@@ -1,0 +1,5 @@
+{
+  "//": "Type-check project for `next build` (typescript.tsconfigPath): app code only. `pnpm type-check` still checks the tests with tsconfig.json.",
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts"]
+}
