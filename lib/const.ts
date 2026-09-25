@@ -1,2 +1,2 @@
-/** Where the API's docs live until the hosted docs site exists (docs/README.md). */
-export const DOCS_BASE_URL = "https://github.com/xdjs/MusicNerdAPI/tree/main/docs";
+/** Where the landing page sends readers for docs. The repo until the docs site exists. */
+export const DOCS_BASE_URL = "https://github.com/xdjs/MusicNerdAPI";

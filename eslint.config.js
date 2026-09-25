@@ -77,7 +77,7 @@ export default [
     },
   },
   {
-    // Public API surface — CLAUDE.md mandates JSDoc on all API routes.
+    // Public API surface — AGENTS.md mandates JSDoc on all API routes.
     files: ["app/api/**/*.ts"],
     rules: jsdocStrictRules,
   },
