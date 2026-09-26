@@ -1,20 +1,18 @@
 # MusicNerdAPI — Agent Guide
 
-Canonical instructions for every coding assistant. `CLAUDE.md` points here.
-
 The Music Nerd API: the endpoints behind [Music Nerd](https://github.com/xdjs/MusicNerdWeb), MNTV and other clients. Next.js 16 App Router, **API routes only**. The one page (`app/page.tsx`) tells a browser visitor this is an API and links to the docs. Split out of MusicNerdWeb at the 2026-09-25 standup; the architecture follows Recoup's API.
 
 Issues and trackers live in [xdjs/MusicNerdWeb](https://github.com/xdjs/MusicNerdWeb/issues). Link PRs here by full ref (`xdjs/MusicNerdWeb#1347`).
 
 ## Docs first
 
-Every endpoint starts as a page in [`docs/endpoints/`](docs/README.md):
+Every endpoint is documented before it is built (2026-09-25 standup):
 
-1. **Docs PR:** the endpoint's page (request, response, errors, auth).
-2. **API PR:** code that meets the page, test first.
+1. **Docs PR** in the docs codebase: the endpoint's page (request, response, errors, auth).
+2. **API PR** here: code that meets the page, test first.
 3. **Client PR:** in whichever app uses it.
 
-Document only what the code will actually do. When behaviour changes, the doc changes in the same PR.
+The docs don't live in this repo. Document only what the code will actually do; when behaviour changes, update the doc too.
 
 ## Layout
 
@@ -23,7 +21,6 @@ Document only what the code will actually do. When behaviour changes, the doc ch
 | `app/api/<route>/route.ts` | Thin route files: JSDoc, `OPTIONS` preflight, then delegate to a handler |
 | `lib/<domain>/` | Business logic by domain: handlers (`get<Name>Handler`), `validate<Name>Body` / `validate<Name>Query` (Zod) |
 | `lib/networking/` | Shared HTTP helpers (`getCorsHeaders`) |
-| `docs/` | The API contract, one page per endpoint |
 
 ## Code principles
 

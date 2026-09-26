@@ -14,7 +14,7 @@ export async function OPTIONS() {
 }
 
 /**
- * GET /api/health — confirms the API is up (docs/endpoints/health.md).
+ * GET /api/health — confirms the API is up.
  *
  * @returns 200 with `{ status: "ok" }`.
  */

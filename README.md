@@ -2,7 +2,6 @@
 
 The API behind [Music Nerd](https://www.musicnerd.xyz). Next.js 16, API routes only.
 
-- **Docs:** [`docs/`](docs/README.md), one page per endpoint, written before the code.
 - **Contributing:** [`AGENTS.md`](AGENTS.md) covers layout, conventions and commands.
 
 ```bash
