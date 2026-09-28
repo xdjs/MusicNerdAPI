@@ -1,3 +1,4 @@
+import { isJobThumbnailPath } from "@/lib/instagram/isJobThumbnailPath";
 import type { ThumbnailUploadScope } from "@/lib/instagram/types";
 import { THUMBNAIL_TIMEOUT_MS, UUID, VAULT_BUCKET } from "@/lib/instagram/const";
 
@@ -19,9 +20,8 @@ export async function removeRevokedInstagramThumbnails(
   }
   const prefix = `${artistId}/instagram-${scope.jobId}-`;
   const paths = [...scope.attemptedPaths];
-  const outside = (path: string) =>
-    !path.startsWith(prefix) || !/^\d+-[a-f0-9]{64}\.webp$/.test(path.slice(prefix.length));
-  if (paths.some(outside)) throw new Error("Invalid thumbnail cleanup path");
+  if (paths.some(path => !isJobThumbnailPath(path, prefix)))
+    throw new Error("Invalid thumbnail cleanup path");
   const supabaseUrl = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   const response = await fetch(`${supabaseUrl}/storage/v1/object/${VAULT_BUCKET}`, {

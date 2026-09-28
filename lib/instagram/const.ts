@@ -1,7 +1,6 @@
 export const APIFY_RUNS_URL = "https://api.apify.com/v2/acts/apify~instagram-scraper/runs";
-export const APIFY_RUN_URL = (runId: string) => `https://api.apify.com/v2/actor-runs/${runId}`;
-export const APIFY_DATASET_URL = (datasetId: string) =>
-  `https://api.apify.com/v2/datasets/${datasetId}/items`;
+export const APIFY_ACTOR_RUNS_URL = "https://api.apify.com/v2/actor-runs";
+export const APIFY_DATASETS_URL = "https://api.apify.com/v2/datasets";
 /** Starting a run and reading its status are quick calls; only the scrape is slow, and we never wait for it. */
 export const APIFY_CONTROL_TIMEOUT_MS = 20_000;
 export const APIFY_DATASET_TIMEOUT_MS = 15_000;

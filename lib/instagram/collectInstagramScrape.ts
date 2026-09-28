@@ -1,6 +1,6 @@
 import {
   APIFY_DATASET_TIMEOUT_MS,
-  APIFY_DATASET_URL,
+  APIFY_DATASETS_URL,
   MAX_SCRAPE_LIMIT,
   THUMBNAILS_PER_SLICE,
 } from "@/lib/instagram/const";
@@ -37,7 +37,7 @@ export async function collectInstagramScrape(
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return null;
   try {
-    const url = `${APIFY_DATASET_URL(datasetId)}?token=${encodeURIComponent(token)}&clean=true&format=json&limit=${MAX_SCRAPE_LIMIT}`;
+    const url = `${APIFY_DATASETS_URL}/${datasetId}/items?token=${encodeURIComponent(token)}&clean=true&format=json&limit=${MAX_SCRAPE_LIMIT}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(APIFY_DATASET_TIMEOUT_MS) });
     if (!res.ok) {
       console.error(`[collectInstagramScrape] dataset fetch failed: ${res.status}`);

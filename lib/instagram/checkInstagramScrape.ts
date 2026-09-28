@@ -1,4 +1,4 @@
-import { APIFY_CONTROL_TIMEOUT_MS, APIFY_RUN_URL } from "@/lib/instagram/const";
+import { APIFY_CONTROL_TIMEOUT_MS, APIFY_ACTOR_RUNS_URL } from "@/lib/instagram/const";
 import type { ApifyRunState } from "@/lib/instagram/types";
 
 /**
@@ -11,7 +11,7 @@ export async function checkInstagramScrape(runId: string): Promise<ApifyRunState
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return { status: "failed", reason: "no apify token" };
   try {
-    const res = await fetch(`${APIFY_RUN_URL(runId)}?token=${encodeURIComponent(token)}`, {
+    const res = await fetch(`${APIFY_ACTOR_RUNS_URL}/${runId}?token=${encodeURIComponent(token)}`, {
       signal: AbortSignal.timeout(APIFY_CONTROL_TIMEOUT_MS),
     });
     if (!res.ok) return { status: "failed", reason: `apify status ${res.status}` };

@@ -1,38 +1,9 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { instagramMediaUrl } from "@/lib/instagram/instagramMediaUrl";
+import { readImage } from "@/lib/instagram/readImage";
 import type { ThumbnailUploadScope } from "@/lib/instagram/types";
-import {
-  THUMBNAIL_MAX_BYTES,
-  THUMBNAIL_TIMEOUT_MS,
-  UUID,
-  VAULT_BUCKET,
-} from "@/lib/instagram/const";
-
-const readImage = async (response: Response): Promise<Buffer> => {
-  const type = response.headers.get("content-type") ?? "";
-  if (!response.ok || !/^image\/(jpeg|png|webp)(?:;|$)/i.test(type)) {
-    throw new Error("Invalid media response");
-  }
-  if (Number(response.headers.get("content-length")) > THUMBNAIL_MAX_BYTES || !response.body) {
-    throw new Error("Image too large or empty");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      length += value.byteLength;
-      if (length > THUMBNAIL_MAX_BYTES) throw new Error("Image too large");
-      chunks.push(value);
-    }
-    return Buffer.concat(chunks);
-  } finally {
-    await reader.cancel();
-  }
-};
+import { THUMBNAIL_TIMEOUT_MS, UUID, VAULT_BUCKET } from "@/lib/instagram/const";
 
 /**
  * Copies a post's thumbnail into Supabase Storage, because Instagram's media

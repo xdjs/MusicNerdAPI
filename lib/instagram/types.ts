@@ -35,3 +35,27 @@ export type ApifyRunState =
 
 /** Paths a job tried to upload, so a revoked job can remove its own late uploads. */
 export type ThumbnailUploadScope = { jobId: string; attemptedPaths: Set<string> };
+
+/** One raw item from the apify/instagram-scraper dataset. Every field is untrusted. */
+export interface ApifyPost {
+  id?: unknown;
+  url?: unknown;
+  ownerUsername?: unknown;
+  caption?: unknown;
+  hashtags?: unknown;
+  mentions?: unknown;
+  taggedUsers?: unknown;
+  coauthorProducers?: unknown;
+  likesCount?: unknown;
+  commentsCount?: unknown;
+  videoPlayCount?: unknown;
+  timestamp?: unknown;
+  musicInfo?: unknown;
+  error?: unknown;
+}
+
+export interface ApifyMusicInfo {
+  artist_name?: unknown;
+  song_name?: unknown;
+  uses_original_audio?: unknown;
+}
