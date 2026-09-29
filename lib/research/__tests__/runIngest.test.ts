@@ -55,6 +55,7 @@ const job = (state: Record<string, unknown> = {}, cursor = 0) => ({
   attempts: 0,
   state,
   updatedAt: null,
+  activityId: null,
 });
 const later = () => Date.now() + 55_000;
 

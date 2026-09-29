@@ -13,6 +13,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -101,18 +102,50 @@ export const artistClaims = pgTable("artist_claims", {
   status: claimStatus().notNull(),
 });
 
-export const artistVaultSources = pgTable("artist_vault_sources", {
-  id: uuid().primaryKey().notNull(),
+export const artistVaultSources = pgTable(
+  "artist_vault_sources",
+  {
+    id: uuid()
+      .default(sql`uuid_generate_v4()`)
+      .primaryKey()
+      .notNull(),
+    artistId: uuid("artist_id").notNull(),
+    origin: text().default("unknown").notNull(),
+    activityId: uuid("activity_id"),
+    url: text().notNull(),
+    title: text(),
+    snippet: text(),
+    type: text(),
+    status: sourceStatus().default("pending").notNull(),
+    filePath: text("file_path"),
+    extractedText: text("extracted_text"),
+    ogImage: text("og_image"),
+    podcastEpisodeKey: text("podcast_episode_key"),
+    podcastShowTitle: text("podcast_show_title"),
+    podcastEpisodeTitle: text("podcast_episode_title"),
+    publishedAt: date("published_at"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`(now() AT TIME ZONE 'utc'::text)`)
+      .notNull(),
+  },
+  // The (artist_id, url) unique index is migration 0014 in MusicNerdWeb; declared
+  // here so `onConflictDoNothing({ target })` can name it.
+  table => [uniqueIndex("artist_vault_sources_artist_url_uniq").on(table.artistId, table.url)],
+);
+
+export const artistActivityEvents = pgTable("artist_activity_events", {
+  id: uuid()
+    .default(sql`uuid_generate_v4()`)
+    .primaryKey()
+    .notNull(),
   artistId: uuid("artist_id").notNull(),
-  url: text().notNull(),
-  title: text(),
-  snippet: text(),
-  type: text(),
-  status: sourceStatus().notNull(),
-  filePath: text("file_path"),
-  extractedText: text("extracted_text"),
-  publishedAt: date("published_at"),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
+  actorUserId: uuid("actor_user_id"),
+  actorKind: text("actor_kind").notNull(),
+  action: text().notNull(),
+  trigger: text().notNull(),
+  sourceId: uuid("source_id"),
+  parentActivityId: uuid("parent_activity_id"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
 });
 
 export const artistInterviewAnswers = pgTable("artist_interview_answers", {
@@ -194,6 +227,7 @@ export const artistResearchJobs = pgTable("artist_research_jobs", {
   attempts: integer().notNull(),
   lastError: text("last_error"),
   state: jsonb().notNull(),
+  activityId: uuid("activity_id"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull(),
 });

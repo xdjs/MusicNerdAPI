@@ -1,6 +1,7 @@
 import { runCaptionExtract } from "@/lib/research/runCaptionExtract";
 import { runIngest } from "@/lib/research/runIngest";
 import { runLoreRefresh } from "@/lib/research/runLoreRefresh";
+import { runSourceSearchJob } from "@/lib/research/runSourceSearchJob";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 
 /**
@@ -18,5 +19,7 @@ export async function runResearchJob(job: ResearchJob, deadline: number): Promis
       return runLoreRefresh(job, deadline);
     case "social_ingest":
       return runIngest(job, deadline);
+    case "source_search":
+      return runSourceSearchJob(job, deadline);
   }
 }

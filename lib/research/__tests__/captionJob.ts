@@ -18,5 +18,6 @@ export function captionJob(state: Record<string, unknown> = {}, cursor = 0): Res
     attempts: 0,
     state,
     updatedAt: null,
+    activityId: null,
   };
 }

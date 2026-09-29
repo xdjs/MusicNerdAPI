@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const claim = vi.fn();
 const runResearchJob = vi.fn();
 const fail = vi.fn();
+const complete = vi.fn();
+vi.mock("@/lib/research/completeResearchJob", () => ({
+  completeResearchJob: (...a: unknown[]) => complete(...a),
+}));
 vi.mock("@/lib/research/claimResearchJob", () => ({
   claimResearchJob: (...a: unknown[]) => claim(...a),
 }));
@@ -22,6 +26,7 @@ beforeEach(() => {
   claim.mockReset();
   runResearchJob.mockReset();
   fail.mockReset();
+  complete.mockReset();
 });
 
 describe("advanceResearch", () => {
@@ -34,7 +39,7 @@ describe("advanceResearch", () => {
     claim.mockResolvedValue(null);
     await advanceResearch({ budgetMs: 50_000, artistId: "artist-1", excludeJobIds: ["x"] });
     expect(claim).toHaveBeenCalledWith({
-      kinds: ["social_ingest", "caption_extract", "lore_refresh"],
+      kinds: ["social_ingest", "caption_extract", "lore_refresh", "source_search"],
       artistId: "artist-1",
       excludeIds: ["x"],
     });
@@ -74,6 +79,9 @@ describe("advanceResearch", () => {
       progress: "Research cancelled after ownership changed",
     });
     expect(fail).not.toHaveBeenCalled();
+    // The row can outlive the claim (a source search's claim changes under it).
+    // Left running, it is reclaimed after every lease and blocks a replacement.
+    expect(complete).toHaveBeenCalledWith("job-1");
   });
 
   it("records any other error on the job", async () => {

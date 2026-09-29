@@ -1,4 +1,5 @@
 import { claimResearchJob } from "@/lib/research/claimResearchJob";
+import { completeResearchJob } from "@/lib/research/completeResearchJob";
 import { PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
 import { failResearchJob } from "@/lib/research/failResearchJob";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
@@ -34,6 +35,9 @@ export async function advanceResearch(opts: {
     return { ...about, ...(await runResearchJob(job, deadline)) };
   } catch (e) {
     if (e instanceof OwnershipChangedError) {
+      // Cancellation is terminal. Left running, the row is reclaimed after
+      // every lease expiry and blocks replacement work of its kind.
+      await completeResearchJob(job.id);
       return { ...about, done: true, progress: "Research cancelled after ownership changed" };
     }
     const message = e instanceof Error ? e.message : String(e);
