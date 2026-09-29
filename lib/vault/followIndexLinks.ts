@@ -11,6 +11,7 @@ import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
 import { outOfBudget } from "@/lib/vault/outOfBudget";
 import type { SearchRun } from "@/lib/vault/types";
+import { recordSavedSource } from "@/lib/vault/recordSavedSource";
 
 /**
  * Follows links out of index pages: an artist's tag archive leads to coverage
@@ -78,7 +79,7 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
         publishedAt: page.publishedAt ?? null,
       });
       if (source) {
-        run.saved.push(source);
+        recordSavedSource(run, source);
         console.log(`[vaultWebSearch] Recovered from index: ${page.title?.slice(0, 70)}`);
       }
     } catch (e) {

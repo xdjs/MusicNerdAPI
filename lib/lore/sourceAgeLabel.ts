@@ -1,3 +1,5 @@
+import { pluralize } from "@/lib/text/pluralize";
+
 /**
  * How a source's age is described to the model: "published 2019-01-10, 7 years ago".
  * An undated source says so, so the model can tell "we know this is old" from
@@ -18,5 +20,5 @@ export function sourceAgeLabel(
   if (years < 0) return `published ${publishedAt}`;
   if (years < 1) return `published ${publishedAt}, within the last year`;
   const rounded = Math.round(years);
-  return `published ${publishedAt}, ${rounded} year${rounded === 1 ? "" : "s"} ago`;
+  return `published ${publishedAt}, ${rounded} ${pluralize(rounded, "year", "years")} ago`;
 }

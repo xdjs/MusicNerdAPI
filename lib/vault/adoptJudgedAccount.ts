@@ -42,7 +42,7 @@ export async function adoptJudgedAccount(
   }
   if (alreadyHave || blocked || verdict !== "about-artist") return false;
   try {
-    await writeArtistLink(run.artistId, match.siteName, match.id, undefined, run.artist);
+    await writeArtistLink(run.artistId, match.siteName, match.id, run.provisional, run.artist);
     console.log(`[vaultWebSearch] ${match.siteName} profile -> links: ${url.slice(0, 80)}`);
   } catch (e) {
     console.warn(`[vaultWebSearch] Could not save discovered ${match.siteName} profile:`, e);

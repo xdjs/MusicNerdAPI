@@ -27,7 +27,13 @@ describe("adoptJudgedAccount", () => {
   it("writes an affirmed account to links and routes it out of the vault", async () => {
     const run = searchRun();
     expect(await adoptJudgedAccount(run, x, "https://x.com/p3t3rango", "about-artist")).toBe(true);
-    expect(writeArtistLink).toHaveBeenCalledWith("a1", "x", "p3t3rango", undefined, run.artist);
+    expect(writeArtistLink).toHaveBeenCalledWith(
+      "a1",
+      "x",
+      "p3t3rango",
+      run.provisional,
+      run.artist,
+    );
   });
 
   it("never replaces a link the artist already has, and needs the judge's yes", async () => {

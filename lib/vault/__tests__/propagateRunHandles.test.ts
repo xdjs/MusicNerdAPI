@@ -24,6 +24,7 @@ describe("propagateRunHandles", () => {
       { id: "a1", name: "Grimes" },
       "Grimes",
       123,
+      run.provisional,
     );
   });
 

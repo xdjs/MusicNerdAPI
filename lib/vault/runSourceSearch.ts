@@ -51,12 +51,14 @@ export async function runSourceSearch(
     accountCandidates: [],
     hubCandidates: [],
     counts: { skipped: 0, dropped: 0, rejectedSkips: 0 },
+    provisional: new Set(opts.provisionalSiteNames ?? []),
+    onSaved: opts.onSaved,
   };
 
   // Before inferring anything, ask a database that already knows.
   const fromMusicBrainz = outOfBudget(run, "MusicBrainz")
     ? { handles: new Set<string>(), homepage: null, authoritative: false }
-    : await adoptFromMusicBrainz(artistId, artistName, run.artist);
+    : await adoptFromMusicBrainz(artistId, artistName, run.artist, run.provisional);
   if (outOfBudget(run, "web search")) return [];
   // Curated handles are at least as trustworthy as ones read off a page.
   run.verifiedHandles = new Set(fromMusicBrainz.handles);

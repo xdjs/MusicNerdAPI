@@ -27,5 +27,6 @@ export async function propagateRunHandles(run: SearchRun, authoritative: boolean
     latest as Record<string, unknown>,
     run.artistName,
     run.deadline,
+    run.provisional,
   );
 }

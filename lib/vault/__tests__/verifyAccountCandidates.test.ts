@@ -94,3 +94,24 @@ describe("verifyAccountCandidates", () => {
     await expect(verifyAccountCandidates(run([cand("x", "p3t3rango")]))).resolves.toBeUndefined();
   });
 });
+
+describe("verifyAccountCandidates with provisional columns", () => {
+  it("replaces a column that holds only a discovery guess, and passes the set to the write", async () => {
+    h.getArtistById.mockResolvedValueOnce({
+      id: "a1",
+      name: "Pete Rango",
+      instagram: "guess",
+      x: null,
+    });
+    const r = run([cand("instagram", "p3t3rango")]);
+    r.provisional = new Set(["instagram"]);
+    await verifyAccountCandidates(r);
+    expect(h.writeArtistLink).toHaveBeenCalledWith(
+      "a1",
+      "instagram",
+      "p3t3rango",
+      r.provisional,
+      expect.objectContaining({ instagram: "guess" }),
+    );
+  });
+});

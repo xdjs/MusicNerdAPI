@@ -37,7 +37,11 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
       MAX_ACCOUNT_CHECKS,
     )) {
       if (done.has(cand.siteName)) continue;
-      if (current && holdsAnswerFor(current as Record<string, unknown>, cand.siteName)) continue;
+      if (
+        current &&
+        holdsAnswerFor(current as Record<string, unknown>, cand.siteName, run.provisional)
+      )
+        continue;
       if (await handleBelongsToAnotherArtist(run.artistId, cand.siteName, cand.id)) {
         console.log(
           `[vaultWebSearch] ${cand.siteName}=${cand.id} is already another artist's, ignoring`,
@@ -57,7 +61,7 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
           run.artistId,
           cand.siteName,
           cand.id,
-          undefined,
+          run.provisional,
           current as Record<string, unknown> | undefined,
         );
         console.log(

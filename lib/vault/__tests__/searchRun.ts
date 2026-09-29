@@ -15,6 +15,7 @@ export function searchRun(overrides: Partial<SearchRun> = {}): SearchRun {
     accountCandidates: [],
     hubCandidates: [],
     counts: { skipped: 0, dropped: 0, rejectedSkips: 0 },
+    provisional: new Set(),
     ...overrides,
   };
 }
