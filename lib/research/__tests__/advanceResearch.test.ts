@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const claim = vi.fn();
-const runIngest = vi.fn();
+const runResearchJob = vi.fn();
 const fail = vi.fn();
 vi.mock("@/lib/research/claimResearchJob", () => ({
   claimResearchJob: (...a: unknown[]) => claim(...a),
 }));
-vi.mock("@/lib/research/runIngest", () => ({ runIngest: (...a: unknown[]) => runIngest(...a) }));
+vi.mock("@/lib/research/runResearchJob", () => ({
+  runResearchJob: (...a: unknown[]) => runResearchJob(...a),
+}));
 vi.mock("@/lib/research/failResearchJob", () => ({
   failResearchJob: (...a: unknown[]) => fail(...a),
 }));
@@ -18,7 +20,7 @@ const job = { id: "job-1", artistId: "artist-1", kind: "social_ingest", cursor: 
 
 beforeEach(() => {
   claim.mockReset();
-  runIngest.mockReset();
+  runResearchJob.mockReset();
   fail.mockReset();
 });
 
@@ -32,7 +34,7 @@ describe("advanceResearch", () => {
     claim.mockResolvedValue(null);
     await advanceResearch({ budgetMs: 50_000, artistId: "artist-1", excludeJobIds: ["x"] });
     expect(claim).toHaveBeenCalledWith({
-      kinds: ["social_ingest"],
+      kinds: ["social_ingest", "caption_extract", "lore_refresh"],
       artistId: "artist-1",
       excludeIds: ["x"],
     });
@@ -40,7 +42,11 @@ describe("advanceResearch", () => {
 
   it("runs the claimed job inside the budget, less the persist reserve", async () => {
     claim.mockResolvedValue(job);
-    runIngest.mockResolvedValue({ progress: "scrape started (r)", done: false, waiting: true });
+    runResearchJob.mockResolvedValue({
+      progress: "scrape started (r)",
+      done: false,
+      waiting: true,
+    });
     const before = Date.now();
     const result = await advanceResearch({ budgetMs: 50_000 });
     expect(result).toEqual({
@@ -52,14 +58,14 @@ describe("advanceResearch", () => {
       done: false,
       waiting: true,
     });
-    const deadline = runIngest.mock.calls[0][1];
+    const deadline = runResearchJob.mock.calls[0][1];
     expect(deadline).toBeGreaterThanOrEqual(before + 45_000);
     expect(deadline).toBeLessThanOrEqual(Date.now() + 45_000);
   });
 
   it("finishes quietly when the claim was revoked mid-job", async () => {
     claim.mockResolvedValue(job);
-    runIngest.mockImplementationOnce(async () => {
+    runResearchJob.mockImplementationOnce(async () => {
       throw new OwnershipChangedError();
     });
     expect(await advanceResearch({ budgetMs: 50_000 })).toMatchObject({
@@ -72,7 +78,7 @@ describe("advanceResearch", () => {
 
   it("records any other error on the job", async () => {
     claim.mockResolvedValue(job);
-    runIngest.mockImplementationOnce(async () => {
+    runResearchJob.mockImplementationOnce(async () => {
       throw new Error("apify exploded");
     });
     expect(await advanceResearch({ budgetMs: 50_000 })).toMatchObject({
