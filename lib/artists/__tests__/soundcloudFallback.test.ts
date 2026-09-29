@@ -8,6 +8,8 @@ const rows = [
     cardPlatformName: "Soundcloud",
     appStringFormat: "",
     regex: "",
+    siteImage: null,
+    colorHex: null,
   },
 ];
 

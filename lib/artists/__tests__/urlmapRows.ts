@@ -68,4 +68,4 @@ export const urlmapRows = [
     appStringFormat: "https://www.youtube.com/channel/%@",
     regex: "^https://(www\\.)?youtube\\.com/channel/([^/]+)$",
   },
-].map((r, i) => ({ id: String(i), ...r }));
+].map((r, i) => ({ id: String(i), siteImage: null, colorHex: null, ...r }));
