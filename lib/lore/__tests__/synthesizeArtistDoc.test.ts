@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ buildDocContext: vi.fn(), generateText: vi.fn() }));
+const m = vi.hoisted(() => ({
+  buildDocContext: vi.fn(),
+  generateText: vi.fn(),
+  streamText: vi.fn(),
+}));
 vi.mock("@/lib/lore/buildDocContext", () => ({ buildDocContext: m.buildDocContext }));
 vi.mock("@/lib/ai/generateText", () => ({ generateText: m.generateText }));
+vi.mock("@/lib/ai/streamText", () => ({ streamText: m.streamText }));
 const { synthesizeArtistDoc } = await import("@/lib/lore/synthesizeArtistDoc");
 
 const sources = [
@@ -51,5 +56,32 @@ describe("synthesizeArtistDoc", () => {
     await vi.advanceTimersByTimeAsync(15_000);
     await settled;
     vi.useRealTimers();
+  });
+
+  it("builds from the caller's numbered sources when given, without streaming", async () => {
+    m.generateText.mockResolvedValueOnce({ text: "## Overview\nA doc." });
+    await synthesizeArtistDoc("a1", sources as never);
+    expect(m.buildDocContext).toHaveBeenCalledWith("a1", sources);
+    expect(m.streamText).not.toHaveBeenCalled();
+  });
+
+  it("streams through streamText when the caller wants each delta, with the same settings", async () => {
+    m.streamText.mockImplementationOnce(async ({ onTextDelta }) => {
+      onTextDelta?.("## Overview\n");
+      onTextDelta?.("A real doc.");
+      return { text: "## Overview\nA real doc." };
+    });
+    const deltas: string[] = [];
+    const { doc } = await synthesizeArtistDoc("a1", undefined, {
+      onTextDelta: d => deltas.push(d),
+    });
+    expect(doc).toBe("## Overview\nA real doc.");
+    expect(deltas).toEqual(["## Overview\n", "A real doc."]);
+    expect(m.generateText).not.toHaveBeenCalled();
+    expect(m.streamText.mock.calls[0][0]).toMatchObject({
+      prompt: "MATERIAL",
+      temperature: 0.4,
+      thinkingBudget: 0,
+    });
   });
 });

@@ -19,3 +19,5 @@ export const GEMINI_ABOUT_TIMEOUT_MS = 12_000;
 export const DOC_REBUILD_RESERVE_MS = 20_000;
 /** A Lore summary longer than this is discarded. */
 export const LORE_SUMMARY_MAX_CHARS = 900;
+/** The last-resort About's bound: a lighter prompt than the document or the cited About. */
+export const FALLBACK_TIMEOUT_MS = 12_000;
