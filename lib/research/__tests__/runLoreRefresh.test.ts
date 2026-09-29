@@ -24,6 +24,7 @@ const job = (state: Record<string, unknown>) => ({
   attempts: 0,
   state,
   updatedAt: null,
+  activityId: null,
 });
 const plenty = () => Date.now() + 50_000;
 

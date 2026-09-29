@@ -7,7 +7,8 @@ import type { JobKind } from "@/lib/research/types";
  * Queues the next job for an artist, from inside the job that finished. A
  * live job for the same artist and kind makes this a no-op (the unique
  * partial index enforces it), and the parent's guard stops a revoked job
- * from queueing more work.
+ * from queueing more work. The child keeps the parent's activity, so the
+ * work stays attributed to whoever started it.
  *
  * @param artistId - The artist.
  * @param kind - The kind of job to queue.
@@ -24,8 +25,9 @@ export async function enqueueResearchJob(
   try {
     await withResearchJobWrite(artistId, opts.parentJobId, async tx => {
       await tx.execute(sql`
-        insert into artist_research_jobs (artist_id, kind, total, state)
-        values (${artistId}::uuid, ${kind}, ${null}, ${JSON.stringify(opts.state ?? {})}::jsonb)
+        insert into artist_research_jobs (artist_id, kind, total, state, activity_id)
+        values (${artistId}::uuid, ${kind}, ${null}, ${JSON.stringify(opts.state ?? {})}::jsonb,
+          (select activity_id from artist_research_jobs where id = ${opts.parentJobId}::uuid and artist_id = ${artistId}::uuid))
         on conflict do nothing`);
     });
     return true;

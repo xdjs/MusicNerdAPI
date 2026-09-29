@@ -1,11 +1,18 @@
 import type { JobKind } from "@/lib/research/types";
 
 /**
- * The job kinds this API runs. MusicNerdWeb also runs `source_search` from the
- * same queue, which isn't ported (xdjs/MusicNerdWeb#1365); the lease keeps the
- * two workers off each other's jobs.
+ * The job kinds this API runs: every kind MusicNerdWeb's route runs. Until the
+ * web cutover both workers take from the same queue, and the lease keeps them
+ * off each other's jobs (xdjs/MusicNerdWeb#1365).
  */
-export const PORTED_JOB_KINDS: JobKind[] = ["social_ingest", "caption_extract", "lore_refresh"];
+export const PORTED_JOB_KINDS: JobKind[] = [
+  "social_ingest",
+  "caption_extract",
+  "lore_refresh",
+  "source_search",
+];
+/** A source search has no cursor, so a slice shorter than this cannot finish one. */
+export const SOURCE_SEARCH_MIN_SLICE_MS = 30_000;
 
 /** How long a claim is good for. A killed invocation's job is claimable again after this. */
 export const LEASE_MS = 3 * 60 * 1000;

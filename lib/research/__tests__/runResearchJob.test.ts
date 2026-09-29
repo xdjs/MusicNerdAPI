@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
-const { runIngest, runCaptionExtract, runLoreRefresh } = vi.hoisted(() => ({
+const { runIngest, runCaptionExtract, runLoreRefresh, runSourceSearchJob } = vi.hoisted(() => ({
+  runSourceSearchJob: vi.fn(async () => ({ progress: "sources", done: true })),
   runIngest: vi.fn(async () => ({ progress: "ingest", done: true })),
   runCaptionExtract: vi.fn(async () => ({ progress: "captions", done: false })),
   runLoreRefresh: vi.fn(async () => ({ progress: "lore", done: true })),
@@ -8,6 +9,7 @@ const { runIngest, runCaptionExtract, runLoreRefresh } = vi.hoisted(() => ({
 vi.mock("@/lib/research/runIngest", () => ({ runIngest }));
 vi.mock("@/lib/research/runCaptionExtract", () => ({ runCaptionExtract }));
 vi.mock("@/lib/research/runLoreRefresh", () => ({ runLoreRefresh }));
+vi.mock("@/lib/research/runSourceSearchJob", () => ({ runSourceSearchJob }));
 const { runResearchJob } = await import("@/lib/research/runResearchJob");
 
 const job = (kind: string) =>
@@ -45,6 +47,17 @@ describe("runResearchJob", () => {
     expect(runLoreRefresh).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "lore_refresh" }),
       789,
+    );
+  });
+
+  it("runs a source search with its own runner", async () => {
+    expect(await runResearchJob(job("source_search"), 321)).toEqual({
+      progress: "sources",
+      done: true,
+    });
+    expect(runSourceSearchJob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "source_search" }),
+      321,
     );
   });
 });

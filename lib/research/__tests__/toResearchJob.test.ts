@@ -15,6 +15,14 @@ describe("toResearchJob", () => {
       attempts: 0,
       state: {},
       updatedAt: null,
+      activityId: null,
     });
+  });
+
+  it("carries the initiating activity, which a source search needs to know who asked", () => {
+    expect(
+      toResearchJob({ id: "j", artist_id: "a", kind: "source_search", activity_id: "event" })
+        .activityId,
+    ).toBe("event");
   });
 });

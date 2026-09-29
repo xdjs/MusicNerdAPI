@@ -33,6 +33,7 @@ describe("claimResearchJob", () => {
       attempts: 1,
       state: { apifyRunId: "run" },
       updatedAt: "2026-09-28T00:00:00Z",
+      activityId: null,
     });
     const { text, params } = renderSql(execute.mock.calls[0][0]);
     expect(text).toContain("set status = 'running', claimed_at = now()");

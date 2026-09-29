@@ -24,9 +24,22 @@ describe("enqueueResearchJob", () => {
     ).toBe(true);
     expect(guard.mock.calls[0].slice(0, 2)).toEqual(["artist-1", "parent"]);
     const { text, params } = renderSql(txExecute.mock.calls[0][0]);
-    expect(text).toContain("insert into artist_research_jobs (artist_id, kind, total, state)");
+    expect(text).toContain(
+      "insert into artist_research_jobs (artist_id, kind, total, state, activity_id)",
+    );
+    // Child work keeps the root initiator's activity, as in MusicNerdWeb (#1373).
+    expect(text).toContain(
+      "(select activity_id from artist_research_jobs where id = $5::uuid and artist_id = $6::uuid)",
+    );
     expect(text).toContain("on conflict do nothing");
-    expect(params).toEqual(["artist-1", "caption_extract", null, '{"incremental":true}']);
+    expect(params).toEqual([
+      "artist-1",
+      "caption_extract",
+      null,
+      '{"incremental":true}',
+      "parent",
+      "artist-1",
+    ]);
   });
 
   it("rethrows a revoked claim and reports other failures as false", async () => {

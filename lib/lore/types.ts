@@ -1,9 +1,6 @@
 import type { ArtistRow } from "@/lib/artists/types";
-import type {
-  artistDocCorrections,
-  artistInterviewAnswers,
-  artistVaultSources,
-} from "@/lib/db/schema";
+import type { VaultSource } from "@/lib/vault/types";
+import type { artistDocCorrections, artistInterviewAnswers } from "@/lib/db/schema";
 
 /**
  * One numbered citation in the Lore. `url` is null for an interview answer:
@@ -27,7 +24,6 @@ export type LoreSummary = { text: string; sourceKey: string };
 /** Inventory metadata only: never source contents. */
 export type LoreSummarySource = { id: string; title?: string | null; type?: string | null };
 
-export type VaultSourceRow = typeof artistVaultSources.$inferSelect;
 export type InterviewAnswerRow = typeof artistInterviewAnswers.$inferSelect;
 export type DocCorrection = Pick<
   typeof artistDocCorrections.$inferSelect,
@@ -42,7 +38,7 @@ export type DocCorrection = Pick<
 export type DocMaterial = {
   artist: ArtistRow;
   artistName: string;
-  vaultSources: VaultSourceRow[];
+  vaultSources: VaultSource[];
   answers: InterviewAnswerRow[];
   socialCollaborators: { handle: string; url: string }[];
   /** People the artist credited by role in their own captions. */

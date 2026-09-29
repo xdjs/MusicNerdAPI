@@ -94,3 +94,6 @@ export const OWN_DOMAIN_SUFFIXES = [
   "live",
   "tv",
 ];
+
+/** Results asked of each search query: five queries, deduped heavily in practice. */
+export const TAVILY_RESULTS_PER_QUERY = 5;

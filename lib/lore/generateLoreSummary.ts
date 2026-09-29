@@ -1,9 +1,9 @@
 import { generateText } from "@/lib/ai/generateText";
 import { withTimeout } from "@/lib/async/withTimeout";
 import { GEMINI_ABOUT_TIMEOUT_MS, LORE_SUMMARY_MAX_CHARS } from "@/lib/lore/const";
-import { getApprovedVaultSources } from "@/lib/lore/getApprovedVaultSources";
 import { loreSourceKey } from "@/lib/lore/loreSourceKey";
 import type { LoreSummary } from "@/lib/lore/types";
+import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
 
 /**
  * A two-or-three-sentence overview of the artist's Lore sources, from titles
@@ -16,7 +16,7 @@ export async function generateLoreSummary(
   artistId: string,
 ): Promise<LoreSummary | null | undefined> {
   try {
-    const sources = await getApprovedVaultSources(artistId);
+    const sources = await getVaultSourcesByStatus(artistId, "approved");
     if (!sources.length) return null;
     const response = await withTimeout(
       generateText({

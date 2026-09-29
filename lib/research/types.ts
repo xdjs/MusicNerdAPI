@@ -1,4 +1,4 @@
-export type JobKind = "social_ingest" | "caption_extract" | "lore_refresh";
+export type JobKind = "social_ingest" | "caption_extract" | "lore_refresh" | "source_search";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export interface ResearchJob {
@@ -11,6 +11,8 @@ export interface ResearchJob {
   attempts: number;
   state: Record<string, unknown>;
   updatedAt: string | null;
+  /** The activity event of whoever started the work; a source search runs as them. */
+  activityId: string | null;
 }
 
 /** What one slice did. `ran: false` means the queue was empty, the normal case. */

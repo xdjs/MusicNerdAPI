@@ -18,5 +18,6 @@ export function toResearchJob(row: Record<string, unknown>): ResearchJob {
     attempts: Number(row.attempts ?? 0),
     state: (row.state as Record<string, unknown>) ?? {},
     updatedAt: updatedAt ? String(updatedAt) : null,
+    activityId: row.activity_id ? String(row.activity_id) : null,
   };
 }
