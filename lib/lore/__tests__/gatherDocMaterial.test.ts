@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
-  getArtistForDoc: vi.fn(),
+  getArtistById: vi.fn(),
   getApprovedVaultSources: vi.fn(),
   getInterviewAnswers: vi.fn(),
   getSocialPostsOrNull: vi.fn(),
   socialSignalSources: vi.fn(),
   captionCreditSources: vi.fn(),
 }));
-vi.mock("@/lib/lore/getArtistForDoc", () => ({ getArtistForDoc: m.getArtistForDoc }));
+vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.getArtistById }));
 vi.mock("@/lib/lore/getApprovedVaultSources", () => ({
   getApprovedVaultSources: m.getApprovedVaultSources,
 }));
@@ -42,7 +42,7 @@ const credits = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.getArtistForDoc.mockResolvedValue(artist);
+  m.getArtistById.mockResolvedValue(artist);
   m.getApprovedVaultSources.mockResolvedValue([read, unread]);
   m.getInterviewAnswers.mockResolvedValue([
     { question: "Sound?", answer: "heartbreak you can dance to" },
@@ -75,7 +75,7 @@ describe("gatherDocMaterial", () => {
   });
 
   it("names a nameless artist and treats a failed answers read as none", async () => {
-    m.getArtistForDoc.mockResolvedValueOnce({ ...artist, name: null, instagram: null });
+    m.getArtistById.mockResolvedValueOnce({ ...artist, name: null, instagram: null });
     m.getInterviewAnswers.mockResolvedValueOnce(null);
     const material = await gatherDocMaterial("a1");
     expect(material.artistName).toBe("Unknown Artist");
@@ -84,7 +84,7 @@ describe("gatherDocMaterial", () => {
   });
 
   it("throws for an artist that does not exist", async () => {
-    m.getArtistForDoc.mockResolvedValueOnce(undefined);
+    m.getArtistById.mockResolvedValueOnce(undefined);
     await expect(gatherDocMaterial("nope")).rejects.toThrow("Artist not found: nope");
   });
 });

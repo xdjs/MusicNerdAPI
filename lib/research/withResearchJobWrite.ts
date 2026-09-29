@@ -1,5 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, type WriteDb } from "@/lib/db/db";
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { artistResearchJobs } from "@/lib/db/schema";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
@@ -20,7 +21,7 @@ export async function withResearchJobWrite<T>(
   write: (tx: WriteDb) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async tx => {
-    await tx.execute(sql`select id from artists where id = ${artistId}::uuid for update`);
+    await lockArtistRow(tx, artistId);
     const job = await tx.query.artistResearchJobs.findFirst({
       where: and(eq(artistResearchJobs.id, jobId), eq(artistResearchJobs.artistId, artistId)),
     });

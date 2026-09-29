@@ -2,6 +2,7 @@ import type { SocialPostRow } from "@/lib/instagram/types";
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import { pushEvidence } from "@/lib/socialSignals/pushEvidence";
 import type { Collaborator } from "@/lib/socialSignals/types";
+import { withoutAt } from "@/lib/artists/withoutAt";
 
 /**
  * Collaborators: coauthor tags, and posts by someone else on the artist's
@@ -22,7 +23,7 @@ export function deriveCollaborators(posts: SocialPostRow[], handle: string): Col
       const key = normalizeHandle(rawHandle);
       if (!key || key === self) continue;
       const entry = byHandle.get(key) ?? {
-        handle: rawHandle.trim().replace(/^@/, ""),
+        handle: withoutAt(rawHandle.trim()),
         postCount: 0,
         evidenceUrls: [],
       };

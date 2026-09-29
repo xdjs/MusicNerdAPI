@@ -21,7 +21,7 @@ const material = (over: Partial<DocMaterial> = {}) =>
       x: "novax",
       soundcloud: "https://soundcloud.com/nova",
       youtube: "@nova",
-    },
+    } as DocMaterial["artist"],
     artistName: "Nova Reyes",
     vaultSources: [
       {
@@ -100,7 +100,7 @@ describe("buildDocContext", () => {
           x: null,
           soundcloud: null,
           youtube: null,
-        },
+        } as DocMaterial["artist"],
         vaultSources: [],
         answers: [],
         socialCollaborators: [],

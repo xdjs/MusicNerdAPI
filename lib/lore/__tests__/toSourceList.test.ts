@@ -14,7 +14,7 @@ const material = (over: Partial<DocMaterial> = {}): DocMaterial => ({
     x: null,
     soundcloud: null,
     youtube: null,
-  },
+  } as DocMaterial["artist"],
   artistName: "Nova Reyes",
   vaultSources: [],
   answers: [],

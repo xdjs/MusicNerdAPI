@@ -5,6 +5,7 @@ import {
   MAX_SCRAPE_LIMIT,
 } from "@/lib/instagram/const";
 import type { ApifyRunState } from "@/lib/instagram/types";
+import { withoutAt } from "@/lib/artists/withoutAt";
 
 /**
  * Starts an Apify scrape of the profile and returns as soon as it has an id.
@@ -27,7 +28,7 @@ export async function startInstagramScrape(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directUrls: [`https://www.instagram.com/${handle.trim().replace(/^@/, "")}/`],
+        directUrls: [`https://www.instagram.com/${withoutAt(handle.trim())}/`],
         resultsType: "posts",
         resultsLimit: limit,
         addParentData: false,

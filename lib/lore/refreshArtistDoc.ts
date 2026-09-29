@@ -1,9 +1,10 @@
+import { db } from "@/lib/db/db";
 import { generateLoreSummary } from "@/lib/lore/generateLoreSummary";
 import { getArtistDoc } from "@/lib/lore/getArtistDoc";
-import { getLoreClaimGeneration } from "@/lib/lore/getLoreClaimGeneration";
 import { persistRefreshedLore } from "@/lib/lore/persistRefreshedLore";
 import { synthesizeArtistDoc } from "@/lib/lore/synthesizeArtistDoc";
 import type { DocRefresh } from "@/lib/lore/types";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
  * Rebuilds the artist's Lore from their current sources. Does not touch the
@@ -24,7 +25,7 @@ export async function refreshArtistDoc(
     const claimId =
       options.expectedClaimId !== undefined
         ? options.expectedClaimId
-        : await getLoreClaimGeneration(artistId);
+        : ((await findApprovedClaim(db, artistId))?.id ?? null);
     if (!options.createIfMissing && !(await getArtistDoc(artistId))) return "no-document";
     const [{ doc, sources }, summary] = await Promise.all([
       synthesizeArtistDoc(artistId),

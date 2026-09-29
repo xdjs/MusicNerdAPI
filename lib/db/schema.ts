@@ -19,18 +19,84 @@ import {
 export const claimStatus = pgEnum("claim_status", ["pending", "approved", "rejected"]);
 export const sourceStatus = pgEnum("source_status", ["pending", "approved", "rejected"]);
 
+/** The artist row with every link column, since link writes and the identity gates read them by name. */
 export const artists = pgTable("artists", {
   id: uuid().primaryKey().notNull(),
   name: text(),
-  instagram: text(),
-  spotify: text(),
+  bandcamp: text(),
+  facebook: text(),
   x: text(),
   soundcloud: text(),
+  patreon: text(),
+  instagram: text(),
   youtube: text(),
+  youtubechannel: text(),
+  spotify: text(),
+  twitch: text(),
+  imdb: text(),
+  musicbrainz: text(),
+  wikidata: text(),
+  mixcloud: text(),
+  facebookId: text("facebookID"),
+  discogs: text(),
+  tiktok: text(),
+  tiktokId: text("tiktokID"),
+  jaxsta: text(),
+  famousbirthdays: text(),
+  songexploder: text(),
+  colorsxstudios: text(),
+  bandsintown: text(),
+  linktree: text(),
+  onlyfans: text(),
+  wikipedia: text(),
+  audius: text(),
+  zora: text(),
+  catalog: text(),
+  opensea: text(),
+  foundation: text(),
+  lastfm: text(),
+  linkedin: text(),
+  soundxyz: text(),
+  mirror: text(),
+  glassnode: text(),
+  spotifyusername: text(),
+  bandcampfan: text(),
+  tellie: text(),
+  ens: text(),
+  lens: text(),
+  cameo: text(),
+  farcaster: text(),
+  supercollector: text(),
+  deezer: text(),
+  subvert: text(),
+  bluesky: text(),
+  inprocess: text(),
+});
+
+export const users = pgTable("users", {
+  id: uuid().primaryKey().notNull(),
+  isAdmin: boolean("is_admin").notNull(),
+});
+
+/** Platform templates and patterns, one row per platform. */
+export const urlmap = pgTable("urlmap", {
+  id: uuid().primaryKey().notNull(),
+  siteName: text("site_name").notNull(),
+  appStringFormat: text("app_string_format").notNull(),
+  cardPlatformName: text("card_platform_name"),
+  regex: text().notNull(),
+});
+
+export const artistIdMappings = pgTable("artist_id_mappings", {
+  id: uuid().primaryKey().notNull(),
+  artistId: uuid("artist_id").notNull(),
+  platform: text().notNull(),
+  platformId: text("platform_id").notNull(),
 });
 
 export const artistClaims = pgTable("artist_claims", {
   id: uuid().primaryKey().notNull(),
+  userId: uuid("user_id").notNull(),
   artistId: uuid("artist_id").notNull(),
   status: claimStatus().notNull(),
 });

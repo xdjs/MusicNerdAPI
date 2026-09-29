@@ -1,8 +1,6 @@
-import { eq } from "drizzle-orm";
+import { getArtistById } from "@/lib/artists/getArtistById";
 import { appendSocialCredits } from "@/lib/credits/appendSocialCredits";
 import { extractCaptionCredits } from "@/lib/credits/extractCaptionCredits";
-import { db } from "@/lib/db/db";
-import { artists } from "@/lib/db/schema";
 import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { captionsToRead } from "@/lib/research/captionsToRead";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
@@ -25,10 +23,7 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  * @returns What the slice did.
  */
 export async function runCaptionExtract(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
-  const artist = await db.query.artists.findFirst({
-    where: eq(artists.id, job.artistId),
-    columns: { name: true, instagram: true },
-  });
+  const artist = await getArtistById(job.artistId);
   if (!artist?.name) {
     await completeResearchJob(job.id);
     return { progress: "no artist", done: true };
