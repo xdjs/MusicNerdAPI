@@ -1,11 +1,11 @@
 import type { JobKind } from "@/lib/research/types";
 
 /**
- * The job kinds this API runs. MusicNerdWeb still runs the rest from the same
- * queue until they are ported (xdjs/MusicNerdWeb#1365); the lease keeps the
+ * The job kinds this API runs. MusicNerdWeb also runs `source_search` from the
+ * same queue, which isn't ported (xdjs/MusicNerdWeb#1365); the lease keeps the
  * two workers off each other's jobs.
  */
-export const PORTED_JOB_KINDS: JobKind[] = ["social_ingest"];
+export const PORTED_JOB_KINDS: JobKind[] = ["social_ingest", "caption_extract", "lore_refresh"];
 
 /** How long a claim is good for. A killed invocation's job is claimable again after this. */
 export const LEASE_MS = 3 * 60 * 1000;

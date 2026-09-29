@@ -2,7 +2,7 @@ import { claimResearchJob } from "@/lib/research/claimResearchJob";
 import { PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
 import { failResearchJob } from "@/lib/research/failResearchJob";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
-import { runIngest } from "@/lib/research/runIngest";
+import { runResearchJob } from "@/lib/research/runResearchJob";
 import type { AdvanceResult } from "@/lib/research/types";
 
 /**
@@ -31,7 +31,7 @@ export async function advanceResearch(opts: {
   const about = { ran: true, jobId: job.id, kind: job.kind, artistId: job.artistId };
   const deadline = Date.now() + Math.max(0, opts.budgetMs - PERSIST_RESERVE_MS);
   try {
-    return { ...about, ...(await runIngest(job, deadline)) };
+    return { ...about, ...(await runResearchJob(job, deadline)) };
   } catch (e) {
     if (e instanceof OwnershipChangedError) {
       return { ...about, done: true, progress: "Research cancelled after ownership changed" };

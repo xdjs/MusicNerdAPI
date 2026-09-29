@@ -59,3 +59,23 @@ export interface ApifyMusicInfo {
   song_name?: unknown;
   uses_original_audio?: unknown;
 }
+
+/** A stored post, in the shape the caption reader and the Lore's social signals read. */
+export interface SocialPostRow {
+  platform: string;
+  platformPostId: string;
+  ownerUsername: string;
+  isOwnPost: boolean;
+  caption: string | null;
+  url: string;
+  /** ISO 8601; "" when the post has no date. */
+  postedAt: string;
+  likeCount: number | null;
+  commentCount: number | null;
+  playCount: number | null;
+  hashtags: string[];
+  mentions: string[];
+  coauthors: string[];
+  musicTitle: string | null;
+  musicArtist: string | null;
+}
