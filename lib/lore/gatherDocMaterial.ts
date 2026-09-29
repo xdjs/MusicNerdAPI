@@ -1,11 +1,11 @@
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { captionCreditSources } from "@/lib/lore/captionCreditSources";
-import { getApprovedVaultSources } from "@/lib/lore/getApprovedVaultSources";
 import { getInterviewAnswers } from "@/lib/lore/getInterviewAnswers";
 import { socialSignalSources } from "@/lib/lore/socialSignalSources";
 import type { DocMaterial } from "@/lib/lore/types";
 import { isCitableSource } from "@/lib/sources/isCitableSource";
+import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
 
 /**
  * Everything the Lore is built from, read once.
@@ -23,7 +23,7 @@ export async function gatherDocMaterial(artistId: string): Promise<DocMaterial> 
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const artistName = artist.name ?? "Unknown Artist";
 
-  const approvedSources = await getApprovedVaultSources(artistId);
+  const approvedSources = await getVaultSourcesByStatus(artistId, "approved");
   const vaultSources = approvedSources.filter(isCitableSource);
   const uncitable = approvedSources.length - vaultSources.length;
   if (uncitable > 0) {

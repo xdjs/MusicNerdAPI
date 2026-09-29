@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ getApprovedVaultSources: vi.fn(), generateText: vi.fn() }));
-vi.mock("@/lib/lore/getApprovedVaultSources", () => ({
-  getApprovedVaultSources: m.getApprovedVaultSources,
+const m = vi.hoisted(() => ({ getVaultSourcesByStatus: vi.fn(), generateText: vi.fn() }));
+vi.mock("@/lib/vault/getVaultSourcesByStatus", () => ({
+  getVaultSourcesByStatus: m.getVaultSourcesByStatus,
 }));
 vi.mock("@/lib/ai/generateText", () => ({ generateText: m.generateText }));
 const { generateLoreSummary } = await import("@/lib/lore/generateLoreSummary");
@@ -21,7 +21,7 @@ const sources = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.getApprovedVaultSources.mockResolvedValue(sources);
+  m.getVaultSourcesByStatus.mockResolvedValue(sources);
 });
 
 describe("generateLoreSummary", () => {
@@ -45,7 +45,7 @@ describe("generateLoreSummary", () => {
   });
 
   it("is null for an empty source set, without a model call", async () => {
-    m.getApprovedVaultSources.mockResolvedValueOnce([]);
+    m.getVaultSourcesByStatus.mockResolvedValueOnce([]);
     expect(await generateLoreSummary("a1")).toBeNull();
     expect(m.generateText).not.toHaveBeenCalled();
   });

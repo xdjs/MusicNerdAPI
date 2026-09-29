@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
   getArtistById: vi.fn(),
-  getApprovedVaultSources: vi.fn(),
+  getVaultSourcesByStatus: vi.fn(),
   getInterviewAnswers: vi.fn(),
   getSocialPostsOrNull: vi.fn(),
   socialSignalSources: vi.fn(),
   captionCreditSources: vi.fn(),
 }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.getArtistById }));
-vi.mock("@/lib/lore/getApprovedVaultSources", () => ({
-  getApprovedVaultSources: m.getApprovedVaultSources,
+vi.mock("@/lib/vault/getVaultSourcesByStatus", () => ({
+  getVaultSourcesByStatus: m.getVaultSourcesByStatus,
 }));
 vi.mock("@/lib/lore/getInterviewAnswers", () => ({ getInterviewAnswers: m.getInterviewAnswers }));
 vi.mock("@/lib/instagram/getSocialPostsOrNull", () => ({
@@ -43,7 +43,7 @@ const credits = {
 beforeEach(() => {
   vi.clearAllMocks();
   m.getArtistById.mockResolvedValue(artist);
-  m.getApprovedVaultSources.mockResolvedValue([read, unread]);
+  m.getVaultSourcesByStatus.mockResolvedValue([read, unread]);
   m.getInterviewAnswers.mockResolvedValue([
     { question: "Sound?", answer: "heartbreak you can dance to" },
     { question: "Offline?", answer: null },

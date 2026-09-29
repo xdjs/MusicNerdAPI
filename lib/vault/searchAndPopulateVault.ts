@@ -1,5 +1,6 @@
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
-import { getLoreClaimGeneration } from "@/lib/lore/getLoreClaimGeneration";
+import { db } from "@/lib/db/db";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import type { ArtistOperationOwnership } from "@/lib/ownership/types";
 import { withArtistOperation } from "@/lib/ownership/withArtistOperation";
@@ -22,7 +23,7 @@ export async function searchAndPopulateVault(
   opts: SourceSearchOptions = {},
 ): Promise<VaultSource[]> {
   const ownership: ArtistOperationOwnership = getArtistOperationOwnership(artistId) ?? {
-    expectedClaimId: await getLoreClaimGeneration(artistId),
+    expectedClaimId: (await findApprovedClaim(db, artistId))?.id ?? null,
   };
   return withArtistOperation(artistId, ownership, async () => {
     const activityId =

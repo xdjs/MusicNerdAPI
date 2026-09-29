@@ -38,8 +38,8 @@ const mockWebSearch = m.webSearch,
   dbExecute = m.dbExecute;
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.dbExecute } }));
 vi.mock("@/lib/activity/recordArtistActivity", () => ({ recordArtistActivity: m.record }));
-vi.mock("@/lib/lore/getLoreClaimGeneration", () => ({
-  getLoreClaimGeneration: async () => "claim",
+vi.mock("@/lib/ownership/findApprovedClaim", () => ({
+  findApprovedClaim: async () => ({ id: "claim" }),
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.getArtist }));

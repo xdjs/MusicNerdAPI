@@ -1,3 +1,5 @@
+import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
+
 /**
  * The part of a stored link value that identifies the profile. Usually the
  * value itself, since these columns hold handles. When one holds a whole url,
@@ -9,7 +11,7 @@
  * @returns The identifying part, lowercased and without an "@".
  */
 export function identifyingPart(value: string): string {
-  const v = value.trim().toLowerCase().replace(/^@/, "");
+  const v = normalizeHandle(value);
   if (!/^https?:\/\//.test(v)) return v;
   const segments = v.split(/[?#]/)[0].split("/").filter(Boolean).slice(2);
   return segments.sort((a, b) => b.length - a.length)[0] ?? v;
