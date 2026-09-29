@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
-import { artistClaims } from "@/lib/db/schema";
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import type { TransactionDb } from "@/lib/ownership/types";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
@@ -16,7 +16,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 export async function lockScopedArtistWrite(tx: TransactionDb, artistId: string): Promise<void> {
   const context = getArtistOperationOwnership(artistId);
   if (!context) return;
-  await tx.execute(sql`select id from artists where id = ${artistId}::uuid for update`);
+  await lockArtistRow(tx, artistId);
   if (context.userId) {
     await authorizeLockedArtistWrite(tx, artistId, {
       userId: context.userId,
@@ -24,8 +24,6 @@ export async function lockScopedArtistWrite(tx: TransactionDb, artistId: string)
     });
     return;
   }
-  const claim = await tx.query.artistClaims.findFirst({
-    where: and(eq(artistClaims.artistId, artistId), eq(artistClaims.status, "approved")),
-  });
+  const claim = await findApprovedClaim(tx, artistId);
   if ((claim?.id ?? null) !== context.expectedClaimId) throw new OwnershipChangedError();
 }

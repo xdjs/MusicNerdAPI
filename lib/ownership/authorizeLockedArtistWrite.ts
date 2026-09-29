@@ -1,5 +1,6 @@
-import { and, eq } from "drizzle-orm";
-import { artistClaims, users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { users } from "@/lib/db/schema";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import type { ArtistWriteAuth, TransactionDb } from "@/lib/ownership/types";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
@@ -18,9 +19,7 @@ export async function authorizeLockedArtistWrite(
   artistId: string,
   auth: ArtistWriteAuth,
 ): Promise<void> {
-  const claim = await tx.query.artistClaims.findFirst({
-    where: and(eq(artistClaims.artistId, artistId), eq(artistClaims.status, "approved")),
-  });
+  const claim = await findApprovedClaim(tx, artistId);
   if ((claim?.id ?? null) !== auth.expectedClaimId) throw new OwnershipChangedError();
   if (claim?.userId !== auth.userId) {
     const user = await tx.query.users.findFirst({ where: eq(users.id, auth.userId) });

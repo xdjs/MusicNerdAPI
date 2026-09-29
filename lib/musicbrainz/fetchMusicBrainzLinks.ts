@@ -3,7 +3,7 @@ import { MIN_SCORE } from "@/lib/musicbrainz/const";
 import { mb } from "@/lib/musicbrainz/mb";
 import { sinceLastCall } from "@/lib/musicbrainz/sinceLastCall";
 import type { MusicBrainzLinks } from "@/lib/musicbrainz/types";
-import { foldAlnum } from "@/lib/text/foldAlnum";
+import { foldName } from "@/lib/text/foldName";
 
 /**
  * An artist's links from MusicBrainz, matched by identifier where possible.
@@ -32,7 +32,7 @@ export async function fetchMusicBrainzLinks(
   );
   if (candidates.length === 0) return null;
 
-  const wantName = foldAlnum(artistName);
+  const wantName = foldName(artistName);
   let fallback: MusicBrainzLinks | null = null;
   for (const cand of candidates.slice(0, 3)) {
     await sinceLastCall();
@@ -56,7 +56,7 @@ export async function fetchMusicBrainzLinks(
     );
     if (identifies) return { matchedBy: "identifier", urls, homepage };
     // Keep looking for an identifier, which outranks an exact-name match.
-    if (!fallback && foldAlnum(String(cand.name ?? "")) === wantName) {
+    if (!fallback && foldName(String(cand.name ?? "")) === wantName) {
       fallback = { matchedBy: "exact-name", urls, homepage };
     }
   }
@@ -64,7 +64,7 @@ export async function fetchMusicBrainzLinks(
   // Several high-scoring entries with this name: it is shared, so don't guess.
   if (
     fallback &&
-    candidates.filter(c => foldAlnum(String(c.name ?? "")) === wantName).length === 1
+    candidates.filter(c => foldName(String(c.name ?? "")) === wantName).length === 1
   ) {
     return fallback;
   }

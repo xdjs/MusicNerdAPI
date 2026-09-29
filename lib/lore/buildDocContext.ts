@@ -7,6 +7,7 @@ import { sourceAgeLabel } from "@/lib/lore/sourceAgeLabel";
 import { sourceManifestBlock } from "@/lib/lore/sourceManifestBlock";
 import { toSourceList } from "@/lib/lore/toSourceList";
 import type { DocSource } from "@/lib/lore/types";
+import { withoutAt } from "@/lib/artists/withoutAt";
 
 /**
  * The Lore prompt: the artist's links, their Spotify catalog, the numbered
@@ -34,8 +35,7 @@ export async function buildDocContext(
   if (artist.instagram) parts.push(`Instagram: https://instagram.com/${artist.instagram}`);
   if (artist.x) parts.push(`X: https://x.com/${artist.x}`);
   if (artist.soundcloud) parts.push(`SoundCloud: ${artist.soundcloud}`);
-  if (artist.youtube)
-    parts.push(`YouTube: https://youtube.com/@${artist.youtube.replace(/^@/, "")}`);
+  if (artist.youtube) parts.push(`YouTube: https://youtube.com/@${withoutAt(artist.youtube)}`);
 
   const catalog = artist.spotify ? await catalogBlock(artist.spotify) : null;
   if (catalog) parts.push(catalog);

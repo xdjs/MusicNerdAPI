@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
-  getLoreClaimGeneration: vi.fn(),
+  findApprovedClaim: vi.fn(),
   getArtistDoc: vi.fn(),
   synthesizeArtistDoc: vi.fn(),
   generateLoreSummary: vi.fn(),
   persistRefreshedLore: vi.fn(),
 }));
-vi.mock("@/lib/lore/getLoreClaimGeneration", () => ({
-  getLoreClaimGeneration: m.getLoreClaimGeneration,
+vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/ownership/findApprovedClaim", () => ({
+  findApprovedClaim: m.findApprovedClaim,
 }));
 vi.mock("@/lib/lore/getArtistDoc", () => ({ getArtistDoc: m.getArtistDoc }));
 vi.mock("@/lib/lore/synthesizeArtistDoc", () => ({ synthesizeArtistDoc: m.synthesizeArtistDoc }));
@@ -23,7 +24,7 @@ const summary = { text: "S", sourceKey: "k" };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.getLoreClaimGeneration.mockResolvedValue("claim-1");
+  m.findApprovedClaim.mockResolvedValue({ id: "claim-1" });
   m.getArtistDoc.mockResolvedValue({ content: "old" });
   m.synthesizeArtistDoc.mockResolvedValue({ doc: "## Overview\nNew.", sources });
   m.generateLoreSummary.mockResolvedValue(summary);
@@ -33,7 +34,7 @@ beforeEach(() => {
 describe("refreshArtistDoc", () => {
   it("captures ownership before synthesis and hands the job to the guarded write", async () => {
     expect(await refreshArtistDoc("a1", { createIfMissing: true, jobId: "j1" })).toBe("rebuilt");
-    expect(m.getLoreClaimGeneration.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(m.findApprovedClaim.mock.invocationCallOrder[0]).toBeLessThan(
       m.synthesizeArtistDoc.mock.invocationCallOrder[0],
     );
     expect(m.persistRefreshedLore).toHaveBeenCalledWith(
@@ -48,7 +49,7 @@ describe("refreshArtistDoc", () => {
 
   it("uses the claim the job was queued under instead of reading it", async () => {
     await refreshArtistDoc("a1", { createIfMissing: true, jobId: "j1", expectedClaimId: null });
-    expect(m.getLoreClaimGeneration).not.toHaveBeenCalled();
+    expect(m.findApprovedClaim).not.toHaveBeenCalled();
     expect(m.persistRefreshedLore.mock.calls[0][3]).toBeNull();
   });
 

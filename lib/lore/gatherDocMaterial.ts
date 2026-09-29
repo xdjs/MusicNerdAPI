@@ -1,7 +1,7 @@
+import { getArtistById } from "@/lib/artists/getArtistById";
 import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { captionCreditSources } from "@/lib/lore/captionCreditSources";
 import { getApprovedVaultSources } from "@/lib/lore/getApprovedVaultSources";
-import { getArtistForDoc } from "@/lib/lore/getArtistForDoc";
 import { getInterviewAnswers } from "@/lib/lore/getInterviewAnswers";
 import { socialSignalSources } from "@/lib/lore/socialSignalSources";
 import type { DocMaterial } from "@/lib/lore/types";
@@ -19,7 +19,7 @@ import { isCitableSource } from "@/lib/sources/isCitableSource";
  * @returns The material. Throws when the artist does not exist.
  */
 export async function gatherDocMaterial(artistId: string): Promise<DocMaterial> {
-  const artist = await getArtistForDoc(artistId);
+  const artist = await getArtistById(artistId);
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const artistName = artist.name ?? "Unknown Artist";
 

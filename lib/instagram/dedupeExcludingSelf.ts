@@ -1,4 +1,5 @@
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
+import { withoutAt } from "@/lib/artists/withoutAt";
 
 /**
  * Dedupes handles and drops the artist's own: a coauthor or tagged-user list
@@ -15,7 +16,7 @@ export function dedupeExcludingSelf(handles: string[], selfNorm: string): string
     const key = normalizeHandle(h);
     if (!key || key === selfNorm || seen.has(key)) continue;
     seen.add(key);
-    out.push(h.trim().replace(/^@/, ""));
+    out.push(withoutAt(h.trim()));
   }
   return out;
 }

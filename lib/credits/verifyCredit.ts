@@ -6,6 +6,7 @@ import type { CaptionCredit, RawCredit } from "@/lib/credits/types";
 import { wordsOf } from "@/lib/credits/wordsOf";
 import type { SocialPostRow } from "@/lib/instagram/types";
 import { foldName } from "@/lib/text/foldName";
+import { withoutAt } from "@/lib/artists/withoutAt";
 
 /**
  * Checks one credit against the post it claims to come from. The cited url must
@@ -25,7 +26,7 @@ export function verifyCredit(
   artistHandle: string,
 ): CaptionCredit | null {
   const url = typeof c.url === "string" ? c.url : "";
-  const subject = typeof c.subject === "string" ? c.subject.trim().replace(/^@/, "") : "";
+  const subject = typeof c.subject === "string" ? withoutAt(c.subject.trim()) : "";
   const role = typeof c.role === "string" ? c.role.trim() : "";
   // A role has to say something: a bare camera emoji is nothing as a label on an edge.
   if (!/\p{L}{2}/u.test(role)) return null;

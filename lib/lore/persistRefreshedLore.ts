@@ -1,7 +1,9 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { artistClaims, artistDocs, artistResearchJobs } from "@/lib/db/schema";
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
+import { artistDocs, artistResearchJobs } from "@/lib/db/schema";
 import type { LoreSummary } from "@/lib/lore/types";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
  * Writes a rebuilt Lore, only if the claim it was built under is still the
@@ -26,10 +28,8 @@ export async function persistRefreshedLore(
   loreSummary?: LoreSummary | null,
 ): Promise<boolean> {
   return db.transaction(async tx => {
-    await tx.execute(sql`select id from artists where id = ${artistId}::uuid for update`);
-    const claim = await tx.query.artistClaims.findFirst({
-      where: and(eq(artistClaims.artistId, artistId), eq(artistClaims.status, "approved")),
-    });
+    await lockArtistRow(tx, artistId);
+    const claim = await findApprovedClaim(tx, artistId);
     if ((claim?.id ?? null) !== expectedClaimId) return false;
     if (jobId) {
       const job = await tx.query.artistResearchJobs.findFirst({

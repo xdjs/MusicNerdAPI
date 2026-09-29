@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
+import { rowsOf } from "@/lib/db/rowsOf";
 
 /**
  * Hands a finished lore_refresh back: done, unless a newer request arrived
@@ -17,6 +18,6 @@ export async function settleLoreRefresh(jobId: string, requestedAt: string): Pro
            claimed_at = null, updated_at = now()
      where id = ${jobId}::uuid
     returning status`);
-  const status = (rows as unknown as { status: string }[])[0]?.status;
+  const status = (rowsOf(rows)[0] as { status?: string } | undefined)?.status;
   return status === undefined || status === "done";
 }

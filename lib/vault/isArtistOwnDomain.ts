@@ -1,4 +1,4 @@
-import { foldAlnum } from "@/lib/text/foldAlnum";
+import { foldName } from "@/lib/text/foldName";
 import { OWN_DOMAIN_SUFFIXES, TWO_PART_TLDS } from "@/lib/vault/const";
 
 /**
@@ -13,7 +13,7 @@ import { OWN_DOMAIN_SUFFIXES, TWO_PART_TLDS } from "@/lib/vault/const";
  * @returns True when the URL is on the artist's own domain.
  */
 export function isArtistOwnDomain(url: string, artistName: string): boolean {
-  const name = foldAlnum(artistName);
+  const name = foldName(artistName);
   if (name.length < 5) return false;
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
@@ -24,7 +24,7 @@ export function isArtistOwnDomain(url: string, artistName: string): boolean {
     if (registrable.length < (twoPartTld ? 3 : 2)) return false;
     // A subdomain is the registrant's choice and says nothing about who they are.
     if (parts.length > registrable.length) return false;
-    const label = foldAlnum(registrable[0] ?? "");
+    const label = foldName(registrable[0] ?? "");
     return OWN_DOMAIN_SUFFIXES.some(s => label === name + s);
   } catch {
     return false;

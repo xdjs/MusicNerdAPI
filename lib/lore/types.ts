@@ -1,7 +1,7 @@
+import type { ArtistRow } from "@/lib/artists/types";
 import type {
   artistDocCorrections,
   artistInterviewAnswers,
-  artists,
   artistVaultSources,
 } from "@/lib/db/schema";
 
@@ -27,10 +27,6 @@ export type LoreSummary = { text: string; sourceKey: string };
 /** Inventory metadata only: never source contents. */
 export type LoreSummarySource = { id: string; title?: string | null; type?: string | null };
 
-export type ArtistForDoc = Pick<
-  typeof artists.$inferSelect,
-  "id" | "name" | "instagram" | "spotify" | "x" | "soundcloud" | "youtube"
->;
 export type VaultSourceRow = typeof artistVaultSources.$inferSelect;
 export type InterviewAnswerRow = typeof artistInterviewAnswers.$inferSelect;
 export type DocCorrection = Pick<
@@ -44,7 +40,7 @@ export type DocCorrection = Pick<
  * its material line always mean the same row.
  */
 export type DocMaterial = {
-  artist: ArtistForDoc;
+  artist: ArtistRow;
   artistName: string;
   vaultSources: VaultSourceRow[];
   answers: InterviewAnswerRow[];

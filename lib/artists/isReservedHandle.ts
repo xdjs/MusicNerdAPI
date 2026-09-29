@@ -1,4 +1,5 @@
 import { RESERVED_HANDLES } from "@/lib/artists/const";
+import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 
 /**
  * Is this "handle" a platform route rather than someone's account? A one-
@@ -10,7 +11,7 @@ import { RESERVED_HANDLES } from "@/lib/artists/const";
  * @returns True when the id must not be written as a handle.
  */
 export function isReservedHandle(siteName: string, id: string): boolean {
-  const handle = id.trim().toLowerCase().replace(/^@/, "");
+  const handle = normalizeHandle(id);
   if (!handle || handle.length < 2) return true;
   return RESERVED_HANDLES[siteName.toLowerCase()]?.has(handle) ?? false;
 }

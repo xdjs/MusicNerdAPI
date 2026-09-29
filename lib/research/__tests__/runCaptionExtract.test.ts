@@ -16,8 +16,8 @@ const m = vi.hoisted(() => ({
   failResearchJob: vi.fn(),
   failJobAtCursor: vi.fn(),
 }));
-vi.mock("@/lib/db/db", () => ({
-  db: { query: { artists: { findFirst: (...a: unknown[]) => m.findFirst(...a) } } },
+vi.mock("@/lib/artists/getArtistById", () => ({
+  getArtistById: (...a: unknown[]) => m.findFirst(...a),
 }));
 vi.mock("@/lib/instagram/getSocialPostsOrNull", () => ({
   getSocialPostsOrNull: (...a: unknown[]) => m.getSocialPostsOrNull(...a),
