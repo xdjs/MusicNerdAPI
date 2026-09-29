@@ -1,3 +1,4 @@
+import { readSpotifyJson } from "@/lib/spotify/readSpotifyJson";
 import type { SpotifyHeaders, SpotifyRelease } from "@/lib/spotify/types";
 
 /**
@@ -14,12 +15,10 @@ export async function getSpotifyCatalogDetail(
 ): Promise<SpotifyRelease[]> {
   if (!id) return [];
   try {
-    const res = await fetch(
+    const data = (await readSpotifyJson(
       `https://api.spotify.com/v1/artists/${id}/albums?include_groups=album%2Csingle%2Cappears_on&limit=50&market=US`,
-      { headers: headers.headers },
-    );
-    if (!res.ok) throw new Error(`Spotify returned ${res.status}`);
-    const data = (await res.json()) as {
+      headers,
+    )) as {
       items?: Array<{
         name?: string;
         release_date?: string;
