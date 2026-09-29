@@ -77,6 +77,7 @@ export const artists = pgTable("artists", {
 export const users = pgTable("users", {
   id: uuid().primaryKey().notNull(),
   isAdmin: boolean("is_admin").notNull(),
+  privyUserId: text("privy_user_id"),
 });
 
 /** Platform templates and patterns, one row per platform. */
