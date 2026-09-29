@@ -4,7 +4,6 @@ import type {
   ResolvedWebSearchOptions,
   WebSearchResult,
 } from "@/lib/search/types";
-import { fetchWithTimeout } from "@/lib/networking/fetchWithTimeout";
 
 /**
  * One Tavily search: `POST /search` with a Bearer key and snake_case fields;
@@ -22,19 +21,17 @@ export async function tavilySearch(
   opts: ResolvedWebSearchOptions,
   apiKey: string,
 ): Promise<ProviderOutcome> {
-  const res = await fetchWithTimeout(
-    TAVILY_ENDPOINT,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        query,
-        include_domains: opts.includeDomains,
-        max_results: opts.maxResults,
-      }),
-    },
-    REQUEST_TIMEOUT_MS,
-  );
+  // A timeout or network error is "no response", reported below, not a throw.
+  const res = await fetch(TAVILY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      query,
+      include_domains: opts.includeDomains,
+      max_results: opts.maxResults,
+    }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch(() => null);
   if (!res) {
     console.error(
       `[webSearch] Tavily did not respond (timeout or network) for: ${query.slice(0, 80)}`,

@@ -1,3 +1,4 @@
+import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import { escapeRegExp } from "@/lib/text/escapeRegExp";
 
 /**
@@ -24,7 +25,7 @@ export function mentionDensity(
   const name = artistName.trim().toLowerCase();
   if (!name) return null;
   const handles = identifiers
-    .map(i => i.split(":").pop()?.trim().toLowerCase().replace(/^@/, "") ?? "")
+    .map(i => normalizeHandle(i.split(":").pop() ?? ""))
     .filter(h => h.length >= 4 && !/^https?$/.test(h));
   // Flexible whitespace: "Pete  Rango" and "Pete\nRango" are the same mention.
   const nameRe = new RegExp(name.split(/\s+/).map(escapeRegExp).join("\\s+"), "i");

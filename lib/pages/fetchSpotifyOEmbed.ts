@@ -1,6 +1,5 @@
 import { EMPTY_PREVIEW, PREVIEW_TIMEOUT_MS, SPOTIFY_OEMBED_ENDPOINT } from "@/lib/pages/const";
 import type { LinkPreview } from "@/lib/pages/types";
-import { fetchWithTimeout } from "@/lib/networking/fetchWithTimeout";
 
 /**
  * Spotify's official oEmbed: the real artist photo, no scraping, no auth.
@@ -10,12 +9,10 @@ import { fetchWithTimeout } from "@/lib/networking/fetchWithTimeout";
  */
 export async function fetchSpotifyOEmbed(url: string): Promise<LinkPreview> {
   try {
-    const res = await fetchWithTimeout(
-      `${SPOTIFY_OEMBED_ENDPOINT}${encodeURIComponent(url)}`,
-      {},
-      PREVIEW_TIMEOUT_MS,
-    );
-    if (!res || !res.ok) return EMPTY_PREVIEW;
+    const res = await fetch(`${SPOTIFY_OEMBED_ENDPOINT}${encodeURIComponent(url)}`, {
+      signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+    });
+    if (!res.ok) return EMPTY_PREVIEW;
     const data = await res.json();
     const imageUrl =
       typeof data?.thumbnail_url === "string" && data.thumbnail_url.startsWith("https://")
