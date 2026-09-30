@@ -8,6 +8,7 @@ import { getArtistNameById } from "@/lib/instagram/getArtistNameById";
 import { mapApifyPost } from "@/lib/instagram/mapApifyPost";
 import { removeRevokedInstagramThumbnails } from "@/lib/instagram/removeRevokedInstagramThumbnails";
 import { retainMappedThumbnails } from "@/lib/instagram/retainMappedThumbnails";
+import { selectLatestPosts } from "@/lib/instagram/selectLatestPosts";
 import { upsertMappedRows } from "@/lib/instagram/upsertMappedRows";
 import type { IngestResult, SocialPostInsert, ThumbnailUploadScope } from "@/lib/instagram/types";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
@@ -25,6 +26,8 @@ import { withResearchJobWrite } from "@/lib/research/withResearchJobWrite";
  * @param datasetId - The finished run's dataset.
  * @param jobId - The job doing the work.
  * @param cursor - The first post of this batch.
+ * @param opts - Collection options.
+ * @param opts.latestOnly - Update Latest: only the newest own posts (`selectLatestPosts`).
  * @returns The counts, with `nextCursor` while posts remain; null when the dataset could not be read, so the job retries.
  */
 export async function collectInstagramScrape(
@@ -33,6 +36,7 @@ export async function collectInstagramScrape(
   datasetId: string,
   jobId: string,
   cursor = 0,
+  opts?: { latestOnly?: boolean },
 ): Promise<IngestResult | null> {
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return null;
@@ -47,10 +51,10 @@ export async function collectInstagramScrape(
     if (!Array.isArray(items)) return null;
 
     const artistName = await getArtistNameById(artistId);
-    const rows = items
+    const mapped = items
       .map(item => mapApifyPost(item, artistId, handle, artistName))
-      .filter((r): r is SocialPostInsert => r !== null)
-      .slice(0, MAX_SCRAPE_LIMIT);
+      .filter((r): r is SocialPostInsert => r !== null);
+    const rows = opts?.latestOnly ? selectLatestPosts(mapped) : mapped.slice(0, MAX_SCRAPE_LIMIT);
     const batch = rows.slice(cursor, cursor + THUMBNAILS_PER_SLICE);
     const scope: ThumbnailUploadScope = { jobId, attemptedPaths: new Set() };
     // Reject an already revoked job before creating any storage objects.

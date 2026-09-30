@@ -14,17 +14,24 @@ import { withoutAt } from "@/lib/artists/withoutAt";
  * @param handle - The Instagram handle, with or without "@".
  * @param opts - Scrape options.
  * @param opts.limit - Posts to fetch, default 200, capped at 300.
+ * @param opts.maxTotalChargeUsd - Apify spend cap for the run (Update Latest).
+ * @param opts.onlyPostsNewerThan - ISO date; older posts are skipped (Update Latest).
  * @returns "started" with the run id, or "failed" with a reason.
  */
 export async function startInstagramScrape(
   handle: string,
-  opts?: { limit?: number },
+  opts?: { limit?: number; maxTotalChargeUsd?: number; onlyPostsNewerThan?: string },
 ): Promise<ApifyRunState> {
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return { status: "failed", reason: "no apify token" };
   const limit = Math.min(Math.max(1, opts?.limit ?? DEFAULT_SCRAPE_LIMIT), MAX_SCRAPE_LIMIT);
   try {
-    const res = await fetch(`${APIFY_RUNS_URL}?token=${encodeURIComponent(token)}`, {
+    const query = new URLSearchParams({ token });
+    if (opts?.maxTotalChargeUsd !== undefined) {
+      query.set("maxTotalChargeUsd", String(opts.maxTotalChargeUsd));
+      query.set("maxItems", String(limit));
+    }
+    const res = await fetch(`${APIFY_RUNS_URL}?${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -32,6 +39,7 @@ export async function startInstagramScrape(
         resultsType: "posts",
         resultsLimit: limit,
         addParentData: false,
+        ...(opts?.onlyPostsNewerThan ? { onlyPostsNewerThan: opts.onlyPostsNewerThan } : {}),
       }),
       signal: AbortSignal.timeout(APIFY_CONTROL_TIMEOUT_MS),
     });
