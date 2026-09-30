@@ -1,15 +1,17 @@
 import type { JobKind } from "@/lib/research/types";
 
 /**
- * The job kinds this API runs: every kind MusicNerdWeb's route runs. Until the
- * web cutover both workers take from the same queue, and the lease keeps them
- * off each other's jobs (xdjs/MusicNerdWeb#1365).
+ * The job kinds this API runs: every research kind, since API 1d added
+ * Update Latest's Instagram check. Until the web cutover both workers take
+ * from the same queue, and the lease keeps them off each other's jobs
+ * (xdjs/MusicNerdWeb#1365).
  */
 export const PORTED_JOB_KINDS: JobKind[] = [
   "social_ingest",
   "caption_extract",
   "lore_refresh",
   "source_search",
+  "latest_refresh",
 ];
 /** A source search has no cursor, so a slice shorter than this cannot finish one. */
 export const SOURCE_SEARCH_MIN_SLICE_MS = 30_000;

@@ -24,6 +24,22 @@ describe("startInstagramScrape", () => {
     });
   });
 
+  it("caps a Latest check's cost and window", async () => {
+    fetchMock.mockResolvedValue(json({ data: { id: "run-1" } }));
+    await startInstagramScrape("x", {
+      limit: 9,
+      maxTotalChargeUsd: 0.03,
+      onlyPostsNewerThan: "2026-09-01T00:00:00.000Z",
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(new URL(url).searchParams.get("maxTotalChargeUsd")).toBe("0.03");
+    expect(new URL(url).searchParams.get("maxItems")).toBe("9");
+    expect(JSON.parse(init.body)).toMatchObject({
+      resultsLimit: 9,
+      onlyPostsNewerThan: "2026-09-01T00:00:00.000Z",
+    });
+  });
+
   it("clamps the limit to the hard cap", async () => {
     fetchMock.mockResolvedValue(json({ data: { id: "run-1" } }));
     await startInstagramScrape("x", { limit: 5000 });

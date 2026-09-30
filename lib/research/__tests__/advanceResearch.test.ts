@@ -39,7 +39,13 @@ describe("advanceResearch", () => {
     claim.mockResolvedValue(null);
     await advanceResearch({ budgetMs: 50_000, artistId: "artist-1", excludeJobIds: ["x"] });
     expect(claim).toHaveBeenCalledWith({
-      kinds: ["social_ingest", "caption_extract", "lore_refresh", "source_search"],
+      kinds: [
+        "social_ingest",
+        "caption_extract",
+        "lore_refresh",
+        "source_search",
+        "latest_refresh",
+      ],
       artistId: "artist-1",
       excludeIds: ["x"],
     });

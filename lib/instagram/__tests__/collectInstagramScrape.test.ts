@@ -84,6 +84,30 @@ describe("collectInstagramScrape", () => {
     expect(written.map(r => r.platformPostId)).toEqual(items.map(i => i.id));
   });
 
+  it("stores only the latest own posts for a Latest check, in one slice", async () => {
+    const now = Date.now();
+    const items = [
+      ...feed(12).map((p, i) => ({
+        ...p,
+        timestamp: new Date(now - (i + 1) * 3_600_000).toISOString(),
+      })),
+      {
+        id: "old",
+        ownerUsername: "artist",
+        url: "https://www.instagram.com/p/old/",
+        timestamp: new Date(now - 40 * 86_400_000).toISOString(),
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => items })),
+    );
+    expect(
+      await collectInstagramScrape(artist, "artist", "ds", "job", 0, { latestOnly: true }),
+    ).toEqual({ ingested: 9, ownPosts: 9, collabPosts: 0 });
+    expect(written.map(r => r.platformPostId)).toEqual(items.slice(0, 9).map(i => i.id));
+  });
+
   it("returns null when the dataset cannot be read, so the job retries", async () => {
     vi.stubGlobal(
       "fetch",

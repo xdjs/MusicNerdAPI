@@ -1,3 +1,4 @@
+import { runLatestRefresh } from "@/lib/latest/runLatestRefresh";
 import { runCaptionExtract } from "@/lib/research/runCaptionExtract";
 import { runIngest } from "@/lib/research/runIngest";
 import { runLoreRefresh } from "@/lib/research/runLoreRefresh";
@@ -21,5 +22,7 @@ export async function runResearchJob(job: ResearchJob, deadline: number): Promis
       return runIngest(job, deadline);
     case "source_search":
       return runSourceSearchJob(job, deadline);
+    case "latest_refresh":
+      return runLatestRefresh(job, deadline);
   }
 }
