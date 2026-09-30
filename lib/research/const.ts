@@ -28,3 +28,6 @@ export const PERSIST_RESERVE_MS = 5_000;
 export const MIN_SLICE_MS = 12_000;
 /** Thumbnail collection needs its own download budget, not the tail of a tick. */
 export const COLLECTION_RESERVE_MS = 45_000;
+/** "Look again" holds a new scrape this long after the last social job finished:
+ *  long enough that the button can't be leaned on, short enough that a new post lands. */
+export const RESEARCH_REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
