@@ -16,15 +16,22 @@ import { withoutAt } from "@/lib/artists/withoutAt";
  * interview lines are zipped with the manifest by position, in the fixed order
  * `toSourceList` uses.
  *
+ * `presetSources` is used as-is instead of numbering this read, so a caller
+ * that built the manifest once hands the same ids to the document and the
+ * About. A row that landed since has no id to attach to, so it can't be cited
+ * rather than being mis-cited.
+ *
  * @param artistId - The artist.
+ * @param presetSources - The numbered sources to use, when the caller already built them.
  * @returns The artist's name, the prompt, and the numbered sources it cites.
  */
 export async function buildDocContext(
   artistId: string,
+  presetSources?: DocSource[],
 ): Promise<{ artistName: string; context: string; sources: DocSource[] }> {
   const material = await gatherDocMaterial(artistId);
   const { artist } = material;
-  const sources = toSourceList(material);
+  const sources = presetSources ?? toSourceList(material);
   const vaultIds = sources.filter(s => s.kind === "vault");
   const interviewIds = sources.filter(s => s.kind === "interview");
   const socialIds = sources.filter(s => s.kind === "social");

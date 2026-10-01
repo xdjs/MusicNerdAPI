@@ -111,4 +111,17 @@ describe("buildDocContext", () => {
     expect(m.catalogBlock).not.toHaveBeenCalled();
     expect(context).toBe("");
   });
+
+  it("uses the caller's numbered sources as-is, pairing lines with them in kind order", async () => {
+    const preset = [
+      { id: 7, kind: "vault", label: "Pitchfork review", url: "https://pitchfork.com/x" },
+      { id: 8, kind: "interview", label: "Their own words", url: null },
+      { id: 9, kind: "social", label: "Instagram collaboration with @dameatlas", url: "u1" },
+    ];
+    const { context, sources } = await buildDocContext("a1", preset as never);
+    expect(sources).toBe(preset);
+    expect(context).toContain("[7] Source (");
+    expect(context).toContain("[8] Q: Sound?");
+    expect(context).toContain("[9] Instagram collaboration with @dameatlas");
+  });
 });
