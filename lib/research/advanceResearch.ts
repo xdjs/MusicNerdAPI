@@ -4,7 +4,7 @@ import { PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
 import { failResearchJob } from "@/lib/research/failResearchJob";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { runResearchJob } from "@/lib/research/runResearchJob";
-import type { AdvanceResult } from "@/lib/research/types";
+import type { AdvanceResult, JobKind } from "@/lib/research/types";
 
 /**
  * Claims one job this API can run and works on it for up to `budgetMs`.
@@ -15,15 +15,17 @@ import type { AdvanceResult } from "@/lib/research/types";
  * @param opts.budgetMs - How long the slice may run.
  * @param opts.artistId - Only this artist's jobs.
  * @param opts.excludeJobIds - Jobs already set aside this tick.
+ * @param opts.kinds - Only these kinds (a subset of the ported ones); all ported kinds when omitted.
  * @returns What ran, or `{ ran: false }` when there was nothing to do.
  */
 export async function advanceResearch(opts: {
   budgetMs: number;
   artistId?: string;
   excludeJobIds?: string[];
+  kinds?: JobKind[];
 }): Promise<AdvanceResult> {
   const job = await claimResearchJob({
-    kinds: PORTED_JOB_KINDS,
+    kinds: opts.kinds ?? PORTED_JOB_KINDS,
     artistId: opts.artistId,
     excludeIds: opts.excludeJobIds,
   });

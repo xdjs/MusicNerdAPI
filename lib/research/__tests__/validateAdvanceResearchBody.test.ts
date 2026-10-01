@@ -18,6 +18,22 @@ describe("validateAdvanceResearchBody", () => {
     expect(await validateAdvanceResearchBody(post("not json"))).toEqual({});
   });
 
+  it("accepts the job kinds to claim", async () => {
+    expect(
+      await validateAdvanceResearchBody(post(JSON.stringify({ kinds: ["latest_refresh"] }))),
+    ).toEqual({
+      kinds: ["latest_refresh"],
+    });
+  });
+
+  it("rejects a kind this API does not run, or an empty list, with a 400", async () => {
+    for (const kinds of [["latest_refresh", "bogus"], []]) {
+      const result = await validateAdvanceResearchBody(post(JSON.stringify({ kinds })));
+      expect(result).toBeInstanceOf(NextResponse);
+      expect((result as NextResponse).status).toBe(400);
+    }
+  });
+
   it("rejects an artist id that is not a UUID with a 400", async () => {
     const result = await validateAdvanceResearchBody(post(JSON.stringify({ artistId: "abc" })));
     expect(result).toBeInstanceOf(NextResponse);
