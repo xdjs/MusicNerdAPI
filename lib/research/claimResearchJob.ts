@@ -9,7 +9,9 @@ import type { JobKind, ResearchJob } from "@/lib/research/types";
  * invocations can never both own the same job, and a claim that is never
  * released expires with its lease instead of wedging. Claiming does not count
  * as an attempt; `attempts` counts failures only, or a long feed would stall
- * after four slices.
+ * after four slices. A job still `running` past its lease is the exception:
+ * its last invocation was killed before it could record anything, and that
+ * counts, or a job the platform kills every time is retried forever.
  *
  * @param opts - Which kinds to take, optionally one artist, and jobs this tick already touched.
  * @param opts.kinds - The job kinds this caller can run.
@@ -36,7 +38,8 @@ export async function claimResearchJob(opts: {
       : sql``;
     const rows = await db.execute(sql`
       update artist_research_jobs
-         set status = 'running', claimed_at = now(), updated_at = now()
+         set status = 'running', claimed_at = now(), updated_at = now(),
+             attempts = attempts + case when status = 'running' then 1 else 0 end
        where id = (
          select id from artist_research_jobs
           where status in ('pending', 'running')

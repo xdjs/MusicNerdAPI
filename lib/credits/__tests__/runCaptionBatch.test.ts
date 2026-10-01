@@ -82,7 +82,7 @@ describe("runCaptionBatch", () => {
         throw new Error("caption extraction timed out");
       })
       .mockImplementation(async (req: unknown) => ({ output: reply(urlsIn(req)) }));
-    const out = await runCaptionBatch(posts, "Artist", "artist", "0", 1000);
+    const out = await runCaptionBatch(posts, "Artist", "artist", "0", 20_000);
     expect(generateObject).toHaveBeenCalledTimes(3);
     expect(out?.credits.map(c => c.url)).toEqual(posts.map(p => p.url));
   });
@@ -99,8 +99,52 @@ describe("runCaptionBatch", () => {
       throw new Error("caption extraction timed out");
     });
     expect(
-      await runCaptionBatch([1, 2, 3].map(numberedPost), "Artist", "artist", "0", 1000),
+      await runCaptionBatch([1, 2, 3].map(numberedPost), "Artist", "artist", "0", 20_000),
     ).toBeNull();
+  });
+
+  // LATASHÁ, production 2026-10-01: the first call spent its whole budget and
+  // the halves got the same budget again, so the invocation was killed at 60 s
+  // before the slice could write anything, every lease, for two days.
+  it("does not retry when the timed-out call spent the whole budget", async () => {
+    vi.useFakeTimers();
+    generateObject.mockImplementation(() => new Promise(() => {}));
+    const pending = runCaptionBatch(
+      [1, 2, 3, 4].map(numberedPost),
+      "Artist",
+      "artist",
+      "0",
+      20_000,
+    );
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toBeNull();
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("gives the halves what is left of the budget, not a fresh one", async () => {
+    vi.useFakeTimers();
+    generateObject
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("caption extraction timed out")), 5_000),
+          ),
+      )
+      .mockImplementation(() => new Promise(() => {}));
+    let settled = false;
+    const pending = runCaptionBatch(
+      [1, 2, 3, 4].map(numberedPost),
+      "Artist",
+      "artist",
+      "0",
+      20_000,
+    ).finally(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(generateObject).toHaveBeenCalledTimes(3);
+    expect(settled).toBe(true);
+    expect(await pending).toBeNull();
+    vi.useRealTimers();
   });
 
   it("times a batch out at its budget", async () => {
