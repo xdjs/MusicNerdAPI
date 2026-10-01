@@ -111,4 +111,18 @@ describe("advanceResearch", () => {
     });
     expect(fail).toHaveBeenCalledWith("job-1", "apify exploded");
   });
+
+  it("fails a job the platform killed on every attempt instead of running it again", async () => {
+    claim.mockResolvedValue({ ...job, kind: "caption_extract", attempts: 4 });
+    expect(await advanceResearch({ budgetMs: 50_000 })).toEqual({
+      ran: true,
+      jobId: "job-1",
+      kind: "caption_extract",
+      artistId: "artist-1",
+      done: false,
+      progress: "failed: stopped before finishing 4 times",
+    });
+    expect(runResearchJob).not.toHaveBeenCalled();
+    expect(fail).toHaveBeenCalledWith("job-1", "stopped before finishing 4 times");
+  });
 });
