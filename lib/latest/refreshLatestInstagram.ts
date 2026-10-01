@@ -57,9 +57,12 @@ export async function refreshLatestInstagram(
       if (run.retryable) throw new Error(run.reason);
       return { status: "failed" };
     }
-    if (run.status !== "ready") return { status: "pending" };
+    if (run.status !== "ready") {
+      await latestRefreshStore(job, state, undefined, true);
+      return { status: "pending" };
+    }
     state.datasetId = run.datasetId;
-    await latestRefreshStore(job, state);
+    await latestRefreshStore(job, state, undefined, true);
   }
   if (deadline - Date.now() < LATEST_COLLECT_RESERVE_MS) return { status: "pending" };
   const stored = await collectInstagramScrape(job.artistId, handle, state.datasetId, job.id, 0, {

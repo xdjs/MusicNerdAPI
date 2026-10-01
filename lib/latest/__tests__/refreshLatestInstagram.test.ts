@@ -115,3 +115,20 @@ it("recovers collection from the saved dataset without polling or paying again",
   expect(m.check).not.toHaveBeenCalled();
   expect(m.start).not.toHaveBeenCalled();
 });
+
+it("resets the failure allowance after a successful running poll", async () => {
+  const j = job({ runId: "paid-run" });
+  m.check.mockResolvedValueOnce({ status: "running", runId: "paid-run" });
+  await refreshLatestInstagram(j, later());
+  expect(m.store).toHaveBeenCalledWith(j, j.state, undefined, true);
+});
+it("resets on a newly discovered dataset but not on failed cached collection", async () => {
+  const j = job({ runId: "paid-run" });
+  m.check.mockResolvedValueOnce({ status: "ready", runId: "paid-run", datasetId: "dataset" });
+  m.collect.mockResolvedValue(null);
+  await expect(refreshLatestInstagram(j, later())).rejects.toThrow();
+  expect(m.store).toHaveBeenCalledWith(j, j.state, undefined, true);
+  m.store.mockClear();
+  await expect(refreshLatestInstagram(j, later())).rejects.toThrow();
+  expect(m.store).not.toHaveBeenCalledWith(j, j.state, undefined, true);
+});
