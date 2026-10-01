@@ -45,7 +45,18 @@ export async function refreshLatestInstagram(
   }
   if (!state.datasetId) {
     const run = await checkInstagramScrape(state.runId);
-    if (run.status === "failed") return { status: "failed" };
+    if (run.status === "failed") {
+      state.instagramFailure = {
+        phase: "status",
+        reason: run.reason,
+        at: new Date().toISOString(),
+      };
+      await latestRefreshStore(job, state);
+      // The queue counts failures and stops after four attempts. Keep the saved
+      // paid run; a status-request failure is not proof the scrape failed.
+      if (run.retryable) throw new Error(run.reason);
+      return { status: "failed" };
+    }
     if (run.status !== "ready") return { status: "pending" };
     state.datasetId = run.datasetId;
     await latestRefreshStore(job, state);
@@ -54,5 +65,11 @@ export async function refreshLatestInstagram(
   const stored = await collectInstagramScrape(job.artistId, handle, state.datasetId, job.id, 0, {
     latestOnly: true,
   });
-  return stored ? { status: "checked", checkedAt: new Date().toISOString() } : { status: "failed" };
+  if (!stored) {
+    const reason = "Instagram collection unavailable";
+    state.instagramFailure = { phase: "collection", reason, at: new Date().toISOString() };
+    await latestRefreshStore(job, state);
+    throw new Error(reason);
+  }
+  return { status: "checked", checkedAt: new Date().toISOString() };
 }

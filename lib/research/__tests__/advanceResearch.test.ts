@@ -112,3 +112,10 @@ describe("advanceResearch", () => {
     expect(fail).toHaveBeenCalledWith("job-1", "apify exploded");
   });
 });
+
+it("sets a failing Latest job aside for the rest of this cron tick", async () => {
+  claim.mockResolvedValue({ ...job, kind: "latest_refresh" });
+  runResearchJob.mockRejectedValue(new Error("apify status 503"));
+  expect(await advanceResearch({ budgetMs: 55000 })).toMatchObject({ waiting: true });
+  expect(fail).toHaveBeenCalledWith("job-1", "apify status 503");
+});
