@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { advanceResearch } from "@/lib/research/advanceResearch";
 import { ADVANCE_MAX_DURATION_S, RESPONSE_RESERVE_MS } from "@/lib/research/const";
+import type { JobKind } from "@/lib/research/types";
 import { validateAdvanceResearchBody } from "@/lib/research/validateAdvanceResearchBody";
 
 /**
@@ -21,6 +22,7 @@ export async function postResearchAdvanceHandler(request: Request): Promise<Next
     const result = await advanceResearch({
       budgetMs: ADVANCE_MAX_DURATION_S * 1000 - RESPONSE_RESERVE_MS,
       artistId: body.artistId,
+      ...(body.kinds ? { kinds: body.kinds as JobKind[] } : {}),
     });
     console.debug(`[research/advance] ${JSON.stringify(result)} in ${Date.now() - started}ms`);
     return NextResponse.json({ status: "ok", ...result }, { headers });

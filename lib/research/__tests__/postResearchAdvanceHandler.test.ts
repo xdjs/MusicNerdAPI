@@ -27,6 +27,17 @@ describe("postResearchAdvanceHandler", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
+  it("passes the kinds a caller asks for, e.g. Update Latest's own pump", async () => {
+    advance.mockResolvedValue({ ran: false });
+    const id = "50f23458-df64-4381-8042-7333e8b64531";
+    await postResearchAdvanceHandler(post({ artistId: id, kinds: ["latest_refresh"] }));
+    expect(advance).toHaveBeenCalledWith({
+      budgetMs: 56_000,
+      artistId: id,
+      kinds: ["latest_refresh"],
+    });
+  });
+
   it("answers 200 with ran: false on an error, so callers do not back off from healthy work", async () => {
     advance.mockImplementationOnce(async () => {
       throw new Error("pool");

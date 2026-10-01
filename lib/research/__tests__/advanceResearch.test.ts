@@ -51,6 +51,16 @@ describe("advanceResearch", () => {
     });
   });
 
+  it("narrows the claim to the kinds the caller asks for", async () => {
+    claim.mockResolvedValue(null);
+    await advanceResearch({ budgetMs: 50_000, artistId: "artist-1", kinds: ["latest_refresh"] });
+    expect(claim).toHaveBeenCalledWith({
+      kinds: ["latest_refresh"],
+      artistId: "artist-1",
+      excludeIds: undefined,
+    });
+  });
+
   it("runs the claimed job inside the budget, less the persist reserve", async () => {
     claim.mockResolvedValue(job);
     runResearchJob.mockResolvedValue({
