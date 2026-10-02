@@ -6,7 +6,9 @@ const m = vi.hoisted(() => ({
   collect: vi.fn(),
   save: vi.fn(),
   connected: vi.fn(),
+  account: vi.fn(),
 }));
+vi.mock("@/lib/social/getApifyAccountUsername", () => ({ getApifyAccountUsername: m.account }));
 vi.mock("@/lib/social/socialTaskIsConnected", () => ({ socialTaskIsConnected: m.connected }));
 vi.mock("@/lib/research/withResearchJobWrite", () => ({
   withResearchJobWrite: async (_a: string, _j: string, fn: (writer: object) => Promise<unknown>) =>
@@ -34,8 +36,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.plan.mockResolvedValue([]);
   m.connected.mockResolvedValue(true);
+  m.account.mockResolvedValue("xdjs");
 });
 describe("additional durable social stages", () => {
+  it("records the deployed token owner once without retaining other account data", async () => {
+    const current = job();
+    await runAdditionalSocialResearch(current, Date.now() + 55_000);
+    expect(current.state).toMatchObject({
+      apifyAccountUsername: "xdjs",
+      apifyAccountCheckedAt: expect.any(String),
+    });
+    await runAdditionalSocialResearch(current, Date.now() + 55_000);
+    expect(m.account).toHaveBeenCalledTimes(1);
+    expect(m.start).not.toHaveBeenCalled();
+  });
   it("does not scrape a disconnected or changed identity", async () => {
     m.connected.mockResolvedValue(false);
     await runAdditionalSocialResearch(
@@ -59,6 +73,8 @@ describe("additional durable social stages", () => {
       expect.objectContaining({
         id: "j",
         state: {
+          apifyAccountUsername: "xdjs",
+          apifyAccountCheckedAt: expect.any(String),
           instagramFinished: true,
           additionalSocial: {
             tasks: [{ source: "tiktok", handle: "artist", startRequested: true, runId: "paid" }],

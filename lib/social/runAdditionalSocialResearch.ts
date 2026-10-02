@@ -7,6 +7,7 @@ import { collectSocialScrape } from "@/lib/social/collectSocialScrape";
 import type { AdditionalSocialState } from "@/lib/social/types";
 import { withResearchJobWrite } from "@/lib/research/withResearchJobWrite";
 import { socialTaskIsConnected } from "@/lib/social/socialTaskIsConnected";
+import { getApifyAccountUsername } from "@/lib/social/getApifyAccountUsername";
 
 /** Runs one durable additional-source stage. A failed optional source never discards other research. */
 export async function runAdditionalSocialResearch(
@@ -30,6 +31,14 @@ export async function runAdditionalSocialResearch(
   )
     throw new Error("invalid additional social state");
   job.state = { ...job.state, instagramFinished: true, additionalSocial: state };
+  if (job.state.apifyAccountCheckedAt === undefined) {
+    job.state.apifyAccountUsername = await getApifyAccountUsername();
+    job.state.apifyAccountCheckedAt = new Date().toISOString();
+    if (deadline - Date.now() < 35_000) {
+      await persistSocialResearch(job, true);
+      return { done: false, waiting: true, progress: "Checked social provider account" };
+    }
+  }
   const task = state.tasks[state.index];
   if (!task) return null;
   let failure: string | undefined;
