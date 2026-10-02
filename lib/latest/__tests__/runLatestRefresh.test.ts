@@ -67,6 +67,7 @@ describe("runLatestRefresh", () => {
         sources: expect.objectContaining({ instagram: { status: "checked", checkedAt: "t" } }),
       }),
       true,
+      false,
     );
   });
 
@@ -81,4 +82,12 @@ describe("runLatestRefresh", () => {
     });
     expect(m.instagram).not.toHaveBeenCalled();
   });
+});
+
+it("resets successful polling only when handing the lease back, without leaking its flag", async () => {
+  const j = job("pending");
+  m.instagram.mockResolvedValueOnce({ status: "pending", resetAttempts: true });
+  await runLatestRefresh(j, later());
+  expect(m.store).toHaveBeenCalledWith(j, expect.any(Object), false, true);
+  expect(j.state.sources.instagram).toEqual({ status: "pending" });
 });

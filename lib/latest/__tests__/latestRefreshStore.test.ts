@@ -37,13 +37,23 @@ describe("latestRefreshStore", () => {
     },
   );
 
-  it("resets consecutive failures explicitly after a successful provider poll", async () => {
-    await latestRefreshStore(job, state, undefined, true);
+  it("resets failures atomically with a completed provider poll slice", async () => {
+    await latestRefreshStore(job, state, false, true);
     const { text, params } = renderSql(m.execute.mock.calls[0][0]);
     const reset = text.match(/attempts = \$(\d+)/);
     expect(reset).not.toBeNull();
     expect(params[Number(reset![1]) - 1]).toBe(0);
+    expect(text).toContain("claimed_at = null");
+    expect(params).toContain("pending");
+  });
+
+  it("never erases killed-lease attempts while the lease is still running", async () => {
+    await latestRefreshStore(job, state, undefined, true);
+    const { text, params } = renderSql(m.execute.mock.calls[0][0]);
+    expect(text).toContain("attempts = attempts");
     expect(text).toContain("claimed_at = now()");
+    expect(params).not.toContain(0);
+    expect(params).toContain("running");
   });
 
   it("throws when the job is no longer running, so a lost write is never swallowed", async () => {

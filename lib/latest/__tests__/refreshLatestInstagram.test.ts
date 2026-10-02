@@ -60,13 +60,19 @@ describe("refreshLatestInstagram", () => {
     m.check.mockResolvedValueOnce({ status: "running", runId: "run-1" });
     expect(await refreshLatestInstagram(job({ runId: "run-1" }), later())).toEqual({
       status: "pending",
+      resetAttempts: true,
     });
   });
 
   it("collects only the latest posts once the run is ready", async () => {
     m.check.mockResolvedValueOnce({ status: "ready", runId: "run-1", datasetId: "ds-1" });
     m.collect.mockResolvedValueOnce({ stored: 3 });
-    const res = await refreshLatestInstagram(job({ runId: "run-1" }), later());
+    const j = job({ runId: "run-1" });
+    expect(await refreshLatestInstagram(j, later())).toMatchObject({
+      status: "pending",
+      resetAttempts: true,
+    });
+    const res = await refreshLatestInstagram(j, later());
     expect(res.status).toBe("checked");
     expect(m.collect).toHaveBeenCalledWith("artist-1", "handle", "ds-1", "job-1", 0, {
       latestOnly: true,
@@ -92,6 +98,10 @@ it("recovers the same paid run after a temporary status error", async () => {
     instagramFailure: { phase: "status", reason: "apify status 503", at: expect.any(String) },
   });
   expect(m.store).toHaveBeenCalledWith(j, j.state);
+  expect(await refreshLatestInstagram(j, later())).toMatchObject({
+    status: "pending",
+    resetAttempts: true,
+  });
   expect(await refreshLatestInstagram(j, later())).toMatchObject({ status: "checked" });
   expect(m.check.mock.calls.map(a => a[0])).toEqual(["paid-run", "paid-run"]);
   expect(m.start).not.toHaveBeenCalled();
@@ -119,16 +129,33 @@ it("recovers collection from the saved dataset without polling or paying again",
 it("resets the failure allowance after a successful running poll", async () => {
   const j = job({ runId: "paid-run" });
   m.check.mockResolvedValueOnce({ status: "running", runId: "paid-run" });
-  await refreshLatestInstagram(j, later());
-  expect(m.store).toHaveBeenCalledWith(j, j.state, undefined, true);
+  expect(await refreshLatestInstagram(j, later())).toEqual({
+    status: "pending",
+    resetAttempts: true,
+  });
+  expect(m.store).not.toHaveBeenCalled();
 });
 it("resets on a newly discovered dataset but not on failed cached collection", async () => {
   const j = job({ runId: "paid-run" });
   m.check.mockResolvedValueOnce({ status: "ready", runId: "paid-run", datasetId: "dataset" });
   m.collect.mockResolvedValue(null);
-  await expect(refreshLatestInstagram(j, later())).rejects.toThrow();
-  expect(m.store).toHaveBeenCalledWith(j, j.state, undefined, true);
-  m.store.mockClear();
+  expect(await refreshLatestInstagram(j, later())).toEqual({
+    status: "pending",
+    resetAttempts: true,
+  });
+  expect(m.store).not.toHaveBeenCalled();
   await expect(refreshLatestInstagram(j, later())).rejects.toThrow();
   expect(m.store).not.toHaveBeenCalledWith(j, j.state, undefined, true);
+});
+
+it("yields a newly discovered dataset before collection so recovery and lease release are atomic", async () => {
+  const j = job({ runId: "paid-run" });
+  m.check.mockResolvedValueOnce({ status: "ready", runId: "paid-run", datasetId: "saved-dataset" });
+  expect(await refreshLatestInstagram(j, later())).toEqual({
+    status: "pending",
+    resetAttempts: true,
+  });
+  expect(j.state.datasetId).toBe("saved-dataset");
+  expect(m.store).not.toHaveBeenCalled();
+  expect(m.collect).not.toHaveBeenCalled();
 });
