@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
-const m = vi.hoisted(() => ({ auth: vi.fn(), canEdit: vi.fn(), claim: vi.fn(), turn: vi.fn() }));
-vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
-vi.mock("@/lib/auth/canEditArtist", () => ({ canEditArtist: m.canEdit }));
+const m = vi.hoisted(() => ({ validate: vi.fn(), claim: vi.fn(), turn: vi.fn() }));
+vi.mock("@/lib/auth/validateArtistEditRequest", () => ({ validateArtistEditRequest: m.validate }));
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim: m.claim }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
 vi.mock("@/lib/onboarding/runOnboardingTurn", () => ({ runOnboardingTurn: m.turn }));
@@ -13,8 +12,7 @@ const ARTIST = "50f23458-df64-4381-8042-7333e8b64531";
 const req = (body = '{"type":"open"}') => new Request("https://api/x", { method: "POST", body });
 
 beforeEach(() => {
-  m.auth.mockReset().mockResolvedValue({ userId: "u1" });
-  m.canEdit.mockReset().mockResolvedValue(true);
+  m.validate.mockReset().mockResolvedValue({ artistId: ARTIST, userId: "u1" });
   m.claim.mockReset().mockResolvedValue({ id: "c1", userId: "u1" });
   m.turn.mockReset().mockImplementation(async function* () {
     yield { kind: "complete" };
@@ -36,23 +34,15 @@ describe("postOnboardingChatHandler", () => {
     );
   });
 
-  it("400s a bad artist id before authenticating", async () => {
-    expect((await postOnboardingChatHandler(req(), "nope")).status).toBe(400);
-    expect(m.auth).not.toHaveBeenCalled();
-  });
-
-  it("returns authentication's 401", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error", error: "Not signed in" }, { status: 401 }),
+  it("returns the edit check's error (bad id, not signed in, not theirs) without running a turn", async () => {
+    const forbidden = NextResponse.json(
+      { status: "error", error: "Not your artist" },
+      { status: 403 },
     );
-    expect((await postOnboardingChatHandler(req(), ARTIST)).status).toBe(401);
-  });
-
-  it("403s someone who can't edit the artist", async () => {
-    m.canEdit.mockResolvedValueOnce(false);
-    const res = await postOnboardingChatHandler(req(), ARTIST);
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ status: "error", error: "Not authorized" });
+    m.validate.mockResolvedValueOnce(forbidden);
+    const request = req();
+    expect(await postOnboardingChatHandler(request, "any")).toBe(forbidden);
+    expect(m.validate).toHaveBeenCalledWith(request, "any");
     expect(m.turn).not.toHaveBeenCalled();
   });
 
@@ -60,6 +50,7 @@ describe("postOnboardingChatHandler", () => {
     const res = await postOnboardingChatHandler(req("{}"), ARTIST);
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ status: "error", error: "Invalid turn" });
+    expect(m.validate).toHaveBeenCalled();
   });
 
   it("runs an unclaimed artist's turn (an admin's) under a null claim", async () => {
