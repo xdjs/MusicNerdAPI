@@ -132,6 +132,7 @@ export const artistVaultSources = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .default(sql`(now() AT TIME ZONE 'utc'::text)`)
       .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }),
   },
   // The (artist_id, url) unique index is migration 0014 in MusicNerdWeb; declared
   // here so `onConflictDoNothing({ target })` can name it.

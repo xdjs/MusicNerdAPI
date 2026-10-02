@@ -50,6 +50,12 @@ export type SourceSearchOptions = {
   requireComplete?: boolean;
   /** When the caller's budget ends, in epoch milliseconds. */
   deadline?: number;
+  /** Columns the onboarding auto-build just filled from a discovery GUESS, so a
+   *  better-evidenced answer may replace them (see `holdsAnswerFor`). */
+  provisionalSiteNames?: string[];
+  /** Told about each source the moment it's saved, so the research view can show
+   *  it. A throw here is swallowed: reporting never costs a source. */
+  onSaved?: (source: VaultSource) => void;
 };
 
 /**
@@ -74,4 +80,20 @@ export type SearchRun = {
   accountCandidates: AccountCandidate[];
   hubCandidates: HubCandidate[];
   counts: { skipped: number; dropped: number; rejectedSkips: number };
+  /** Columns still holding a discovery guess; a write that lands removes its column. */
+  provisional: Set<string>;
+  /** The caller's saved-source listener, if any. */
+  onSaved?: (source: VaultSource) => void;
+};
+
+/** What `updateVaultSourceContent` may set, from a read of the source's page. */
+export type VaultSourceContent = {
+  title?: string;
+  snippet?: string;
+  extractedText?: string | null;
+  ogImage?: string | null;
+  podcastEpisodeKey?: string | null;
+  podcastShowTitle?: string | null;
+  podcastEpisodeTitle?: string | null;
+  publishedAt?: string | null;
 };

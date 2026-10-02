@@ -2,6 +2,7 @@ import { pickExactNameMatch } from "@/lib/discovery/pickExactNameMatch";
 import type { TierCandidate } from "@/lib/discovery/types";
 import { searchSpotifyArtists } from "@/lib/musicPlatform/searchSpotifyArtists";
 import { spotifyArtistFromDeezer } from "@/lib/musicPlatform/spotifyArtistFromDeezer";
+import { pluralize } from "@/lib/text/pluralize";
 
 /**
  * Tier 2 for Spotify: an id first, a name only if that fails. A name search
@@ -27,7 +28,7 @@ export async function findSpotifyCandidate(
           // validateCandidate re-derives the canonical URL from urlmap.
           url: `https://open.spotify.com/artist/${viaIsrc.spotifyId}`,
           reasoning:
-            `Shares ${viaIsrc.recordings} recording${viaIsrc.recordings === 1 ? "" : "s"} (by ISRC) with their Deezer catalogue` +
+            `Shares ${viaIsrc.recordings} ${pluralize(viaIsrc.recordings, "recording", "recordings")} (by ISRC) with their Deezer catalogue` +
             (viaIsrc.byName ? ", name confirmed among the performers" : ""),
         };
       }

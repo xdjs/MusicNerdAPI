@@ -19,4 +19,21 @@ describe("findCorroborator", () => {
     ).toBeUndefined();
     expect(findCorroborator([{ siteName: "x", id: "a" }], {})).toBeUndefined();
   });
+
+  it("skips an id that is only a discovery guess, so a namesake can't vouch for a page", () => {
+    const resolved = [
+      { siteName: "youtube", id: "bioritmo" },
+      { siteName: "instagram", id: "bioritmo.oficial" },
+    ];
+    expect(
+      findCorroborator(resolved, { youtube: "bioritmo" }, new Set(["youtube"])),
+    ).toBeUndefined();
+  });
+
+  it("still corroborates through a held id when another column is provisional", () => {
+    const resolved = [{ siteName: "deezer", id: "416544" }];
+    expect(
+      findCorroborator(resolved, { deezer: "416544", youtube: "bioritmo" }, new Set(["youtube"])),
+    ).toEqual({ siteName: "deezer", id: "416544" });
+  });
 });

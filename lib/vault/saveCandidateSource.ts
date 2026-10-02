@@ -6,6 +6,7 @@ import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
 import { outOfBudget } from "@/lib/vault/outOfBudget";
 import type { ReadCandidate, SearchRun } from "@/lib/vault/types";
+import { recordSavedSource } from "@/lib/vault/recordSavedSource";
 
 /**
  * Files a page as a vault source, or drops it. A page must name the artist in
@@ -70,7 +71,7 @@ export async function saveCandidateSource(
       ...(isVerified ? page.podcastEpisode : null),
       publishedAt: page.publishedAt ?? null,
     });
-    if (source) run.saved.push(source);
+    if (source) recordSavedSource(run, source);
   } catch (e) {
     console.error("[vaultWebSearch] Failed to insert source:", result.url, e);
     if (run.requireComplete) throw e;

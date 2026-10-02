@@ -132,6 +132,26 @@ describe("adoptHandlesFromOwnPage", () => {
     m.contradicts.mockImplementation(async () => false);
   });
 
+  it("adopts nothing from a namesake's page corroborated only by a discovery guess", async () => {
+    m.resolve.mockResolvedValueOnce([
+      { siteName: "youtube", id: "bioritmo" },
+      { siteName: "instagram", id: "bioritmo.oficial" },
+      { siteName: "tiktok", id: "bioritmo.oficial" },
+    ]);
+    const artist = { name: "Bio Ritmo", youtube: "bioritmo" };
+    expect(
+      await adoptHandlesFromOwnPage(
+        "a1",
+        ["l"],
+        artist,
+        "Bio Ritmo",
+        undefined,
+        new Set(["youtube"]),
+      ),
+    ).toEqual({ adopted: 0, handles: new Set<string>() });
+    expect(m.writeArtistLink).not.toHaveBeenCalled();
+  });
+
   it("counts only the writes that succeeded", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     m.resolve.mockResolvedValueOnce([

@@ -38,7 +38,7 @@ export async function adoptHandlesFromOwnPage(
   provisional?: Set<string>,
 ): Promise<{ adopted: number; handles: Set<string> }> {
   const resolved = await resolveOutboundHandles(outboundLinks);
-  const corroborator = findCorroborator(resolved, artist);
+  const corroborator = findCorroborator(resolved, artist, provisional);
   const ownDomain =
     !corroborator &&
     !!page?.aboutArtist &&

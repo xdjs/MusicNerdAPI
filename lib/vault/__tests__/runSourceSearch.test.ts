@@ -76,6 +76,7 @@ describe("runSourceSearch", () => {
       "a1",
       "Grimes",
       expect.objectContaining({ id: "a1" }),
+      new Set(),
     );
     expect(h.searchCandidates).toHaveBeenCalledWith(expect.anything(), "https://grimes.com");
     const run = h.fileCandidate.mock.calls[0][0];
@@ -87,6 +88,16 @@ describe("runSourceSearch", () => {
       run,
       expect.objectContaining({ name: "Grimes" }),
     );
+  });
+
+  it("carries the onboarding's provisional columns and saved-source listener on the run", async () => {
+    const onSaved = vi.fn();
+    await runSourceSearch("a1", { provisionalSiteNames: ["instagram"], onSaved });
+    const run = h.fileCandidate.mock.calls[0][0];
+    expect([...run.provisional]).toEqual(["instagram"]);
+    expect(run.onSaved).toBe(onSaved);
+    // The same set: a write that lands removes the column for every later pass.
+    expect(h.adoptFromMusicBrainz.mock.calls[0][3]).toBe(run.provisional);
   });
 
   it("finds nothing for a missing artist or an empty search", async () => {

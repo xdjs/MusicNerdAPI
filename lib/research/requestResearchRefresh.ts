@@ -3,6 +3,7 @@ import { queueSocialIngest } from "@/lib/research/queueSocialIngest";
 import { getResearchJobs } from "@/lib/research/getResearchJobs";
 import { reopenResearchJob } from "@/lib/research/reopenResearchJob";
 import { RESEARCH_REFRESH_COOLDOWN_MS } from "@/lib/research/const";
+import { pluralize } from "@/lib/text/pluralize";
 
 /**
  * "Look again": rebuild the Lore and read what the artist has posted since.
@@ -47,7 +48,7 @@ export async function requestResearchRefresh(
       .sort((a, b) => b - a)[0] ?? 0;
   if (lastFinished && Date.now() - lastFinished < RESEARCH_REFRESH_COOLDOWN_MS) {
     const mins = Math.ceil((RESEARCH_REFRESH_COOLDOWN_MS - (Date.now() - lastFinished)) / 60000);
-    return `${loreMessage} Social posts can be checked again in ${mins} minute${mins === 1 ? "" : "s"}.`;
+    return `${loreMessage} Social posts can be checked again in ${mins} ${pluralize(mins, "minute", "minutes")}.`;
   }
   await reopenResearchJob(artistId, "social_ingest");
   await reopenResearchJob(artistId, "caption_extract");
