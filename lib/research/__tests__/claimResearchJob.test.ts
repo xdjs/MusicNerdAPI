@@ -55,6 +55,16 @@ describe("claimResearchJob", () => {
     expect(params).toEqual(expect.arrayContaining(["artist-1", "a", "b"]));
   });
 
+  // A job still `running` past its lease was killed mid-slice (no failure was
+  // written). Counting that as an attempt is what lets MAX_ATTEMPTS stop a job
+  // the platform kills every time; a released job is reclaimed for free.
+  it("counts reclaiming a killed job (running past its lease) as an attempt", async () => {
+    execute.mockResolvedValue([row]);
+    await claimResearchJob({ kinds: ["caption_extract"] });
+    const { text } = renderSql(execute.mock.calls[0][0]);
+    expect(text).toContain("attempts = attempts + case when status = 'running' then 1 else 0 end");
+  });
+
   it("returns null when nothing is claimable or the query fails", async () => {
     execute.mockResolvedValueOnce([]);
     expect(await claimResearchJob({ kinds: ["social_ingest"] })).toBeNull();

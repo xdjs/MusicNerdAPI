@@ -1,6 +1,6 @@
 import { claimResearchJob } from "@/lib/research/claimResearchJob";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
-import { PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
+import { MAX_ATTEMPTS, PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
 import { failResearchJob } from "@/lib/research/failResearchJob";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { runResearchJob } from "@/lib/research/runResearchJob";
@@ -32,6 +32,12 @@ export async function advanceResearch(opts: {
   if (!job) return { ran: false };
 
   const about = { ran: true, jobId: job.id, kind: job.kind, artistId: job.artistId };
+  // Killed mid-slice on every attempt (counted at the claim): stop here.
+  if (job.attempts >= MAX_ATTEMPTS) {
+    const message = `stopped before finishing ${job.attempts} times`;
+    await failResearchJob(job.id, message);
+    return { ...about, done: false, progress: `failed: ${message}` };
+  }
   const deadline = Date.now() + Math.max(0, opts.budgetMs - PERSIST_RESERVE_MS);
   try {
     return { ...about, ...(await runResearchJob(job, deadline)) };

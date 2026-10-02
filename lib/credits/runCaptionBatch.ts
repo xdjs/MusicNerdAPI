@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateObject } from "@/lib/ai/generateObject";
 import { withTimeout } from "@/lib/async/withTimeout";
 import { captionSystemInstruction } from "@/lib/credits/captionSystemInstruction";
-import { TIMEOUT_MS } from "@/lib/credits/const";
+import { MIN_CALL_BUDGET_MS, TIMEOUT_MS } from "@/lib/credits/const";
 import { isUnusableOutput } from "@/lib/credits/isUnusableOutput";
 import { parseLeniently } from "@/lib/credits/parseLeniently";
 import type { CaptionExtraction } from "@/lib/credits/types";
@@ -50,6 +50,7 @@ export async function runCaptionBatch(
   index: string,
   budgetMs: number = TIMEOUT_MS,
 ): Promise<CaptionExtraction | null> {
+  const started = Date.now();
   const payload = batch.map(p => ({ url: p.url, postedAt: p.postedAt, caption: p.caption }));
   try {
     const response = await withTimeout(
@@ -72,15 +73,17 @@ export async function runCaptionBatch(
     }
     // Cost is roughly proportional to how much the model writes, so half the
     // captions is well under half the time. The halves inherit what is LEFT,
-    // not a fresh budget, or the retry outlives the invocation.
-    if (batch.length > 2 && String(e).includes("timed out")) {
+    // not a fresh budget, or the retry outlives the invocation. Too little
+    // left for a call and the batch is unread: null, so the job records it.
+    const left = budgetMs - (Date.now() - started);
+    if (batch.length > 2 && String(e).includes("timed out") && left >= MIN_CALL_BUDGET_MS) {
       const mid = Math.ceil(batch.length / 2);
       console.warn(
         `[socialCredits] Batch ${index} timed out for ${artistName}, retrying as two halves`,
       );
       const [a, b] = await Promise.all([
-        runCaptionBatch(batch.slice(0, mid), artistName, artistHandle, `${index}a`, budgetMs),
-        runCaptionBatch(batch.slice(mid), artistName, artistHandle, `${index}b`, budgetMs),
+        runCaptionBatch(batch.slice(0, mid), artistName, artistHandle, `${index}a`, left),
+        runCaptionBatch(batch.slice(mid), artistName, artistHandle, `${index}b`, left),
       ]);
       if (!a && !b) return null;
       return {

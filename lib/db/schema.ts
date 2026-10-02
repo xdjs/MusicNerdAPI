@@ -13,6 +13,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -24,6 +25,7 @@ export const sourceStatus = pgEnum("source_status", ["pending", "approved", "rej
 export const artists = pgTable("artists", {
   id: uuid().primaryKey().notNull(),
   name: text(),
+  bio: text(),
   bandcamp: text(),
   facebook: text(),
   x: text(),
@@ -87,6 +89,8 @@ export const urlmap = pgTable("urlmap", {
   appStringFormat: text("app_string_format").notNull(),
   cardPlatformName: text("card_platform_name"),
   regex: text().notNull(),
+  siteImage: text("site_image"),
+  colorHex: text("color_hex"),
 });
 
 export const artistIdMappings = pgTable("artist_id_mappings", {
@@ -149,12 +153,50 @@ export const artistActivityEvents = pgTable("artist_activity_events", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
 });
 
-export const artistInterviewAnswers = pgTable("artist_interview_answers", {
-  id: uuid().primaryKey().notNull(),
+export const artistInterviewAnswers = pgTable(
+  "artist_interview_answers",
+  {
+    id: uuid()
+      .default(sql`uuid_generate_v4()`)
+      .primaryKey()
+      .notNull(),
+    artistId: uuid("artist_id").notNull(),
+    questionKey: text("question_key").notNull(),
+    question: text().notNull(),
+    answer: text(),
+    source: text().notNull(),
+    sitting: integer(),
+    offeredAt: timestamp("offered_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }),
+  },
+  table => [
+    unique("artist_interview_answers_artist_question_uniq").on(table.artistId, table.questionKey),
+  ],
+);
+
+export const artistOnboardingSteps = pgTable(
+  "artist_onboarding_steps",
+  {
+    id: uuid()
+      .default(sql`uuid_generate_v4()`)
+      .primaryKey()
+      .notNull(),
+    artistId: uuid("artist_id").notNull(),
+    step: text().notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true, mode: "string" }),
+  },
+  table => [unique("artist_onboarding_steps_artist_step_uniq").on(table.artistId, table.step)],
+);
+
+export const artistBioVersions = pgTable("artist_bio_versions", {
+  id: uuid()
+    .default(sql`uuid_generate_v4()`)
+    .primaryKey()
+    .notNull(),
   artistId: uuid("artist_id").notNull(),
-  question: text().notNull(),
-  answer: text(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
+  bioText: text("bio_text").notNull(),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }),
 });
 
 export const artistDocs = pgTable("artist_docs", {
