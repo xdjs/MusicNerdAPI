@@ -112,19 +112,22 @@ describe("advanceResearch", () => {
     expect(fail).toHaveBeenCalledWith("job-1", "apify exploded");
   });
 
-  it("fails a job the platform killed on every attempt instead of running it again", async () => {
-    claim.mockResolvedValue({ ...job, kind: "caption_extract", attempts: 4 });
-    expect(await advanceResearch({ budgetMs: 50_000 })).toEqual({
-      ran: true,
-      jobId: "job-1",
-      kind: "caption_extract",
-      artistId: "artist-1",
-      done: false,
-      progress: "failed: stopped before finishing 4 times",
-    });
-    expect(runResearchJob).not.toHaveBeenCalled();
-    expect(fail).toHaveBeenCalledWith("job-1", "stopped before finishing 4 times");
-  });
+  it.each(["caption_extract", "latest_refresh"])(
+    "fails a %s job killed on every attempt without running it again",
+    async kind => {
+      claim.mockResolvedValue({ ...job, kind, attempts: 4 });
+      expect(await advanceResearch({ budgetMs: 50_000 })).toEqual({
+        ran: true,
+        jobId: "job-1",
+        kind,
+        artistId: "artist-1",
+        done: false,
+        progress: "failed: stopped before finishing 4 times",
+      });
+      expect(runResearchJob).not.toHaveBeenCalled();
+      expect(fail).toHaveBeenCalledWith("job-1", "stopped before finishing 4 times");
+    },
+  );
 });
 
 it("sets a failing Latest job aside for the rest of this cron tick", async () => {
