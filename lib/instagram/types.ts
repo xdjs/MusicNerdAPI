@@ -62,6 +62,8 @@ export interface ApifyMusicInfo {
 
 /** A stored post, in the shape the caption reader and the Lore's social signals read. */
 export interface SocialPostRow {
+  /** Audio context only; never treated as the author's caption or a verified speaker quote. */
+  transcript?: string;
   platform: string;
   platformPostId: string;
   ownerUsername: string;
