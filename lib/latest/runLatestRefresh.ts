@@ -18,13 +18,17 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 export async function runLatestRefresh(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   await authorizeLatestRefresh(job);
   const state = job.state as unknown as LatestRefreshState;
+  let resetAttempts = false;
   if (
     state.sources.instagram?.status === "pending" &&
     deadline - Date.now() > LATEST_COLLECT_RESERVE_MS
-  )
-    state.sources.instagram = await refreshLatestInstagram(job, deadline);
+  ) {
+    const { resetAttempts: reset = false, ...result } = await refreshLatestInstagram(job, deadline);
+    resetAttempts = reset;
+    state.sources.instagram = result;
+  }
   const done = state.sources.instagram?.status !== "pending";
-  await latestRefreshStore(job, state, done);
+  await latestRefreshStore(job, state, done, resetAttempts);
   return done
     ? { done, progress: "Latest check finished" }
     : { done, waiting: true, progress: "Checking Instagram" };

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderSql } from "@/lib/db/__tests__/renderSql";
 
 const m = vi.hoisted(() => ({ write: vi.fn(), execute: vi.fn() }));
 vi.mock("@/lib/research/withResearchJobWrite", () => ({ withResearchJobWrite: m.write }));
@@ -23,6 +24,36 @@ describe("latestRefreshStore", () => {
   it("marks the job done or pending when told", async () => {
     await latestRefreshStore(job, state, true);
     expect(sqlText()).toContain("done");
+  });
+
+  it.each([undefined, false, true])(
+    "preserves failures when saving a slice with done=%s",
+    async done => {
+      await latestRefreshStore(job, state, done);
+      const { text, params } = renderSql(m.execute.mock.calls[0][0]);
+      expect(text).toContain("attempts = attempts");
+      expect(params).not.toContain(0);
+      expect(text).toContain("and kind = 'latest_refresh' and status = 'running'");
+    },
+  );
+
+  it("resets failures atomically with a completed provider poll slice", async () => {
+    await latestRefreshStore(job, state, false, true);
+    const { text, params } = renderSql(m.execute.mock.calls[0][0]);
+    const reset = text.match(/attempts = \$(\d+)/);
+    expect(reset).not.toBeNull();
+    expect(params[Number(reset![1]) - 1]).toBe(0);
+    expect(text).toContain("claimed_at = null");
+    expect(params).toContain("pending");
+  });
+
+  it("never erases killed-lease attempts while the lease is still running", async () => {
+    await latestRefreshStore(job, state, undefined, true);
+    const { text, params } = renderSql(m.execute.mock.calls[0][0]);
+    expect(text).toContain("attempts = attempts");
+    expect(text).toContain("claimed_at = now()");
+    expect(params).not.toContain(0);
+    expect(params).toContain("running");
   });
 
   it("throws when the job is no longer running, so a lost write is never swallowed", async () => {

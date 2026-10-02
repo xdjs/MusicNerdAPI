@@ -19,12 +19,12 @@ import type { ResearchJob } from "@/lib/research/types";
  *
  * @param job - The running `latest_refresh` job (its state is updated in place).
  * @param deadline - When the slice must stop, in epoch milliseconds.
- * @returns The Instagram source's result.
+ * @returns The source result and an internal reset request for the atomic lease handoff.
  */
 export async function refreshLatestInstagram(
   job: ResearchJob,
   deadline: number,
-): Promise<SourceResult> {
+): Promise<SourceResult & { resetAttempts?: boolean }> {
   const state = job.state as unknown as LatestRefreshState;
   const handle = withoutAt(state.instagram?.trim() ?? "");
   if (!handle) return { status: "disconnected" };
@@ -45,14 +45,33 @@ export async function refreshLatestInstagram(
   }
   if (!state.datasetId) {
     const run = await checkInstagramScrape(state.runId);
-    if (run.status === "failed") return { status: "failed" };
-    if (run.status !== "ready") return { status: "pending" };
-    state.datasetId = run.datasetId;
-    await latestRefreshStore(job, state);
+    if (run.status === "failed") {
+      state.instagramFailure = {
+        phase: "status",
+        reason: run.reason,
+        at: new Date().toISOString(),
+      };
+      await latestRefreshStore(job, state);
+      // The queue counts failures and stops after four attempts. Keep the saved
+      // paid run; a status-request failure is not proof the scrape failed.
+      if (run.retryable) throw new Error(run.reason);
+      return { status: "failed" };
+    }
+    if (run.status === "ready") state.datasetId = run.datasetId;
+    // Yield even when ready: persist progress, release the lease and reset
+    // consecutive failures in one write. Resetting while still running would
+    // hide repeated platform kills between this poll and the lease handoff.
+    return { status: "pending", resetAttempts: true };
   }
   if (deadline - Date.now() < LATEST_COLLECT_RESERVE_MS) return { status: "pending" };
   const stored = await collectInstagramScrape(job.artistId, handle, state.datasetId, job.id, 0, {
     latestOnly: true,
   });
-  return stored ? { status: "checked", checkedAt: new Date().toISOString() } : { status: "failed" };
+  if (!stored) {
+    const reason = "Instagram collection unavailable";
+    state.instagramFailure = { phase: "collection", reason, at: new Date().toISOString() };
+    await latestRefreshStore(job, state);
+    throw new Error(reason);
+  }
+  return { status: "checked", checkedAt: new Date().toISOString() };
 }

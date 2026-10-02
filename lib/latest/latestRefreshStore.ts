@@ -11,17 +11,20 @@ import { withResearchJobWrite } from "@/lib/research/withResearchJobWrite";
  * @param job - The running `latest_refresh` job.
  * @param state - The state to save.
  * @param done - Omitted: still running (lease renewed). True: done. False: back to pending for the next slice.
+ * @param resetAttempts - True only at successful provider-poll lease handoff, never for a cached dataset retry.
  * @returns Nothing; throws when the job is no longer running.
  */
 export async function latestRefreshStore(
   job: ResearchJob,
   state: LatestRefreshState,
   done?: boolean,
+  resetAttempts = false,
 ): Promise<void> {
   await withResearchJobWrite(job.artistId, job.id, async tx => {
     const status = done === undefined ? "running" : done ? "done" : "pending";
     const rows = await tx.execute(sql`update artist_research_jobs
       set state = ${JSON.stringify(state)}::jsonb, status = ${status},
+          attempts = ${resetAttempts && done !== undefined ? 0 : sql`attempts`},
           claimed_at = ${done === undefined ? sql`now()` : sql`null`}, updated_at = now()
       where id = ${job.id}::uuid and kind = 'latest_refresh' and status = 'running' returning id`);
     if (!rowsOf(rows).length) throw new Error("Latest refresh no longer active");

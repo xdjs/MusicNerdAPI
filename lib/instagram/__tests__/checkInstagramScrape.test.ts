@@ -30,13 +30,54 @@ describe("checkInstagramScrape", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.apify.com/v2/actor-runs/run?token=tok");
   });
 
-  it("fails on a bad status or a thrown fetch", async () => {
+  it("distinguishes a permanent HTTP error from a temporary fetch failure", async () => {
     fetchMock.mockResolvedValueOnce(json({}, false, 404));
     expect(await checkInstagramScrape("run")).toEqual({
       status: "failed",
       reason: "apify status 404",
     });
     fetchMock.mockRejectedValueOnce(new Error("reset"));
-    expect(await checkInstagramScrape("run")).toEqual({ status: "failed", reason: "reset" });
+    expect(await checkInstagramScrape("run")).toEqual({
+      status: "failed",
+      reason: "apify status unavailable",
+      retryable: true,
+    });
   });
+});
+
+it.each([408, 429, 500, 502, 503, 504])(
+  "retries HTTP %s without declaring the run failed",
+  async status => {
+    fetchMock.mockResolvedValueOnce(json({}, false, status));
+    expect(await checkInstagramScrape("paid-run")).toEqual({
+      status: "failed",
+      reason: `apify status ${status}`,
+      retryable: true,
+    });
+  },
+);
+it.each(["READY", "RUNNING", "TIMING-OUT", "ABORTING"])(
+  "waits for transitional %s",
+  async status => {
+    fetchMock.mockResolvedValueOnce(json({ data: { status } }));
+    expect(await checkInstagramScrape("paid-run")).toEqual({
+      status: "running",
+      runId: "paid-run",
+    });
+  },
+);
+it.each([{ data: { status: "SUCCEEDED" } }, {}, { data: { status: "unexpected secret-token" } }])(
+  "retries incomplete responses safely",
+  async body => {
+    fetchMock.mockResolvedValueOnce(json(body));
+    expect(await checkInstagramScrape("paid-run")).toEqual({
+      status: "failed",
+      reason: "apify status invalid response",
+      retryable: true,
+    });
+  },
+);
+it("does not expose exception URLs or credentials", async () => {
+  fetchMock.mockRejectedValueOnce(new Error("https://api.apify.com/?token=secret"));
+  expect(JSON.stringify(await checkInstagramScrape("run"))).not.toContain("secret");
 });

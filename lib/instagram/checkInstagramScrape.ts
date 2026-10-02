@@ -14,14 +14,24 @@ export async function checkInstagramScrape(runId: string): Promise<ApifyRunState
     const res = await fetch(`${APIFY_ACTOR_RUNS_URL}/${runId}?token=${encodeURIComponent(token)}`, {
       signal: AbortSignal.timeout(APIFY_CONTROL_TIMEOUT_MS),
     });
-    if (!res.ok) return { status: "failed", reason: `apify status ${res.status}` };
+    if (!res.ok)
+      return {
+        status: "failed",
+        reason: `apify status ${res.status}`,
+        ...([408, 429].includes(res.status) || res.status >= 500 ? { retryable: true } : {}),
+      };
     const body = (await res.json()) as { data?: { status?: string; defaultDatasetId?: string } };
     const state = body?.data?.status;
     const datasetId = body?.data?.defaultDatasetId;
-    if (state === "SUCCEEDED" && datasetId) return { status: "ready", runId, datasetId };
-    if (state === "READY" || state === "RUNNING") return { status: "running", runId };
-    return { status: "failed", reason: `apify run ${state ?? "unknown"}` };
-  } catch (e) {
-    return { status: "failed", reason: e instanceof Error ? e.message : "apify status failed" };
+    if (state === "SUCCEEDED" && typeof datasetId === "string" && datasetId.length > 0)
+      return { status: "ready", runId, datasetId };
+    if (["READY", "RUNNING", "TIMING-OUT", "ABORTING"].includes(state ?? ""))
+      return { status: "running", runId };
+    if (["FAILED", "TIMED-OUT", "ABORTED"].includes(state ?? "")) {
+      return { status: "failed", reason: `apify run ${state}` };
+    }
+    return { status: "failed", reason: "apify status invalid response", retryable: true };
+  } catch {
+    return { status: "failed", reason: "apify status unavailable", retryable: true };
   }
 }

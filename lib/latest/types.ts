@@ -15,6 +15,8 @@ export type LatestRefreshState = {
   spotify?: string;
   deezer?: string;
   sources: Record<LatestSource, SourceResult>;
+  /** Private diagnostic, excluded from the editor response. */
+  instagramFailure?: { phase: "status" | "collection"; reason: string; at: string };
   providerStarted?: boolean;
   runId?: string;
   datasetId?: string;

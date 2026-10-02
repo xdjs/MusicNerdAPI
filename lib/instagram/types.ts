@@ -31,7 +31,7 @@ export type ApifyRunState =
   | { status: "started"; runId: string }
   | { status: "running"; runId: string }
   | { status: "ready"; runId: string; datasetId: string }
-  | { status: "failed"; reason: string };
+  | { status: "failed"; reason: string; retryable?: boolean };
 
 /** Paths a job tried to upload, so a revoked job can remove its own late uploads. */
 export type ThumbnailUploadScope = { jobId: string; attemptedPaths: Set<string> };

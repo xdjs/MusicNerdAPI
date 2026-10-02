@@ -1,3 +1,4 @@
+import { fetchThumbnailResource } from "@/lib/instagram/fetchThumbnailResource";
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { instagramMediaUrl } from "@/lib/instagram/instagramMediaUrl";
@@ -43,9 +44,15 @@ export async function retainInstagramThumbnail(
     ),
   ].slice(0, 3);
   const signal = AbortSignal.timeout(THUMBNAIL_TIMEOUT_MS);
+  let phase = "download";
+  let reason = "unavailable";
   for (const sourceUrl of candidates) {
     try {
-      const input = await readImage(await fetch(sourceUrl, { redirect: "error", signal }));
+      phase = "download";
+      const response = await fetchThumbnailResource(sourceUrl, { redirect: "error", signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      phase = "decode";
+      const input = await readImage(response);
       const image = sharp(input, { limitInputPixels: 40_000_000, animated: false });
       const metadata = await image.metadata();
       if (!["jpeg", "png", "webp"].includes(metadata.format ?? "")) {
@@ -61,23 +68,32 @@ export async function retainInstagramThumbnail(
       const path = `${artistId}/instagram-${scope ? `${scope.jobId}-` : ""}${postId}-${hash}.webp`;
       // Tracked before the POST: a failed response can still mean it was stored.
       scope?.attemptedPaths.add(path);
-      const upload = await fetch(`${supabaseUrl}/storage/v1/object/${VAULT_BUCKET}/${path}`, {
-        method: "POST",
-        redirect: "error",
-        signal,
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          apikey: serviceKey,
-          "Content-Type": "image/webp",
-          "Cache-Control": "max-age=31536000",
-          "x-upsert": "false",
+      phase = "upload";
+      const upload = await fetchThumbnailResource(
+        `${supabaseUrl}/storage/v1/object/${VAULT_BUCKET}/${path}`,
+        {
+          method: "POST",
+          redirect: "error",
+          signal,
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+            "Content-Type": "image/webp",
+            "Cache-Control": "max-age=31536000",
+            "x-upsert": "false",
+          },
+          body: new Uint8Array(data),
         },
-        body: new Uint8Array(data),
-      });
+      );
       if (!upload.ok) {
         const error = await upload.json().catch(() => null);
-        if (error?.error !== "Duplicate" && error?.code !== "Duplicate") {
-          throw new Error("Thumbnail upload failed");
+        const duplicate =
+          error?.error === "Duplicate" ||
+          error?.code === "Duplicate" ||
+          (upload.status === 409 &&
+            ["ResourceAlreadyExists", "KeyAlreadyExists", "already_exists"].includes(error?.code));
+        if (!duplicate) {
+          throw new Error(`HTTP ${upload.status}`);
         }
       }
       const url = `${supabaseUrl}/storage/v1/object/public/${VAULT_BUCKET}/${path}`;
@@ -94,11 +110,18 @@ export async function retainInstagramThumbnail(
           height: info.height,
         },
       };
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      // Native decoder errors can contain input data. Keep only our fixed codes.
+      reason = signal.aborted
+        ? "request timeout"
+        : /^(HTTP \d{3}|request unavailable|request timeout)$/.test(message)
+          ? message
+          : "invalid media or storage response";
       if (signal.aborted) break;
     }
   }
   if (candidates.length)
-    console.warn("[instagramThumbnail] Retention failed", { artistId, postId });
+    console.warn("[instagramThumbnail] Retention failed", { artistId, postId, phase, reason });
   return post;
 }
