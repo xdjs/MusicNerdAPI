@@ -10,7 +10,8 @@ export type GroundedQuestionKind =
   | "partnership"
   | "same_post"
   | "recent"
-  | "lore";
+  | "lore"
+  | "audio";
 
 export interface GroundedQuestion {
   key: string;

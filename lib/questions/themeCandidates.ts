@@ -36,7 +36,7 @@ export function themeCandidates(artistName: string, themes: Theme[]): SignalCand
         kind: "theme",
         key: `social_theme_${t.kind}_${slug(t.term)}`,
         authoredBy: "artist",
-        material: `${artistName} recurringly uses the ${termNoun} "${t.term}" in their own Instagram captions (appears in ${t.count} of their own posts).`,
+        material: `${artistName} recurringly uses the ${termNoun} "${t.term}" in their own social captions (appears in ${t.count} of their own posts).`,
         sourceUrls: t.evidenceUrls,
       };
     });

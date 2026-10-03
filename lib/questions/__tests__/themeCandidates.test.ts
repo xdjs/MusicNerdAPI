@@ -15,7 +15,7 @@ describe("themeCandidates", () => {
         key: "social_theme_hashtag_midjourney",
         authoredBy: "artist",
         material:
-          'Pete Rango recurringly uses the hashtag "midjourney" in their own Instagram captions (appears in 3 of their own posts).',
+          'Pete Rango recurringly uses the hashtag "midjourney" in their own social captions (appears in 3 of their own posts).',
         sourceUrls: ["h"],
       },
     ]);

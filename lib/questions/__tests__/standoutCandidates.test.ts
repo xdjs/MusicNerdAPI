@@ -24,7 +24,7 @@ describe("standoutCandidates", () => {
       "social_standout_C",
     ]);
     expect(out[0].material).toBe(
-      "One of Pete's own posts noticeably outperformed their typical plays on Instagram (roughly 7.6x their usual). Its caption: (no caption)",
+      "One of Pete's own posts noticeably outperformed their typical plays on the same platform (roughly 7.6x their usual). Its caption: (no caption)",
     );
   });
 });

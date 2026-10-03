@@ -3,6 +3,18 @@ import { deriveStandoutPosts } from "@/lib/socialSignals/deriveStandoutPosts";
 import { post } from "@/lib/socialSignals/__tests__/post";
 
 describe("deriveStandoutPosts", () => {
+  it("compares engagement only within the same platform", () => {
+    const posts = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        post({ platform: "instagram", likeCount: 10, playCount: null, url: `ig${i}` }),
+      ),
+      ...Array.from({ length: 7 }, (_, i) =>
+        post({ platform: "x", likeCount: 10000, playCount: null, url: `x${i}` }),
+      ),
+      post({ platform: "instagram", likeCount: 100, playCount: null, url: "ig-hit" }),
+    ];
+    expect(deriveStandoutPosts(posts).map(p => p.url)).toEqual(["ig-hit"]);
+  });
   it("flags own posts against likes and plays, strongest multiple first", () => {
     const posts = [
       ...[10, 11, 12, 13, 14].map((n, i) =>
