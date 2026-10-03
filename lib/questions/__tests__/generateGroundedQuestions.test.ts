@@ -117,6 +117,7 @@ describe("generateGroundedQuestions", () => {
       sourceUrls: ["https://www.instagram.com/p/AUDIO1/"],
     });
     expect(generationPrompt().prompt).toContain("speaker is unverified");
+    expect(generationPrompt()).toMatchObject({ thinkingBudget: 1024 });
   });
   it("returns [] for a missing artist, no posts, a failed post read, or max 0", async () => {
     m.getArtistById.mockResolvedValueOnce(undefined);

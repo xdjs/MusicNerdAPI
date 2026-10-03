@@ -80,6 +80,7 @@ export async function generateGroundedQuestions(
         instructions: questionSystemInstruction(artistName),
         // Stability comes from persisting the asked questions; 0.2 only flattened the writing.
         temperature: 0.8,
+        thinkingBudget: 1024,
         element: z.object({
           signalId: z.string().optional(),
           question: z.string().optional(),
