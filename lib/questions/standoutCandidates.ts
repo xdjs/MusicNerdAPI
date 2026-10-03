@@ -23,7 +23,7 @@ export function standoutCandidates(
       kind: "standout",
       key: `social_standout_${shortCodeFromUrl(s.url)}`,
       authoredBy: "artist",
-      material: `One of ${artistName}'s own posts noticeably outperformed their typical ${s.metric} on Instagram (roughly ${s.multiple}x their usual). Its caption: ${s.caption ? `"${s.caption}"` : "(no caption)"}`,
+      material: `One of ${artistName}'s own posts noticeably outperformed their typical ${s.metric} on the same platform (roughly ${s.multiple}x their usual). Its caption: ${s.caption ? `"${s.caption}"` : "(no caption)"}`,
       sourceUrls: [s.url],
     }));
 }

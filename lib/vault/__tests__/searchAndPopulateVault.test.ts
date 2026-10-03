@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SQL } from "drizzle-orm";
+import "@/lib/vault/searchAndPopulateVault";
 import { renderSql } from "@/lib/db/__tests__/renderSql";
 
 const m = vi.hoisted(() => ({

@@ -56,7 +56,7 @@ export async function keepOnlySupported(
   const approved = new Map<number, boolean>();
   for (const v of verdicts) {
     if (typeof v?.i !== "number" || !Number.isInteger(v.i)) continue;
-    const needsContent = drafted[v.i]?.kind === "recent" || drafted[v.i]?.kind === "lore";
+    const needsContent = ["recent", "lore", "audio"].includes(drafted[v.i]?.kind ?? "");
     approved.set(v.i, v.ok === true && (!needsContent || v.contentSpecific === true));
     if (v.ok !== true) {
       console.log(`[questionGenerator] dropped a question: ${String(v.problem ?? "unsupported")}`);

@@ -18,6 +18,17 @@ const draft = (i: number, kind: DraftedQuestion["kind"] = "statement"): DraftedQ
 beforeEach(() => generateArray.mockReset());
 
 describe("keepOnlySupported", () => {
+  it("rejects audio questions without a content-specific verification", async () => {
+    generateArray.mockResolvedValueOnce({
+      output: [
+        { i: 0, ok: true, contentSpecific: false },
+        { i: 1, ok: true, contentSpecific: true },
+      ],
+    });
+    expect(
+      (await keepOnlySupported([draft(0, "audio"), draft(1, "audio")], "Artist")).map(q => q.key),
+    ).toEqual(["k1"]);
+  });
   it("sends every question with its source in one call and keeps only the approved ones", async () => {
     generateArray.mockResolvedValueOnce({
       output: [

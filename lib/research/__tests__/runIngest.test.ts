@@ -42,6 +42,9 @@ vi.mock("@/lib/research/failResearchJob", () => ({
 vi.mock("@/lib/research/enqueueResearchJob", () => ({
   enqueueResearchJob: (...a: unknown[]) => m.enqueueResearchJob(...a),
 }));
+vi.mock("@/lib/social/runAdditionalSocialResearch", () => ({
+  runAdditionalSocialResearch: vi.fn().mockResolvedValue(null),
+}));
 
 const { runIngest } = await import("@/lib/research/runIngest");
 
@@ -66,6 +69,12 @@ beforeEach(() => {
 });
 
 describe("runIngest", () => {
+  it("fails closed on malformed job state before spending on any provider", async () => {
+    await expect(
+      runIngest(job("bad" as unknown as Record<string, unknown>), later()),
+    ).rejects.toThrow("invalid social research state");
+    expect(m.startInstagramScrape).not.toHaveBeenCalled();
+  });
   it("retries a failed handle lookup instead of finishing", async () => {
     m.instagramHandleFor.mockResolvedValue("error");
     expect(await runIngest(job(), later())).toEqual({
@@ -93,6 +102,7 @@ describe("runIngest", () => {
     expect(m.startInstagramScrape).not.toHaveBeenCalled();
     expect(m.enqueueResearchJob).toHaveBeenCalledWith("artist-1", "caption_extract", {
       parentJobId: "job-1",
+      state: {},
     });
   });
 

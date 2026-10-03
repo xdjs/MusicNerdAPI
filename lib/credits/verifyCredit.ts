@@ -61,11 +61,21 @@ export function verifyCredit(
     (isSelfWord && wordsOf(caption).includes(folded));
   if (!inMentions && !inCaption) return null;
 
-  const selfKeys = new Set([foldName(artistName), foldName(artistHandle)].filter(Boolean));
+  const selfKeys = new Set(
+    [
+      foldName(artistName),
+      foldName(post.platform === "instagram" ? artistHandle : post.ownerUsername),
+    ].filter(Boolean),
+  );
   return {
     subject,
     // Only a handle if the model said so AND we can see the @ ourselves.
-    isHandle: c.isHandle === true && (inMentions || caption.includes(`@${subject}`)),
+    // The current credit schema/UI links handle credits to Instagram. Other
+    // platforms stay plain names with their original post evidence URL.
+    isHandle:
+      post.platform === "instagram" &&
+      c.isHandle === true &&
+      (inMentions || caption.includes(`@${subject}`)),
     role,
     quote,
     url,

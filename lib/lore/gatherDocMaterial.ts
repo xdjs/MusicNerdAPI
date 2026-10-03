@@ -3,6 +3,7 @@ import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { captionCreditSources } from "@/lib/lore/captionCreditSources";
 import { getInterviewAnswers } from "@/lib/lore/getInterviewAnswers";
 import { socialSignalSources } from "@/lib/lore/socialSignalSources";
+import { videoContextSources } from "@/lib/lore/videoContextSources";
 import type { DocMaterial } from "@/lib/lore/types";
 import { isCitableSource } from "@/lib/sources/isCitableSource";
 import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
@@ -46,5 +47,6 @@ export async function gatherDocMaterial(artistId: string): Promise<DocMaterial> 
     answers,
     ...signals,
     ...(await captionCreditSources(artistId)),
+    ...(posts.some(p => p.transcript) ? { videoContexts: videoContextSources(posts) } : {}),
   };
 }

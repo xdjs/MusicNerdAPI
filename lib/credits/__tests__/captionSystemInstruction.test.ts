@@ -6,7 +6,7 @@ describe("captionSystemInstruction", () => {
     const text = captionSystemInstruction("Bio Ritmo", "bioritmo");
     expect(
       text.startsWith(
-        "You are reading Instagram captions written by the musician Bio Ritmo (@bioritmo).",
+        "You are reading social post captions written by the musician Bio Ritmo (@bioritmo).",
       ),
     ).toBe(true);
     expect(text).toContain('Return JSON: {"credits": [...], "statements": [...]}');
@@ -17,7 +17,7 @@ describe("captionSystemInstruction", () => {
 
   it("leaves the handle out when there is none", () => {
     expect(captionSystemInstruction("Bio Ritmo", "")).toMatch(
-      /^You are reading Instagram captions written by the musician Bio Ritmo\.\n/,
+      /^You are reading social post captions written by the musician Bio Ritmo\.\n/,
     );
   });
 });

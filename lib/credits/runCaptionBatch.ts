@@ -51,7 +51,13 @@ export async function runCaptionBatch(
   budgetMs: number = TIMEOUT_MS,
 ): Promise<CaptionExtraction | null> {
   const started = Date.now();
-  const payload = batch.map(p => ({ url: p.url, postedAt: p.postedAt, caption: p.caption }));
+  const payload = batch.map(p => ({
+    url: p.url,
+    platform: p.platform,
+    author: p.ownerUsername,
+    postedAt: p.postedAt,
+    caption: p.caption,
+  }));
   try {
     const response = await withTimeout(
       generateObject({

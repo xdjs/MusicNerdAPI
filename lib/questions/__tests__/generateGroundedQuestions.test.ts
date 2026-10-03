@@ -95,6 +95,30 @@ beforeEach(() => {
 });
 
 describe("generateGroundedQuestions", () => {
+  it("passes cited reel context through drafting and the existing verifier", async () => {
+    m.getSocialPostsOrNull.mockResolvedValue([
+      post({
+        url: "https://www.instagram.com/p/AUDIO1/",
+        transcript: "The drums were layered before the bass.",
+      }),
+    ]);
+    reply([
+      {
+        signalId: "audio_AUDIO1",
+        question:
+          "The reel you shared layers drums before bass — what does that sequence make possible?",
+        rationale: "specific process",
+      },
+    ]);
+    const [question] = await generateGroundedQuestions("a1", { max: 1 });
+    expect(question).toMatchObject({
+      kind: "audio",
+      key: "social_audio_AUDIO1",
+      sourceUrls: ["https://www.instagram.com/p/AUDIO1/"],
+    });
+    expect(generationPrompt().prompt).toContain("speaker is unverified");
+    expect(generationPrompt()).toMatchObject({ thinkingBudget: 1024 });
+  });
   it("returns [] for a missing artist, no posts, a failed post read, or max 0", async () => {
     m.getArtistById.mockResolvedValueOnce(undefined);
     expect(await generateGroundedQuestions("a1")).toEqual([]);

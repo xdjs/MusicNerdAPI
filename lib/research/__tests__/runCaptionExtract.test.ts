@@ -79,6 +79,16 @@ beforeEach(() => {
 });
 
 describe("runCaptionExtract", () => {
+  it("rebuilds new audio context even when every caption was already read", async () => {
+    m.resolveExtractionMode.mockResolvedValue(true);
+    m.captionsToRead.mockResolvedValue([]);
+    await runCaptionExtract(
+      captionJob({ incremental: true, rebuildForVideoContext: true }),
+      later(),
+    );
+    expect(m.rebuildAfterCaptions).toHaveBeenCalled();
+    expect(m.extractCaptionCredits).not.toHaveBeenCalled();
+  });
   it("completes when the artist is gone or has no posts", async () => {
     m.findFirst.mockResolvedValueOnce(undefined);
     expect(await runCaptionExtract(captionJob(), later())).toEqual({

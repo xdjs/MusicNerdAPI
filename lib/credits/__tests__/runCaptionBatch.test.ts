@@ -41,7 +41,13 @@ describe("runCaptionBatch", () => {
     expect(req.instructions).toContain("the musician Artist (@artist)");
     expect(req.prompt.startsWith("CAPTIONS:\n")).toBe(true);
     expect(JSON.parse(req.prompt.slice("CAPTIONS:\n".length))).toEqual(
-      posts.map(p => ({ url: p.url, postedAt: p.postedAt, caption: p.caption })),
+      posts.map(p => ({
+        url: p.url,
+        platform: p.platform,
+        author: p.ownerUsername,
+        postedAt: p.postedAt,
+        caption: p.caption,
+      })),
     );
   });
 
