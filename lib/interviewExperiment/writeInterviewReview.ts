@@ -22,6 +22,8 @@ export async function writeInterviewReview(
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   const sources = new Map(chunkInterviewEvidence(corpus.evidence).map(e => [e.id, e]));
+  for (const result of results)
+    for (const source of result.preparation?.context ?? []) sources.set(source.id, source);
   const review = [
     `# ${corpus.artist.name}: interview experiment`,
     "",
@@ -38,6 +40,13 @@ export async function writeInterviewReview(
   for (const [index, result] of shuffled.entries()) {
     const label = String.fromCharCode(65 + index);
     review.push("", `## Set ${label}`, "");
+    if (result.preparation?.conversation)
+      review.push(
+        `Exercise: ${result.preparation.conversation.kind} replay; not a newly received artist answer.`,
+        "",
+        ...result.preparation.conversation.turns.map(t => `${t.speaker}: ${t.text}`),
+        "",
+      );
     if (!result.questions.length) review.push("No question passed the experiment checks.");
     for (const [i, q] of result.questions.entries()) {
       review.push(`${i + 1}. ${q.question}`);
@@ -70,6 +79,48 @@ export async function writeInterviewReview(
       selectedEvidence: result.evidenceIds.length,
       rejected: result.rejected.length,
       searches: result.searches,
+    });
+  }
+  for (const result of results) {
+    if (!result.preparation) continue;
+    const p = result.preparation;
+    const dossier = [
+      `# ${corpus.artist.name}: preparation`,
+      "",
+      `Assignment: ${p.purpose}`,
+      "",
+      "Private experimental output. Notes are interpretations; originals remain authoritative.",
+      "",
+      `Reading coverage: ${p.memoryDocuments.length} Lore documents; ${p.memoryDocuments.reduce((n, d) => n + d.characters, 0)} extracted characters. This measures submitted text, not comprehension or completeness of PDF extraction.`,
+      `Opened for this assignment: ${p.context.length} original records/windows. Omitted source IDs: ${p.omittedIds.length}. Withheld replay source IDs: ${p.withheldIds.length}. See prepared.json for the exact audit.`,
+      "",
+      "## Already explained",
+      "",
+      ...p.dossier.alreadyExplained.map(a => `- ${a.observation}`),
+      "",
+      "## Angles",
+      "",
+      ...p.dossier.angles.flatMap(a => [
+        `### ${a.observation}`,
+        "",
+        `Unknown: ${a.unknown}`,
+        `Why ask: ${a.whyAsk}`,
+        `Avoid assuming: ${a.assumptionsToAvoid.join("; ") || "No additional assumption recorded"}`,
+        "",
+        ...a.evidence.map(e => `- ${e.evidenceId}: ${e.quote}`),
+        "",
+      ]),
+      "## Discarded",
+      "",
+      ...p.dossier.discarded.map(d => `- ${d}`),
+      "",
+      "## Research gaps",
+      "",
+      ...p.dossier.gaps.map(g => `- ${g}`),
+    ];
+    await writeFile(join(directory, "preparation.md"), dossier.join("\n") + "\n", {
+      mode: 0o600,
+      flag: "wx",
     });
   }
   for (const [name, body] of [

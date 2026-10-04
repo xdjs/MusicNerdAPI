@@ -37,6 +37,11 @@ it("refuses oversized input before a paid call", async () => {
   expect(generateText).not.toHaveBeenCalled();
 });
 
+it("gives preparation and its premise audit a larger measured reasoning allowance", async () => {
+  await callInterviewModel("verify-prepared", "Audit", {}, z.object({}), "test/model");
+  expect(generateText.mock.calls[0][0].thinkingBudget).toBe(2048);
+});
+
 it("reports stage and validation paths without echoing source text or provider responses", async () => {
   generateText.mockRejectedValueOnce({
     name: "AI_NoObjectGeneratedError",

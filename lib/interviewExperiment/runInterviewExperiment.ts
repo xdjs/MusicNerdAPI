@@ -36,7 +36,7 @@ import type {
  */
 export async function runInterviewExperiment(
   corpus: InterviewCorpus,
-  arm: ExperimentArm,
+  arm: Exclude<ExperimentArm, "prepared">,
   options: { asOf?: string; model?: string; maxContextBytes?: number } = {},
 ): Promise<ExperimentResult> {
   const asOf = options.asOf ?? corpus.capturedAt,

@@ -28,7 +28,7 @@ export async function callInterviewModel<T>(
       instructions: instructions + "\nFollow the provided structured-output schema.",
       prompt,
       temperature: stage === "draft" ? 0.8 : 0,
-      thinkingBudget: 512,
+      thinkingBudget: stage === "prepare" || stage === "verify-prepared" ? 2048 : 512,
       maxOutputTokens: 6144,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(45000),
