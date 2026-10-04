@@ -10,7 +10,7 @@ An operator can snapshot the two artists' existing research read-only, run three
 
 | PR | Item | State |
 | --- | --- | --- |
-| MusicNerdAPI#TBD | Stored-evidence snapshot, bounded context, three-arm question experiment and private review report | In progress — branch `codex/interviewer-memory-experiment` from main `89d2f62` |
+| [MusicNerdAPI#19](https://github.com/xdjs/MusicNerdAPI/pull/19) | Stored-evidence snapshot, bounded context, three-arm question experiment and private review report | Draft — implementation and private comparisons complete; human editorial review pending; not merged or released |
 | Follow-up, after results | Integrate accepted research/context behavior into API interview and shared Lore consumers | Not started; informed by the experiment |
 
 ## Open — experiment
@@ -53,7 +53,7 @@ Each model call uses the existing Flash model by default, 512 thinking tokens, a
 
 Long sources are divided into overlapping original passages, with source group and offsets retained. Neither the generated Lore nor an index preview becomes independent evidence. Corrections and saved answers remain whole and pinned; a memory set too large for the budget fails explicitly. The navigation index uses short previews; selected sources are opened as original text. This selection still risks missing a relevant passage, and is a variable under evaluation, not a solved retrieval problem.
 
-Short prompt IDs such as `e17` are reversible aliases for original UUID/offset references. Full text, original URLs, dates and attribution travel alongside them; reports restore original IDs. Quotation validation permits layout-only whitespace differences for extracted PDFs and rejects changed words. The independent reviewer checks whole premises, attribution, corrections, redundancy and editorial value. Its acceptance is advisory.
+Short prompt IDs such as `e17` are reversible aliases for original UUID/offset references. Each selected passage keeps its original wording, source URL, dates and attribution; reports restore original IDs, and the complete captured source remains in the private corpus. Changing an ID does not summarize source text. The model still sees a bounded selection of passages, so preserved references alone do not guarantee that it saw every relevant qualification. Quotation validation permits layout-only whitespace differences for extracted PDFs and rejects changed words. The independent reviewer checks whole premises, attribution, corrections, redundancy and editorial value. Its acceptance is advisory.
 
 Outputs are local files with mode 0600 in a mode-0700 directory: `questions.md` is blinded; `evidence.md` contains original references/excerpts; `methods.json` reveals arms and usage; `results.json` includes rejected drafts; `corpus.json` preserves the exact input. File creation refuses to overwrite existing reports. Keep all of them private and outside Git. Read the question sets before the method key.
 
