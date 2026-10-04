@@ -26,3 +26,13 @@ describe("generateText", () => {
     });
   });
 });
+
+it("forwards cancellation, retry and output limits for bounded experiments", async () => {
+  const signal = new AbortController().signal;
+  await generateText({ prompt: "p", abortSignal: signal, maxOutputTokens: 2048, maxRetries: 0 });
+  expect(sdkGenerateText.mock.calls[0][0]).toMatchObject({
+    abortSignal: signal,
+    maxOutputTokens: 2048,
+    maxRetries: 0,
+  });
+});

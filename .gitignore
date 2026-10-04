@@ -43,3 +43,6 @@ next-env.d.ts
 supabase/.temp/
 .env*
 !.env.example
+
+# Private interview experiment corpora and reports
+/.local-data/
