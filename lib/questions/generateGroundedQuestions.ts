@@ -5,7 +5,6 @@ import { withTimeout } from "@/lib/async/withTimeout";
 import { getSocialCredits } from "@/lib/credits/getSocialCredits";
 import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { buildCandidates } from "@/lib/questions/buildCandidates";
-import { reelAudioCandidates } from "@/lib/questions/reelAudioCandidates";
 import { capPersonQuestions } from "@/lib/questions/capPersonQuestions";
 import {
   DEFAULT_MAX_QUESTIONS,
@@ -53,10 +52,7 @@ export async function generateGroundedQuestions(
 
     const signals = deriveSocialSignals(posts, artist.instagram ?? "", artistName);
     const extraction = await getSocialCredits(artistId);
-    const candidates = [
-      ...reelAudioCandidates(posts, artistName),
-      ...buildCandidates(signals, artistName, extraction),
-    ];
+    const candidates = buildCandidates(signals, artistName, extraction);
     if (candidates.length === 0) return [];
 
     const wantedDrafts = max * DRAFT_OVERSAMPLE;
@@ -80,7 +76,6 @@ export async function generateGroundedQuestions(
         instructions: questionSystemInstruction(artistName),
         // Stability comes from persisting the asked questions; 0.2 only flattened the writing.
         temperature: 0.8,
-        thinkingBudget: 1024,
         element: z.object({
           signalId: z.string().optional(),
           question: z.string().optional(),
