@@ -152,6 +152,18 @@ describe("catalog source persistence with real PostgreSQL and application role",
     });
     expect(await save()).toBeUndefined();
   });
+  it.each(["spotify", "deezer"] as const)(
+    "does not adopt another artist's canonical %s profile",
+    async platform => {
+      await database
+        .update(schema.artists)
+        .set({ [platform]: "123" })
+        .where(eq(schema.artists.id, otherId));
+      const host = platform === "spotify" ? "open.spotify.com" : "www.deezer.com";
+      expect(await save(`https://${host}/artist/123`)).toBeUndefined();
+      expect(await database.query.artistVaultSources.findMany()).toEqual([]);
+    },
+  );
   it("preserves spoken audio through the actual writer and supports explicitly classified music", async () => {
     const spoken = "https://soundcloud.com/pete-rango/a-conversation";
     const music = "https://soundcloud.com/pete-rango/rush";

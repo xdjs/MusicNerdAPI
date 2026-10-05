@@ -47,7 +47,7 @@ export function parseMusicDestination(raw: string): MusicDestination | null {
       match[2],
     ];
   } else if (host === "deezer.com") {
-    match = path.match(/^\/(?:[a-z]{2}\/)?(artist|album|track)\/([1-9]\d*)$/i);
+    match = path.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(artist|album|track)\/([1-9]\d*)$/i);
     if (!match) return null;
     [platform, label, kind, id] = [
       "deezer",

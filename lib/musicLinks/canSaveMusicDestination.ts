@@ -47,10 +47,11 @@ export async function canSaveMusicDestination(
   ) {
     const rows = rowsOf(
       await writer.execute(sql`
-      select ${sql.identifier(destination.platform)} as value from artists where id = ${artistId}::uuid
+      select ${sql.identifier(destination.platform)} as value from artists
+      where id = ${artistId}::uuid or ${sql.identifier(destination.platform)} = ${destination.id}
     `),
     ) as { value: string | null }[];
-    if (rows[0]?.value) return false;
+    if (rows.some(row => row.value)) return false;
   }
   return !sources.some(source => {
     const held = parseMusicDestination(source.url);
