@@ -5,6 +5,7 @@ import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDire
 import type { RelevanceVerdict } from "@/lib/relevance/types";
 import type { SearchRun } from "@/lib/vault/types";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 
 /**
  * Writes an account the judge affirmed to the artist's links. This is the
@@ -24,6 +25,7 @@ export async function adoptJudgedAccount(
   url: string,
   verdict: RelevanceVerdict | undefined,
 ): Promise<boolean> {
+  if (outOfBudget(run, "judged-account verification")) return false;
   const alreadyHave = !!run.artist[match.siteName];
   if (alreadyHave) {
     console.log(
@@ -41,6 +43,7 @@ export async function adoptJudgedAccount(
     );
   }
   if (alreadyHave || blocked || verdict !== "about-artist") return false;
+  if (outOfBudget(run, "judged-account insertion")) return false;
   try {
     await writeArtistLink(run.artistId, match.siteName, match.id, run.provisional, run.artist);
     console.log(`[vaultWebSearch] ${match.siteName} profile -> links: ${url.slice(0, 80)}`);

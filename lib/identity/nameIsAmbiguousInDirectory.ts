@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { rowsOf } from "@/lib/db/rowsOf";
+import { foldName } from "@/lib/text/foldName";
 
 /**
  * Is this the generic artist among several sharing a name? "Black Dave" is a
@@ -16,12 +17,12 @@ export async function nameIsAmbiguousInDirectory(
   artistId: string,
   artistName: string,
 ): Promise<boolean> {
-  const folded = artistName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const folded = foldName(artistName);
   if (folded.length < 4) return true;
   try {
     const rows = await db.execute(sql`
       select 1 from artists
-      where regexp_replace(lower(name), '[^a-z0-9]', '', 'g') like ${folded + "%"}
+      where regexp_replace(lower(normalize(name, NFKD) collate "C"), '[^a-z0-9]', '', 'g') like ${folded + "%"}
         and id <> ${artistId}::uuid
       limit 1`);
     return rowsOf(rows).length > 0;

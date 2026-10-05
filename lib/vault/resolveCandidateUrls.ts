@@ -1,4 +1,5 @@
 import { resolveRedirectUrl } from "@/lib/sources/resolveRedirectUrl";
+import { resolveDiscoveryResult } from "@/lib/vault/resolveDiscoveryResult";
 import type { DiscoveryResult } from "@/lib/vault/types";
 
 /**
@@ -14,7 +15,7 @@ export async function resolveCandidateUrls(results: DiscoveryResult[]): Promise<
       .filter(r => r.url && r.title)
       .map(async r => {
         const url = await resolveRedirectUrl(r.url);
-        return url ? { ...r, url } : null;
+        return url ? resolveDiscoveryResult(r, url) : null;
       }),
   );
   return resolved.filter((r): r is DiscoveryResult => r !== null);

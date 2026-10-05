@@ -30,6 +30,27 @@ const file = (
   );
 
 describe("fileCandidate", () => {
+  it("does not use an unreadable homepage as an account or outbound-link authority", async () => {
+    const run = searchRun();
+    await fileCandidate(
+      run,
+      {
+        result: { ...hit("https://grimes.com/"), type: "website" },
+        page: {
+          ...goodPage,
+          extractedText: "Grimes",
+          fullText: "Grimes",
+          outboundLinks: ["https://instagram.com/attacker"],
+        },
+      },
+      "about-artist",
+    );
+    expect(run.hubCandidates).toEqual([]);
+    expect(accountMatchFor).not.toHaveBeenCalled();
+    expect(saveCandidateSource).not.toHaveBeenCalled();
+    expect(run.counts.dropped).toBe(1);
+  });
+
   it("routes an adopted account to links, not the vault", async () => {
     const x = { siteName: "x", cardPlatformName: "X", id: "p3t3rango" };
     accountMatchFor.mockResolvedValue({ match: x, isAccountUrl: true });
@@ -44,6 +65,20 @@ describe("fileCandidate", () => {
     );
     expect(saveCandidateSource).not.toHaveBeenCalled();
     expect(run.counts.skipped).toBe(1);
+  });
+
+  it("keeps an affirmed newly adopted account's outbound links for the hub pass", async () => {
+    const url = "https://soundcloud.com/grimes";
+    const links = ["https://music.apple.com/artist/grimes/123"];
+    accountMatchFor.mockResolvedValue({
+      match: { siteName: "soundcloud", id: "grimes" },
+      isAccountUrl: true,
+    });
+    adoptJudgedAccount.mockResolvedValue(true);
+    const run = searchRun();
+    await file(run, url, { outboundLinks: links }, "about-artist");
+    expect(run.hubCandidates).toEqual([{ links, url, aboutArtist: true }]);
+    expect(saveCandidateSource).not.toHaveBeenCalled();
   });
 
   it("holds a page's outbound links for the hub pass, unless it's an index", async () => {
@@ -64,6 +99,25 @@ describe("fileCandidate", () => {
       { links: ["https://instagram.com/x"], url: "https://dupes.rocks", aboutArtist: true },
     ]);
   });
+
+  it.each(["not-about-artist", "undecided"])(
+    "does not queue a %s page as an outbound identity authority",
+    async verdict => {
+      const run = searchRun();
+      await file(
+        run,
+        "https://attacker.example/artist",
+        {
+          outboundLinks: [
+            "https://soundcloud.com/grimes",
+            "https://music.apple.com/artist/grimes/42",
+          ],
+        },
+        verdict,
+      );
+      expect(run.hubCandidates).toEqual([]);
+    },
+  );
 
   it("keeps an unadopted account page as a candidate handle, never as press", async () => {
     accountMatchFor.mockResolvedValue({

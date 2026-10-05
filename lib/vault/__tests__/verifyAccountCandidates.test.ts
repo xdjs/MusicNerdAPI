@@ -115,3 +115,27 @@ describe("verifyAccountCandidates with provisional columns", () => {
     );
   });
 });
+
+it.each([false, true])(
+  "does not write after the account check consumes the deadline (durable %s)",
+  async requireComplete => {
+    let now = 1000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      h.confirms.mockImplementationOnce(async () => {
+        now = 3000;
+        return "Pete Rango";
+      });
+      const pending = verifyAccountCandidates({
+        ...run([cand("instagram", "p3t3rango")]),
+        deadline: 2000,
+        requireComplete,
+      });
+      if (requireComplete) await expect(pending).rejects.toThrow("deadline");
+      else await pending;
+      expect(h.writeArtistLink).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);

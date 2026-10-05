@@ -1,3 +1,4 @@
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { webSearch } from "@/lib/search/webSearch";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
@@ -33,6 +34,9 @@ export async function searchCandidates(
       `[vaultWebSearch] Seeding MusicBrainz homepage into discovery: ${homepage.slice(0, 70)}`,
     );
   }
+  // A MusicBrainz homepage is an untrusted candidate, not an approved identity.
+  const homepageKey =
+    homepage && !parseMusicDestination(homepage) ? normalizeLoreDiscoveryUrl(homepage) : null;
   const byUrl = new Map<string, DiscoveryResult>();
   for (const hit of [...seeded, ...perQuery.flat()]) {
     if (!hit.url || !hit.title) continue;
@@ -42,7 +46,7 @@ export async function searchCandidates(
       url: hit.url,
       title: hit.title,
       snippet: hit.snippet ?? "",
-      type: inferTypeFromUrl(hit.url),
+      type: key === homepageKey ? "website" : inferTypeFromUrl(hit.url),
     });
   }
   return [...byUrl.values()];

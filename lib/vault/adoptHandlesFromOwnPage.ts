@@ -1,3 +1,5 @@
+import { adoptMusicDestinations } from "@/lib/musicLinks/adoptMusicDestinations";
+import type { SearchRun } from "@/lib/vault/types";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
@@ -10,6 +12,7 @@ import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
 import { resolveOutboundHandles } from "@/lib/vault/resolveOutboundHandles";
 import { sharedPrefix } from "@/lib/vault/sharedPrefix";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 
 /**
  * Adopts the account handles an artist published on their own page, which
@@ -18,6 +21,9 @@ import { writeArtistLink } from "@/lib/vault/writeArtistLink";
  * name isn't shared). When some handles resemble the artist and others don't,
  * only the resembling ones are kept; a page naming two handles for one
  * platform adopts neither. Propagation is left to the caller, once per run.
+ * Catalog sources require an affirmed own domain or the referring page's own
+ * saved account identity. Linking a public known account is not ownership proof
+ * for that additional catalog branch; rejected pages cannot supply either branch.
  *
  * @param artistId - The artist.
  * @param outboundLinks - The page's off-host links.
@@ -36,26 +42,47 @@ export async function adoptHandlesFromOwnPage(
   artistName: string,
   page?: { url: string; aboutArtist: boolean },
   provisional?: Set<string>,
+  run?: SearchRun,
 ): Promise<{ adopted: number; handles: Set<string> }> {
+  if (page && !page.aboutArtist) return { adopted: 0, handles: new Set<string>() };
   const resolved = await resolveOutboundHandles(outboundLinks);
   const corroborator = findCorroborator(resolved, artist, provisional);
   const ownDomain =
-    !corroborator &&
     !!page?.aboutArtist &&
     isArtistOwnDomain(page.url, String(artist.name ?? "")) &&
     !(await nameIsAmbiguousInDirectory(artistId, String(artist.name ?? "")));
-  if (!corroborator && !ownDomain) return { adopted: 0, handles: new Set<string>() };
+  let ownedCatalogPage = ownDomain;
+  if (run && page?.aboutArtist) {
+    // An outbound public link can corroborate identity, but does not prove who
+    // controls its referring page. Catalog adoption needs that page's own authority.
+    const pageAccounts = ownDomain ? [] : await resolveOutboundHandles([page.url]);
+    const heldPage = findCorroborator(
+      pageAccounts.filter(
+        handle =>
+          !handle.corroborationOnly &&
+          ACCOUNT_PLATFORMS.has(handle.siteName) &&
+          !isReservedHandle(handle.siteName, handle.id),
+      ),
+      artist,
+      provisional,
+    );
+    if (outOfBudget(run, "catalog hub authority"))
+      return { adopted: 0, handles: new Set<string>() };
+    ownedCatalogPage ||= !!heldPage;
+  }
+  if (!corroborator && !ownedCatalogPage) return { adopted: 0, handles: new Set<string>() };
   console.log(
     corroborator
       ? `[vaultWebSearch] Page corroborated by known ${corroborator.siteName}=${corroborator.id}`
-      : `[vaultWebSearch] Page corroborated as the artist's own domain: ${page!.url.slice(0, 70)}`,
+      : `[vaultWebSearch] Artist-owned page: ${page!.url.slice(0, 70)}`,
   );
-
-  const ambiguous = ambiguousPlatforms(resolved);
+  if (run && ownedCatalogPage) await adoptMusicDestinations(run, outboundLinks, "own-page");
+  const adoptable = resolved.filter(handle => !handle.corroborationOnly);
+  const ambiguous = ambiguousPlatforms(adoptable);
   for (const platform of ambiguous) {
     console.log(`[vaultWebSearch] Own page names more than one ${platform} handle — adopting none`);
   }
-  const accountHandles = resolved.filter(
+  const accountHandles = adoptable.filter(
     r => ACCOUNT_PLATFORMS.has(r.siteName) || REFERENCE_PLATFORMS.has(r.siteName),
   );
   const anyResembles = accountHandles.some(r => sharedPrefix(r.id, artistName) >= HANDLE_STEM_MIN);
@@ -64,6 +91,7 @@ export async function adoptHandlesFromOwnPage(
   const done = new Set<string>();
   const adoptedHandles = new Set<string>();
   for (const r of accountHandles) {
+    if (run && outOfBudget(run, "own-page handle verification")) break;
     if (anyResembles && sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN) {
       console.log(
         `[vaultWebSearch] Page mixes "${artistName}" accounts with ${r.siteName}=${r.id}; keeping only theirs`,
@@ -85,6 +113,7 @@ export async function adoptHandlesFromOwnPage(
       );
       continue;
     }
+    if (run && outOfBudget(run, "own-page handle insertion")) break;
     try {
       await writeArtistLink(artistId, r.siteName, r.id, provisional, artist);
       console.log(`[vaultWebSearch] Adopted ${r.siteName}=${r.id} from the artist's own page`);

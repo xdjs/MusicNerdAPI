@@ -1,5 +1,7 @@
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import type { RelevanceVerdict } from "@/lib/relevance/types";
+import { classifyFetchedSource } from "@/lib/sources/classifyFetchedSource";
 import { accountMatchFor } from "@/lib/vault/accountMatchFor";
 import { adoptJudgedAccount } from "@/lib/vault/adoptJudgedAccount";
 import { ACCOUNT_PLATFORMS } from "@/lib/vault/const";
@@ -25,17 +27,32 @@ export async function fileCandidate(
   verdict: RelevanceVerdict | undefined,
 ): Promise<"stop" | void> {
   const { result, page } = candidate;
-  const { match, isAccountUrl } = await accountMatchFor(result.url);
-  if (isAccountUrl && match && (await adoptJudgedAccount(run, match, result.url, verdict))) {
-    run.counts.skipped++;
+  // Community-edited homepage relations must clear relevance before source or outbound adoption.
+  if (
+    result.type === "website" &&
+    (verdict !== "about-artist" ||
+      classifyFetchedSource(page, run.artistName, { identityConfirmed: true }) !== "verified")
+  ) {
+    run.counts.dropped++;
     return;
   }
-  if ((page.outboundLinks?.length ?? 0) > 0 && verdict !== "lists-artist") {
+  if ((page.outboundLinks?.length ?? 0) > 0 && verdict === "about-artist") {
     run.hubCandidates.push({
       links: page.outboundLinks!,
       url: result.url,
-      aboutArtist: verdict === "about-artist",
+      aboutArtist: true,
     });
+  }
+  // Preserve outbound leads before account adoption returns. The hub pass
+  // re-reads saved ownership before accepting any catalog destinations.
+  // A release URL must never be mistaken for an account by a loose legacy urlmap row.
+  const release = parseMusicDestination(result.url)?.kind === "release";
+  const { match, isAccountUrl } = release
+    ? { match: undefined, isAccountUrl: false }
+    : await accountMatchFor(result.url);
+  if (isAccountUrl && match && (await adoptJudgedAccount(run, match, result.url, verdict))) {
+    run.counts.skipped++;
+    return;
   }
   if (match?.siteName && ACCOUNT_PLATFORMS.has(match.siteName)) {
     // Searching their name and getting back an account page is evidence

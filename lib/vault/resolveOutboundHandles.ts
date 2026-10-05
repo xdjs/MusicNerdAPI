@@ -1,7 +1,9 @@
 import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import { stripQuery } from "@/lib/sources/stripQuery";
-import { MAX_CORROBORATION_CHECKS } from "@/lib/vault/const";
+import { CASE_SENSITIVE_ACCOUNT_IDS, MAX_CORROBORATION_CHECKS } from "@/lib/vault/const";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { getReleaseOwnerHandle } from "@/lib/musicLinks/getReleaseOwnerHandle";
 import type { ResolvedHandle } from "@/lib/vault/types";
 
 /**
@@ -14,9 +16,19 @@ import type { ResolvedHandle } from "@/lib/vault/types";
 export async function resolveOutboundHandles(outboundLinks: string[]): Promise<ResolvedHandle[]> {
   const resolved: ResolvedHandle[] = [];
   for (const link of outboundLinks.slice(0, MAX_CORROBORATION_CHECKS)) {
-    const match = await extractArtistId(stripQuery(link)).catch(() => undefined);
+    const music = parseMusicDestination(link);
+    const match =
+      music?.kind === "release"
+        ? getReleaseOwnerHandle(music)
+        : await extractArtistId(stripQuery(link)).catch(() => undefined);
     if (match?.siteName && match?.id)
-      resolved.push({ siteName: match.siteName, id: normalizeHandle(String(match.id)) });
+      resolved.push({
+        siteName: match.siteName,
+        id: CASE_SENSITIVE_ACCOUNT_IDS.has(match.siteName)
+          ? String(match.id).trim()
+          : normalizeHandle(String(match.id)),
+        ...(music?.kind === "release" ? { corroborationOnly: true } : {}),
+      });
   }
   return resolved;
 }
