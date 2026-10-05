@@ -179,14 +179,20 @@ it("never adopts a release URL as an artist ID through a loose legacy mapping", 
   expect(m.writeArtistLink).not.toHaveBeenCalled();
 });
 
-it("retains the Bandcamp artist handle from a curated artist-scoped album link", async () => {
+it.each([
+  "https://label.bandcamp.com/album/grimes-record",
+  "https://soundcloud.com/label/grimes-record",
+  "https://audius.co/label/grimes-record",
+  "https://mixcloud.com/label/grimes-record",
+  "https://subvert.fm/label/releases/grimes-record",
+])("does not assign a release uploader as the artist's canonical account (%s)", async url => {
   m.fetchMusicBrainzLinks.mockResolvedValueOnce({
     matchedBy: "identifier",
-    urls: ["https://grimes.bandcamp.com/album/new-release"],
+    urls: [url],
     homepage: null,
   });
-  const artist = {};
-  expect((await adoptFromMusicBrainz("a1", "Grimes", artist)).handles).toEqual(new Set(["grimes"]));
-  expect(m.writeArtistLink).toHaveBeenCalledWith("a1", "bandcamp", "grimes", undefined, artist);
+  const result = await adoptFromMusicBrainz("a1", "Grimes", {});
+  expect(result.handles.size).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
   expect(m.extractArtistId).not.toHaveBeenCalled();
 });

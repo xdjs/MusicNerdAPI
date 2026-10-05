@@ -209,3 +209,24 @@ it.each(["catalog", "ownership"])(
     }
   },
 );
+
+it("never adopts an unknown release uploader, including one whose handle resembles the artist", async () => {
+  m.resolve.mockResolvedValueOnce([
+    { siteName: "bandcamp", id: "dupes-records", corroborationOnly: true },
+  ]);
+  const result = await adoptHandlesFromOwnPage("a1", [], { name: "Dupes" }, "Dupes", {
+    url: "https://dupes.com",
+    aboutArtist: true,
+  });
+  expect(result.adopted).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
+});
+it("a known release account can corroborate a page without competing with its explicit artist profiles", async () => {
+  m.resolve.mockResolvedValueOnce([
+    { siteName: "bandcamp", id: "dupes", corroborationOnly: true },
+    { siteName: "soundcloud", id: "label", corroborationOnly: true },
+    { siteName: "soundcloud", id: "dupes" },
+  ]);
+  await adoptHandlesFromOwnPage("a1", [], { name: "Dupes", bandcamp: "dupes" }, "Dupes");
+  expect(m.writeArtistLink.mock.calls.map(c => [c[1], c[2]])).toEqual([["soundcloud", "dupes"]]);
+});

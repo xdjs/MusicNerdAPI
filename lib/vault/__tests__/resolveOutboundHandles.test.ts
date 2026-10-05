@@ -49,8 +49,8 @@ it("retains artist-scoped release handles as corroboration, never their release 
       "https://soundcloud.com/grimes/sets/new-release",
     ]),
   ).toEqual([
-    { siteName: "bandcamp", id: "grimes" },
-    { siteName: "soundcloud", id: "grimes" },
+    { siteName: "bandcamp", id: "grimes", corroborationOnly: true },
+    { siteName: "soundcloud", id: "grimes", corroborationOnly: true },
   ]);
   expect(extractArtistId).not.toHaveBeenCalled();
 });

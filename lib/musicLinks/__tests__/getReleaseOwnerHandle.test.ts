@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { parseMusicDestination } from "../parseMusicDestination";
-import { getReleaseArtistHandle } from "../getReleaseArtistHandle";
+import { getReleaseOwnerHandle } from "../getReleaseOwnerHandle";
 
-describe("getReleaseArtistHandle", () => {
+describe("getReleaseOwnerHandle", () => {
   it.each([
     ["https://grimes.bandcamp.com/album/new-release", "bandcamp"],
     ["https://soundcloud.com/grimes/sets/new-release", "soundcloud"],
@@ -10,7 +10,7 @@ describe("getReleaseArtistHandle", () => {
     ["https://audius.co/grimes/album/new-release", "audius"],
     ["https://mixcloud.com/grimes/new-release/", "mixcloud"],
   ])("retains only the artist scope of %s", (url, siteName) => {
-    expect(getReleaseArtistHandle(parseMusicDestination(url)!)).toEqual({ siteName, id: "grimes" });
+    expect(getReleaseOwnerHandle(parseMusicDestination(url)!)).toEqual({ siteName, id: "grimes" });
   });
 
   it.each([
@@ -21,6 +21,6 @@ describe("getReleaseArtistHandle", () => {
     "https://release.supercollector.xyz/grimes-new-release",
     "https://soundcloud.com/grimes",
   ])("does not infer an artist ID from %s", url => {
-    expect(getReleaseArtistHandle(parseMusicDestination(url)!)).toBeNull();
+    expect(getReleaseOwnerHandle(parseMusicDestination(url)!)).toBeNull();
   });
 });

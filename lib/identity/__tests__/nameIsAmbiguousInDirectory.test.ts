@@ -13,7 +13,9 @@ describe("nameIsAmbiguousInDirectory", () => {
     execute.mockResolvedValueOnce([{ "?column?": 1 }]);
     expect(await nameIsAmbiguousInDirectory("a1", "Black Dave")).toBe(true);
     const { text, params } = renderSql(execute.mock.calls[0][0]);
-    expect(text).toContain("regexp_replace(lower(name), '[^a-z0-9]', '', 'g') like $1");
+    expect(text).toContain(
+      "regexp_replace(lower(normalize(name, NFKD) collate \"C\"), '[^a-z0-9]', '', 'g') like $1",
+    );
     expect(params[0]).toBe("blackdave%");
   });
 

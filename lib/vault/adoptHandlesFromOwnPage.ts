@@ -56,11 +56,12 @@ export async function adoptHandlesFromOwnPage(
   );
 
   if (run) await adoptMusicDestinations(run, outboundLinks, "own-page");
-  const ambiguous = ambiguousPlatforms(resolved);
+  const adoptable = resolved.filter(handle => !handle.corroborationOnly);
+  const ambiguous = ambiguousPlatforms(adoptable);
   for (const platform of ambiguous) {
     console.log(`[vaultWebSearch] Own page names more than one ${platform} handle — adopting none`);
   }
-  const accountHandles = resolved.filter(
+  const accountHandles = adoptable.filter(
     r => ACCOUNT_PLATFORMS.has(r.siteName) || REFERENCE_PLATFORMS.has(r.siteName),
   );
   const anyResembles = accountHandles.some(r => sharedPrefix(r.id, artistName) >= HANDLE_STEM_MIN);

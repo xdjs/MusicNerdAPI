@@ -4,6 +4,9 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, type SQL } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import * as schema from "@/lib/db/schema";
+import { searchRun } from "@/lib/vault/__tests__/searchRun";
+
+vi.mock("@/lib/pages/fetchPageContent", () => ({ fetchPageContent: vi.fn() }));
 
 vi.mock("@/lib/db/db", () => ({
   get db() {
@@ -93,6 +96,42 @@ const save = (sourceUrl = url) =>
   );
 
 describe("catalog source persistence with real PostgreSQL and application role", () => {
+  it.each([
+    ["Sigur Rós", "Sigur Ros"],
+    ["Café", "Cafe"],
+    ["Ｃａｆé", "Cafe"],
+    ["𝐃𝐮𝐩𝐞𝐬", "Dupes"],
+  ])(
+    "uses the same Unicode identity fold for directory ambiguity and catalog adoption (%s/%s)",
+    async (artistName, otherName) => {
+      await database
+        .update(schema.artists)
+        .set({ name: artistName })
+        .where(eq(schema.artists.id, artistId));
+      await database
+        .update(schema.artists)
+        .set({ name: otherName })
+        .where(eq(schema.artists.id, otherId));
+      const { nameIsAmbiguousInDirectory } =
+        await import("@/lib/identity/nameIsAmbiguousInDirectory");
+      expect(await nameIsAmbiguousInDirectory(artistId, artistName)).toBe(true);
+      const { adoptMusicDestinations } = await import("@/lib/musicLinks/adoptMusicDestinations");
+      const { fetchPageContent } = await import("@/lib/pages/fetchPageContent");
+      vi.mocked(fetchPageContent).mockClear();
+      await adoptMusicDestinations(searchRun({ artistId, artistName }), [url], "identifier");
+      expect(fetchPageContent).not.toHaveBeenCalled();
+      expect(await database.query.artistVaultSources.findMany()).toEqual([]);
+    },
+  );
+  it("accepts a unique Unicode-normalized full name without treating its width as ambiguity", async () => {
+    const { nameIsAmbiguousInDirectory } =
+      await import("@/lib/identity/nameIsAmbiguousInDirectory");
+    await database
+      .update(schema.artists)
+      .set({ name: "Ｄｕｐｅｓ" })
+      .where(eq(schema.artists.id, artistId));
+    expect(await nameIsAmbiguousInDirectory(artistId, "Ｄｕｐｅｓ")).toBe(false);
+  });
   it("treats another artist's pending evidence as a source, not a canonical identity reservation", async () => {
     await database.insert(schema.artistVaultSources).values({
       artistId: otherId,
