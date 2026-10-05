@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db/db";
-import { artistOnboardingSteps } from "@/lib/db/schema";
+import { getOnboardingStepTimes } from "@/lib/onboarding/getOnboardingStepTimes";
 import type { OnboardingStep } from "@/lib/onboarding/types";
 
 /**
@@ -12,13 +10,7 @@ import type { OnboardingStep } from "@/lib/onboarding/types";
  * @returns The confirmed steps, or null on a database error.
  */
 export async function getConfirmedSteps(artistId: string): Promise<Set<OnboardingStep> | null> {
-  try {
-    const rows = await db.query.artistOnboardingSteps.findMany({
-      where: eq(artistOnboardingSteps.artistId, artistId),
-    });
-    return new Set(rows.map(r => r.step as OnboardingStep));
-  } catch (e) {
-    console.error("[getConfirmedSteps] Error:", e);
-    return null;
-  }
+  const times = await getOnboardingStepTimes(artistId);
+  if (times === null) return null;
+  return new Set((Object.keys(times) as OnboardingStep[]).filter(step => times[step] !== null));
 }
