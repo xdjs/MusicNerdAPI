@@ -1,5 +1,10 @@
 export type JobKind =
-  "social_ingest" | "caption_extract" | "lore_refresh" | "source_search" | "latest_refresh";
+  | "social_ingest"
+  | "caption_extract"
+  | "lore_refresh"
+  | "source_search"
+  | "latest_refresh"
+  | "source_extract";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export interface ResearchJob {

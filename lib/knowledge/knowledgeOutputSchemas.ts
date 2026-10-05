@@ -1,3 +1,4 @@
+import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
 import { z } from "zod";
 import {
   knowledgeRevisionSchema as revision,
@@ -85,6 +86,7 @@ const history = z.strictObject({
     .max(2),
 });
 const job = z.strictObject({
+  extractionOutcomes: sourceExtractionSchemas.outcome.array().max(20).optional(),
   jobId: z.uuid(),
   kind: z.enum([
     "social_ingest",
@@ -92,6 +94,7 @@ const job = z.strictObject({
     "lore_refresh",
     "source_search",
     "latest_refresh",
+    "source_extract",
   ]),
   status: z.enum(["pending", "running", "done", "failed"]),
   cursor: nonnegative,

@@ -1,3 +1,4 @@
+import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { knowledgeRevision } from "@/lib/knowledge/knowledgeRevision";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
@@ -239,6 +240,7 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
           "lore_refresh",
           "source_search",
           "latest_refresh",
+          "source_extract",
         ].includes(row.kind) ||
         !["pending", "running", "done", "failed"].includes(row.status) ||
         row.cursor < 0 ||
@@ -249,7 +251,18 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
           503,
           "Stored research status is unsupported",
         );
+      const parsed =
+        row.kind === "source_extract"
+          ? sourceExtractionSchemas.outcome.array().max(20).safeParse(row.extractionOutcomes)
+          : null;
+      if (parsed && !parsed.success)
+        throw new KnowledgeError(
+          "storage_unavailable",
+          503,
+          "Stored extraction status is unsupported",
+        );
       return {
+        ...(parsed?.success ? { extractionOutcomes: parsed.data } : {}),
         jobId: row.id,
         kind: row.kind as KnowledgeJob["kind"],
         status: row.status as KnowledgeJob["status"],

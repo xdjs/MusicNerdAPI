@@ -41,10 +41,10 @@ export type RawKnowledge = {
   }[];
   answers: (typeof artistInterviewAnswers.$inferSelect)[];
   corrections: (typeof artistDocCorrections.$inferSelect)[];
-  jobs: Pick<
+  jobs: (Pick<
     typeof artistResearchJobs.$inferSelect,
     "id" | "artistId" | "kind" | "status" | "cursor" | "total" | "updatedAt"
-  >[];
+  > & { extractionOutcomes?: unknown })[];
 };
 export type KnowledgeSource = {
   sourceId: string;
@@ -106,8 +106,15 @@ export type HistoryEntry = {
   fields: HistoryField[];
 };
 export type KnowledgeJob = {
+  extractionOutcomes?: import("@/lib/sourceExtraction/types").ExtractionOutcome[];
   jobId: string;
-  kind: "social_ingest" | "caption_extract" | "lore_refresh" | "source_search" | "latest_refresh";
+  kind:
+    | "social_ingest"
+    | "caption_extract"
+    | "lore_refresh"
+    | "source_search"
+    | "latest_refresh"
+    | "source_extract";
   status: "pending" | "running" | "done" | "failed";
   cursor: number;
   total: number | null;

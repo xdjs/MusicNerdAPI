@@ -122,6 +122,7 @@ export async function loadArtistKnowledge(artistId: string, userId: string) {
           id: artistResearchJobs.id,
           artistId: artistResearchJobs.artistId,
           kind: artistResearchJobs.kind,
+          extractionOutcomes: sql<unknown>`case when ${artistResearchJobs.kind}='source_extract' then ${artistResearchJobs.state}->'outcomes' else null end`,
           status: artistResearchJobs.status,
           cursor: artistResearchJobs.cursor,
           total: artistResearchJobs.total,

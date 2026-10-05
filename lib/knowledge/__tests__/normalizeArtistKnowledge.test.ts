@@ -105,3 +105,33 @@ describe("normalizeArtistKnowledge", () => {
     ).toThrow(/corpus/i);
   });
 });
+
+it("returns sanitized source extraction outcomes without job secrets", () => {
+  const outcome = {
+    sourceId: vault.id,
+    status: "blocked",
+    capturedAt: "2026-10-05T00:00:00.000Z",
+    httpStatus: 403,
+    storedChars: 0,
+    truncated: false,
+  };
+  const r = normalizeArtistKnowledge({
+    ...rawKnowledge,
+    jobs: [
+      {
+        id: vault.id,
+        artistId: rawKnowledge.artist.id,
+        kind: "source_extract",
+        status: "done",
+        cursor: 1,
+        total: 1,
+        updatedAt: "2026-10-05T00:00:00Z",
+        extractionOutcomes: [
+          { ...outcome, url: "https://private.example?token=secret", userId: "secret" },
+        ],
+      },
+    ],
+  });
+  expect(r.jobs[0].extractionOutcomes).toEqual([outcome]);
+  expect(JSON.stringify(r.jobs)).not.toContain("secret");
+});

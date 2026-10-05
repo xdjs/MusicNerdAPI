@@ -13,6 +13,10 @@ vi.mock("@/lib/research/runCaptionExtract", () => ({ runCaptionExtract }));
 vi.mock("@/lib/research/runLoreRefresh", () => ({ runLoreRefresh }));
 vi.mock("@/lib/research/runSourceSearchJob", () => ({ runSourceSearchJob }));
 vi.mock("@/lib/latest/runLatestRefresh", () => ({ runLatestRefresh }));
+const runSourceExtraction = vi.fn(async () => ({ progress: "extraction", done: true }));
+vi.mock("@/lib/sourceExtraction/runSourceExtraction", () => ({
+  runSourceExtraction: () => runSourceExtraction(),
+}));
 const { runResearchJob } = await import("@/lib/research/runResearchJob");
 
 const job = (kind: string) =>
@@ -29,6 +33,12 @@ const job = (kind: string) =>
   }) as never;
 
 describe("runResearchJob", () => {
+  it("dispatches durable source extraction", async () => {
+    expect(await runResearchJob(job("source_extract"), 123)).toEqual({
+      progress: "extraction",
+      done: true,
+    });
+  });
   it("runs each kind with its own runner and the caller's deadline", async () => {
     expect(await runResearchJob(job("social_ingest"), 123)).toEqual({
       progress: "ingest",
