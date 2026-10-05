@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { record } = vi.hoisted(() => ({ record: vi.fn(async () => "activity-new") }));
+const { record, queue } = vi.hoisted(() => ({
+  record: vi.fn(async () => "activity-new"),
+  queue: vi.fn(),
+}));
+vi.mock("@/lib/sourceExtraction/queueApprovedSourceExtraction", () => ({
+  queueApprovedSourceExtraction: queue,
+}));
 vi.mock("@/lib/activity/recordArtistActivity", () => ({ recordArtistActivity: record }));
 const { writeVaultSource } = await import("@/lib/vault/writeVaultSource");
 const { withArtistOperation } = await import("@/lib/ownership/withArtistOperation");
@@ -15,6 +21,7 @@ beforeEach(() => {
   values.mockReset().mockReturnValue({ onConflictDoNothing: () => ({ returning }) });
   execute.mockClear();
   record.mockClear();
+  queue.mockClear();
 });
 
 describe("writeVaultSource", () => {
@@ -28,6 +35,7 @@ describe("writeVaultSource", () => {
       expect.objectContaining({ url: "u", origin: "research", activityId: "run-event" }),
     );
     expect(record).not.toHaveBeenCalled();
+    expect(queue).toHaveBeenCalledWith(writer, { id: "s1" }, "run-event");
     expect(source).toEqual({ id: "s1", activityId: "run-event" });
   });
 
@@ -57,5 +65,6 @@ describe("writeVaultSource", () => {
     returning.mockResolvedValueOnce([]);
     expect(await writeVaultSource(writer, { artistId: "a1", url: "u" }, "u")).toBeUndefined();
     expect(record).not.toHaveBeenCalled();
+    expect(queue).not.toHaveBeenCalled();
   });
 });

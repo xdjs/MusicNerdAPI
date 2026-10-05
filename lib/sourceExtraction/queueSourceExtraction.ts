@@ -62,7 +62,7 @@ export async function queueSourceExtraction(artistId: string, sourceIds: string[
       .map(r => ({ id: r.id, url: r.url }));
     if (!sources.length) return { status: "ok" as const, jobId: null, queued: 0 };
     const live = await tx.execute(
-      sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='source_extract' and status in ('pending','running') limit 1`,
+      sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='source_extract' and status in ('queued','pending','running') limit 1`,
     );
     if (live.length)
       throw new KnowledgeError("already_running", 409, "Source extraction is already running");

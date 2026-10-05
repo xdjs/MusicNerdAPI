@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { lockArtistRow } from "@/lib/db/lockArtistRow";
-import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
+import { lockSourceExtractionSlice } from "@/lib/sourceExtraction/lockSourceExtractionSlice";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 import type { ExtractionState, FetchedSource } from "@/lib/sourceExtraction/types";
 import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
@@ -13,15 +12,8 @@ export async function checkpointSourceExtraction(
   result: FetchedSource | null,
 ): Promise<SliceOutcome> {
   return db.transaction(async tx => {
-    await lockArtistRow(tx, job.artistId);
-    await authorizeLockedArtistWrite(tx, job.artistId, {
-      userId: state.userId,
-      expectedClaimId: state.expectedClaimId,
-    });
-    const current = await tx.execute(
-      sql`select id from artist_research_jobs where id=${job.id}::uuid and artist_id=${job.artistId}::uuid and kind='source_extract' and status='running' and cursor=${job.cursor} and updated_at is not distinct from ${job.updatedAt}::timestamptz for update`,
-    );
-    if (!current.length)
+    const permission = await lockSourceExtractionSlice(tx, job, state);
+    if (permission === "stale")
       return { progress: "Slice no longer owns this job", done: false, waiting: true };
     const source = state.sources[job.cursor];
     if (result && !source) throw new Error("Invalid source extraction cursor");
@@ -29,10 +21,10 @@ export async function checkpointSourceExtraction(
     let cursor = job.cursor;
     if (result && source) {
       let storedChars = 0;
-      let status = result.status;
+      let status = permission === "changed" ? ("skipped" as const) : result.status;
       if (status === "ready" && result.text?.trim()) {
         const rows = await tx.execute(
-          sql`update artist_vault_sources set extracted_text=${result.text},updated_at=now() where id=${source.id}::uuid and artist_id=${job.artistId}::uuid and status='approved' and file_path is null and url=${source.url} and coalesce(extracted_text,'')='' returning id`,
+          sql`update artist_vault_sources set extracted_text=${result.text},updated_at=now() where id=${source.id}::uuid and artist_id=${job.artistId}::uuid and status='approved' and file_path is null and url=${source.url} and coalesce(extracted_text,'') ~ '^[[:space:]]*$' returning id`,
         );
         if (rows.length) storedChars = result.text.length;
         else status = "skipped";

@@ -1,3 +1,4 @@
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { db } from "@/lib/db/db";
 import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
@@ -21,7 +22,10 @@ export async function insertVaultSource(
     const url = canonicalizeLoreUrl(data.url) ?? data.url;
     return getArtistOperationOwnership(data.artistId)
       ? await withScopedArtistWrite(data.artistId, tx => writeVaultSource(tx, data, url))
-      : await db.transaction(tx => writeVaultSource(tx, data, url));
+      : await db.transaction(async tx => {
+          await lockArtistRow(tx, data.artistId);
+          return writeVaultSource(tx, data, url);
+        });
   } catch (e) {
     console.error("[insertVaultSource] Error:", e);
     throw e;

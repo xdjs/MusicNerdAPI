@@ -135,3 +135,22 @@ it("returns sanitized source extraction outcomes without job secrets", () => {
   expect(r.jobs[0].extractionOutcomes).toEqual([outcome]);
   expect(JSON.stringify(r.jobs)).not.toContain("secret");
 });
+
+it("exposes automatic extraction backlog as pending without adding a public status", () => {
+  const jobs = [
+    {
+      id: vault.id,
+      artistId: rawKnowledge.artist.id,
+      kind: "source_extract",
+      status: "queued",
+      cursor: 0,
+      total: 1,
+      updatedAt: "2026-10-05T00:00:00Z",
+      extractionOutcomes: [],
+    },
+  ];
+  expect(normalizeArtistKnowledge({ ...rawKnowledge, jobs }).jobs[0].status).toBe("pending");
+  expect(() =>
+    normalizeArtistKnowledge({ ...rawKnowledge, jobs: [{ ...jobs[0], kind: "lore_refresh" }] }),
+  ).toThrow("Stored research status is unsupported");
+});

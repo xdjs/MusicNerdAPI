@@ -5,7 +5,7 @@ export type JobKind =
   | "source_search"
   | "latest_refresh"
   | "source_extract";
-export type JobStatus = "pending" | "running" | "done" | "failed";
+export type JobStatus = "queued" | "pending" | "running" | "done" | "failed";
 
 export interface ResearchJob {
   id: string;

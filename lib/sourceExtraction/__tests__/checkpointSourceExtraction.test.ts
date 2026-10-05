@@ -49,10 +49,10 @@ it("checkpoints the body, outcome and cursor together under the artist lock", as
   expect(await checkpointSourceExtraction(job, state, result)).toMatchObject({ done: true });
   expect(m.lock).toHaveBeenCalledWith(tx, id);
   expect(m.authorize).toHaveBeenCalledWith(tx, id, { userId: id, expectedClaimId: null });
-  const update = renderSql(m.execute.mock.calls[1][0]);
-  expect(update.text).toContain("coalesce(extracted_text,'')=''");
+  const update = renderSql(m.execute.mock.calls[2][0]);
+  expect(update.text).toContain("coalesce(extracted_text,'') ~ '^[[:space:]]*$'");
   expect(update.text).toContain("status='approved'");
-  const progress = renderSql(m.execute.mock.calls[2][0]);
+  const progress = renderSql(m.execute.mock.calls[3][0]);
   expect(progress.text).toContain("claimed_at=null");
   expect(progress.params).toContain(1);
 });

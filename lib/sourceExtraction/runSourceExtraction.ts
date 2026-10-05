@@ -2,6 +2,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
 import { fetchSourceText } from "@/lib/sourceExtraction/fetchSourceText";
+import { checkSourceExtractionSlice } from "@/lib/sourceExtraction/checkSourceExtractionSlice";
 import { checkpointSourceExtraction } from "@/lib/sourceExtraction/checkpointSourceExtraction";
 
 /** Attempt one missing original per slice; resume exclusively from persisted state. */
@@ -22,6 +23,16 @@ export async function runSourceExtraction(
     const state = parsed.data;
     if (deadline - Date.now() < 1000 || job.cursor === state.sources.length)
       return await checkpointSourceExtraction(job, state, null);
+    const permission = await checkSourceExtractionSlice(job, state);
+    if (permission === "stale")
+      return { progress: "Slice no longer owns this job", done: false, waiting: true };
+    if (permission === "changed")
+      return await checkpointSourceExtraction(job, state, {
+        status: "skipped",
+        capturedAt: new Date().toISOString(),
+        httpStatus: null,
+        truncated: false,
+      });
     const result = await fetchSourceText(
       state.sources[job.cursor].url,
       Math.min(15_000, deadline - Date.now()),

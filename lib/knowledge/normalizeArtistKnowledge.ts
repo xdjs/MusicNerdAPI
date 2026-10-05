@@ -242,7 +242,8 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
           "latest_refresh",
           "source_extract",
         ].includes(row.kind) ||
-        !["pending", "running", "done", "failed"].includes(row.status) ||
+        (!["pending", "running", "done", "failed"].includes(row.status) &&
+          !(row.kind === "source_extract" && row.status === "queued")) ||
         row.cursor < 0 ||
         (row.total !== null && row.total < 0)
       )
@@ -265,7 +266,7 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
         ...(parsed?.success ? { extractionOutcomes: parsed.data } : {}),
         jobId: row.id,
         kind: row.kind as KnowledgeJob["kind"],
-        status: row.status as KnowledgeJob["status"],
+        status: (row.status === "queued" ? "pending" : row.status) as KnowledgeJob["status"],
         cursor: row.cursor,
         total: row.total,
         updatedAt: date(row.updatedAt),

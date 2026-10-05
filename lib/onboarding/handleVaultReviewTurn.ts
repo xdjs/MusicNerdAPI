@@ -14,7 +14,7 @@ import { updateVaultSourceStatus } from "@/lib/vault/updateVaultSourceStatus";
 /**
  * The artist's decisions on the vault card. Only their own sources are
  * touched; links they paste go straight to approved (they added them) and are
- * read in the background. Then the interview starts.
+ * queued for durable original-text extraction. Then the interview starts.
  *
  * @param ctx - The turn's context.
  * @param turn - The turn, with decisions and pasted URLs.

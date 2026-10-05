@@ -7,7 +7,8 @@ import type { JobKind, JobStatus, ResearchJob } from "@/lib/research/types";
  * @returns The job.
  */
 export function toResearchJob(row: Record<string, unknown>): ResearchJob {
-  const updatedAt = row.updated_at ?? row.updatedAt;
+  // Raw postgres-js timestamp parsing loses microseconds, so claim queries return text.
+  const updatedAt = row.lease_updated_at ?? row.updated_at ?? row.updatedAt;
   return {
     id: String(row.id),
     artistId: String(row.artist_id ?? row.artistId),

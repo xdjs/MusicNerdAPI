@@ -76,7 +76,7 @@ describe("insertVaultSource", () => {
       expect.objectContaining({ sourceId: "s1", trigger: "editor_source" }),
       writer,
     );
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
     expect(source).toMatchObject({ id: "s1", activityId: "activity-new" });
   });
 

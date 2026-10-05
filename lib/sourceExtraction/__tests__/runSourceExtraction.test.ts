@@ -1,6 +1,9 @@
 import { it, expect, vi, beforeEach } from "vitest";
 import { runSourceExtraction } from "@/lib/sourceExtraction/runSourceExtraction";
-const m = vi.hoisted(() => ({ fetch: vi.fn(), checkpoint: vi.fn() }));
+const m = vi.hoisted(() => ({ fetch: vi.fn(), checkpoint: vi.fn(), check: vi.fn() }));
+vi.mock("@/lib/sourceExtraction/checkSourceExtractionSlice", () => ({
+  checkSourceExtractionSlice: m.check,
+}));
 vi.mock("@/lib/sourceExtraction/fetchSourceText", () => ({ fetchSourceText: m.fetch }));
 vi.mock("@/lib/sourceExtraction/checkpointSourceExtraction", () => ({
   checkpointSourceExtraction: m.checkpoint,
@@ -29,6 +32,7 @@ const job = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  m.check.mockResolvedValue("eligible");
   m.fetch.mockResolvedValue({
     status: "empty",
     capturedAt: "2026-10-05T00:00:00.000Z",
