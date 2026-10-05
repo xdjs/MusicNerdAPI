@@ -10,6 +10,8 @@ it.each([
   ["Grimes", "Grimes tribute band — Apple Music", "apple_music"],
   ["Grimes", "Grimes — a review", "apple_music"],
   ["Grimes", "Grimes | Beatport", "apple_music"],
+  ["Grimes", "Grimes tribute band on Amazon Music Unlimited", "amazon_music"],
+  ["Grimes", "Grimes on Amazon Music Unlimited", "apple_music"],
   ["", "Apple Music", "apple_music"],
 ])("rejects partial or unrelated identity for %s: %s", (name, title, platform) => {
   expect(catalogTitleMatchesArtist(title, name, platform)).toBe(false);
@@ -23,6 +25,12 @@ it.each([
   ["Sigur Rós", "Sigur Ros | Spotify", "spotify"],
   ["Grimes", "Music | Grimes", "bandcamp"],
   ["Grimes", "Grimes on Amazon Music", "amazon_music"],
+  ["Grimes", "Grimes on Amazon Music Unlimited", "amazon_music"],
+  [
+    "Anonymous Artists (어나니머스 아티스트)",
+    "Anonymous Artists (어나니머스 아티스트) on Amazon Music Unlimited",
+    "amazon_music",
+  ],
   ["Grimes", "Grimes: albums, songs, playlists | Listen on Deezer", "deezer"],
   [
     "Grimes",

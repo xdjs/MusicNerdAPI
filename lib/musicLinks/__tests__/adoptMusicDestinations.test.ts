@@ -164,6 +164,10 @@ it.each([
 it.each([
   [apple, "Black Dave — Apple Music"],
   [beatport, "Black Dave | Beatport"],
+  [
+    "https://music.amazon.com/artists/B0012345AB/black-dave",
+    "Black Dave on Amazon Music Unlimited",
+  ],
 ])("accepts the full name with the expected catalog decoration (%s)", async (url, title) => {
   m.fetch.mockResolvedValueOnce({ status: 200, title });
   await adoptMusicDestinations(searchRun({ artistName: "Black Dave" }), [url], "identifier");

@@ -17,7 +17,7 @@ export function catalogTitleMatchesArtist(
     deezer: "Deezer",
     tidal: "TIDAL",
     qobuz: "Qobuz",
-    amazon_music: "Amazon Music",
+    amazon_music: "Amazon Music(?: Unlimited)?",
     bandcamp: "Bandcamp",
     subvert: "Subvert",
     supercollector: "Supercollector",
