@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { goodPage, hit } from "@/lib/vault/__tests__/searchRun";
 import type { SearchRun } from "@/lib/vault/types";
+import { adoptMappedMusicDestinations } from "@/lib/musicLinks/adoptMappedMusicDestinations";
+
+vi.mock("@/lib/musicLinks/adoptMappedMusicDestinations", () => ({
+  adoptMappedMusicDestinations: vi.fn(async () => {}),
+}));
 
 const h = vi.hoisted(() => ({
   getArtistById: vi.fn(),
@@ -43,6 +48,7 @@ for (const name of [
 const { runSourceSearch } = await import("@/lib/vault/runSourceSearch");
 
 beforeEach(() => {
+  vi.mocked(adoptMappedMusicDestinations).mockReset().mockResolvedValue(undefined);
   h.getArtistById.mockReset().mockResolvedValue({ id: "a1", name: "Grimes", spotify: "sp1" });
   h.adoptFromMusicBrainz.mockReset().mockResolvedValue({
     handles: new Set(["grimes"]),
@@ -69,6 +75,22 @@ beforeEach(() => {
 });
 
 describe("runSourceSearch", () => {
+  it.each([false, true])(
+    "isolates optional mapped-enrichment failures unless requireComplete=%s",
+    async requireComplete => {
+      vi.mocked(adoptMappedMusicDestinations).mockRejectedValue(new Error("catalog phase failed"));
+      const result = runSourceSearch("a1", { requireComplete });
+      if (requireComplete) {
+        await expect(result).rejects.toThrow("catalog phase failed");
+        expect(h.adoptFromMusicBrainz).not.toHaveBeenCalled();
+        expect(h.searchCandidates).not.toHaveBeenCalled();
+      } else {
+        await expect(result).resolves.toEqual([{ id: "s1" }]);
+        expect(h.adoptFromMusicBrainz).toHaveBeenCalled();
+        expect(h.searchCandidates).toHaveBeenCalled();
+      }
+    },
+  );
   it("runs the phases in order and returns what it saved", async () => {
     const saved = await runSourceSearch("a1", {});
     expect(saved).toEqual([{ id: "s1" }]);
@@ -77,6 +99,7 @@ describe("runSourceSearch", () => {
       "Grimes",
       expect.objectContaining({ id: "a1" }),
       new Set(),
+      expect.objectContaining({ artistId: "a1" }),
     );
     expect(h.searchCandidates).toHaveBeenCalledWith(expect.anything(), "https://grimes.com");
     const run = h.fileCandidate.mock.calls[0][0];
@@ -127,7 +150,7 @@ describe("runSourceSearch", () => {
   it("won't start MusicBrainz or the search after the deadline", async () => {
     await expect(
       runSourceSearch("a1", { requireComplete: true, deadline: Date.now() - 1 }),
-    ).rejects.toThrow("Source search deadline exhausted before MusicBrainz");
+    ).rejects.toThrow("Source search deadline exhausted before catalog discovery");
     expect(await runSourceSearch("a1", { deadline: Date.now() - 1 })).toEqual([]);
     expect(h.adoptFromMusicBrainz).not.toHaveBeenCalled();
     expect(h.searchCandidates).not.toHaveBeenCalled();

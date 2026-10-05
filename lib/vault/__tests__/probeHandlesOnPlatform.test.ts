@@ -83,3 +83,26 @@ describe("probeHandlesOnPlatform", () => {
     });
   });
 });
+
+it("marks the final probe incomplete when its fetch consumes the remaining deadline", async () => {
+  let now = 1000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    m.preview.mockImplementationOnce(async () => {
+      now = 3000;
+      return { title: "Pete Rango" };
+    });
+    expect(
+      await probeHandlesOnPlatform(
+        "a1",
+        "soundcloud",
+        "https://soundcloud.com/%@",
+        ["peterango"],
+        "Pete Rango",
+        2000,
+      ),
+    ).toEqual({ resolved: [], scannedAll: false });
+  } finally {
+    clock.mockRestore();
+  }
+});

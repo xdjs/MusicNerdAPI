@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { searchRun } from "@/lib/vault/__tests__/searchRun";
 
 const m = vi.hoisted(() => ({
   resolve: vi.fn(),
+  catalog: vi.fn(async () => {}),
   belongs: vi.fn(async (_artistId: string, _site: string, _handle: string) => false),
   contradicts: vi.fn(async (_artistId: string, _site: string, _handle: string) => false),
   ambiguous: vi.fn(async (_artistId: string, _name: string) => false),
@@ -15,6 +17,7 @@ const m = vi.hoisted(() => ({
     ) => {},
   ),
 }));
+vi.mock("@/lib/musicLinks/adoptMusicDestinations", () => ({ adoptMusicDestinations: m.catalog }));
 vi.mock("@/lib/vault/resolveOutboundHandles", () => ({ resolveOutboundHandles: m.resolve }));
 vi.mock("@/lib/identity/handleBelongsToAnotherArtist", () => ({
   handleBelongsToAnotherArtist: m.belongs,
@@ -30,6 +33,8 @@ const { adoptHandlesFromOwnPage } = await import("@/lib/vault/adoptHandlesFromOw
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.resolve.mockReset();
+  m.catalog.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -60,6 +65,99 @@ describe("adoptHandlesFromOwnPage", () => {
       adopted: 0,
       handles: new Set(),
     });
+  });
+
+  it("does not adopt from a rejected page even if it links a known public account", async () => {
+    m.resolve.mockResolvedValueOnce([
+      { siteName: "bandcamp", id: "dupes" },
+      { siteName: "instagram", id: "dupes-attacker" },
+    ]);
+    const result = await adoptHandlesFromOwnPage(
+      "a1",
+      ["catalog"],
+      { name: "Dupes", bandcamp: "dupes" },
+      "Dupes",
+      { url: "https://attacker.example", aboutArtist: false },
+      undefined,
+      searchRun(),
+    );
+    expect(result.adopted).toBe(0);
+    expect(m.catalog).not.toHaveBeenCalled();
+    expect(m.writeArtistLink).not.toHaveBeenCalled();
+  });
+  it("does not treat a third-party page's outbound public account link as catalog ownership", async () => {
+    m.resolve
+      .mockResolvedValueOnce([{ siteName: "bandcamp", id: "dupes" }])
+      .mockResolvedValueOnce([]);
+    await adoptHandlesFromOwnPage(
+      "a1",
+      ["catalog"],
+      { name: "Dupes", bandcamp: "dupes" },
+      "Dupes",
+      { url: "https://magazine.example/dupes", aboutArtist: true },
+      undefined,
+      searchRun(),
+    );
+    expect(m.catalog).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "requires the hosted authority page itself to be a saved profile, not a release (release=%s)",
+    async release => {
+      m.resolve
+        .mockResolvedValueOnce([{ siteName: "bandcamp", id: "dupes" }])
+        .mockResolvedValueOnce([{ siteName: "bandcamp", id: "dupes", corroborationOnly: release }]);
+      await adoptHandlesFromOwnPage(
+        "a1",
+        ["catalog"],
+        { name: "Dupes", bandcamp: "dupes" },
+        "Dupes",
+        {
+          url: release ? "https://dupes.bandcamp.com/album/rush" : "https://dupes.bandcamp.com",
+          aboutArtist: true,
+        },
+        undefined,
+        searchRun(),
+      );
+      expect(m.catalog).toHaveBeenCalledTimes(release ? 0 : 1);
+    },
+  );
+  it("accepts a held hosted profile without requiring it to link itself", async () => {
+    m.resolve
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ siteName: "bandcamp", id: "dupes" }]);
+    await adoptHandlesFromOwnPage(
+      "a1",
+      ["catalog"],
+      { name: "Dupes", bandcamp: "dupes" },
+      "Dupes",
+      { url: "https://dupes.bandcamp.com", aboutArtist: true },
+      undefined,
+      searchRun(),
+    );
+    expect(m.catalog).toHaveBeenCalledTimes(1);
+  });
+  it("rechecks the deadline after resolving the authority page", async () => {
+    let now = 1000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      m.resolve.mockResolvedValueOnce([]).mockImplementationOnce(async () => {
+        now = 3000;
+        return [{ siteName: "bandcamp", id: "dupes" }];
+      });
+      await adoptHandlesFromOwnPage(
+        "a1",
+        ["catalog"],
+        { name: "Dupes", bandcamp: "dupes" },
+        "Dupes",
+        { url: "https://dupes.bandcamp.com", aboutArtist: true },
+        undefined,
+        searchRun({ deadline: 2000 }),
+      );
+      expect(m.catalog).not.toHaveBeenCalled();
+      expect(m.writeArtistLink).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("accepts the artist's own domain only when the judge affirmed it and the name isn't shared", async () => {
@@ -168,4 +266,62 @@ describe("adoptHandlesFromOwnPage", () => {
       handles: new Set(),
     });
   });
+});
+
+it.each(["catalog", "ownership"])(
+  "does not write a hub handle after %s verification exhausts the budget",
+  async phase => {
+    let now = 1000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      m.resolve.mockResolvedValueOnce([
+        { siteName: "bandcamp", id: "dupes" },
+        { siteName: "instagram", id: "dupesmusic" },
+      ]);
+      if (phase === "catalog")
+        m.catalog.mockImplementationOnce(async () => {
+          now = 3000;
+        });
+      else
+        m.belongs.mockImplementationOnce(async () => {
+          now = 3000;
+          return false;
+        });
+      expect(
+        await adoptHandlesFromOwnPage(
+          "a1",
+          [],
+          { name: "Dupes", bandcamp: "dupes" },
+          "Dupes",
+          { url: "https://dupes.com", aboutArtist: true },
+          undefined,
+          searchRun({ deadline: 2000 }),
+        ),
+      ).toEqual({ adopted: 0, handles: new Set() });
+      expect(m.writeArtistLink).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);
+
+it("never adopts an unknown release uploader, including one whose handle resembles the artist", async () => {
+  m.resolve.mockResolvedValueOnce([
+    { siteName: "bandcamp", id: "dupes-records", corroborationOnly: true },
+  ]);
+  const result = await adoptHandlesFromOwnPage("a1", [], { name: "Dupes" }, "Dupes", {
+    url: "https://dupes.com",
+    aboutArtist: true,
+  });
+  expect(result.adopted).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
+});
+it("a known release account can corroborate a page without competing with its explicit artist profiles", async () => {
+  m.resolve.mockResolvedValueOnce([
+    { siteName: "bandcamp", id: "dupes", corroborationOnly: true },
+    { siteName: "soundcloud", id: "label", corroborationOnly: true },
+    { siteName: "soundcloud", id: "dupes" },
+  ]);
+  await adoptHandlesFromOwnPage("a1", [], { name: "Dupes", bandcamp: "dupes" }, "Dupes");
+  expect(m.writeArtistLink.mock.calls.map(c => [c[1], c[2]])).toEqual([["soundcloud", "dupes"]]);
 });

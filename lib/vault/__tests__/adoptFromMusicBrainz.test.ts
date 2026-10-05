@@ -166,3 +166,33 @@ describe("adoptFromMusicBrainz", () => {
     });
   });
 });
+
+it("never adopts a release URL as an artist ID through a loose legacy mapping", async () => {
+  m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+    matchedBy: "identifier",
+    urls: ["https://open.spotify.com/album/3DmaZbBPnKSGnxYRpHobss"],
+    homepage: null,
+  });
+  m.extractArtistId.mockResolvedValue({ siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" });
+  const result = await adoptFromMusicBrainz("a1", "Grimes", {});
+  expect(result.handles.size).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
+});
+
+it.each([
+  "https://label.bandcamp.com/album/grimes-record",
+  "https://soundcloud.com/label/grimes-record",
+  "https://audius.co/label/grimes-record",
+  "https://mixcloud.com/label/grimes-record",
+  "https://subvert.fm/label/releases/grimes-record",
+])("does not assign a release uploader as the artist's canonical account (%s)", async url => {
+  m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+    matchedBy: "identifier",
+    urls: [url],
+    homepage: null,
+  });
+  const result = await adoptFromMusicBrainz("a1", "Grimes", {});
+  expect(result.handles.size).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
+  expect(m.extractArtistId).not.toHaveBeenCalled();
+});

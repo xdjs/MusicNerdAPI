@@ -2,6 +2,7 @@ import { PLATFORM_DOMAINS, PROFILE_LINK_COLUMNS } from "@/lib/artists/const";
 import { artistRowProperty } from "@/lib/artists/artistRowProperty";
 import { IDENTITY_MATCH_MIN_LENGTH } from "@/lib/vault/const";
 import { identifyingPart } from "@/lib/vault/identifyingPart";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 
 /**
  * Whether a search result is a profile we already hold as a link: identity we
@@ -14,6 +15,17 @@ import { identifyingPart } from "@/lib/vault/identifyingPart";
  * @returns True when the url is one of the artist's stored profiles.
  */
 export function isKnownProfileUrl(url: string, artist: Record<string, unknown>): boolean {
+  const destination = parseMusicDestination(url);
+  if (destination?.kind === "release") return false;
+  if (destination?.platform === "spotify") {
+    const held = artist.spotify;
+    if (typeof held !== "string") return false;
+    const parsed = parseMusicDestination(held);
+    return (
+      destination.id ===
+      (parsed?.platform === "spotify" && parsed.kind === "artist" ? parsed.id : held.trim())
+    );
+  }
   let host: string;
   try {
     host = new URL(url).hostname.toLowerCase();

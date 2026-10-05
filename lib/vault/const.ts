@@ -51,6 +51,9 @@ export const ACCOUNT_PLATFORMS = new Set([
   "deezer",
 ]);
 
+/** Opaque account IDs must not be folded like user-chosen handles. */
+export const CASE_SENSITIVE_ACCOUNT_IDS = new Set(["spotify", "youtubechannel"]);
+
 /**
  * Platforms a probe can't settle: tiktok serves a bot nothing, twitch only
  * echoes the handle, bandcamp answers for subdomains nobody owns. A URL from

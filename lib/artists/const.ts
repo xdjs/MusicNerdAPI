@@ -1,3 +1,5 @@
+import { MUSIC_RESERVED_HANDLES } from "@/lib/musicLinks/const";
+
 /** Where a physical column name and its Drizzle row property disagree. */
 export const ARTIST_ROW_PROPERTY_BY_COLUMN: Record<string, string> = {
   facebookID: "facebookId",
@@ -146,7 +148,7 @@ export const RESERVED_HANDLES: Record<string, Set<string>> = {
     "about",
   ]),
   youtubechannel: new Set(["watch", "shorts", "playlist", "results", "feed", "embed"]),
-  soundcloud: new Set(["search", "discover", "stream", "you", "tags", "charts"]),
+  ...MUSIC_RESERVED_HANDLES,
   twitch: new Set(["videos", "directory", "settings", "downloads"]),
   spotify: new Set(["track", "album", "playlist", "search", "user", "episode", "show"]),
   deezer: new Set(["album", "track", "playlist", "search", "profile", "show"]),

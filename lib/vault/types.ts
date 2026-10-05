@@ -4,7 +4,12 @@ import type { WebSearchResult } from "@/lib/search/types";
 import type { SourceType } from "@/lib/sources/types";
 
 /** A link resolved to a platform and a normalized handle. */
-export type ResolvedHandle = { siteName: string; id: string };
+export type ResolvedHandle = {
+  siteName: string;
+  id: string;
+  /** A release uploader may match a known account but cannot establish a new one. */
+  corroborationOnly?: boolean;
+};
 
 /** A stored vault source, with the activity that added it. */
 export type VaultSource = typeof artistVaultSources.$inferSelect;
@@ -30,7 +35,7 @@ export type VaultSourceInput = {
 export type DiscoveryResult = WebSearchResult & { type: SourceType };
 
 /** A search hit and the page we fetched for it. */
-export type ReadCandidate = { result: DiscoveryResult; page: PageContent };
+export type ReadCandidate = { result: DiscoveryResult; page: PageContent; discoveredUrl?: string };
 
 /** An account page the search returned, verified after the main pass. */
 export type AccountCandidate = {

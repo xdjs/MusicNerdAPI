@@ -1064,6 +1064,13 @@ describe("searchAndPopulateVault", () => {
   });
 
   describe("adopting handles from the artist's own page", () => {
+    beforeEach(() => {
+      // Outbound adoption now requires an affirmative relevance verdict.
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) =>
+          new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+      );
+    });
     // An artist's own site is the only first-party statement of their handles,
     // and it lives entirely in href attributes — so the text extractor strips it
     // and the same-host `links` rule excludes it. Sherwinn Brice's Instagram is
@@ -1312,7 +1319,7 @@ describe("searchAndPopulateVault", () => {
       });
 
       mockWebSearch.mockResolvedValue([
-        hit("https://dupes.bandcamp.com/album/convergence", "Convergence"),
+        hit("https://dupes.bandcamp.com/", "Sherwinn Dupes Brice"),
         hit(OWN_SITE, "Dupes"),
       ]);
       mockFetchPage.mockImplementation(async url => ({
@@ -1326,7 +1333,7 @@ describe("searchAndPopulateVault", () => {
           new Map(
             candidates.map((c: Cand) => [
               c.url,
-              c.url.includes("bandcamp") ? "about-artist" : "undecided",
+              c.url.includes("bandcamp") || c.url === OWN_SITE ? "about-artist" : "undecided",
             ]),
           ),
       );
@@ -1568,5 +1575,434 @@ describe("searchAndPopulateVault", () => {
       searchAndPopulateVault("a1", { requireComplete: true }),
     );
     expect(m.record).not.toHaveBeenCalled();
+  });
+  it.each(["not-about-artist", "undecided"])(
+    "does not trust an identifier-matched MusicBrainz homepage when relevance is %s",
+    async verdict => {
+      const homepage = "https://untrusted.example/";
+      mockMusicBrainz.mockResolvedValue({ matchedBy: "identifier", urls: [], homepage });
+      mockFetchPage.mockResolvedValue({
+        ...goodPage,
+        title: "Grimes",
+        outboundLinks: ["https://instagram.com/attacker"],
+      });
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, verdict])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      expect(await searchAndPopulateVault("a1")).toEqual([]);
+      expect(mockJudge).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([expect.objectContaining({ url: homepage })]),
+      );
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockSetLink).not.toHaveBeenCalled();
+    },
+  );
+  it("does not retain an unreadable MusicBrainz homepage even when the judge affirms it", async () => {
+    mockMusicBrainz.mockResolvedValue({
+      matchedBy: "identifier",
+      urls: [],
+      homepage: "https://grimes.com/",
+    });
+    mockFetchPage.mockResolvedValue({
+      ...goodPage,
+      title: "Grimes",
+      extractedText: "Grimes",
+      fullText: "Grimes",
+    });
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    expect(await searchAndPopulateVault("a1")).toEqual([]);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps identifier-matched MusicBrainz catalog URLs and homepage even when search is empty", async () => {
+    const apple = "https://music.apple.com/us/artist/grimes/123";
+    const beatport = "https://www.beatport.com/artist/grimes/456";
+    mockMusicBrainz.mockResolvedValue({
+      matchedBy: "identifier",
+      urls: [apple, beatport],
+      homepage: "https://grimes.com/",
+    });
+    mockFetchPage.mockResolvedValue({ ...goodPage, title: "Grimes" });
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    const onSaved = vi.fn();
+    const saved = await searchAndPopulateVault("a1", { onSaved });
+    expect(saved.map(source => [source.url, source.type])).toEqual([
+      [apple, "music"],
+      [beatport, "music"],
+      ["https://grimes.com/", "website"],
+    ]);
+    expect(onSaved).toHaveBeenCalledTimes(3);
+    expect(mockJudge).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ url: "https://grimes.com/" })]),
+    );
+    expect(mockSetLink).not.toHaveBeenCalled();
+  });
+
+  it("continues MusicBrainz and web research after a mapped catalog write fails interactively", async () => {
+    const apple = "https://music.apple.com/artist/123";
+    const story = "https://example.com/grimes-interview";
+    dbExecute.mockImplementation(async (query: SQL) =>
+      renderSql(query).text.includes("from artist_id_mappings")
+        ? [{ platform: "apple_music", platform_id: "123", confidence: "high", source: "manual" }]
+        : [],
+    );
+    mockWebSearch.mockResolvedValue([hit(story)]);
+    mockFetchPage.mockResolvedValue({ ...goodPage, title: "Grimes" });
+    mockInsert.mockImplementation(async data => {
+      if (data.url === apple) throw new Error("catalog write failed");
+      return { id: data.url, ...data };
+    });
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    const saved = await searchAndPopulateVault("a1");
+    expect(mockMusicBrainz).toHaveBeenCalled();
+    expect(mockWebSearch).toHaveBeenCalled();
+    expect(saved.map(source => source.url)).toEqual([story]);
+  });
+
+  it.each([false, true])(
+    "isolates optional mapping lookup failure only for non-durable research (requireComplete=%s)",
+    async requireComplete => {
+      const story = "https://example.com/grimes-interview";
+      dbExecute.mockImplementation(async (query: SQL) => {
+        if (renderSql(query).text.includes("from artist_id_mappings"))
+          throw new Error("mapping lookup failed");
+        return [];
+      });
+      mockWebSearch.mockResolvedValue([hit(story)]);
+      mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      const research = searchAndPopulateVault("a1", { requireComplete });
+      if (requireComplete) {
+        await expect(research).rejects.toThrow("mapping lookup failed");
+        expect(mockMusicBrainz).not.toHaveBeenCalled();
+        expect(mockWebSearch).not.toHaveBeenCalled();
+        expect(mockInsert).not.toHaveBeenCalled();
+      } else {
+        const saved = await research;
+        expect(mockMusicBrainz).toHaveBeenCalled();
+        expect(mockWebSearch).toHaveBeenCalled();
+        expect(saved.map(source => source.url)).toEqual([story]);
+      }
+    },
+  );
+
+  it("discovers catalog links from a newly adopted hosted artist account", async () => {
+    const profile = "https://soundcloud.com/grimes";
+    const apple = "https://music.apple.com/artist/grimes/123";
+    const live: Record<string, unknown> = { id: "a1", name: "Grimes", soundcloud: null };
+    mockGetArtist.mockImplementation(async () => ({ ...live }));
+    mockSetLink.mockImplementation(async (_id, site, value) => {
+      live[site] = value;
+      return {};
+    });
+    mockWebSearch.mockResolvedValue([hit(profile, "Grimes")]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: "Grimes",
+      outboundLinks: url === profile ? [apple] : [],
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === profile ? { siteName: "soundcloud", id: "grimes" } : undefined,
+    );
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+    );
+    mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    const saved = await searchAndPopulateVault("a1");
+    expect(live.soundcloud).toBe("grimes");
+    expect(saved.map(source => [source.url, source.type])).toEqual([[apple, "music"]]);
+  });
+
+  it.each(["catalog fetch", "handle verification"])(
+    "does not adopt MusicBrainz handles after the deadline expires during %s",
+    async phase => {
+      const apple = "https://music.apple.com/us/artist/grimes/123";
+      const instagram = "https://instagram.com/grimes";
+      let now = 1000;
+      const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+      mockMusicBrainz.mockResolvedValue({
+        matchedBy: "identifier",
+        urls: [apple, instagram],
+        homepage: null,
+      });
+      mockFetchPage.mockImplementation(async () => {
+        if (phase === "catalog fetch") now = 3000;
+        return { ...goodPage, title: "Grimes" };
+      });
+      mockExtract.mockImplementation(async url => {
+        if (url !== instagram) return undefined;
+        if (phase === "handle verification") now = 3000;
+        return { siteName: "instagram", id: "grimes" };
+      });
+      try {
+        const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+        await searchAndPopulateVault("a1", { deadline: 2000 });
+        expect(mockSetLink).not.toHaveBeenCalled();
+        expect(mockWebSearch).not.toHaveBeenCalled();
+        if (phase === "catalog fetch") expect(mockInsert).not.toHaveBeenCalled();
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
+  it("keeps catalog profiles from a corroborated own page while preserving its editorial source", async () => {
+    const home = "https://grimes.com/";
+    const apple = "https://music.apple.com/us/artist/grimes/123";
+    const knownSpotify = "https://open.spotify.com/artist/3DmaZbBPnKSGnxYRpHobss";
+    mockGetArtist.mockResolvedValue({
+      id: "a1",
+      name: "Grimes",
+      spotify: "3DmaZbBPnKSGnxYRpHobss",
+    });
+    mockWebSearch.mockResolvedValue([hit(home, "Grimes")]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: "Grimes",
+      outboundLinks: url === home ? [knownSpotify, apple] : [],
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === knownSpotify ? { siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" } : undefined,
+    );
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+    );
+    mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ url: home, type: "website" }),
+    );
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ url: apple, type: "music", status: "pending" }),
+    );
+  });
+
+  it.each(["about-artist", "not-about-artist"])(
+    "does not adopt catalog URLs from a third-party hub merely linking a known account (%s)",
+    async verdict => {
+      const page = "https://third-party.example/grimes";
+      const apple = "https://music.apple.com/us/artist/grimes/123";
+      const spotify = "https://open.spotify.com/artist/3DmaZbBPnKSGnxYRpHobss";
+      mockGetArtist.mockResolvedValue({
+        id: "a1",
+        name: "Grimes",
+        spotify: "3DmaZbBPnKSGnxYRpHobss",
+      });
+      mockWebSearch.mockResolvedValue([hit(page, "Grimes")]);
+      mockFetchPage.mockResolvedValue({
+        ...goodPage,
+        title: "Grimes",
+        outboundLinks: [spotify, apple],
+      });
+      mockExtract.mockImplementation(async url =>
+        url === spotify ? { siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" } : undefined,
+      );
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) =>
+          new Map(candidates.map((candidate: Cand) => [candidate.url, verdict])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1");
+      expect(mockFetchPage.mock.calls.map(([url]) => url)).not.toContain(apple);
+      expect(mockInsert.mock.calls.map(([row]) => row.url)).not.toContain(apple);
+    },
+  );
+
+  it("routes judged catalog search hits to music and never turns a release URL into an artist ID", async () => {
+    const artist = "https://www.beatport.com/artist/grimes/456";
+    const release = "https://open.spotify.com/album/2up3OPMp9Tb4dAKM2erWXQ";
+    mockWebSearch.mockResolvedValue([hit(artist), hit(release)]);
+    mockExtract.mockImplementation(async url =>
+      url === release ? { siteName: "spotify", id: "2up3OPMp9Tb4dAKM2erWXQ" } : undefined,
+    );
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert.mock.calls.map(([source]) => [source.url, source.type])).toEqual([
+      [artist, "music"],
+      [release, "music"],
+    ]);
+    expect(mockSetLink).not.toHaveBeenCalled();
+  });
+  it("uses a normal HTTP redirect's catalog identity during ordinary search", async () => {
+    const original = "https://grimes.com/listen";
+    const final = "https://music.apple.com/artist/grimes/123";
+    mockWebSearch.mockResolvedValue([hit(original)]);
+    mockFetchPage.mockResolvedValue({ ...goodPage, resolvedUrl: final });
+    mockJudge.mockImplementation(
+      async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ url: final, type: "music" }));
+  });
+  it("keeps a mixed-use recording Audio when a grounding redirect is resolved before fetching", async () => {
+    const original = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token";
+    const final = "https://soundcloud.com/show/interview";
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue({ url: final } as Response);
+    try {
+      mockWebSearch.mockResolvedValue([hit(original)]);
+      mockFetchPage.mockResolvedValue({ ...goodPage, resolvedUrl: final });
+      mockJudge.mockImplementation(
+        async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1");
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ url: final, type: "audio" }),
+      );
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+  it("retains a distinct Spotify ID after reading a case-only rejected catalog URL", async () => {
+    const rejected = "https://open.spotify.com/artist/AAAAAAAAAAAAAAAAAAAAAA";
+    const valid = "https://open.spotify.com/artist/aaaaaaaaaaaaaaaaaaaaaa";
+    mockGetArtist.mockResolvedValue({ id: "a1", name: "Grimes" });
+    mockWebSearch.mockResolvedValue([hit(valid)]);
+    mockGetSources.mockImplementation(async (_a, status) =>
+      status === "rejected" ? [{ url: rejected }] : [],
+    );
+    mockJudge.mockImplementation(
+      async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ url: valid, type: "music" }));
+  });
+  it("preserves a final catalog URL's existing rejection after a normal redirect", async () => {
+    const original = "https://grimes.com/listen";
+    const final = "https://music.apple.com/artist/grimes/123";
+    mockWebSearch.mockResolvedValue([hit(original)]);
+    mockFetchPage.mockResolvedValue({ ...goodPage, resolvedUrl: final });
+    mockGetSources.mockImplementation(async (_a, status) =>
+      status === "rejected" ? [{ url: final }] : [],
+    );
+    mockJudge.mockImplementation(
+      async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+  it("does not grant hub ownership from an artist-looking URL that redirects elsewhere", async () => {
+    const original = "https://grimes.com/listen";
+    const final = "https://unrelated.example/profile";
+    const apple = "https://music.apple.com/artist/grimes/123";
+    mockWebSearch.mockResolvedValue([hit(original)]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: "Grimes",
+      resolvedUrl: url === original ? final : url,
+      outboundLinks: url === original ? [apple] : [],
+    }));
+    mockJudge.mockImplementation(
+      async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockFetchPage.mock.calls.map(([url]) => url)).not.toContain(apple);
+    expect(mockInsert.mock.calls.map(([source]) => source.url)).not.toContain(apple);
+  });
+  it.each([
+    "https://soundcloud.com/interview-show/grimes-chat",
+    "https://www.mixcloud.com/interview-show/grimes-chat/",
+    "https://audius.co/interview_show/grimes-chat",
+  ])("keeps a spoken item as audio through ordinary search: %s", async url => {
+    mockWebSearch.mockResolvedValue([hit(url, "Grimes interview about her new record")]);
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ url, type: "audio" }));
+  });
+
+  it("keeps an index-followed spoken item as audio", async () => {
+    const index = "https://example.com/artists/grimes";
+    const spoken = "https://www.mixcloud.com/show/grimes-discussion/";
+    mockWebSearch.mockResolvedValue([hit(index)]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      links: url === index ? [spoken] : [],
+    }));
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(
+          candidates.map((c: Cand) => [c.url, c.url === index ? "lists-artist" : "about-artist"]),
+        ),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ url: spoken, type: "audio" }),
+    );
+  });
+  it("stops hub handle adoption when catalog fetching consumes the deadline", async () => {
+    const home = "https://grimes.com/";
+    const apple = "https://music.apple.com/artist/123";
+    const instagram = "https://instagram.com/grimesmusic";
+    let now = 1000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      mockWebSearch.mockResolvedValue([hit(home, "Grimes")]);
+      mockFetchPage.mockImplementation(async url => {
+        if (url === apple) now = 3000;
+        return {
+          ...goodPage,
+          title: "Grimes",
+          outboundLinks: url === home ? [apple, instagram] : [],
+        };
+      });
+      mockExtract.mockImplementation(async url =>
+        url === instagram ? { siteName: "instagram", id: "grimesmusic" } : undefined,
+      );
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) =>
+          new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1", { deadline: 2000 });
+      expect(mockSetLink).not.toHaveBeenCalled();
+      expect(mockInsert.mock.calls.map(([source]) => source.url)).toEqual([home]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it.each([
+    ["bandcamp", "https://grimes.bandcamp.com/album/new-release", "music"],
+    ["soundcloud", "https://soundcloud.com/grimes/a-conversation", "audio"],
+    ["audius", "https://audius.co/grimes/a-conversation", "audio"],
+    ["mixcloud", "https://www.mixcloud.com/grimes/a-conversation/", "audio"],
+    ["subvert", "https://subvert.fm/grimes/new-release", "music"],
+  ])("retains discovered content on an already-known %s account", async (platform, url, type) => {
+    mockGetArtist.mockResolvedValue({ id: "a1", name: "Grimes", [platform]: "grimes" });
+    mockWebSearch.mockResolvedValue([hit(url)]);
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ url, type, status: "pending" }),
+    );
+    expect(mockSetLink).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,6 @@
+import { adoptMusicDestinations } from "@/lib/musicLinks/adoptMusicDestinations";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import type { SearchRun } from "@/lib/vault/types";
 import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
@@ -9,6 +12,7 @@ import { stripQuery } from "@/lib/sources/stripQuery";
 import { ACCOUNT_PLATFORMS, REFERENCE_PLATFORMS } from "@/lib/vault/const";
 import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { pageNamesArtist } from "@/lib/vault/pageNamesArtist";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
 
 /**
@@ -21,13 +25,14 @@ import { writeArtistLink } from "@/lib/vault/writeArtistLink";
  * @param artistName - Their name.
  * @param artist - The artist row snapshot; updated as links are written.
  * @param provisional - Columns holding a discovery guess (see holdsAnswerFor).
- * @returns The handles adopted (for propagation), their homepage, and whether the match was by identifier. Never throws.
+ * @returns The handles adopted (for propagation), their homepage, and whether the match was by identifier. A durable run propagates failed source writes for retry.
  */
 export async function adoptFromMusicBrainz(
   artistId: string,
   artistName: string,
   artist: Record<string, unknown>,
   provisional?: Set<string>,
+  run?: SearchRun,
 ): Promise<{ handles: Set<string>; homepage: string | null; authoritative: boolean }> {
   const handles = new Set<string>();
   try {
@@ -40,7 +45,17 @@ export async function adoptFromMusicBrainz(
     console.log(
       `[vaultWebSearch] MusicBrainz matched "${artistName}" by ${found.matchedBy}, ${found.urls.length} link(s)`,
     );
+    if (run)
+      await adoptMusicDestinations(
+        run,
+        found.urls,
+        found.matchedBy === "identifier" ? "identifier" : "name",
+      );
     for (const url of found.urls) {
+      if (run && outOfBudget(run, "MusicBrainz handle verification")) break;
+      const music = parseMusicDestination(url);
+      // The release uploader may be a label or collaborator, not this artist.
+      if (music?.kind === "release") continue;
       const match = await extractArtistId(stripQuery(url)).catch(() => undefined);
       if (!match?.siteName || !match?.id) continue;
       if (!ACCOUNT_PLATFORMS.has(match.siteName) && !REFERENCE_PLATFORMS.has(match.siteName))
@@ -70,6 +85,7 @@ export async function adoptFromMusicBrainz(
           continue;
         }
       }
+      if (run && outOfBudget(run, "MusicBrainz handle insertion")) break;
       try {
         await writeArtistLink(artistId, match.siteName, id, provisional, artist);
         console.log(`[vaultWebSearch] MusicBrainz -> ${match.siteName}=${id}`);
@@ -83,6 +99,7 @@ export async function adoptFromMusicBrainz(
     return { handles, homepage: found.homepage, authoritative: found.matchedBy === "identifier" };
   } catch (e) {
     console.error("[vaultWebSearch] MusicBrainz lookup failed:", e);
+    if (run?.requireComplete) throw e;
     return { handles, homepage: null, authoritative: false };
   }
 }

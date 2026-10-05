@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GOOD_BODY, goodPage, hit, searchRun } from "@/lib/vault/__tests__/searchRun";
 
+vi.mock("@/lib/identity/nameIsAmbiguousInDirectory", () => ({
+  nameIsAmbiguousInDirectory: vi.fn(async () => false),
+}));
+
 const { insertVaultSource } = vi.hoisted(() => ({ insertVaultSource: vi.fn() }));
 vi.mock("@/lib/vault/insertVaultSource", () => ({ insertVaultSource }));
 const { saveCandidateSource } = await import("@/lib/vault/saveCandidateSource");
@@ -97,4 +101,27 @@ describe("saveCandidateSource", () => {
     ).rejects.toThrow("source database unavailable");
     await expect(save(searchRun(), "https://example.com/a", goodPage)).resolves.toBeUndefined();
   });
+});
+
+it("routes a verified catalog artist/release page as music and never trusts a title-only catalog lead", async () => {
+  await save(searchRun(), "https://www.beatport.com/artist/grimes/123", goodPage, "about-artist");
+  expect(insertVaultSource).toHaveBeenLastCalledWith(
+    expect.objectContaining({ type: "music", status: "pending" }),
+  );
+  await save(
+    searchRun(),
+    "https://music.apple.com/us/album/a-record/456",
+    goodPage,
+    "about-artist",
+  );
+  expect(insertVaultSource).toHaveBeenLastCalledWith(expect.objectContaining({ type: "music" }));
+  insertVaultSource.mockClear();
+  await save(searchRun(), "https://music.apple.com/us/artist/grimes/123", goodPage, "undecided");
+  expect(insertVaultSource).not.toHaveBeenCalled();
+});
+it("uses website for the verified artist homepage and data for Discogs releases", async () => {
+  await save(searchRun(), "https://grimes.com/", goodPage, "about-artist");
+  expect(insertVaultSource).toHaveBeenLastCalledWith(expect.objectContaining({ type: "website" }));
+  await save(searchRun(), "https://www.discogs.com/master/123-record", goodPage, "about-artist");
+  expect(insertVaultSource).toHaveBeenLastCalledWith(expect.objectContaining({ type: "data" }));
 });

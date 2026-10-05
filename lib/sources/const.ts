@@ -93,6 +93,7 @@ export const SOURCE_TYPES = [
   "data",
   "social",
   "website",
+  "music",
 ] as const;
 
 /** A source's type from its domain (or a subdomain of it). */

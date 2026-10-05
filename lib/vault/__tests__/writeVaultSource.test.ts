@@ -19,7 +19,7 @@ const writer = { insert: () => ({ values }), execute } as never;
 beforeEach(() => {
   returning.mockReset().mockResolvedValue([{ id: "s1" }]);
   values.mockReset().mockReturnValue({ onConflictDoNothing: () => ({ returning }) });
-  execute.mockClear();
+  execute.mockReset().mockResolvedValue([]);
   record.mockClear();
   queue.mockClear();
 });
@@ -67,4 +67,32 @@ describe("writeVaultSource", () => {
     expect(record).not.toHaveBeenCalled();
     expect(queue).not.toHaveBeenCalled();
   });
+});
+
+it("keeps provider music classification before queueing the persisted approved source", async () => {
+  const url = "https://music.apple.com/us/artist/example/1513734272";
+  const source = { id: "s1", artistId: "a1", url, status: "approved", type: "music" };
+  returning.mockResolvedValueOnce([source]);
+  await withArtistOperation(
+    "a1",
+    { expectedClaimId: "c1", sourceOrigin: "research", activityId: "event" },
+    () =>
+      writeVaultSource(writer, { artistId: "a1", url, type: "article", status: "approved" }, url),
+  );
+  expect(values).toHaveBeenCalledWith(expect.objectContaining({ type: "music" }));
+  expect(queue).toHaveBeenCalledWith(writer, source, "event");
+});
+it("does not insert or queue a research music destination rejected by the current provider identity", async () => {
+  const url = "https://music.apple.com/us/artist/example/1513734272";
+  execute.mockResolvedValueOnce([
+    { artist_id: "another-artist", platform_id: "1513734272" },
+  ] as never);
+  expect(
+    await withArtistOperation("a1", { expectedClaimId: "c1", sourceOrigin: "research" }, () =>
+      writeVaultSource(writer, { artistId: "a1", url, status: "approved" }, url),
+    ),
+  ).toBeUndefined();
+  expect(values).not.toHaveBeenCalled();
+  expect(queue).not.toHaveBeenCalled();
+  expect(record).not.toHaveBeenCalled();
 });

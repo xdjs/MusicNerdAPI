@@ -64,3 +64,25 @@ describe("adoptJudgedAccount", () => {
     ).toBe(true);
   });
 });
+
+it("does not write after identity verification consumes the deadline", async () => {
+  let now = 1000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    contradicts.mockImplementationOnce(async () => {
+      now = 3000;
+      return false;
+    });
+    expect(
+      await adoptJudgedAccount(
+        searchRun({ deadline: 2000 }),
+        x,
+        "https://x.com/p3t3rango",
+        "about-artist",
+      ),
+    ).toBe(false);
+    expect(writeArtistLink).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+  }
+});

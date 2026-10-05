@@ -6,6 +6,15 @@ vi.mock("@/lib/sources/stripQuery", () => ({ stripQuery: (u: string) => u.split(
 const { resolveOutboundHandles } = await import("@/lib/vault/resolveOutboundHandles");
 
 describe("resolveOutboundHandles", () => {
+  it.each(["spotify", "youtubechannel"])(
+    "preserves the case of a %s account ID",
+    async siteName => {
+      extractArtistId.mockReset().mockResolvedValue({ siteName, id: "AbC123" });
+      expect(await resolveOutboundHandles(["https://example.com/profile"])).toEqual([
+        { siteName, id: "AbC123" },
+      ]);
+    },
+  );
   it("resolves each link once, query stripped, handles normalized, unresolved ones dropped", async () => {
     extractArtistId.mockImplementation(async (u: string) =>
       u.includes("instagram")
@@ -29,4 +38,28 @@ describe("resolveOutboundHandles", () => {
     expect(await resolveOutboundHandles(links)).toEqual([]);
     expect(extractArtistId).toHaveBeenCalledTimes(25);
   });
+});
+
+it("never turns a release into a profile through a loose legacy URL mapping", async () => {
+  extractArtistId
+    .mockReset()
+    .mockResolvedValue({ siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" });
+  expect(
+    await resolveOutboundHandles(["https://open.spotify.com/album/3DmaZbBPnKSGnxYRpHobss"]),
+  ).toEqual([]);
+  expect(extractArtistId).not.toHaveBeenCalled();
+});
+
+it("retains artist-scoped release handles as corroboration, never their release slug", async () => {
+  extractArtistId.mockReset().mockResolvedValue({ siteName: "bandcamp", id: "wrong-release-id" });
+  expect(
+    await resolveOutboundHandles([
+      "https://grimes.bandcamp.com/album/new-release",
+      "https://soundcloud.com/grimes/sets/new-release",
+    ]),
+  ).toEqual([
+    { siteName: "bandcamp", id: "grimes", corroborationOnly: true },
+    { siteName: "soundcloud", id: "grimes", corroborationOnly: true },
+  ]);
+  expect(extractArtistId).not.toHaveBeenCalled();
 });
