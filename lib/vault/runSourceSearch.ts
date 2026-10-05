@@ -61,7 +61,10 @@ export async function runSourceSearch(
     if (outOfBudget(run, "catalog discovery")) return run.saved;
     const { existingUrls, rejectedUrls } = await readExistingUrls(artistId);
     run.existingUrls = existingUrls;
-    await adoptMappedMusicDestinations(run);
+    await adoptMappedMusicDestinations(run).catch(error => {
+      console.error("[vaultWebSearch] Mapped catalog enrichment failed:", error);
+      if (run.requireComplete) throw error;
+    });
 
     // Before inferring anything, ask a database that already knows.
     const fromMusicBrainz = outOfBudget(run, "MusicBrainz")

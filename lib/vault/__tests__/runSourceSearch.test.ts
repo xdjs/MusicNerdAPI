@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { goodPage, hit } from "@/lib/vault/__tests__/searchRun";
 import type { SearchRun } from "@/lib/vault/types";
+import { adoptMappedMusicDestinations } from "@/lib/musicLinks/adoptMappedMusicDestinations";
 
 vi.mock("@/lib/musicLinks/adoptMappedMusicDestinations", () => ({
   adoptMappedMusicDestinations: vi.fn(async () => {}),
@@ -47,6 +48,7 @@ for (const name of [
 const { runSourceSearch } = await import("@/lib/vault/runSourceSearch");
 
 beforeEach(() => {
+  vi.mocked(adoptMappedMusicDestinations).mockReset().mockResolvedValue(undefined);
   h.getArtistById.mockReset().mockResolvedValue({ id: "a1", name: "Grimes", spotify: "sp1" });
   h.adoptFromMusicBrainz.mockReset().mockResolvedValue({
     handles: new Set(["grimes"]),
@@ -73,6 +75,22 @@ beforeEach(() => {
 });
 
 describe("runSourceSearch", () => {
+  it.each([false, true])(
+    "isolates optional mapped-enrichment failures unless requireComplete=%s",
+    async requireComplete => {
+      vi.mocked(adoptMappedMusicDestinations).mockRejectedValue(new Error("catalog phase failed"));
+      const result = runSourceSearch("a1", { requireComplete });
+      if (requireComplete) {
+        await expect(result).rejects.toThrow("catalog phase failed");
+        expect(h.adoptFromMusicBrainz).not.toHaveBeenCalled();
+        expect(h.searchCandidates).not.toHaveBeenCalled();
+      } else {
+        await expect(result).resolves.toEqual([{ id: "s1" }]);
+        expect(h.adoptFromMusicBrainz).toHaveBeenCalled();
+        expect(h.searchCandidates).toHaveBeenCalled();
+      }
+    },
+  );
   it("runs the phases in order and returns what it saved", async () => {
     const saved = await runSourceSearch("a1", {});
     expect(saved).toEqual([{ id: "s1" }]);

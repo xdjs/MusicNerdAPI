@@ -1669,6 +1669,33 @@ describe("searchAndPopulateVault", () => {
     expect(saved.map(source => source.url)).toEqual([story]);
   });
 
+  it.each([false, true])(
+    "isolates optional mapping lookup failure only for non-durable research (requireComplete=%s)",
+    async requireComplete => {
+      const story = "https://example.com/grimes-interview";
+      dbExecute.mockImplementation(async (query: SQL) => {
+        if (renderSql(query).text.includes("from artist_id_mappings"))
+          throw new Error("mapping lookup failed");
+        return [];
+      });
+      mockWebSearch.mockResolvedValue([hit(story)]);
+      mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      const research = searchAndPopulateVault("a1", { requireComplete });
+      if (requireComplete) {
+        await expect(research).rejects.toThrow("mapping lookup failed");
+        expect(mockMusicBrainz).not.toHaveBeenCalled();
+        expect(mockWebSearch).not.toHaveBeenCalled();
+        expect(mockInsert).not.toHaveBeenCalled();
+      } else {
+        const saved = await research;
+        expect(mockMusicBrainz).toHaveBeenCalled();
+        expect(mockWebSearch).toHaveBeenCalled();
+        expect(saved.map(source => source.url)).toEqual([story]);
+      }
+    },
+  );
+
   it("discovers catalog links from a newly adopted hosted artist account", async () => {
     const profile = "https://soundcloud.com/grimes";
     const apple = "https://music.apple.com/artist/grimes/123";
