@@ -58,6 +58,7 @@ describe("getOnboardingStateHandler", () => {
   it("returns 400 for an id that isn't a UUID, without reading", async () => {
     const res = await getOnboardingStateHandler("nope");
     expect(res.status).toBe(400);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(getOnboardingStepTimes).not.toHaveBeenCalled();
   });
 

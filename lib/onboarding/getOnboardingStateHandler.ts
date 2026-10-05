@@ -13,7 +13,10 @@ import { validateOnboardingStateParams } from "@/lib/onboarding/validateOnboardi
  */
 export async function getOnboardingStateHandler(id: string): Promise<NextResponse> {
   const artistId = validateOnboardingStateParams(id);
-  if (artistId instanceof NextResponse) return artistId;
+  if (artistId instanceof NextResponse) {
+    artistId.headers.set("Cache-Control", "no-store");
+    return artistId;
+  }
   const headers = { ...getCorsHeaders(), "Cache-Control": "no-store" };
   const steps = await getOnboardingStepTimes(artistId);
   if (steps === null)
