@@ -11,6 +11,7 @@ import { stripQuery } from "@/lib/sources/stripQuery";
 import { ACCOUNT_PLATFORMS, REFERENCE_PLATFORMS } from "@/lib/vault/const";
 import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { pageNamesArtist } from "@/lib/vault/pageNamesArtist";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
 
 /**
@@ -51,6 +52,7 @@ export async function adoptFromMusicBrainz(
         found.homepage,
       );
     for (const url of found.urls) {
+      if (run && outOfBudget(run, "MusicBrainz handle verification")) break;
       const match = await extractArtistId(stripQuery(url)).catch(() => undefined);
       if (!match?.siteName || !match?.id) continue;
       if (!ACCOUNT_PLATFORMS.has(match.siteName) && !REFERENCE_PLATFORMS.has(match.siteName))
@@ -80,6 +82,7 @@ export async function adoptFromMusicBrainz(
           continue;
         }
       }
+      if (run && outOfBudget(run, "MusicBrainz handle insertion")) break;
       try {
         await writeArtistLink(artistId, match.siteName, id, provisional, artist);
         console.log(`[vaultWebSearch] MusicBrainz -> ${match.siteName}=${id}`);

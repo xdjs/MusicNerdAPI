@@ -1591,6 +1591,39 @@ describe("searchAndPopulateVault", () => {
     expect(mockSetLink).not.toHaveBeenCalled();
   });
 
+  it.each(["catalog fetch", "handle verification"])(
+    "does not adopt MusicBrainz handles after the deadline expires during %s",
+    async phase => {
+      const apple = "https://music.apple.com/us/artist/grimes/123";
+      const instagram = "https://instagram.com/grimes";
+      let now = 1000;
+      const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+      mockMusicBrainz.mockResolvedValue({
+        matchedBy: "identifier",
+        urls: [apple, instagram],
+        homepage: null,
+      });
+      mockFetchPage.mockImplementation(async () => {
+        if (phase === "catalog fetch") now = 3000;
+        return { ...goodPage, title: "Grimes" };
+      });
+      mockExtract.mockImplementation(async url => {
+        if (url !== instagram) return undefined;
+        if (phase === "handle verification") now = 3000;
+        return { siteName: "instagram", id: "grimes" };
+      });
+      try {
+        const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+        await searchAndPopulateVault("a1", { deadline: 2000 });
+        expect(mockSetLink).not.toHaveBeenCalled();
+        expect(mockWebSearch).not.toHaveBeenCalled();
+        if (phase === "catalog fetch") expect(mockInsert).not.toHaveBeenCalled();
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
   it("keeps catalog profiles from a corroborated own page while preserving its editorial source", async () => {
     const home = "https://grimes.com/";
     const apple = "https://music.apple.com/us/artist/grimes/123";
