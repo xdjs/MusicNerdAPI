@@ -1826,6 +1826,25 @@ describe("searchAndPopulateVault", () => {
     await searchAndPopulateVault("a1");
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ url: final, type: "music" }));
   });
+  it("keeps a mixed-use recording Audio when a grounding redirect is resolved before fetching", async () => {
+    const original = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/token";
+    const final = "https://soundcloud.com/show/interview";
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue({ url: final } as Response);
+    try {
+      mockWebSearch.mockResolvedValue([hit(original)]);
+      mockFetchPage.mockResolvedValue({ ...goodPage, resolvedUrl: final });
+      mockJudge.mockImplementation(
+        async (_a, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1");
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ url: final, type: "audio" }),
+      );
+    } finally {
+      fetch.mockRestore();
+    }
+  });
   it("retains a distinct Spotify ID after reading a case-only rejected catalog URL", async () => {
     const rejected = "https://open.spotify.com/artist/AAAAAAAAAAAAAAAAAAAAAA";
     const valid = "https://open.spotify.com/artist/aaaaaaaaaaaaaaaaaaaaaa";

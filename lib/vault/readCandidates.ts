@@ -1,7 +1,6 @@
 import { fetchPageContent } from "@/lib/pages/fetchPageContent";
 import { getFetchedSourceUrl } from "@/lib/sources/getFetchedSourceUrl";
-import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
-import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { resolveDiscoveryResult } from "@/lib/vault/resolveDiscoveryResult";
 import { VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import type { DiscoveryResult, ReadCandidate } from "@/lib/vault/types";
 
@@ -22,14 +21,7 @@ export async function readCandidates(candidates: DiscoveryResult[]): Promise<Rea
       if (!url) return null;
       if (url === result.url) return { result, page };
       return {
-        result: {
-          ...result,
-          url,
-          type:
-            result.type === "website" && !parseMusicDestination(url)
-              ? "website"
-              : inferTypeFromUrl(url),
-        },
+        result: resolveDiscoveryResult(result, url),
         page,
         discoveredUrl: result.url,
       };
