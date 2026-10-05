@@ -70,6 +70,10 @@ export async function saveCandidateSource(
     return;
   }
   const isVerified = classified === "verified";
+  if (result.type === "website" && !isVerified) {
+    run.counts.dropped++;
+    return;
+  }
   try {
     if (outOfBudget(run, "source insertion")) return "stop";
     const source = await insertVaultSource({

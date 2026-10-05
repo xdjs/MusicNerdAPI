@@ -16,15 +16,14 @@ beforeEach(() => {
   m.insert.mockReset().mockImplementation(async data => ({ id: data.url, ...data }));
   m.ambiguous.mockReset().mockResolvedValue(false);
 });
-it("retains MusicBrainz catalog URLs and verified homepage as reviewable original URLs", async () => {
+it("retains MusicBrainz catalog URLs as reviewable original URLs", async () => {
   const run = searchRun();
-  await adoptMusicDestinations(run, [apple, beatport], "identifier", "https://grimes.com/");
+  await adoptMusicDestinations(run, [apple, beatport], "identifier");
   expect(m.insert.mock.calls.map(([data]) => [data.url, data.type, data.status])).toEqual([
     [apple, "music", "pending"],
     [beatport, "music", "pending"],
-    ["https://grimes.com/", "website", "pending"],
   ]);
-  expect(run.saved).toHaveLength(3);
+  expect(run.saved).toHaveLength(2);
 });
 it("does not adopt a namesake, dead page, non-artist catalog page or ambiguous platform", async () => {
   const run = searchRun();

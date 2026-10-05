@@ -30,6 +30,27 @@ const file = (
   );
 
 describe("fileCandidate", () => {
+  it("does not use an unreadable homepage as an account or outbound-link authority", async () => {
+    const run = searchRun();
+    await fileCandidate(
+      run,
+      {
+        result: { ...hit("https://grimes.com/"), type: "website" },
+        page: {
+          ...goodPage,
+          extractedText: "Grimes",
+          fullText: "Grimes",
+          outboundLinks: ["https://instagram.com/attacker"],
+        },
+      },
+      "about-artist",
+    );
+    expect(run.hubCandidates).toEqual([]);
+    expect(accountMatchFor).not.toHaveBeenCalled();
+    expect(saveCandidateSource).not.toHaveBeenCalled();
+    expect(run.counts.dropped).toBe(1);
+  });
+
   it("routes an adopted account to links, not the vault", async () => {
     const x = { siteName: "x", cardPlatformName: "X", id: "p3t3rango" };
     accountMatchFor.mockResolvedValue({ match: x, isAccountUrl: true });

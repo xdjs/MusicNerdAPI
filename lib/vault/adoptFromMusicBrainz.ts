@@ -49,7 +49,6 @@ export async function adoptFromMusicBrainz(
         run,
         found.urls,
         found.matchedBy === "identifier" ? "identifier" : "name",
-        found.homepage,
       );
     for (const url of found.urls) {
       if (run && outOfBudget(run, "MusicBrainz handle verification")) break;

@@ -1,7 +1,6 @@
 import { titleMatchesArtist } from "@/lib/artists/titleMatchesArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { fetchPageContent } from "@/lib/pages/fetchPageContent";
-import { isUnsafeUrl } from "@/lib/pages/isUnsafeUrl";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 import { VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -15,7 +14,6 @@ export async function adoptMusicDestinations(
   run: SearchRun,
   urls: string[],
   evidence: "identifier" | "name" | "own-page",
-  homepage?: string | null,
 ): Promise<void> {
   if (evidence !== "identifier" && (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)))
     return;
@@ -32,8 +30,6 @@ export async function adoptMusicDestinations(
   const targets = candidates
     .filter(candidate => candidate && ids.get(candidate.platform)?.size === 1)
     .map(candidate => ({ url: candidate!.url, type: "music" }));
-  if (homepage && !isUnsafeUrl(homepage) && !parseMusicDestination(homepage))
-    targets.push({ url: homepage, type: "website" });
   for (const target of targets.slice(0, 9)) {
     if (outOfBudget(run, "catalog destination verification")) return;
     const key = normalizeLoreDiscoveryUrl(target.url);

@@ -1,6 +1,7 @@
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import type { RelevanceVerdict } from "@/lib/relevance/types";
+import { classifyFetchedSource } from "@/lib/sources/classifyFetchedSource";
 import { accountMatchFor } from "@/lib/vault/accountMatchFor";
 import { adoptJudgedAccount } from "@/lib/vault/adoptJudgedAccount";
 import { ACCOUNT_PLATFORMS } from "@/lib/vault/const";
@@ -26,6 +27,15 @@ export async function fileCandidate(
   verdict: RelevanceVerdict | undefined,
 ): Promise<"stop" | void> {
   const { result, page } = candidate;
+  // Community-edited homepage relations must clear relevance before source or outbound adoption.
+  if (
+    result.type === "website" &&
+    (verdict !== "about-artist" ||
+      classifyFetchedSource(page, run.artistName, { identityConfirmed: true }) !== "verified")
+  ) {
+    run.counts.dropped++;
+    return;
+  }
   // A release URL must never be mistaken for an account by a loose legacy urlmap row.
   const release = parseMusicDestination(result.url)?.kind === "release";
   const { match, isAccountUrl } = release
