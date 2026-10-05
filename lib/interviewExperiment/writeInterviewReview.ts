@@ -22,8 +22,10 @@ export async function writeInterviewReview(
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   const sources = new Map(chunkInterviewEvidence(corpus.evidence).map(e => [e.id, e]));
+  for (const source of corpus.evidence) sources.set(source.id, source);
   for (const result of results)
-    for (const source of result.preparation?.context ?? []) sources.set(source.id, source);
+    for (const source of result.preparation?.context ?? result.grounding?.context ?? [])
+      sources.set(source.id, source);
   const review = [
     `# ${corpus.artist.name}: interview experiment`,
     "",
@@ -40,11 +42,12 @@ export async function writeInterviewReview(
   for (const [index, result] of shuffled.entries()) {
     const label = String.fromCharCode(65 + index);
     review.push("", `## Set ${label}`, "");
-    if (result.preparation?.conversation)
+    const conversation = result.preparation?.conversation ?? result.grounding?.conversation;
+    if (conversation)
       review.push(
-        `Exercise: ${result.preparation.conversation.kind} replay; not a newly received artist answer.`,
+        `Exercise: ${conversation.kind} replay; not a newly received artist answer.`,
         "",
-        ...result.preparation.conversation.turns.map(t => `${t.speaker}: ${t.text}`),
+        ...conversation.turns.map(t => `${t.speaker}: ${t.text}`),
         "",
       );
     if (!result.questions.length) review.push("No question passed the experiment checks.");
@@ -73,6 +76,14 @@ export async function writeInterviewReview(
       set: label,
       arm: result.arm,
       model: result.model,
+      ...(result.grounding
+        ? {
+            reviewModel: result.grounding.reviewModel,
+            preparationModel: result.grounding.research.model,
+            preparationCall: result.grounding.research.call,
+            preparationReused: true,
+          }
+        : {}),
       corpusHash: result.corpusHash,
       asOf: result.asOf,
       calls: result.calls,
@@ -82,6 +93,57 @@ export async function writeInterviewReview(
     });
   }
   for (const result of results) {
+    if (result.grounding) {
+      const { research, reviewModel, attempts } = result.grounding;
+      const report = [
+        `# ${corpus.artist.name}: complete archive preparation`,
+        "",
+        `Assignment: ${research.purpose}`,
+        "",
+        `Submitted text: ${research.sourceIds.length} eligible sources; ${research.characters} extracted characters. This is coverage, not proof of comprehension or complete PDF extraction.`,
+        `Preparation reused: ${research.promptVersion}; corpus ${research.corpusHash}; cutoff ${research.asOf}.`,
+        `Preparation model: ${research.model}; writer: ${result.model}; reviewer: ${reviewModel}.`,
+        "",
+        "Originals remain authoritative. Full reviewer verdicts and both drafting attempts are preserved in results.json.",
+        "",
+        "## Ledger",
+        "",
+        ...research.notes.flatMap((n, i) => [
+          `### ${i}: ${n.status} — ${n.timeScope}`,
+          "",
+          n.statement,
+          "",
+          ...n.evidence.map(e => `- ${e.evidenceId}: ${e.quote}`),
+          "",
+        ]),
+        "## Angles",
+        "",
+        ...research.angles.flatMap(a => [
+          `- Unknown: ${a.unknown}`,
+          `  Why ask: ${a.whyAsk}`,
+          `  Ledger notes: ${a.noteIndexes.join(", ")}`,
+        ]),
+        "",
+        "## Gaps",
+        "",
+        ...research.gaps.map(g => `- ${g}`),
+        "",
+        "## Attempts",
+        "",
+        ...attempts.flatMap(a => [
+          `- ${a.attempt}: ${a.question || "Abstained"}`,
+          `  Outcome: ${a.rejection ?? "Passed model checks; editorial review still required"}`,
+        ]),
+      ];
+      await writeFile(join(directory, "research.md"), report.join("\n") + "\n", {
+        mode: 0o600,
+        flag: "wx",
+      });
+      await writeFile(join(directory, "research.json"), JSON.stringify(research, null, 2), {
+        mode: 0o600,
+        flag: "wx",
+      });
+    }
     if (!result.preparation) continue;
     const p = result.preparation;
     const dossier = [

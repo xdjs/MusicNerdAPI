@@ -29,7 +29,7 @@ export interface InterviewCorpus {
   evidence: InterviewEvidence[];
   baseline: { posts: SocialPostRow[]; extraction: CaptionExtraction };
 }
-export type ExperimentArm = "signals" | "context" | "connections" | "prepared";
+export type ExperimentArm = "signals" | "context" | "connections" | "prepared" | "grounded";
 export interface EvidenceQuote {
   evidenceId: string;
   quote: string;
@@ -50,6 +50,7 @@ export interface InterviewVerdict {
   reason: string;
 }
 export interface ExperimentCall {
+  model?: string;
   stage: string;
   elapsedMs: number;
   inputTokens: number | null;
@@ -66,6 +67,15 @@ export interface ExperimentResult {
   calls: ExperimentCall[];
   evidenceIds: string[];
   searches: string[];
+  grounding?: {
+    research: InterviewResearch;
+    reviewModel: string;
+    context: InterviewEvidence[];
+    conversation: InterviewConversation | null;
+    withheldIds: string[];
+    attempts: { question: string; attempt: "draft" | "repair"; rejection: string | null }[];
+    reviews: { attempt: "draft" | "repair"; questions: string[]; verdicts: unknown[] }[];
+  };
   preparation?: {
     purpose: string;
     dossier: InterviewDossier;
@@ -81,6 +91,28 @@ export interface ExperimentResult {
       premises: { claim: string; status: string; reason: string }[];
     }[];
   };
+}
+
+export interface InterviewResearch {
+  version: 1;
+  promptVersion: "grounded-v1";
+  artistId: string;
+  corpusHash: string;
+  asOf: string;
+  purpose: string;
+  model: string;
+  sourceIds: string[];
+  characters: number;
+  notes: {
+    statement: string;
+    status:
+      "supported" | "already-answered" | "conflicted" | "superseded" | "unknown" | "correction";
+    timeScope: string;
+    evidence: EvidenceQuote[];
+  }[];
+  angles: { noteIndexes: number[]; unknown: string; whyAsk: string }[];
+  gaps: string[];
+  call: ExperimentCall;
 }
 
 export interface InterviewMemory {

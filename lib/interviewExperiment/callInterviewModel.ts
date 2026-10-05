@@ -9,6 +9,7 @@ import type { ExperimentCall } from "@/lib/interviewExperiment/types";
  * @param payload - Bounded evidence and assignment.
  * @param schema - SDK-owned structured output schema.
  * @param model - Same explicit model for all arms.
+ * @param mode - Explicit full-archive allowance; smaller calls retain the original limits.
  * @returns Parsed output and actual provider usage, never credentials or raw provider objects.
  */
 export async function callInterviewModel<T>(
@@ -17,10 +18,12 @@ export async function callInterviewModel<T>(
   payload: unknown,
   schema: z.ZodType<T>,
   model: string,
+  mode: "standard" | "archive" = "standard",
 ): Promise<{ output: T; call: ExperimentCall }> {
   const prompt = JSON.stringify(payload);
   const promptBytes = Buffer.byteLength(instructions + prompt, "utf8");
-  if (promptBytes > 90000) throw new Error("Experiment prompt exceeds conservative byte budget");
+  if (promptBytes > (mode === "archive" ? 500000 : 90000))
+    throw new Error("Experiment prompt exceeds conservative byte budget");
   const started = Date.now();
   try {
     const result = await generateText({
@@ -29,14 +32,15 @@ export async function callInterviewModel<T>(
       prompt,
       temperature: stage === "draft" ? 0.8 : 0,
       thinkingBudget: stage === "prepare" || stage === "verify-prepared" ? 2048 : 512,
-      maxOutputTokens: 6144,
+      maxOutputTokens: mode === "archive" ? 16384 : 6144,
       maxRetries: 0,
-      abortSignal: AbortSignal.timeout(45000),
+      abortSignal: AbortSignal.timeout(mode === "archive" ? 180000 : 45000),
       output: Output.object({ schema }),
     });
     return {
       output: result.output,
       call: {
+        model,
         stage,
         elapsedMs: Date.now() - started,
         inputTokens: result.totalUsage.inputTokens ?? null,
@@ -65,6 +69,7 @@ export async function callInterviewModel<T>(
       ),
       {
         call: {
+          model,
           stage,
           elapsedMs: Date.now() - started,
           inputTokens: detail?.usage?.inputTokens ?? null,

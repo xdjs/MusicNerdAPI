@@ -8,6 +8,28 @@ beforeEach(() =>
     .mockReset()
     .mockResolvedValue({ output: { ok: true }, totalUsage: { inputTokens: 40, outputTokens: 12 } }),
 );
+it("requires an explicit archive mode for larger calls and keeps a finite bound", async () => {
+  await callInterviewModel(
+    "research",
+    "Read originals",
+    { text: "x".repeat(100000) },
+    z.object({ ok: z.boolean() }),
+    "test/model",
+    "archive",
+  );
+  expect(generateText.mock.calls[0][0]).toMatchObject({ maxOutputTokens: 16384, maxRetries: 0 });
+  await expect(
+    callInterviewModel(
+      "research",
+      "Read originals",
+      { text: "x".repeat(500000) },
+      z.object({}),
+      "test/model",
+      "archive",
+    ),
+  ).rejects.toThrow(/budget/i);
+  expect(generateText).toHaveBeenCalledTimes(1);
+});
 it("records actual usage and cancels bounded calls with retries disabled", async () => {
   const r = await callInterviewModel(
     "draft",

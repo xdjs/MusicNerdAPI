@@ -6,6 +6,8 @@ import { runInterviewExperiment } from "@/lib/interviewExperiment/runInterviewEx
 import { writeInterviewReview } from "@/lib/interviewExperiment/writeInterviewReview";
 import { indexInterviewMemory } from "@/lib/interviewExperiment/indexInterviewMemory";
 import { runPreparedInterview } from "@/lib/interviewExperiment/runPreparedInterview";
+import { prepareInterviewResearch } from "@/lib/interviewExperiment/prepareInterviewResearch";
+import { runGroundedInterview } from "@/lib/interviewExperiment/runGroundedInterview";
 import type {
   ExperimentArm,
   ExperimentResult,
@@ -23,6 +25,8 @@ const { values, positionals } = parseArgs({
     output: { type: "string" },
     "as-of": { type: "string" },
     model: { type: "string" },
+    "review-model": { type: "string" },
+    research: { type: "string" },
     "exclude-source": { type: "string", multiple: true },
     "exclusion-reason": { type: "string" },
     arm: { type: "string" },
@@ -37,7 +41,10 @@ if (values["env-file"]) process.loadEnvFile(resolve(values["env-file"]));
 const main = async () => {
   if (values.help) {
     console.log(
-      "pnpm interview:experiment snapshot --env-file <private-env> --environment production|staging --artist-id <uuid> --expected-handle <handle> --output <private-corpus.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-directory> [--as-of <ISO-date>] [--exclude-source <id> --exclusion-reason <reason>] [--arm signals|context|connections|prepared]\npnpm interview:experiment index --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-memory.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm prepared --memory <private-memory.json> --purpose <assignment> --output <new-private-directory> [--conversation <private-replay.json>]",
+      "pnpm interview:experiment snapshot --env-file <private-env> --environment production|staging --artist-id <uuid> --expected-handle <handle> --output <private-corpus.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-directory> [--as-of <ISO-date>] [--exclude-source <id> --exclusion-reason <reason>] [--arm signals|context|connections|prepared|grounded]\npnpm interview:experiment index --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-memory.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm prepared --memory <private-memory.json> --purpose <assignment> --output <new-private-directory> [--conversation <private-replay.json>]",
+    );
+    console.log(
+      "pnpm interview:experiment prepare --env-file <preview-env> --corpus <private-corpus.json> --purpose <assignment> --output <new-private-research.json> [--conversation <private-replay.json>]\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm grounded --research <private-research.json> --purpose <assignment> --output <new-private-directory> [--model <writer-model>] [--review-model <critic-model>] [--conversation <private-replay.json>]",
     );
     return;
   }
@@ -70,8 +77,8 @@ const main = async () => {
     );
     return;
   }
-  if (!["run", "index"].includes(positionals[0]) || !values.corpus)
-    throw new Error("Use snapshot, index or run; see --help");
+  if (!["run", "index", "prepare"].includes(positionals[0]) || !values.corpus)
+    throw new Error("Use snapshot, index, prepare or run; see --help");
   if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN)
     throw new Error("AI Gateway credentials are required");
   const corpus = JSON.parse(await readFile(resolve(values.corpus), "utf8")) as InterviewCorpus;
@@ -85,6 +92,32 @@ const main = async () => {
       throw new Error("An excluded evidence id was not in the snapshot");
     corpus.exclusions = removed.map(e => ({ id: e.id, reason: values["exclusion-reason"]! }));
     corpus.evidence = corpus.evidence.filter(e => !excluded.has(e.id));
+  }
+  const conversation = values.conversation
+    ? JSON.parse(await readFile(resolve(values.conversation), "utf8"))
+    : undefined;
+  if (positionals[0] === "prepare") {
+    if (!values.purpose) throw new Error("Preparation requires --purpose");
+    const research = await prepareInterviewResearch(corpus, {
+      purpose: values.purpose,
+      asOf: values["as-of"],
+      model: values.model,
+      conversation,
+    });
+    await writeFile(resolve(values.output), JSON.stringify(research, null, 2), {
+      mode: 0o600,
+      flag: "wx",
+    });
+    console.log(
+      JSON.stringify({
+        sources: research.sourceIds.length,
+        characters: research.characters,
+        notes: research.notes.length,
+        angles: research.angles.length,
+        call: research.call,
+      }),
+    );
+    return;
   }
   if (positionals[0] === "index") {
     const partial = resolve(values.output) + ".partial.json";
@@ -121,31 +154,40 @@ const main = async () => {
   const arms: ExperimentArm[] = values.arm
     ? [values.arm as ExperimentArm]
     : ["signals", "context", "connections"];
-  if (arms.some(a => !["signals", "context", "connections", "prepared"].includes(a)))
+  if (arms.some(a => !["signals", "context", "connections", "prepared", "grounded"].includes(a)))
     throw new Error("Unknown experiment arm");
   if (arms.includes("prepared") && (!values.memory || !values.purpose))
     throw new Error("Prepared arm requires --memory and --purpose");
-  if (values.conversation && !arms.every(a => a === "prepared"))
-    throw new Error("Conversation replay requires the prepared arm");
+  if (arms.includes("grounded") && (!values.research || !values.purpose))
+    throw new Error("Grounded arm requires --research and --purpose");
+  if (values.conversation && !arms.every(a => a === "prepared" || a === "grounded"))
+    throw new Error("Conversation replay requires the prepared or grounded arm");
   const results: ExperimentResult[] = [];
   const directory = resolve(values.output);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   for (const arm of arms) {
     const result =
-      arm === "prepared"
-        ? await runPreparedInterview(corpus, {
+      arm === "grounded"
+        ? await runGroundedInterview(corpus, {
             purpose: values.purpose!,
-            memory: JSON.parse(await readFile(resolve(values.memory!), "utf8")),
-            conversation: values.conversation
-              ? JSON.parse(await readFile(resolve(values.conversation), "utf8"))
-              : undefined,
+            research: JSON.parse(await readFile(resolve(values.research!), "utf8")),
+            conversation,
             asOf: values["as-of"],
             model: values.model,
+            reviewModel: values["review-model"],
           })
-        : await runInterviewExperiment(corpus, arm, {
-            asOf: values["as-of"],
-            model: values.model,
-          });
+        : arm === "prepared"
+          ? await runPreparedInterview(corpus, {
+              purpose: values.purpose!,
+              memory: JSON.parse(await readFile(resolve(values.memory!), "utf8")),
+              conversation,
+              asOf: values["as-of"],
+              model: values.model,
+            })
+          : await runInterviewExperiment(corpus, arm, {
+              asOf: values["as-of"],
+              model: values.model,
+            });
     results.push(result);
     await writeFile(join(directory, `${arm}.json`), JSON.stringify(result, null, 2), {
       mode: 0o600,
