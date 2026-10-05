@@ -26,7 +26,12 @@ export async function writeVaultSource(
   const context = getArtistOperationOwnership(data.artistId);
   const userId = context?.userId;
   const origin = context?.sourceOrigin ?? (userId ? "submission" : "unknown");
-  if (origin === "research" && !(await canSaveMusicDestination(writer, data.artistId, url)))
+  const music = isMusicSource({ ...data, url });
+  if (
+    origin === "research" &&
+    music &&
+    !(await canSaveMusicDestination(writer, data.artistId, url))
+  )
     return undefined;
   let activityId = context?.activityId ?? null;
   const [source] = await writer
@@ -38,7 +43,7 @@ export async function writeVaultSource(
       url,
       title: data.title,
       snippet: data.snippet,
-      type: isMusicSource({ ...data, url }) ? "music" : (data.type ?? "article"),
+      type: music ? "music" : (data.type ?? "article"),
       status: data.status ?? "pending",
       extractedText: data.extractedText,
       ogImage: data.ogImage,

@@ -1,7 +1,7 @@
 import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import { stripQuery } from "@/lib/sources/stripQuery";
-import { MAX_CORROBORATION_CHECKS } from "@/lib/vault/const";
+import { CASE_SENSITIVE_ACCOUNT_IDS, MAX_CORROBORATION_CHECKS } from "@/lib/vault/const";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { getReleaseOwnerHandle } from "@/lib/musicLinks/getReleaseOwnerHandle";
 import type { ResolvedHandle } from "@/lib/vault/types";
@@ -24,7 +24,9 @@ export async function resolveOutboundHandles(outboundLinks: string[]): Promise<R
     if (match?.siteName && match?.id)
       resolved.push({
         siteName: match.siteName,
-        id: normalizeHandle(String(match.id)),
+        id: CASE_SENSITIVE_ACCOUNT_IDS.has(match.siteName)
+          ? String(match.id).trim()
+          : normalizeHandle(String(match.id)),
         ...(music?.kind === "release" ? { corroborationOnly: true } : {}),
       });
   }

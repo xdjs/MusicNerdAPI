@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { rowsOf } from "@/lib/db/rowsOf";
 import type { ScopedWriteDb } from "@/lib/ownership/types";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 
 /** Preserve accepted identities and review decisions inside the source-write transaction. */
 export async function canSaveMusicDestination(
@@ -24,9 +25,10 @@ export async function canSaveMusicDestination(
   );
   const sources = rowsOf(
     await writer.execute(sql`
-    select url, status from artist_vault_sources where artist_id = ${artistId}::uuid
+    select url, status, type, podcast_episode_key as "podcastEpisodeKey"
+    from artist_vault_sources where artist_id = ${artistId}::uuid
   `),
-  ) as { url: string; status: string }[];
+  ) as { url: string; status: string; type: string | null; podcastEpisodeKey: string | null }[];
   if (
     excluded.length ||
     mappings.some(row => row.artist_id !== artistId || row.platform_id !== destination.id)
@@ -65,7 +67,8 @@ export async function canSaveMusicDestination(
     return (
       held?.kind === "artist" &&
       held.platform === destination.platform &&
-      (held.id === destination.id || source.status === "approved" || source.status === "pending")
+      (held.id === destination.id ||
+        (isMusicSource(source) && (source.status === "approved" || source.status === "pending")))
     );
   });
 }

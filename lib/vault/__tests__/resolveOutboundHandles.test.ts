@@ -6,6 +6,15 @@ vi.mock("@/lib/sources/stripQuery", () => ({ stripQuery: (u: string) => u.split(
 const { resolveOutboundHandles } = await import("@/lib/vault/resolveOutboundHandles");
 
 describe("resolveOutboundHandles", () => {
+  it.each(["spotify", "youtubechannel"])(
+    "preserves the case of a %s account ID",
+    async siteName => {
+      extractArtistId.mockReset().mockResolvedValue({ siteName, id: "AbC123" });
+      expect(await resolveOutboundHandles(["https://example.com/profile"])).toEqual([
+        { siteName, id: "AbC123" },
+      ]);
+    },
+  );
   it("resolves each link once, query stripped, handles normalized, unresolved ones dropped", async () => {
     extractArtistId.mockImplementation(async (u: string) =>
       u.includes("instagram")

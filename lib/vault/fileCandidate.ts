@@ -45,11 +45,11 @@ export async function fileCandidate(
     run.counts.skipped++;
     return;
   }
-  if ((page.outboundLinks?.length ?? 0) > 0 && verdict !== "lists-artist") {
+  if ((page.outboundLinks?.length ?? 0) > 0 && verdict === "about-artist") {
     run.hubCandidates.push({
       links: page.outboundLinks!,
       url: result.url,
-      aboutArtist: verdict === "about-artist",
+      aboutArtist: true,
     });
   }
   if (match?.siteName && ACCOUNT_PLATFORMS.has(match.siteName)) {

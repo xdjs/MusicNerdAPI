@@ -1,6 +1,6 @@
 import { parseMusicDestination } from "./parseMusicDestination";
 
-/** Mixed audio release URLs need a positive music classification; URL shape alone is not evidence. */
+/** Preserve explicit audio evidence on mixed hosts; their releases need a positive music classification. */
 export function isMusicSource(source: {
   url: string;
   type?: string | null;
@@ -10,7 +10,7 @@ export function isMusicSource(source: {
   const destination = parseMusicDestination(source.url);
   if (!destination) return false;
   if (["soundcloud", "mixcloud", "audius"].includes(destination.platform)) {
-    if (source.type === "interview") return false;
+    if (source.type === "interview" || source.type === "audio") return false;
     if (destination.kind === "release") return source.type === "music";
   }
   return true;

@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { findCorroborator } from "@/lib/vault/findCorroborator";
 
 describe("findCorroborator", () => {
+  it.each(["spotify", "youtubechannel"])("preserves exact case for %s identifiers", siteName => {
+    const resolved = [{ siteName, id: "AbC123" }];
+    expect(findCorroborator(resolved, { [siteName]: "AbC123" })).toEqual(resolved[0]);
+    expect(findCorroborator(resolved, { [siteName]: "abc123" })).toBeUndefined();
+  });
   it("finds a link to an id we already hold, normalizing an @-prefixed stored value", () => {
     const resolved = [
       { siteName: "instagram", id: "rvamag" },

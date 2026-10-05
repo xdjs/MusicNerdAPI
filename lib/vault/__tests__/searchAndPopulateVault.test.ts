@@ -1064,6 +1064,13 @@ describe("searchAndPopulateVault", () => {
   });
 
   describe("adopting handles from the artist's own page", () => {
+    beforeEach(() => {
+      // Outbound adoption now requires an affirmative relevance verdict.
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) =>
+          new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+      );
+    });
     // An artist's own site is the only first-party statement of their handles,
     // and it lives entirely in href attributes — so the text extractor strips it
     // and the same-host `links` rule excludes it. Sherwinn Brice's Instagram is
@@ -1326,7 +1333,7 @@ describe("searchAndPopulateVault", () => {
           new Map(
             candidates.map((c: Cand) => [
               c.url,
-              c.url.includes("bandcamp") ? "about-artist" : "undecided",
+              c.url.includes("bandcamp") || c.url === OWN_SITE ? "about-artist" : "undecided",
             ]),
           ),
       );
@@ -1706,6 +1713,37 @@ describe("searchAndPopulateVault", () => {
       expect.objectContaining({ url: apple, type: "music", status: "pending" }),
     );
   });
+
+  it.each(["about-artist", "not-about-artist"])(
+    "does not adopt catalog URLs from a third-party hub merely linking a known account (%s)",
+    async verdict => {
+      const page = "https://third-party.example/grimes";
+      const apple = "https://music.apple.com/us/artist/grimes/123";
+      const spotify = "https://open.spotify.com/artist/3DmaZbBPnKSGnxYRpHobss";
+      mockGetArtist.mockResolvedValue({
+        id: "a1",
+        name: "Grimes",
+        spotify: "3DmaZbBPnKSGnxYRpHobss",
+      });
+      mockWebSearch.mockResolvedValue([hit(page, "Grimes")]);
+      mockFetchPage.mockResolvedValue({
+        ...goodPage,
+        title: "Grimes",
+        outboundLinks: [spotify, apple],
+      });
+      mockExtract.mockImplementation(async url =>
+        url === spotify ? { siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" } : undefined,
+      );
+      mockJudge.mockImplementation(
+        async (_anchor, candidates) =>
+          new Map(candidates.map((candidate: Cand) => [candidate.url, verdict])),
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1");
+      expect(mockFetchPage.mock.calls.map(([url]) => url)).not.toContain(apple);
+      expect(mockInsert.mock.calls.map(([row]) => row.url)).not.toContain(apple);
+    },
+  );
 
   it("routes judged catalog search hits to music and never turns a release URL into an artist ID", async () => {
     const artist = "https://www.beatport.com/artist/grimes/456";

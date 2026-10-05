@@ -1,4 +1,5 @@
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
+import { CASE_SENSITIVE_ACCOUNT_IDS } from "@/lib/vault/const";
 import type { ResolvedHandle } from "@/lib/vault/types";
 
 /**
@@ -21,6 +22,9 @@ export function findCorroborator(
   return resolved.find(r => {
     if (provisional?.has(r.siteName)) return false;
     const held = artist[r.siteName];
-    return typeof held === "string" && !!held && normalizeHandle(held) === r.id;
+    if (typeof held !== "string" || !held) return false;
+    return (
+      (CASE_SENSITIVE_ACCOUNT_IDS.has(r.siteName) ? held.trim() : normalizeHandle(held)) === r.id
+    );
   });
 }

@@ -21,6 +21,9 @@ import { outOfBudget } from "@/lib/vault/outOfBudget";
  * name isn't shared). When some handles resemble the artist and others don't,
  * only the resembling ones are kept; a page naming two handles for one
  * platform adopts neither. Propagation is left to the caller, once per run.
+ * Catalog sources require an affirmed own domain or the referring page's own
+ * saved account identity. Linking a public known account is not ownership proof
+ * for that additional catalog branch; rejected pages cannot supply either branch.
  *
  * @param artistId - The artist.
  * @param outboundLinks - The page's off-host links.
@@ -41,21 +44,39 @@ export async function adoptHandlesFromOwnPage(
   provisional?: Set<string>,
   run?: SearchRun,
 ): Promise<{ adopted: number; handles: Set<string> }> {
+  if (page && !page.aboutArtist) return { adopted: 0, handles: new Set<string>() };
   const resolved = await resolveOutboundHandles(outboundLinks);
   const corroborator = findCorroborator(resolved, artist, provisional);
   const ownDomain =
-    !corroborator &&
     !!page?.aboutArtist &&
     isArtistOwnDomain(page.url, String(artist.name ?? "")) &&
     !(await nameIsAmbiguousInDirectory(artistId, String(artist.name ?? "")));
-  if (!corroborator && !ownDomain) return { adopted: 0, handles: new Set<string>() };
+  let ownedCatalogPage = ownDomain;
+  if (run && page?.aboutArtist) {
+    // An outbound public link can corroborate identity, but does not prove who
+    // controls its referring page. Catalog adoption needs that page's own authority.
+    const pageAccounts = ownDomain ? [] : await resolveOutboundHandles([page.url]);
+    const heldPage = findCorroborator(
+      pageAccounts.filter(
+        handle =>
+          !handle.corroborationOnly &&
+          ACCOUNT_PLATFORMS.has(handle.siteName) &&
+          !isReservedHandle(handle.siteName, handle.id),
+      ),
+      artist,
+      provisional,
+    );
+    if (outOfBudget(run, "catalog hub authority"))
+      return { adopted: 0, handles: new Set<string>() };
+    ownedCatalogPage ||= !!heldPage;
+  }
+  if (!corroborator && !ownedCatalogPage) return { adopted: 0, handles: new Set<string>() };
   console.log(
     corroborator
       ? `[vaultWebSearch] Page corroborated by known ${corroborator.siteName}=${corroborator.id}`
-      : `[vaultWebSearch] Page corroborated as the artist's own domain: ${page!.url.slice(0, 70)}`,
+      : `[vaultWebSearch] Artist-owned page: ${page!.url.slice(0, 70)}`,
   );
-
-  if (run) await adoptMusicDestinations(run, outboundLinks, "own-page");
+  if (run && ownedCatalogPage) await adoptMusicDestinations(run, outboundLinks, "own-page");
   const adoptable = resolved.filter(handle => !handle.corroborationOnly);
   const ambiguous = ambiguousPlatforms(adoptable);
   for (const platform of ambiguous) {

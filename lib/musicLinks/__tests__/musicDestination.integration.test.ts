@@ -268,6 +268,47 @@ describe("catalog source persistence with real PostgreSQL and application role",
     expect(rows.find(row => row.url === spoken)?.type).toBe("audio");
     expect(rows.find(row => row.url === music)?.type).toBe("music");
   });
+  it.each(["soundcloud.com", "mixcloud.com", "audius.co"])(
+    "preserves explicit audio classification on a show profile (%s)",
+    async host => {
+      const show = `https://${host}/show`;
+      const source = await withArtistOperation(
+        artistId,
+        { expectedClaimId: claimId, sourceOrigin: "research" },
+        () => insertVaultSource({ artistId, url: show, type: "audio", title: "Artist interviews" }),
+      );
+      expect(source).toMatchObject({ type: "audio", url: show });
+      expect(await database.query.artistVaultSources.findMany()).toEqual([
+        expect.objectContaining({ type: "audio", url: show }),
+      ]);
+    },
+  );
+  it("retains a spoken show source when the artist already has a different music account", async () => {
+    await database
+      .update(schema.artists)
+      .set({ soundcloud: "pete-rango" })
+      .where(eq(schema.artists.id, artistId));
+    const source = await withArtistOperation(
+      artistId,
+      { expectedClaimId: claimId, sourceOrigin: "research" },
+      () =>
+        insertVaultSource({
+          artistId,
+          url: "https://soundcloud.com/interview-show",
+          type: "audio",
+        }),
+    );
+    expect(source).toMatchObject({ type: "audio", url: "https://soundcloud.com/interview-show" });
+  });
+  it("does not treat a saved spoken show as the artist's music identity", async () => {
+    await database.insert(schema.artistVaultSources).values({
+      artistId,
+      url: "https://soundcloud.com/interview-show",
+      type: "audio",
+      status: "approved",
+    });
+    expect(await save("https://soundcloud.com/pete-rango")).toMatchObject({ type: "music" });
+  });
   it("keeps releases distinct from artist identities", async () => {
     await database
       .insert(schema.artistIdMappings)

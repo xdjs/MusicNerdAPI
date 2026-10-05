@@ -86,6 +86,25 @@ describe("fileCandidate", () => {
     ]);
   });
 
+  it.each(["not-about-artist", "undecided"])(
+    "does not queue a %s page as an outbound identity authority",
+    async verdict => {
+      const run = searchRun();
+      await file(
+        run,
+        "https://attacker.example/artist",
+        {
+          outboundLinks: [
+            "https://soundcloud.com/grimes",
+            "https://music.apple.com/artist/grimes/42",
+          ],
+        },
+        verdict,
+      );
+      expect(run.hubCandidates).toEqual([]);
+    },
+  );
+
   it("keeps an unadopted account page as a candidate handle, never as press", async () => {
     accountMatchFor.mockResolvedValue({
       match: { siteName: "instagram", cardPlatformName: null, id: "p3t3rango" },
