@@ -54,7 +54,7 @@ export function createArtistKnowledgeTools(config: KnowledgeToolConfig) {
     }),
     searchArtistKnowledge: tool({
       description:
-        "Find lexical matches in original stored passages, including deep inside long sources. Inspect surrounding originals before selecting an angle. No match is not proof of absence; check coverage and try other terms." +
+        "Find ranked lexical matches in original stored passages, including deep inside long sources. Word forms and adjacent query terms help locate evidence; ranking is not factual verification. Inspect surrounding originals before selecting an angle. No match is not proof of absence; check coverage and try other terms." +
         untrusted,
       inputSchema: knowledgeInputSchemas.search,
       outputSchema: knowledgeOutputSchemas.search,
@@ -63,7 +63,7 @@ export function createArtistKnowledgeTools(config: KnowledgeToolConfig) {
     }),
     readArtistSource: tool({
       description:
-        "Read surrounding original context by sourceId/revision and UTF-16 offset. Preserve qualifications, speaker uncertainty and dates. A 409 requires reloading metadata; do not silently cite changed text." +
+        "Read original context by sourceId/revision and UTF-16 offset. Inspect a document's opening for authorship and scope, then surrounding relevant passages for qualifications, speaker uncertainty and dates. Continue when a needed qualification lies outside a window. A 409 requires reloading metadata; do not silently cite changed text." +
         untrusted,
       inputSchema: knowledgeInputSchemas.read,
       outputSchema: knowledgeOutputSchemas.read,

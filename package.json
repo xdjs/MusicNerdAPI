@@ -28,6 +28,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sharp": "0.34.5",
+    "stemmer": "2.0.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
