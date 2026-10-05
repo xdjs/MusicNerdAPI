@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { searchRun } from "@/lib/vault/__tests__/searchRun";
 
 const m = vi.hoisted(() => ({
   resolve: vi.fn(),
+  catalog: vi.fn(async () => {}),
   belongs: vi.fn(async (_artistId: string, _site: string, _handle: string) => false),
   contradicts: vi.fn(async (_artistId: string, _site: string, _handle: string) => false),
   ambiguous: vi.fn(async (_artistId: string, _name: string) => false),
@@ -15,6 +17,7 @@ const m = vi.hoisted(() => ({
     ) => {},
   ),
 }));
+vi.mock("@/lib/musicLinks/adoptMusicDestinations", () => ({ adoptMusicDestinations: m.catalog }));
 vi.mock("@/lib/vault/resolveOutboundHandles", () => ({ resolveOutboundHandles: m.resolve }));
 vi.mock("@/lib/identity/handleBelongsToAnotherArtist", () => ({
   handleBelongsToAnotherArtist: m.belongs,
@@ -169,3 +172,40 @@ describe("adoptHandlesFromOwnPage", () => {
     });
   });
 });
+
+it.each(["catalog", "ownership"])(
+  "does not write a hub handle after %s verification exhausts the budget",
+  async phase => {
+    let now = 1000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      m.resolve.mockResolvedValueOnce([
+        { siteName: "bandcamp", id: "dupes" },
+        { siteName: "instagram", id: "dupesmusic" },
+      ]);
+      if (phase === "catalog")
+        m.catalog.mockImplementationOnce(async () => {
+          now = 3000;
+        });
+      else
+        m.belongs.mockImplementationOnce(async () => {
+          now = 3000;
+          return false;
+        });
+      expect(
+        await adoptHandlesFromOwnPage(
+          "a1",
+          [],
+          { name: "Dupes", bandcamp: "dupes" },
+          "Dupes",
+          undefined,
+          undefined,
+          searchRun({ deadline: 2000 }),
+        ),
+      ).toEqual({ adopted: 0, handles: new Set() });
+      expect(m.writeArtistLink).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);

@@ -84,6 +84,7 @@ export async function runSourceSearch(
     const relevance = await judgeCandidates(anchor, read);
 
     for (const candidate of read) {
+      if (outOfBudget(run, "candidate filing")) break;
       if ((await fileCandidate(run, candidate, relevance.get(candidate.result.url))) === "stop")
         break;
     }

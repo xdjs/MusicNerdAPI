@@ -2,6 +2,8 @@ import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import { stripQuery } from "@/lib/sources/stripQuery";
 import { MAX_CORROBORATION_CHECKS } from "@/lib/vault/const";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { getReleaseArtistHandle } from "@/lib/musicLinks/getReleaseArtistHandle";
 import type { ResolvedHandle } from "@/lib/vault/types";
 
 /**
@@ -14,7 +16,11 @@ import type { ResolvedHandle } from "@/lib/vault/types";
 export async function resolveOutboundHandles(outboundLinks: string[]): Promise<ResolvedHandle[]> {
   const resolved: ResolvedHandle[] = [];
   for (const link of outboundLinks.slice(0, MAX_CORROBORATION_CHECKS)) {
-    const match = await extractArtistId(stripQuery(link)).catch(() => undefined);
+    const music = parseMusicDestination(link);
+    const match =
+      music?.kind === "release"
+        ? getReleaseArtistHandle(music)
+        : await extractArtistId(stripQuery(link)).catch(() => undefined);
     if (match?.siteName && match?.id)
       resolved.push({ siteName: match.siteName, id: normalizeHandle(String(match.id)) });
   }

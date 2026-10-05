@@ -12,6 +12,7 @@ import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
 import { resolveOutboundHandles } from "@/lib/vault/resolveOutboundHandles";
 import { sharedPrefix } from "@/lib/vault/sharedPrefix";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 
 /**
  * Adopts the account handles an artist published on their own page, which
@@ -68,6 +69,7 @@ export async function adoptHandlesFromOwnPage(
   const done = new Set<string>();
   const adoptedHandles = new Set<string>();
   for (const r of accountHandles) {
+    if (run && outOfBudget(run, "own-page handle verification")) break;
     if (anyResembles && sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN) {
       console.log(
         `[vaultWebSearch] Page mixes "${artistName}" accounts with ${r.siteName}=${r.id}; keeping only theirs`,
@@ -89,6 +91,7 @@ export async function adoptHandlesFromOwnPage(
       );
       continue;
     }
+    if (run && outOfBudget(run, "own-page handle insertion")) break;
     try {
       await writeArtistLink(artistId, r.siteName, r.id, provisional, artist);
       console.log(`[vaultWebSearch] Adopted ${r.siteName}=${r.id} from the artist's own page`);

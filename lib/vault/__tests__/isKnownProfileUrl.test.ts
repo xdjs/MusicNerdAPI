@@ -27,3 +27,13 @@ describe("isKnownProfileUrl", () => {
     expect(isKnownProfileUrl("not a url", { x: "p3t3rango" })).toBe(false);
   });
 });
+
+it.each([
+  ["bandcamp", "https://grimes.bandcamp.com/album/new-release"],
+  ["soundcloud", "https://soundcloud.com/grimes/new-release"],
+  ["audius", "https://audius.co/grimes/new-release"],
+  ["mixcloud", "https://www.mixcloud.com/grimes/new-release/"],
+  ["subvert", "https://subvert.fm/grimes/new-release"],
+])("keeps a release distinct from the known %s profile", (platform, url) => {
+  expect(isKnownProfileUrl(url, { [platform]: "grimes" })).toBe(false);
+});

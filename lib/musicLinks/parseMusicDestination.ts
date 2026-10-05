@@ -104,7 +104,9 @@ export function parseMusicDestination(raw: string): MusicDestination | null {
       profile ? handle : `${handle}${path}`,
     ];
   } else if (host === "subvert.fm") {
-    match = path.match(/^\/([a-z0-9][a-z0-9-]*)(?:\/(?:tracks\/)?([a-z0-9][a-z0-9-]*))?$/i);
+    match = path.match(
+      /^\/([a-z0-9][a-z0-9-]*)(?:\/(?:(?:tracks|releases)\/)?([a-z0-9][a-z0-9-]*))?$/i,
+    );
     if (
       !match ||
       [

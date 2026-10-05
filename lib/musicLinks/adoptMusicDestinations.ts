@@ -15,8 +15,7 @@ export async function adoptMusicDestinations(
   urls: string[],
   evidence: "identifier" | "name" | "own-page",
 ): Promise<void> {
-  if (evidence !== "identifier" && (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)))
-    return;
+  if (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)) return;
   const candidates = urls
     .map(url => parseMusicDestination(url))
     .filter(destination => destination?.kind === "artist");
@@ -27,20 +26,34 @@ export async function adoptMusicDestinations(
     held.add(candidate.id);
     ids.set(candidate.platform, held);
   }
+  const seen = new Set<string>();
   const targets = candidates
-    .filter(candidate => candidate && ids.get(candidate.platform)?.size === 1)
+    .filter(candidate => {
+      if (!candidate || ids.get(candidate.platform)?.size !== 1) return false;
+      const identity = `${candidate.platform}:${candidate.id}`;
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    })
     .map(candidate => ({ url: candidate!.url, type: "music" }));
-  for (const target of targets.slice(0, 9)) {
+  const fresh = targets.filter(
+    target => !run.existingUrls.has(normalizeLoreDiscoveryUrl(target.url)),
+  );
+  // A corroborated own page can strengthen an earlier search candidate. Revisit
+  // those only after new targets, within the same nine-fetch ceiling.
+  const revisits =
+    evidence === "own-page"
+      ? targets.filter(target => run.existingUrls.has(normalizeLoreDiscoveryUrl(target.url)))
+      : [];
+  for (const target of [...fresh, ...revisits].slice(0, 9)) {
     if (outOfBudget(run, "catalog destination verification")) return;
     const key = normalizeLoreDiscoveryUrl(target.url);
-    // The own-page pass may provide stronger evidence for a candidate the search
-    // already read. The transactional writer still preserves all saved/rejected rows.
-    if (evidence !== "own-page" && run.existingUrls.has(key)) continue;
     const page = await fetchPageContent(target.url, { timeoutMs: VERIFY_TIMEOUT_MS }).catch(
       () => null,
     );
     if (!page || page.status === null || page.status >= 400 || !page.title) continue;
-    if (evidence !== "identifier" && !titleMatchesArtist(page.title, run.artistName)) continue;
+    // Matching one MusicBrainz identifier is not proof for its other relations.
+    if (!titleMatchesArtist(page.title, run.artistName)) continue;
     if (outOfBudget(run, "catalog destination insertion")) return;
     const source = await insertVaultSource({
       artistId: run.artistId,

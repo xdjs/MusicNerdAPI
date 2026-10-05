@@ -3,8 +3,12 @@ import { goodPage, searchRun } from "@/lib/vault/__tests__/searchRun";
 
 const h = vi.hoisted(() => ({
   fetchPageContent: vi.fn(),
+  ambiguous: vi.fn(async () => false),
   judgeSourceRelevance: vi.fn(),
   insertVaultSource: vi.fn(async (row: { url: string }) => ({ id: row.url, url: row.url })),
+}));
+vi.mock("@/lib/identity/nameIsAmbiguousInDirectory", () => ({
+  nameIsAmbiguousInDirectory: h.ambiguous,
 }));
 vi.mock("@/lib/pages/fetchPageContent", () => ({ fetchPageContent: h.fetchPageContent }));
 vi.mock("@/lib/relevance/judgeSourceRelevance", () => ({
@@ -88,4 +92,21 @@ describe("followIndexLinks", () => {
       followIndexLinks(searchRun({ indexLinks, requireComplete: true }), anchor),
     ).rejects.toThrow("source database unavailable");
   });
+});
+
+it("does not insert a followed catalog page after its identity check exhausts the budget", async () => {
+  const url = "https://www.beatport.com/artist/grimes/123";
+  let now = 1000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    h.ambiguous.mockImplementationOnce(async () => {
+      now = 3000;
+      return false;
+    });
+    h.judgeSourceRelevance.mockImplementationOnce(affirm([url]));
+    await followIndexLinks(searchRun({ indexLinks: new Set([url]), deadline: 2000 }), anchor);
+    expect(h.insertVaultSource).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+  }
 });

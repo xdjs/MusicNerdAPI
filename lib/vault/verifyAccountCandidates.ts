@@ -9,6 +9,7 @@ import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { rankAccountCandidates } from "@/lib/vault/rankAccountCandidates";
 import type { SearchRun } from "@/lib/vault/types";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
+import { outOfBudget } from "@/lib/vault/outOfBudget";
 
 /**
  * Verifies the account pages the search returned. These platforms serve a bot
@@ -22,7 +23,7 @@ import { writeArtistLink } from "@/lib/vault/writeArtistLink";
  * @returns Nothing.
  */
 export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
-  if (run.accountCandidates.length === 0) return;
+  if (run.accountCandidates.length === 0 || outOfBudget(run, "account verification")) return;
   try {
     if (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)) {
       console.log(
@@ -36,6 +37,7 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
       0,
       MAX_ACCOUNT_CHECKS,
     )) {
+      if (outOfBudget(run, "account verification")) return;
       if (done.has(cand.siteName)) continue;
       if (
         current &&
@@ -55,6 +57,7 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
         continue;
       }
       const identity = await accountPageConfirms(cand, run.artistName);
+      if (outOfBudget(run, "verified-account insertion")) return;
       if (!identity) continue;
       try {
         await writeArtistLink(
@@ -74,6 +77,8 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
       }
     }
   } catch (e) {
+    // Enrichment errors stay optional; a durable run must still report an exhausted budget.
+    if (outOfBudget(run, "account verification")) return;
     console.error("[vaultWebSearch] Account verification pass failed:", e);
   }
 }

@@ -73,6 +73,7 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
       (await nameIsAmbiguousInDirectory(run.artistId, run.artistName))
     )
       continue;
+    if (outOfBudget(run, "followed-source insertion")) break;
     try {
       const source = await insertVaultSource({
         artistId: run.artistId,

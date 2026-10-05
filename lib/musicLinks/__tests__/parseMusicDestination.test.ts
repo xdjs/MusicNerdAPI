@@ -41,6 +41,12 @@ describe("parseMusicDestination", () => {
     ],
     ["https://www.subvert.fm/pete-rango", "subvert", "artist", "pete-rango"],
     [
+      "https://subvert.fm/dutchyyy/releases/unfinished-hugs",
+      "subvert",
+      "release",
+      "dutchyyy/releases/unfinished-hugs",
+    ],
+    [
       "https://subvert.fm/megadepth/the-embryology-of-human-institutions",
       "subvert",
       "release",
@@ -142,6 +148,7 @@ describe("parseMusicDestination", () => {
     "https://subvert.fm/pages/privacy-policy",
     "https://subvert.fm/artist/settings",
     "https://subvert.fm/artist/tracks",
+    "https://subvert.fm/artist/releases",
     "https://release.supercollector.xyz/artist",
     "https://release.supercollector.xyz/about",
     "https://supercollector.xyz/",

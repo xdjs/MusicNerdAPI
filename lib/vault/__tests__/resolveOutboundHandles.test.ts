@@ -30,3 +30,27 @@ describe("resolveOutboundHandles", () => {
     expect(extractArtistId).toHaveBeenCalledTimes(25);
   });
 });
+
+it("never turns a release into a profile through a loose legacy URL mapping", async () => {
+  extractArtistId
+    .mockReset()
+    .mockResolvedValue({ siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" });
+  expect(
+    await resolveOutboundHandles(["https://open.spotify.com/album/3DmaZbBPnKSGnxYRpHobss"]),
+  ).toEqual([]);
+  expect(extractArtistId).not.toHaveBeenCalled();
+});
+
+it("retains artist-scoped release handles as corroboration, never their release slug", async () => {
+  extractArtistId.mockReset().mockResolvedValue({ siteName: "bandcamp", id: "wrong-release-id" });
+  expect(
+    await resolveOutboundHandles([
+      "https://grimes.bandcamp.com/album/new-release",
+      "https://soundcloud.com/grimes/sets/new-release",
+    ]),
+  ).toEqual([
+    { siteName: "bandcamp", id: "grimes" },
+    { siteName: "soundcloud", id: "grimes" },
+  ]);
+  expect(extractArtistId).not.toHaveBeenCalled();
+});

@@ -1,6 +1,7 @@
 import { adoptMusicDestinations } from "../adoptMusicDestinations";
 import { beforeEach, expect, it, vi } from "vitest";
 import { searchRun } from "@/lib/vault/__tests__/searchRun";
+import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 const m = vi.hoisted(() => ({ fetch: vi.fn(), insert: vi.fn(), ambiguous: vi.fn() }));
 vi.mock("@/lib/pages/fetchPageContent", () => ({ fetchPageContent: m.fetch }));
 vi.mock("@/lib/vault/insertVaultSource", () => ({ insertVaultSource: m.insert }));
@@ -64,4 +65,54 @@ it("propagates failed writes for durable jobs instead of silently losing the can
   await expect(
     adoptMusicDestinations(searchRun({ requireComplete: true }), [apple], "identifier"),
   ).rejects.toThrow("write failed");
+});
+
+it("validates each catalog relation even when MusicBrainz matched a trusted identifier", async () => {
+  m.fetch.mockResolvedValueOnce({
+    status: 200,
+    title: "Someone Else",
+    extractedText: "Their catalog",
+  });
+  await adoptMusicDestinations(searchRun(), [apple, beatport], "identifier");
+  expect(m.insert.mock.calls.map(([data]) => data.url)).toEqual([beatport]);
+  m.insert.mockClear();
+  m.ambiguous.mockResolvedValueOnce(true);
+  await adoptMusicDestinations(searchRun(), [apple], "identifier");
+  expect(m.insert).not.toHaveBeenCalled();
+});
+
+const catalog = [
+  apple,
+  beatport,
+  "https://open.spotify.com/artist/3DmaZbBPnKSGnxYRpHobss",
+  "https://deezer.com/artist/123",
+  "https://tidal.com/artist/123",
+  "https://open.qobuz.com/artist/123",
+  "https://music.amazon.com/artists/B0012345AB",
+  "https://grimes.bandcamp.com",
+  "https://subvert.fm/grimes",
+  "https://soundcloud.com/grimes",
+];
+
+it.each(["identifier", "own-page"] as const)(
+  "checks a new tenth relation before existing targets (%s)",
+  async evidence => {
+    const run = searchRun({
+      existingUrls: new Set(catalog.slice(0, 9).map(normalizeLoreDiscoveryUrl)),
+    });
+    await adoptMusicDestinations(run, catalog, evidence);
+    expect(m.fetch.mock.calls[0][0]).toBe(catalog[9]);
+    expect(m.fetch.mock.calls.length).toBeLessThanOrEqual(9);
+    expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({ url: catalog[9] }));
+  },
+);
+
+it("counts unique destinations rather than duplicate relation URLs toward the fetch cap", async () => {
+  await adoptMusicDestinations(searchRun(), [...Array(9).fill(apple), beatport], "identifier");
+  expect(m.fetch.mock.calls.map(([url]) => url)).toEqual([apple, beatport]);
+});
+
+it("retains the nine-fetch ceiling for new destinations", async () => {
+  await adoptMusicDestinations(searchRun(), catalog, "identifier");
+  expect(m.fetch).toHaveBeenCalledTimes(9);
 });

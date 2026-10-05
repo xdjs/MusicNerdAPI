@@ -1,4 +1,6 @@
 import { adoptMusicDestinations } from "@/lib/musicLinks/adoptMusicDestinations";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { getReleaseArtistHandle } from "@/lib/musicLinks/getReleaseArtistHandle";
 import type { SearchRun } from "@/lib/vault/types";
 import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
@@ -52,7 +54,11 @@ export async function adoptFromMusicBrainz(
       );
     for (const url of found.urls) {
       if (run && outOfBudget(run, "MusicBrainz handle verification")) break;
-      const match = await extractArtistId(stripQuery(url)).catch(() => undefined);
+      const music = parseMusicDestination(url);
+      const match =
+        music?.kind === "release"
+          ? getReleaseArtistHandle(music)
+          : await extractArtistId(stripQuery(url)).catch(() => undefined);
       if (!match?.siteName || !match?.id) continue;
       if (!ACCOUNT_PLATFORMS.has(match.siteName) && !REFERENCE_PLATFORMS.has(match.siteName))
         continue;

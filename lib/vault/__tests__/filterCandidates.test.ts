@@ -28,3 +28,21 @@ describe("filterCandidates", () => {
     expect(run.existingUrls.has("example.com/new")).toBe(true);
   });
 });
+
+it("retains new releases while keeping rejected releases and known profiles filtered", () => {
+  const run = searchRun({
+    artist: { bandcamp: "grimes" },
+    existingUrls: new Set(["grimes.bandcamp.com/album/rejected"]),
+  });
+  const results = filterCandidates(
+    run,
+    [
+      hit("https://grimes.bandcamp.com/"),
+      hit("https://grimes.bandcamp.com/album/new"),
+      hit("https://grimes.bandcamp.com/album/rejected"),
+    ],
+    new Set(["grimes.bandcamp.com/album/rejected"]),
+  );
+  expect(results.map(r => r.url)).toEqual(["https://grimes.bandcamp.com/album/new"]);
+  expect(run.counts.rejectedSkips).toBe(1);
+});

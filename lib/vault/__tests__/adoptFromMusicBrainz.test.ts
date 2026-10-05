@@ -166,3 +166,27 @@ describe("adoptFromMusicBrainz", () => {
     });
   });
 });
+
+it("never adopts a release URL as an artist ID through a loose legacy mapping", async () => {
+  m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+    matchedBy: "identifier",
+    urls: ["https://open.spotify.com/album/3DmaZbBPnKSGnxYRpHobss"],
+    homepage: null,
+  });
+  m.extractArtistId.mockResolvedValue({ siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" });
+  const result = await adoptFromMusicBrainz("a1", "Grimes", {});
+  expect(result.handles.size).toBe(0);
+  expect(m.writeArtistLink).not.toHaveBeenCalled();
+});
+
+it("retains the Bandcamp artist handle from a curated artist-scoped album link", async () => {
+  m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+    matchedBy: "identifier",
+    urls: ["https://grimes.bandcamp.com/album/new-release"],
+    homepage: null,
+  });
+  const artist = {};
+  expect((await adoptFromMusicBrainz("a1", "Grimes", artist)).handles).toEqual(new Set(["grimes"]));
+  expect(m.writeArtistLink).toHaveBeenCalledWith("a1", "bandcamp", "grimes", undefined, artist);
+  expect(m.extractArtistId).not.toHaveBeenCalled();
+});

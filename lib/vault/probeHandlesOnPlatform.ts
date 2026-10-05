@@ -32,7 +32,9 @@ export async function probeHandlesOnPlatform(
     if (isReservedHandle(platform, handle)) continue;
     if (await handleBelongsToAnotherArtist(artistId, platform, handle)) continue;
     if (await contradictsScrapedPosts(artistId, platform, handle)) continue;
+    if (Date.now() > deadline) return { resolved, scannedAll: false };
     const preview = await fetchLinkPreview(pattern.replace("%@", handle)).catch(() => null);
+    if (Date.now() > deadline) return { resolved, scannedAll: false };
     if (preview?.title && titleMatchesArtist(preview.title, artistName)) resolved.push(handle);
   }
   return { resolved, scannedAll: true };
