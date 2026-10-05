@@ -1,4 +1,4 @@
-import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
 import type { RelevanceVerdict } from "@/lib/relevance/types";
@@ -28,11 +28,10 @@ export async function saveCandidateSource(
   { result, page }: ReadCandidate,
   verdict: RelevanceVerdict | undefined,
 ): Promise<"stop" | void> {
-  const destination = parseMusicDestination(result.url);
-  const spoken =
-    result.type === "interview" &&
-    ["soundcloud", "mixcloud", "audius"].includes(destination?.platform ?? "");
-  const music = !page.podcastEpisode && !spoken && destination;
+  const music = isMusicSource({
+    ...result,
+    podcastEpisodeKey: page.podcastEpisode?.podcastEpisodeKey,
+  });
   if (
     music &&
     (verdict !== "about-artist" || (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)))

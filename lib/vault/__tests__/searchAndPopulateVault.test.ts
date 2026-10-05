@@ -1638,4 +1638,38 @@ describe("searchAndPopulateVault", () => {
     ]);
     expect(mockSetLink).not.toHaveBeenCalled();
   });
+  it.each([
+    "https://soundcloud.com/interview-show/grimes-chat",
+    "https://www.mixcloud.com/interview-show/grimes-chat/",
+    "https://audius.co/interview_show/grimes-chat",
+  ])("keeps a spoken item as audio through ordinary search: %s", async url => {
+    mockWebSearch.mockResolvedValue([hit(url, "Grimes interview about her new record")]);
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) => new Map(candidates.map((c: Cand) => [c.url, "about-artist"])),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ url, type: "audio" }));
+  });
+
+  it("keeps an index-followed spoken item as audio", async () => {
+    const index = "https://example.com/artists/grimes";
+    const spoken = "https://www.mixcloud.com/show/grimes-discussion/";
+    mockWebSearch.mockResolvedValue([hit(index)]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      links: url === index ? [spoken] : [],
+    }));
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(
+          candidates.map((c: Cand) => [c.url, c.url === index ? "lists-artist" : "about-artist"]),
+        ),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1");
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ url: spoken, type: "audio" }),
+    );
+  });
 });

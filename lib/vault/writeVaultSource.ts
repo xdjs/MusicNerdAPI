@@ -1,4 +1,4 @@
-import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 import { canSaveMusicDestination } from "@/lib/musicLinks/canSaveMusicDestination";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
@@ -28,10 +28,6 @@ export async function writeVaultSource(
   const origin = context?.sourceOrigin ?? (userId ? "submission" : "unknown");
   if (origin === "research" && !(await canSaveMusicDestination(writer, data.artistId, url)))
     return undefined;
-  const destination = parseMusicDestination(url);
-  const spoken =
-    data.type === "interview" &&
-    ["soundcloud", "mixcloud", "audius"].includes(destination?.platform ?? "");
   let activityId = context?.activityId ?? null;
   const [source] = await writer
     .insert(artistVaultSources)
@@ -42,7 +38,7 @@ export async function writeVaultSource(
       url,
       title: data.title,
       snippet: data.snippet,
-      type: !data.podcastEpisodeKey && !spoken && destination ? "music" : (data.type ?? "article"),
+      type: isMusicSource({ ...data, url }) ? "music" : (data.type ?? "article"),
       status: data.status ?? "pending",
       extractedText: data.extractedText,
       ogImage: data.ogImage,

@@ -152,6 +152,26 @@ describe("catalog source persistence with real PostgreSQL and application role",
     });
     expect(await save()).toBeUndefined();
   });
+  it("preserves spoken audio through the actual writer and supports explicitly classified music", async () => {
+    const spoken = "https://soundcloud.com/pete-rango/a-conversation";
+    const music = "https://soundcloud.com/pete-rango/rush";
+    await withArtistOperation(
+      artistId,
+      { expectedClaimId: claimId, sourceOrigin: "research" },
+      async () => {
+        await insertVaultSource({
+          artistId,
+          url: spoken,
+          type: "audio",
+          title: "Pete Rango interview",
+        });
+        await insertVaultSource({ artistId, url: music, type: "music", title: "rush" });
+      },
+    );
+    const rows = await database.query.artistVaultSources.findMany();
+    expect(rows.find(row => row.url === spoken)?.type).toBe("audio");
+    expect(rows.find(row => row.url === music)?.type).toBe("music");
+  });
   it("keeps releases distinct from artist identities", async () => {
     await database
       .insert(schema.artistIdMappings)
