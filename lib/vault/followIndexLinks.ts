@@ -5,9 +5,11 @@ import type { ArtistAnchor } from "@/lib/relevance/types";
 import { isBlockedSourceHost } from "@/lib/sources/isBlockedSourceHost";
 import { isExcludedLoreDiscoveryUrl } from "@/lib/sources/isExcludedLoreDiscoveryUrl";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
+import { getFetchedSourceUrl } from "@/lib/sources/getFetchedSourceUrl";
+import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
+import { isUnsafeUrl } from "@/lib/pages/isUnsafeUrl";
 import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
-import { stripQuery } from "@/lib/sources/stripQuery";
 import { MAX_INDEX_FOLLOWS, VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
@@ -27,25 +29,34 @@ import { recordSavedSource } from "@/lib/vault/recordSavedSource";
  */
 export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Promise<void> {
   const toFollow = [...run.indexLinks]
-    .filter(u => !run.existingUrls.has(stripQuery(u)) && !isExcludedLoreDiscoveryUrl(u))
+    .filter(
+      u =>
+        !run.existingUrls.has(normalizeLoreDiscoveryUrl(u)) &&
+        !isExcludedLoreDiscoveryUrl(u) &&
+        !isUnsafeUrl(u),
+    )
     .slice(0, MAX_INDEX_FOLLOWS);
   if (toFollow.length === 0 || outOfBudget(run, "index following")) return;
   console.log(`[vaultWebSearch] Following ${toFollow.length} link(s) out of index page(s)`);
   const followed = await Promise.all(
     toFollow.map(async url => {
       try {
-        return { url, page: await fetchPageContent(url, { timeoutMs: VERIFY_TIMEOUT_MS }) };
+        const page = await fetchPageContent(url, { timeoutMs: VERIFY_TIMEOUT_MS });
+        const finalUrl = getFetchedSourceUrl(url, page);
+        return finalUrl ? { url: finalUrl, page } : null;
       } catch {
         return null;
       }
     }),
   );
-  const readable = followed.filter(
-    (f): f is { url: string; page: PageContent } =>
-      !!f &&
-      !isExcludedLoreDiscoveryUrl(f.page.resolvedUrl ?? "") &&
-      (f.page.fullText?.length ?? 0) > 0,
-  );
+  const seen = new Set(run.existingUrls);
+  const readable = followed.filter((f): f is { url: string; page: PageContent } => {
+    if (!f || (f.page.fullText?.length ?? 0) === 0) return false;
+    const key = normalizeLoreDiscoveryUrl(f.url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (readable.length === 0 || outOfBudget(run, "followed-page judging")) return;
   const verdicts = await judgeSourceRelevance(
     anchor,
@@ -89,6 +100,7 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
         publishedAt: page.publishedAt ?? null,
       });
       if (source) {
+        run.existingUrls.add(normalizeLoreDiscoveryUrl(url));
         recordSavedSource(run, source);
         console.log(`[vaultWebSearch] Recovered from index: ${page.title?.slice(0, 70)}`);
       }

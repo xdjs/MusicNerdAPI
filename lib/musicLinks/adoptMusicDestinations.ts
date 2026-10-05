@@ -2,6 +2,7 @@ import { catalogTitleMatchesArtist } from "@/lib/musicLinks/catalogTitleMatchesA
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { fetchPageContent } from "@/lib/pages/fetchPageContent";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
+import { getFetchedSourceUrl } from "@/lib/sources/getFetchedSourceUrl";
 import { VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { outOfBudget } from "@/lib/vault/outOfBudget";
@@ -35,7 +36,12 @@ export async function adoptMusicDestinations(
       seen.add(identity);
       return true;
     })
-    .map(candidate => ({ url: candidate!.url, platform: candidate!.platform, type: "music" }));
+    .map(candidate => ({
+      url: candidate!.url,
+      platform: candidate!.platform,
+      id: candidate!.id,
+      type: "music",
+    }));
   const fresh = targets.filter(
     target => !run.existingUrls.has(normalizeLoreDiscoveryUrl(target.url)),
   );
@@ -52,19 +58,28 @@ export async function adoptMusicDestinations(
       () => null,
     );
     if (!page || page.status === null || page.status >= 400 || !page.title) continue;
+    const finalUrl = getFetchedSourceUrl(target.url, page);
+    const finalDestination = finalUrl ? parseMusicDestination(finalUrl) : null;
+    if (
+      finalDestination?.kind !== "artist" ||
+      finalDestination.platform !== target.platform ||
+      finalDestination.id !== target.id
+    )
+      continue;
     // Matching one MusicBrainz identifier is not proof for its other relations.
     if (!catalogTitleMatchesArtist(page.title, run.artistName, target.platform)) continue;
     if (outOfBudget(run, "catalog destination insertion")) return;
     try {
       const source = await insertVaultSource({
         artistId: run.artistId,
-        url: target.url,
+        url: finalUrl!,
         title: page.title,
         snippet: page.snippet,
         type: target.type,
         status: "pending",
         extractedText: page.extractedText,
         ogImage: page.ogImage,
+        ...page.podcastEpisode,
       });
       run.existingUrls.add(key);
       if (source) recordSavedSource(run, source);

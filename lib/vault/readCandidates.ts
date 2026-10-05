@@ -1,5 +1,7 @@
 import { fetchPageContent } from "@/lib/pages/fetchPageContent";
-import { isExcludedLoreDiscoveryUrl } from "@/lib/sources/isExcludedLoreDiscoveryUrl";
+import { getFetchedSourceUrl } from "@/lib/sources/getFetchedSourceUrl";
+import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import type { DiscoveryResult, ReadCandidate } from "@/lib/vault/types";
 
@@ -14,10 +16,24 @@ import type { DiscoveryResult, ReadCandidate } from "@/lib/vault/types";
  */
 export async function readCandidates(candidates: DiscoveryResult[]): Promise<ReadCandidate[]> {
   const read = await Promise.all(
-    candidates.map(async result => ({
-      result,
-      page: await fetchPageContent(result.url, { timeoutMs: VERIFY_TIMEOUT_MS }),
-    })),
+    candidates.map(async (result): Promise<ReadCandidate | null> => {
+      const page = await fetchPageContent(result.url, { timeoutMs: VERIFY_TIMEOUT_MS });
+      const url = getFetchedSourceUrl(result.url, page);
+      if (!url) return null;
+      if (url === result.url) return { result, page };
+      return {
+        result: {
+          ...result,
+          url,
+          type:
+            result.type === "website" && !parseMusicDestination(url)
+              ? "website"
+              : inferTypeFromUrl(url),
+        },
+        page,
+        discoveredUrl: result.url,
+      };
+    }),
   );
-  return read.filter(({ page }) => !isExcludedLoreDiscoveryUrl(page.resolvedUrl ?? ""));
+  return read.filter((candidate): candidate is ReadCandidate => candidate !== null);
 }

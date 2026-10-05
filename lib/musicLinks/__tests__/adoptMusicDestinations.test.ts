@@ -17,6 +17,25 @@ beforeEach(() => {
   m.insert.mockReset().mockImplementation(async data => ({ id: data.url, ...data }));
   m.ambiguous.mockReset().mockResolvedValue(false);
 });
+it("does not suppress a distinct case-sensitive catalog ID behind a rejected URL", async () => {
+  const upper = "https://open.spotify.com/artist/AAAAAAAAAAAAAAAAAAAAAA";
+  const lower = "https://open.spotify.com/artist/aaaaaaaaaaaaaaaaaaaaaa";
+  const run = searchRun({ existingUrls: new Set([normalizeLoreDiscoveryUrl(upper)]) });
+  await adoptMusicDestinations(run, [lower], "identifier");
+  expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({ url: lower }));
+});
+it.each([
+  "https://music.apple.com/artist/someone-else/999",
+  "http://127.0.0.1/private",
+  "https://example.com/grimes",
+])(
+  "rejects a catalog redirect that no longer proves the requested identity: %s",
+  async resolvedUrl => {
+    m.fetch.mockResolvedValue({ status: 200, title: "Grimes", resolvedUrl });
+    await adoptMusicDestinations(searchRun(), [apple], "identifier");
+    expect(m.insert).not.toHaveBeenCalled();
+  },
+);
 it("retains MusicBrainz catalog URLs as reviewable original URLs", async () => {
   const run = searchRun();
   await adoptMusicDestinations(run, [apple, beatport], "identifier");
@@ -45,7 +64,7 @@ it("does not adopt a namesake, dead page, non-artist catalog page or ambiguous p
   expect(m.insert).not.toHaveBeenCalled();
 });
 it("preserves rejected/existing URLs and source-write skips, and checks the deadline after the fetch", async () => {
-  const run = searchRun({ existingUrls: new Set([apple.replace("https://", "")]) });
+  const run = searchRun({ existingUrls: new Set([normalizeLoreDiscoveryUrl(apple)]) });
   await adoptMusicDestinations(run, [apple], "identifier");
   expect(m.fetch).not.toHaveBeenCalled();
   m.insert.mockResolvedValueOnce(undefined);

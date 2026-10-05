@@ -15,7 +15,17 @@ import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
  * @returns True when the url is one of the artist's stored profiles.
  */
 export function isKnownProfileUrl(url: string, artist: Record<string, unknown>): boolean {
-  if (parseMusicDestination(url)?.kind === "release") return false;
+  const destination = parseMusicDestination(url);
+  if (destination?.kind === "release") return false;
+  if (destination?.platform === "spotify") {
+    const held = artist.spotify;
+    if (typeof held !== "string") return false;
+    const parsed = parseMusicDestination(held);
+    return (
+      destination.id ===
+      (parsed?.platform === "spotify" && parsed.kind === "artist" ? parsed.id : held.trim())
+    );
+  }
   let host: string;
   try {
     host = new URL(url).hostname.toLowerCase();

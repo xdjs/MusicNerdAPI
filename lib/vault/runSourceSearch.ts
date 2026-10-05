@@ -1,4 +1,5 @@
 import { adoptMappedMusicDestinations } from "@/lib/musicLinks/adoptMappedMusicDestinations";
+import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { adoptFromHubs } from "@/lib/vault/adoptFromHubs";
 import { adoptFromMusicBrainz } from "@/lib/vault/adoptFromMusicBrainz";
@@ -78,7 +79,13 @@ export async function runSourceSearch(
     const candidates = filterCandidates(run, await resolveCandidateUrls(results), rejectedUrls);
 
     if (outOfBudget(run, "page verification")) return run.saved;
-    const read = await readCandidates(candidates);
+    const read = (await readCandidates(candidates)).filter(
+      candidate =>
+        !candidate.discoveredUrl ||
+        normalizeLoreDiscoveryUrl(candidate.discoveredUrl) ===
+          normalizeLoreDiscoveryUrl(candidate.result.url) ||
+        filterCandidates(run, [candidate.result], rejectedUrls).length > 0,
+    );
     const anchor = await buildArtistAnchor(run.artist, artistName);
     if (outOfBudget(run, "relevance judging")) return run.saved;
     const relevance = await judgeCandidates(anchor, read);

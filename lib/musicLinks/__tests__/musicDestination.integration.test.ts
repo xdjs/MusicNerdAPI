@@ -338,6 +338,34 @@ describe("catalog source persistence with real PostgreSQL and application role",
       expect.objectContaining({ url: show, type: "audio", status: "pending", ...podcastEpisode }),
     ]);
   });
+  it("enforces stored catalog ownership on the actual destination of an index redirect", async () => {
+    const redirect = "https://example.com/listen";
+    await database.insert(schema.artistIdMappings).values({
+      id: crypto.randomUUID(),
+      artistId,
+      platform: "apple_music",
+      platformId: "42",
+    });
+    const { fetchPageContent } = await import("@/lib/pages/fetchPageContent");
+    const { judgeSourceRelevance } = await import("@/lib/relevance/judgeSourceRelevance");
+    const { followIndexLinks } = await import("@/lib/vault/followIndexLinks");
+    vi.mocked(fetchPageContent).mockResolvedValueOnce({
+      status: 200,
+      title: "Pete Rango",
+      resolvedUrl: url,
+      fullText: "Pete Rango's artist catalog. ".repeat(30),
+      extractedText: "Pete Rango's artist catalog. ".repeat(30),
+    });
+    vi.mocked(judgeSourceRelevance).mockResolvedValueOnce(new Map([[url, "about-artist"]]));
+    const run = searchRun({ artistId, artistName: "Pete Rango", indexLinks: new Set([redirect]) });
+    await withArtistOperation(
+      artistId,
+      { expectedClaimId: claimId, sourceOrigin: "research" },
+      () => followIndexLinks(run, { name: "Pete Rango", catalog: [], identifiers: [] }),
+    );
+    expect(run.saved).toEqual([]);
+    expect(await database.query.artistVaultSources.findMany()).toEqual([]);
+  });
   it("does not treat a saved spoken show as the artist's music identity", async () => {
     await database.insert(schema.artistVaultSources).values({
       artistId,

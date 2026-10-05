@@ -12,6 +12,21 @@ vi.mock("@/lib/pages/fetchPageContent", () => ({ fetchPageContent }));
 const { readCandidates } = await import("@/lib/vault/readCandidates");
 
 describe("readCandidates", () => {
+  it("classifies the actual fetched catalog destination while retaining its discovery URL", async () => {
+    const discoveredUrl = "https://grimes.com/listen";
+    const url = "https://open.spotify.com/artist/AAAAAAAAAAAAAAAAAAAAAA";
+    fetchPageContent.mockResolvedValueOnce({ ...goodPage, resolvedUrl: url });
+    const read = await readCandidates([hit(discoveredUrl)]);
+    expect(read[0]).toMatchObject({ discoveredUrl, result: { url, type: "music" } });
+  });
+  it.each([
+    "http://127.0.0.1/private",
+    "https://user:pass@example.com/",
+    "https://www.viberate.com/artist/grimes",
+  ])("drops an unsafe or blocked final destination: %s", async resolvedUrl => {
+    fetchPageContent.mockResolvedValueOnce({ ...goodPage, resolvedUrl });
+    expect(await readCandidates([hit("https://example.com/redirect")])).toEqual([]);
+  });
   it("fetches every candidate with the verification timeout and drops LinkedIn destinations", async () => {
     const read = await readCandidates([
       hit("https://example.com/a"),

@@ -35,7 +35,7 @@ export type VaultSourceInput = {
 export type DiscoveryResult = WebSearchResult & { type: SourceType };
 
 /** A search hit and the page we fetched for it. */
-export type ReadCandidate = { result: DiscoveryResult; page: PageContent };
+export type ReadCandidate = { result: DiscoveryResult; page: PageContent; discoveredUrl?: string };
 
 /** An account page the search returned, verified after the main pass. */
 export type AccountCandidate = {
