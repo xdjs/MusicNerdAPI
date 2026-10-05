@@ -64,5 +64,13 @@ export function toSourceList(m: DocMaterial): DocSource[] {
       url: r.url,
     });
   }
+  for (const video of m.videoContexts ?? []) {
+    sources.push({
+      id: nextId++,
+      kind: "social",
+      label: "Instagram reel audio context (speaker unverified)",
+      url: video.url,
+    });
+  }
   return sources;
 }

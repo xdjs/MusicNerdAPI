@@ -7,6 +7,13 @@ const check = (raw: Record<string, unknown>, p: SocialPostRow = post()) =>
   verifyCredit(raw, new Map([[p.url, p]]), ARTIST, HANDLE);
 
 describe("verifyCredit", () => {
+  it("does not turn X/TikTok collaborator handles into Instagram links", () => {
+    const p = post({ platform: "x" });
+    expect(verifyCredit(credit(), new Map([[p.url, p]]), ARTIST, HANDLE)).toMatchObject({
+      subject: "p3t3rango",
+      isHandle: false,
+    });
+  });
   it("keeps a credit that is really in the caption", () => {
     expect(check(credit())).toMatchObject({
       subject: "p3t3rango",

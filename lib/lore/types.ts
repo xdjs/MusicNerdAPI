@@ -48,4 +48,6 @@ export type DocMaterial = {
   /** The artist in their own words, about their work and their life. */
   artistStatements: { topic: string; quote: string; url: string }[];
   socialMusicRefs: { title: string; artist: string; url: string }[];
+  /** Speech on own reels, with unknown speaker identity. */
+  videoContexts?: { url: string; text: string; postedAt: string }[];
 };

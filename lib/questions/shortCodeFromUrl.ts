@@ -8,6 +8,19 @@ import { slug } from "@/lib/questions/slug";
  * @returns The shortcode, or a slug of the url when it has none.
  */
 export function shortCodeFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    const id =
+      host === "tiktok.com"
+        ? /^\/@[^/]+\/video\/(\d+)\/?$/.exec(parsed.pathname)?.[1]
+        : ["x.com", "twitter.com"].includes(host)
+          ? /^\/[^/]+\/status\/(\d+)\/?$/.exec(parsed.pathname)?.[1]
+          : undefined;
+    if (id) return `${host === "tiktok.com" ? "tiktok" : "x"}_${id}`;
+  } catch {
+    /* Legacy arbitrary identifiers retain their existing slug. */
+  }
   const m = url.match(/\/p\/([^/]+)\/?/);
   return m ? m[1] : slug(url);
 }

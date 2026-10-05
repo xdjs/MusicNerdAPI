@@ -9,7 +9,8 @@
  */
 export function captionSystemInstruction(artistName: string, artistHandle: string): string {
   return `
-You are reading Instagram captions written by the musician ${artistName}${artistHandle ? ` (@${artistHandle})` : ""}.
+You are reading social post captions written by the musician ${artistName}${artistHandle ? ` (@${artistHandle})` : ""}.
+Each post identifies its platform and author. The handle above is their Instagram identity. Handles belong to that platform; never assume an X or TikTok handle is an Instagram identity.
 
 Report what the captions SAY. Do not infer, summarise, or add anything that is not written there.
 

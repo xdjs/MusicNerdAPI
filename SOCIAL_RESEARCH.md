@@ -1,0 +1,31 @@
+# Social research
+
+> 2026-10-05 — Pete split delivery into three phases: social ingestion first, shared API knowledge tools second, and the MusicNerdWeb interviewer integration last. This PR delivers ingestion and existing research/Lore compatibility. Interview prompts, audio-question generation and latency experiments are deferred; the private interview experiment remains separate.
+
+`social_ingest` is advanced by the existing `/api/research/advance` route and minute cron. No new endpoint, migration or browser-triggered scrape is introduced. Stored artist handles are the only profile inputs. Instagram collection remains unchanged; after it finishes (or is disconnected/already stored), the same job reads TikTok, X and selected Instagram reel audio before queuing caption extraction.
+
+| Source | Actor | Limit | Run charge cap |
+| --- | --- | --- | --- |
+| TikTok | `clockworks/tiktok-scraper` | 50 latest profile videos | $0.50 (actor minimum cap) |
+| X | `apidojo/tweet-scraper` | 50 latest own posts, excluding reposts | $0.05 |
+| Instagram audio | `apify/instagram-reel-scraper`, `includeTranscript: true` | Three own reels with captions under 160 meaningful characters, known duration at most 180 seconds | $0.50 |
+
+The Instagram feed actor remains `apify/instagram-scraper`: it returns caption/video metadata, not audio transcripts. The dedicated Reel Scraper supports audio transcription as a paid add-on. Native transcript availability and quality are not guaranteed. Unavailable or failed enrichment is recorded privately in job state; other sources and existing caption research continue. Retry status/data reads against the same saved run and dataset. Never restart a paid run after it has an id.
+
+TikTok/X items normalize into `artist_social_posts`. Wrong owners, reposts, error placeholders, malformed dates and off-platform URLs are rejected. A stored Instagram post must match the selected post id, owner and canonical shortcode before its audio transcript is attached. Raw payloads and transcripts stay server-side. All writes use the existing job/artist lock and revocation guard.
+
+Successful Instagram transcripts are stored separately in `raw._musicnerdTranscript`, with actor, run id and retrieval date. They survive a feed refresh. The Lore receives bounded transcript excerpts as explicitly labelled audio context with original post citations. Audio is not automatically attributed to the artist: lyrics, sampled speech and other speakers are not artist statements or collaborator credits. Caption extraction still verifies quotes only against captions. TikTok/X captions use the same exact-quote checks as Instagram.
+
+The extraction handoff marks newly collected audio so Lore is rebuilt even if incremental caption reading has no unread captions. Invalid job state fails before any paid run. Starting a provider run is preceded by a durable intent marker; an ambiguous lost response requires provider inspection rather than another paid start. Optional status/collection reads have four attempts against the same run/dataset.
+
+Each job checks `/v2/users/me` once and stores only `apifyAccountUsername` and `apifyAccountCheckedAt` in private job state. This verifies the runtime token owner even when Vercel marks the token sensitive. A failed check records a null username, not a successful account verification. No token, email or account payload is retained. Existing jobs may refer to datasets owned by a previous account; switching tokens does not grant access to those datasets.
+
+Existing Update Latest remains an Instagram collection-only job. TikTok/X data enrich research and Lore; this change does not add their cards or refresh controls to Latest. Existing in-flight Instagram jobs finish their saved dataset before the additional stages. A per-platform existence check prevents Instagram data from suppressing first-time TikTok/X collection. Forced research refresh repeats capped profile reads, but skips reels with saved transcripts.
+
+Provider references checked 2026-10-02: [Instagram](https://apify.com/apify/instagram-scraper), [Reels input](https://apify.com/apify/instagram-reel-scraper/input-schema), [Reels output](https://apify.com/apify/instagram-reel-scraper/output-schema), [TikTok](https://apify.com/clockworks/tiktok-scraper), [X](https://apify.com/apidojo/tweet-scraper). X documents a 50-item minimum; use 50, not a nine-post Latest limit. Apify's charge caps can stop a run before its requested item count.
+
+The active profile interview remains in MusicNerdWeb. Its tool access, audio questions, cache invalidation and answer-triggered Lore preservation belong to the later client integration. This ingestion PR makes stored posts and transcript provenance available to API research and Lore; it does not claim that the Web interviewer or every Web Lore rebuild consumes them yet. Web#1421 preserves the earlier client work for that phase; API#19 preserves the private editorial experiment. Shared API tools will be implemented independently before the interviewer switches to them.
+
+Mixed-platform engagement signals compare baselines within each platform. Existing API question helpers retain full TikTok/X ids and use accurate platform labels, because their input storage now contains multiple platforms; historical Instagram keys stay unchanged. These are compatibility fixes, not a new question strategy. Collection does not add social cards to Latest.
+
+Acceptance for this phase is provider identity, bounded collection, source attribution, stored captions/transcripts, dataset resume, refresh preservation and the existing extraction/Lore handoff. Active interview quality and live model timing are separate acceptance criteria for the final interviewer phase. The existing API question-generation model, prompts, thinking settings and deadline stay at their main-branch behavior.

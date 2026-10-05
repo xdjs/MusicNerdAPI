@@ -43,6 +43,13 @@ export async function runCaptionExtract(job: ResearchJob, deadline: number): Pro
   const incremental = await resolveExtractionMode(job);
   const toRead = await captionsToRead(job, posts, incremental);
   if (incremental && toRead.length === 0) {
+    if (job.state.rebuildForVideoContext === true) {
+      return rebuildAfterCaptions(
+        job,
+        { extraction: { credits: [], statements: [] }, nextBatch: 0, totalBatches: 0, done: true },
+        deadline,
+      );
+    }
     await completeResearchJob(job.id);
     return { progress: "nothing new to read", done: true };
   }

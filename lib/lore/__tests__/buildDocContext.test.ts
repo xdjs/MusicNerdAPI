@@ -49,6 +49,33 @@ beforeEach(() => {
 });
 
 describe("buildDocContext", () => {
+  it("cites audio by URL and keeps unknown speakers separate from artist statements", async () => {
+    m.gatherDocMaterial.mockResolvedValue(
+      material({
+        videoContexts: [
+          {
+            url: "https://instagram.com/p/reel/",
+            text: "This studio was built in a barn.",
+            postedAt: "2026-10-01",
+          },
+        ],
+      }),
+    );
+    const result = await buildDocContext("a1");
+    expect(result.sources.at(-1)).toMatchObject({
+      kind: "social",
+      label: "Instagram reel audio context (speaker unverified)",
+      url: "https://instagram.com/p/reel/",
+    });
+    expect(result.context).toContain('Audio transcript: "This studio was built in a barn."');
+    expect(result.context).toContain("The uploader is not necessarily the speaker");
+    const preset = result.sources.filter(
+      s => s.label !== "Instagram reel audio context (speaker unverified)",
+    );
+    expect((await buildDocContext("a1", preset)).context).not.toContain(
+      "This studio was built in a barn.",
+    );
+  });
   it("lays out links, catalog, numbered sources, answers, social signals and the manifest", async () => {
     const { artistName, context, sources } = await buildDocContext("a1");
     expect(artistName).toBe("Nova Reyes");

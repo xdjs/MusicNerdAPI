@@ -11,7 +11,10 @@ import type { StandoutPost } from "@/lib/socialSignals/types";
 export function deriveStandoutPosts(posts: SocialPostRow[]): StandoutPost[] {
   const own = posts.filter(p => p.isOwnPost);
   const byUrl = new Map<string, StandoutPost>();
-  scanStandouts(own, "likes", p => p.likeCount, byUrl);
-  scanStandouts(own, "plays", p => p.playCount, byUrl);
+  for (const platform of new Set(own.map(p => p.platform))) {
+    const samePlatform = own.filter(p => p.platform === platform);
+    scanStandouts(samePlatform, "likes", p => p.likeCount, byUrl);
+    scanStandouts(samePlatform, "plays", p => p.playCount, byUrl);
+  }
   return [...byUrl.values()].sort((a, b) => b.multiple - a.multiple);
 }

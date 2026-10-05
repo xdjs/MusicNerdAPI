@@ -36,13 +36,16 @@ export async function upsertSocialPost(row: SocialPostInsert, writer: WriteDb): 
         coauthors: row.coauthors,
         musicTitle: row.musicTitle,
         musicArtist: row.musicArtist,
-        raw: sql`CASE
+        raw: sql`(CASE
           WHEN ${raw}::jsonb->'_musicnerdThumbnail'->>'version' = '1' THEN ${raw}::jsonb
           WHEN ${artistSocialPosts.raw}->'_musicnerdThumbnail'->>'version' = '1'
             THEN ${raw}::jsonb || jsonb_build_object(
               'displayUrl', ${artistSocialPosts.raw}->'_musicnerdThumbnail'->>'url',
               '_musicnerdThumbnail', ${artistSocialPosts.raw}->'_musicnerdThumbnail')
-          ELSE ${raw}::jsonb END`,
+          ELSE ${raw}::jsonb END) || CASE
+          WHEN ${artistSocialPosts.raw}->'_musicnerdTranscript'->>'version' = '1'
+            THEN jsonb_build_object('_musicnerdTranscript', ${artistSocialPosts.raw}->'_musicnerdTranscript')
+          ELSE '{}'::jsonb END`,
       },
     });
 }

@@ -3,9 +3,8 @@ import { collectInstagramScrape } from "@/lib/instagram/collectInstagramScrape";
 import { hasSocialPosts } from "@/lib/instagram/hasSocialPosts";
 import { instagramHandleFor } from "@/lib/instagram/instagramHandleFor";
 import { startInstagramScrape } from "@/lib/instagram/startInstagramScrape";
-import { completeResearchJob } from "@/lib/research/completeResearchJob";
 import { COLLECTION_RESERVE_MS } from "@/lib/research/const";
-import { enqueueResearchJob } from "@/lib/research/enqueueResearchJob";
+import { finishSocialIngest } from "@/lib/research/finishSocialIngest";
 import { failResearchJob } from "@/lib/research/failResearchJob";
 import { saveJobProgress } from "@/lib/research/saveJobProgress";
 import { saveJobState } from "@/lib/research/saveJobState";
@@ -16,13 +15,18 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  * as many slices as it takes. A scrape runs one to five minutes and a slice
  * has sixty seconds, so the run is started and its id saved before anything
  * else can go wrong; later slices poll it, then store the posts nine at a time.
- * When the feed is stored, a `caption_extract` job is queued.
+ * After Instagram, the same durable job reads connected TikTok/X profiles
+ * and selected reel audio before queuing `caption_extract`.
  *
  * @param job - The claimed job.
  * @param deadline - When this slice must stop, in epoch milliseconds.
  * @returns What the slice did.
  */
 export async function runIngest(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
+  if (!job.state || typeof job.state !== "object" || Array.isArray(job.state))
+    throw new Error("invalid social research state");
+  if (job.state.instagramFinished === true)
+    return finishSocialIngest(job, deadline, "social research finished");
   const force = job.state.force === true;
   const runId = typeof job.state.apifyRunId === "string" ? job.state.apifyRunId : null;
   const readyDatasetId =
@@ -37,14 +41,11 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     return { progress: "handle lookup failed, will retry", done: false };
   }
   if (!handle) {
-    await completeResearchJob(job.id);
-    return { progress: "no instagram handle", done: true };
+    return finishSocialIngest(job, deadline, "no instagram handle");
   }
 
   if (!force && !runId && (await hasSocialPosts(job.artistId))) {
-    await completeResearchJob(job.id);
-    await enqueueResearchJob(job.artistId, "caption_extract", { parentJobId: job.id });
-    return { progress: "posts already present", done: true };
+    return finishSocialIngest(job, deadline, "posts already present");
   }
 
   if (!runId) {
@@ -106,10 +107,6 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
       waiting: true,
     };
   }
-  await completeResearchJob(job.id);
-  await enqueueResearchJob(job.artistId, "caption_extract", {
-    parentJobId: job.id,
-    state: force ? { incremental: true } : {},
-  });
-  return { progress: `ingested ${job.cursor + result.ingested} post(s)`, done: true };
+  job.state = collectionState;
+  return finishSocialIngest(job, deadline, `ingested ${job.cursor + result.ingested} post(s)`);
 }

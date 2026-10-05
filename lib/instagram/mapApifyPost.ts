@@ -35,6 +35,7 @@ export function mapApifyPost(
   const storedRaw: Record<string, unknown> = { ...raw };
   // Never trust a scraper-provided value as evidence of a retained thumbnail.
   delete storedRaw._musicnerdThumbnail;
+  delete storedRaw._musicnerdTranscript;
   return {
     artistId,
     platform: "instagram",

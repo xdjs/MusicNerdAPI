@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { artistSocialPosts } from "@/lib/db/schema";
 import type { SocialPostRow } from "@/lib/instagram/types";
+import { storedReelTranscript } from "@/lib/social/storedReelTranscript";
 
 /**
  * The artist's stored posts, or null when the read failed. A failed read is
@@ -32,6 +33,7 @@ export async function getSocialPostsOrNull(artistId: string): Promise<SocialPost
       coauthors: r.coauthors ?? [],
       musicTitle: r.musicTitle,
       musicArtist: r.musicArtist,
+      ...(storedReelTranscript(r.raw) ? { transcript: storedReelTranscript(r.raw)! } : {}),
     }));
   } catch (e) {
     console.error("[getSocialPostsOrNull] Error:", e);
