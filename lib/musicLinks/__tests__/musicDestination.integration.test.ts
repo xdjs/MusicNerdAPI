@@ -7,6 +7,7 @@ import * as schema from "@/lib/db/schema";
 import { searchRun } from "@/lib/vault/__tests__/searchRun";
 
 vi.mock("@/lib/pages/fetchPageContent", () => ({ fetchPageContent: vi.fn() }));
+vi.mock("@/lib/relevance/judgeSourceRelevance", () => ({ judgeSourceRelevance: vi.fn() }));
 
 vi.mock("@/lib/db/db", () => ({
   get db() {
@@ -299,6 +300,43 @@ describe("catalog source persistence with real PostgreSQL and application role",
         }),
     );
     expect(source).toMatchObject({ type: "audio", url: "https://soundcloud.com/interview-show" });
+  });
+  it("persists an index-followed podcast despite namesakes and a different canonical music account", async () => {
+    const show = "https://soundcloud.com/interview-show";
+    const podcastEpisode = {
+      podcastEpisodeKey: "publisher:show:episode-123",
+      podcastShowTitle: "Interviews",
+      podcastEpisodeTitle: "Pete Rango on his new record",
+    };
+    await database
+      .update(schema.artists)
+      .set({ soundcloud: "pete-rango" })
+      .where(eq(schema.artists.id, artistId));
+    await database
+      .update(schema.artists)
+      .set({ name: "Pete Rango" })
+      .where(eq(schema.artists.id, otherId));
+    const { fetchPageContent } = await import("@/lib/pages/fetchPageContent");
+    const { judgeSourceRelevance } = await import("@/lib/relevance/judgeSourceRelevance");
+    const { followIndexLinks } = await import("@/lib/vault/followIndexLinks");
+    vi.mocked(fetchPageContent).mockResolvedValueOnce({
+      status: 200,
+      title: "Pete Rango interview",
+      fullText: "Pete Rango discusses his new record. ".repeat(30),
+      extractedText: "Pete Rango discusses his new record. ".repeat(30),
+      podcastEpisode,
+    });
+    vi.mocked(judgeSourceRelevance).mockResolvedValueOnce(new Map([[show, "about-artist"]]));
+    const run = searchRun({ artistId, artistName: "Pete Rango", indexLinks: new Set([show]) });
+    await withArtistOperation(
+      artistId,
+      { expectedClaimId: claimId, sourceOrigin: "research" },
+      () => followIndexLinks(run, { name: "Pete Rango", catalog: [], identifiers: [] }),
+    );
+    expect(run.saved).toHaveLength(1);
+    expect(await database.query.artistVaultSources.findMany()).toEqual([
+      expect.objectContaining({ url: show, type: "audio", status: "pending", ...podcastEpisode }),
+    ]);
   });
   it("does not treat a saved spoken show as the artist's music identity", async () => {
     await database.insert(schema.artistVaultSources).values({

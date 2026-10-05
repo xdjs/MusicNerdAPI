@@ -5,7 +5,7 @@ import type { ArtistAnchor } from "@/lib/relevance/types";
 import { isBlockedSourceHost } from "@/lib/sources/isBlockedSourceHost";
 import { isExcludedLoreDiscoveryUrl } from "@/lib/sources/isExcludedLoreDiscoveryUrl";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
-import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { stripQuery } from "@/lib/sources/stripQuery";
 import { MAX_INDEX_FOLLOWS, VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
@@ -68,8 +68,9 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
       );
       continue;
     }
+    const type = page.podcastEpisode?.podcastEpisodeKey ? "audio" : inferTypeFromUrl(url);
     if (
-      parseMusicDestination(url) &&
+      isMusicSource({ url, type, podcastEpisodeKey: page.podcastEpisode?.podcastEpisodeKey }) &&
       (await nameIsAmbiguousInDirectory(run.artistId, run.artistName))
     )
       continue;
@@ -80,10 +81,11 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
         url,
         title: page.title,
         snippet: page.snippet ?? "",
-        type: inferTypeFromUrl(url),
+        type,
         status: "pending",
         extractedText: page.extractedText,
         ogImage: page.ogImage ?? null,
+        ...page.podcastEpisode,
         publishedAt: page.publishedAt ?? null,
       });
       if (source) {

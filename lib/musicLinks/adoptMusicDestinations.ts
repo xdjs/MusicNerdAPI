@@ -55,17 +55,22 @@ export async function adoptMusicDestinations(
     // Matching one MusicBrainz identifier is not proof for its other relations.
     if (!catalogTitleMatchesArtist(page.title, run.artistName, target.platform)) continue;
     if (outOfBudget(run, "catalog destination insertion")) return;
-    const source = await insertVaultSource({
-      artistId: run.artistId,
-      url: target.url,
-      title: page.title,
-      snippet: page.snippet,
-      type: target.type,
-      status: "pending",
-      extractedText: page.extractedText,
-      ogImage: page.ogImage,
-    });
-    run.existingUrls.add(key);
-    if (source) recordSavedSource(run, source);
+    try {
+      const source = await insertVaultSource({
+        artistId: run.artistId,
+        url: target.url,
+        title: page.title,
+        snippet: page.snippet,
+        type: target.type,
+        status: "pending",
+        extractedText: page.extractedText,
+        ogImage: page.ogImage,
+      });
+      run.existingUrls.add(key);
+      if (source) recordSavedSource(run, source);
+    } catch (error) {
+      console.error("[vaultWebSearch] Failed to insert catalog destination:", target.url, error);
+      if (run.requireComplete) throw error;
+    }
   }
 }

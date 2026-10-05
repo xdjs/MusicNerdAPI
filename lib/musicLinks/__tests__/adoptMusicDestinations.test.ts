@@ -67,6 +67,16 @@ it("propagates failed writes for durable jobs instead of silently losing the can
   ).rejects.toThrow("write failed");
 });
 
+it("continues a non-durable run after one failed catalog write without marking it saved", async () => {
+  const run = searchRun();
+  m.insert.mockRejectedValueOnce(new Error("write failed"));
+  await adoptMusicDestinations(run, [apple, beatport], "identifier");
+  expect(m.insert.mock.calls.map(([data]) => data.url)).toEqual([apple, beatport]);
+  expect(run.saved.map(source => source.url)).toEqual([beatport]);
+  expect(run.existingUrls.has(normalizeLoreDiscoveryUrl(apple))).toBe(false);
+  expect(run.existingUrls.has(normalizeLoreDiscoveryUrl(beatport))).toBe(true);
+});
+
 it("validates each catalog relation even when MusicBrainz matched a trusted identifier", async () => {
   m.fetch.mockResolvedValueOnce({
     status: 200,

@@ -67,6 +67,20 @@ describe("fileCandidate", () => {
     expect(run.counts.skipped).toBe(1);
   });
 
+  it("keeps an affirmed newly adopted account's outbound links for the hub pass", async () => {
+    const url = "https://soundcloud.com/grimes";
+    const links = ["https://music.apple.com/artist/grimes/123"];
+    accountMatchFor.mockResolvedValue({
+      match: { siteName: "soundcloud", id: "grimes" },
+      isAccountUrl: true,
+    });
+    adoptJudgedAccount.mockResolvedValue(true);
+    const run = searchRun();
+    await file(run, url, { outboundLinks: links }, "about-artist");
+    expect(run.hubCandidates).toEqual([{ links, url, aboutArtist: true }]);
+    expect(saveCandidateSource).not.toHaveBeenCalled();
+  });
+
   it("holds a page's outbound links for the hub pass, unless it's an index", async () => {
     const run = searchRun();
     await file(

@@ -1648,6 +1648,56 @@ describe("searchAndPopulateVault", () => {
     expect(mockSetLink).not.toHaveBeenCalled();
   });
 
+  it("continues MusicBrainz and web research after a mapped catalog write fails interactively", async () => {
+    const apple = "https://music.apple.com/artist/123";
+    const story = "https://example.com/grimes-interview";
+    dbExecute.mockImplementation(async (query: SQL) =>
+      renderSql(query).text.includes("from artist_id_mappings")
+        ? [{ platform: "apple_music", platform_id: "123", confidence: "high", source: "manual" }]
+        : [],
+    );
+    mockWebSearch.mockResolvedValue([hit(story)]);
+    mockFetchPage.mockResolvedValue({ ...goodPage, title: "Grimes" });
+    mockInsert.mockImplementation(async data => {
+      if (data.url === apple) throw new Error("catalog write failed");
+      return { id: data.url, ...data };
+    });
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    const saved = await searchAndPopulateVault("a1");
+    expect(mockMusicBrainz).toHaveBeenCalled();
+    expect(mockWebSearch).toHaveBeenCalled();
+    expect(saved.map(source => source.url)).toEqual([story]);
+  });
+
+  it("discovers catalog links from a newly adopted hosted artist account", async () => {
+    const profile = "https://soundcloud.com/grimes";
+    const apple = "https://music.apple.com/artist/grimes/123";
+    const live: Record<string, unknown> = { id: "a1", name: "Grimes", soundcloud: null };
+    mockGetArtist.mockImplementation(async () => ({ ...live }));
+    mockSetLink.mockImplementation(async (_id, site, value) => {
+      live[site] = value;
+      return {};
+    });
+    mockWebSearch.mockResolvedValue([hit(profile, "Grimes")]);
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: "Grimes",
+      outboundLinks: url === profile ? [apple] : [],
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === profile ? { siteName: "soundcloud", id: "grimes" } : undefined,
+    );
+    mockJudge.mockImplementation(
+      async (_anchor, candidates) =>
+        new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
+    );
+    mockInsert.mockImplementation(async data => ({ id: data.url, ...data }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    const saved = await searchAndPopulateVault("a1");
+    expect(live.soundcloud).toBe("grimes");
+    expect(saved.map(source => [source.url, source.type])).toEqual([[apple, "music"]]);
+  });
+
   it.each(["catalog fetch", "handle verification"])(
     "does not adopt MusicBrainz handles after the deadline expires during %s",
     async phase => {

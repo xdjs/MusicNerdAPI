@@ -36,6 +36,15 @@ export async function fileCandidate(
     run.counts.dropped++;
     return;
   }
+  if ((page.outboundLinks?.length ?? 0) > 0 && verdict === "about-artist") {
+    run.hubCandidates.push({
+      links: page.outboundLinks!,
+      url: result.url,
+      aboutArtist: true,
+    });
+  }
+  // Preserve outbound leads before account adoption returns. The hub pass
+  // re-reads saved ownership before accepting any catalog destinations.
   // A release URL must never be mistaken for an account by a loose legacy urlmap row.
   const release = parseMusicDestination(result.url)?.kind === "release";
   const { match, isAccountUrl } = release
@@ -44,13 +53,6 @@ export async function fileCandidate(
   if (isAccountUrl && match && (await adoptJudgedAccount(run, match, result.url, verdict))) {
     run.counts.skipped++;
     return;
-  }
-  if ((page.outboundLinks?.length ?? 0) > 0 && verdict === "about-artist") {
-    run.hubCandidates.push({
-      links: page.outboundLinks!,
-      url: result.url,
-      aboutArtist: true,
-    });
   }
   if (match?.siteName && ACCOUNT_PLATFORMS.has(match.siteName)) {
     // Searching their name and getting back an account page is evidence

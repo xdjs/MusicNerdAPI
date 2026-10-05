@@ -24,9 +24,50 @@ beforeEach(() => {
   h.fetchPageContent.mockReset().mockResolvedValue(goodPage);
   h.judgeSourceRelevance.mockReset().mockImplementation(affirm(["https://example.com/story"]));
   h.insertVaultSource.mockClear();
+  h.ambiguous.mockReset().mockResolvedValue(false);
 });
 
 describe("followIndexLinks", () => {
+  it.each([
+    "https://soundcloud.com/interview-show/grimes-chat",
+    "https://www.mixcloud.com/interview-show/grimes-chat/",
+    "https://audius.co/interview_show/grimes-chat",
+  ])("keeps affirmed spoken coverage despite an ambiguous artist name: %s", async url => {
+    h.ambiguous.mockResolvedValue(true);
+    h.judgeSourceRelevance.mockImplementation(affirm([url]));
+    await followIndexLinks(searchRun({ indexLinks: new Set([url]) }), anchor);
+    expect(h.insertVaultSource).toHaveBeenCalledWith(
+      expect.objectContaining({ url, type: "audio" }),
+    );
+    expect(h.ambiguous).not.toHaveBeenCalled();
+  });
+
+  it("still blocks a music catalog when the artist name is ambiguous", async () => {
+    const url = "https://music.apple.com/artist/grimes/123";
+    h.ambiguous.mockResolvedValue(true);
+    h.judgeSourceRelevance.mockImplementation(affirm([url]));
+    await followIndexLinks(searchRun({ indexLinks: new Set([url]) }), anchor);
+    expect(h.ambiguous).toHaveBeenCalledWith("a1", "Grimes");
+    expect(h.insertVaultSource).not.toHaveBeenCalled();
+  });
+
+  it("carries podcast identity through a profile-shaped URL into the source write", async () => {
+    const url = "https://soundcloud.com/interview-show";
+    const podcastEpisode = {
+      podcastEpisodeKey: "publisher:show:episode-123",
+      podcastShowTitle: "Interviews",
+      podcastEpisodeTitle: "Grimes on her new record",
+    };
+    h.fetchPageContent.mockResolvedValue({ ...goodPage, podcastEpisode });
+    h.ambiguous.mockResolvedValue(true);
+    h.judgeSourceRelevance.mockImplementation(affirm([url]));
+    await followIndexLinks(searchRun({ indexLinks: new Set([url]) }), anchor);
+    expect(h.insertVaultSource).toHaveBeenCalledWith(
+      expect.objectContaining({ url, type: "audio", ...podcastEpisode }),
+    );
+    expect(h.ambiguous).not.toHaveBeenCalled();
+  });
+
   it("follows at most three new links and saves only what the judge affirms", async () => {
     const run = searchRun({
       indexLinks: new Set([
