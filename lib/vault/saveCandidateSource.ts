@@ -1,3 +1,6 @@
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
+import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
 import type { RelevanceVerdict } from "@/lib/relevance/types";
 import { classifyFetchedSource } from "@/lib/sources/classifyFetchedSource";
 import { nameAppearsIn } from "@/lib/sources/nameAppearsIn";
@@ -25,6 +28,18 @@ export async function saveCandidateSource(
   { result, page }: ReadCandidate,
   verdict: RelevanceVerdict | undefined,
 ): Promise<"stop" | void> {
+  const destination = parseMusicDestination(result.url);
+  const spoken =
+    result.type === "interview" &&
+    ["soundcloud", "mixcloud", "audius"].includes(destination?.platform ?? "");
+  const music = !page.podcastEpisode && !spoken && destination;
+  if (
+    music &&
+    (verdict !== "about-artist" || (await nameIsAmbiguousInDirectory(run.artistId, run.artistName)))
+  ) {
+    run.counts.dropped++;
+    return;
+  }
   // Some feeds are served from ordinary-looking URLs.
   const body = (page.fullText ?? page.extractedText ?? "").trimStart();
   if (body.startsWith("<?xml") || body.startsWith("<rss")) {
@@ -64,7 +79,13 @@ export async function saveCandidateSource(
       // The page is the authority on its own title and description.
       title: (isVerified ? page.title : null) ?? result.title,
       snippet: (isVerified ? page.snippet : undefined) ?? result.snippet ?? "",
-      type: normalizeSourceType(result.type ?? "article"),
+      type: music
+        ? "music"
+        : verdict === "about-artist" && isArtistOwnDomain(result.url, run.artistName)
+          ? "website"
+          : inferTypeFromUrl(result.url) === "data"
+            ? "data"
+            : normalizeSourceType(result.type ?? "article"),
       status: "pending",
       extractedText: isVerified ? page.extractedText : null,
       ogImage: page.ogImage ?? null,

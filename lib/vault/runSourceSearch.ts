@@ -1,3 +1,4 @@
+import { adoptMappedMusicDestinations } from "@/lib/musicLinks/adoptMappedMusicDestinations";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { adoptFromHubs } from "@/lib/vault/adoptFromHubs";
 import { adoptFromMusicBrainz } from "@/lib/vault/adoptFromMusicBrainz";
@@ -55,28 +56,31 @@ export async function runSourceSearch(
     onSaved: opts.onSaved,
   };
 
-  // Before inferring anything, ask a database that already knows.
-  const fromMusicBrainz = outOfBudget(run, "MusicBrainz")
-    ? { handles: new Set<string>(), homepage: null, authoritative: false }
-    : await adoptFromMusicBrainz(artistId, artistName, run.artist, run.provisional);
-  if (outOfBudget(run, "web search")) return [];
-  // Curated handles are at least as trustworthy as ones read off a page.
-  run.verifiedHandles = new Set(fromMusicBrainz.handles);
-
   try {
+    if (outOfBudget(run, "catalog discovery")) return run.saved;
+    const { existingUrls, rejectedUrls } = await readExistingUrls(artistId);
+    run.existingUrls = existingUrls;
+    await adoptMappedMusicDestinations(run);
+
+    // Before inferring anything, ask a database that already knows.
+    const fromMusicBrainz = outOfBudget(run, "MusicBrainz")
+      ? { handles: new Set<string>(), homepage: null, authoritative: false }
+      : await adoptFromMusicBrainz(artistId, artistName, run.artist, run.provisional, run);
+    if (outOfBudget(run, "web search")) return run.saved;
+    // Curated handles are at least as trustworthy as ones read off a page.
+    run.verifiedHandles = new Set(fromMusicBrainz.handles);
+
     const results = await searchCandidates(run, fromMusicBrainz.homepage);
     if (results.length === 0) {
       console.log(`[vaultWebSearch] Web search returned nothing for "${artistName}"`);
-      return [];
+      return run.saved;
     }
-    const { existingUrls, rejectedUrls } = await readExistingUrls(artistId);
-    run.existingUrls = existingUrls;
     const candidates = filterCandidates(run, await resolveCandidateUrls(results), rejectedUrls);
 
-    if (outOfBudget(run, "page verification")) return [];
+    if (outOfBudget(run, "page verification")) return run.saved;
     const read = await readCandidates(candidates);
     const anchor = await buildArtistAnchor(run.artist, artistName);
-    if (outOfBudget(run, "relevance judging")) return [];
+    if (outOfBudget(run, "relevance judging")) return run.saved;
     const relevance = await judgeCandidates(anchor, read);
 
     for (const candidate of read) {
@@ -111,6 +115,6 @@ export async function runSourceSearch(
       full: error,
     });
     if (run.requireComplete) throw error;
-    return [];
+    return run.saved;
   }
 }

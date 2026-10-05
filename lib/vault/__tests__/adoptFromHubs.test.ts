@@ -34,6 +34,7 @@ describe("adoptFromHubs", () => {
       "Grimes",
       { url: "https://a.com", aboutArtist: true },
       run.provisional,
+      run,
     );
     expect([...run.verifiedHandles]).toEqual(["dupesdidit"]);
     // One adoption can corroborate the next page, so it re-reads.

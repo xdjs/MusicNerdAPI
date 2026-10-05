@@ -4,7 +4,9 @@ import { judgeSourceRelevance } from "@/lib/relevance/judgeSourceRelevance";
 import type { ArtistAnchor } from "@/lib/relevance/types";
 import { isBlockedSourceHost } from "@/lib/sources/isBlockedSourceHost";
 import { isExcludedLoreDiscoveryUrl } from "@/lib/sources/isExcludedLoreDiscoveryUrl";
-import { normalizeSourceType } from "@/lib/sources/normalizeSourceType";
+import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
+import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { stripQuery } from "@/lib/sources/stripQuery";
 import { MAX_INDEX_FOLLOWS, VERIFY_TIMEOUT_MS } from "@/lib/vault/const";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -66,13 +68,18 @@ export async function followIndexLinks(run: SearchRun, anchor: ArtistAnchor): Pr
       );
       continue;
     }
+    if (
+      parseMusicDestination(url) &&
+      (await nameIsAmbiguousInDirectory(run.artistId, run.artistName))
+    )
+      continue;
     try {
       const source = await insertVaultSource({
         artistId: run.artistId,
         url,
         title: page.title,
         snippet: page.snippet ?? "",
-        type: normalizeSourceType("article"),
+        type: inferTypeFromUrl(url),
         status: "pending",
         extractedText: page.extractedText,
         ogImage: page.ogImage ?? null,

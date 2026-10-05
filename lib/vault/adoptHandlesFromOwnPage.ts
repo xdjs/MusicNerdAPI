@@ -1,3 +1,5 @@
+import { adoptMusicDestinations } from "@/lib/musicLinks/adoptMusicDestinations";
+import type { SearchRun } from "@/lib/vault/types";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
@@ -36,6 +38,7 @@ export async function adoptHandlesFromOwnPage(
   artistName: string,
   page?: { url: string; aboutArtist: boolean },
   provisional?: Set<string>,
+  run?: SearchRun,
 ): Promise<{ adopted: number; handles: Set<string> }> {
   const resolved = await resolveOutboundHandles(outboundLinks);
   const corroborator = findCorroborator(resolved, artist, provisional);
@@ -51,6 +54,7 @@ export async function adoptHandlesFromOwnPage(
       : `[vaultWebSearch] Page corroborated as the artist's own domain: ${page!.url.slice(0, 70)}`,
   );
 
+  if (run) await adoptMusicDestinations(run, outboundLinks, "own-page");
   const ambiguous = ambiguousPlatforms(resolved);
   for (const platform of ambiguous) {
     console.log(`[vaultWebSearch] Own page names more than one ${platform} handle — adopting none`);

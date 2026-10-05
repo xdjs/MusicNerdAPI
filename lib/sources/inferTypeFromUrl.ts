@@ -1,3 +1,4 @@
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { DOMAIN_TYPE_MAP, PATH_KEYWORD_MAP } from "@/lib/sources/const";
 import type { SourceType } from "@/lib/sources/types";
 
@@ -9,9 +10,11 @@ import type { SourceType } from "@/lib/sources/types";
  * @returns The type; "article" when nothing matches or the URL is malformed.
  */
 export function inferTypeFromUrl(url: string): SourceType {
+  if (parseMusicDestination(url)) return "music";
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "discogs.com" && /^\/(release|master)\//i.test(parsed.pathname)) return "data";
     for (const [domain, type] of Object.entries(DOMAIN_TYPE_MAP)) {
       if (host === domain || host.endsWith(`.${domain}`)) return type;
     }

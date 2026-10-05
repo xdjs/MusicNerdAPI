@@ -6,7 +6,7 @@ describe("inferTypeFromUrl", () => {
     expect(inferTypeFromUrl("https://pitchfork.com/x")).toBe("review");
     expect(inferTypeFromUrl("https://www.youtube.com/watch?v=1")).toBe("video");
     expect(inferTypeFromUrl("https://en.wikipedia.org/wiki/X")).toBe("profile");
-    expect(inferTypeFromUrl("https://artist.bandcamp.com/album/x")).toBe("audio");
+    expect(inferTypeFromUrl("https://artist.bandcamp.com/album/x")).toBe("music");
   });
 
   it("then by path keyword", () => {

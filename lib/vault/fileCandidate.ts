@@ -1,3 +1,4 @@
+import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import type { RelevanceVerdict } from "@/lib/relevance/types";
 import { accountMatchFor } from "@/lib/vault/accountMatchFor";
@@ -25,7 +26,11 @@ export async function fileCandidate(
   verdict: RelevanceVerdict | undefined,
 ): Promise<"stop" | void> {
   const { result, page } = candidate;
-  const { match, isAccountUrl } = await accountMatchFor(result.url);
+  // A release URL must never be mistaken for an account by a loose legacy urlmap row.
+  const release = parseMusicDestination(result.url)?.kind === "release";
+  const { match, isAccountUrl } = release
+    ? { match: undefined, isAccountUrl: false }
+    : await accountMatchFor(result.url);
   if (isAccountUrl && match && (await adoptJudgedAccount(run, match, result.url, verdict))) {
     run.counts.skipped++;
     return;

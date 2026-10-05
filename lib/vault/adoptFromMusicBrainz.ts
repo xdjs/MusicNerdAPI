@@ -1,3 +1,5 @@
+import { adoptMusicDestinations } from "@/lib/musicLinks/adoptMusicDestinations";
+import type { SearchRun } from "@/lib/vault/types";
 import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { isReservedHandle } from "@/lib/artists/isReservedHandle";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
@@ -21,13 +23,14 @@ import { writeArtistLink } from "@/lib/vault/writeArtistLink";
  * @param artistName - Their name.
  * @param artist - The artist row snapshot; updated as links are written.
  * @param provisional - Columns holding a discovery guess (see holdsAnswerFor).
- * @returns The handles adopted (for propagation), their homepage, and whether the match was by identifier. Never throws.
+ * @returns The handles adopted (for propagation), their homepage, and whether the match was by identifier. A durable run propagates failed source writes for retry.
  */
 export async function adoptFromMusicBrainz(
   artistId: string,
   artistName: string,
   artist: Record<string, unknown>,
   provisional?: Set<string>,
+  run?: SearchRun,
 ): Promise<{ handles: Set<string>; homepage: string | null; authoritative: boolean }> {
   const handles = new Set<string>();
   try {
@@ -40,6 +43,13 @@ export async function adoptFromMusicBrainz(
     console.log(
       `[vaultWebSearch] MusicBrainz matched "${artistName}" by ${found.matchedBy}, ${found.urls.length} link(s)`,
     );
+    if (run)
+      await adoptMusicDestinations(
+        run,
+        found.urls,
+        found.matchedBy === "identifier" ? "identifier" : "name",
+        found.homepage,
+      );
     for (const url of found.urls) {
       const match = await extractArtistId(stripQuery(url)).catch(() => undefined);
       if (!match?.siteName || !match?.id) continue;
@@ -83,6 +93,7 @@ export async function adoptFromMusicBrainz(
     return { handles, homepage: found.homepage, authoritative: found.matchedBy === "identifier" };
   } catch (e) {
     console.error("[vaultWebSearch] MusicBrainz lookup failed:", e);
+    if (run?.requireComplete) throw e;
     return { handles, homepage: null, authoritative: false };
   }
 }

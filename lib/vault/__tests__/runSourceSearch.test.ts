@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { goodPage, hit } from "@/lib/vault/__tests__/searchRun";
 import type { SearchRun } from "@/lib/vault/types";
 
+vi.mock("@/lib/musicLinks/adoptMappedMusicDestinations", () => ({
+  adoptMappedMusicDestinations: vi.fn(async () => {}),
+}));
+
 const h = vi.hoisted(() => ({
   getArtistById: vi.fn(),
   adoptFromMusicBrainz: vi.fn(),
@@ -77,6 +81,7 @@ describe("runSourceSearch", () => {
       "Grimes",
       expect.objectContaining({ id: "a1" }),
       new Set(),
+      expect.objectContaining({ artistId: "a1" }),
     );
     expect(h.searchCandidates).toHaveBeenCalledWith(expect.anything(), "https://grimes.com");
     const run = h.fileCandidate.mock.calls[0][0];
@@ -127,7 +132,7 @@ describe("runSourceSearch", () => {
   it("won't start MusicBrainz or the search after the deadline", async () => {
     await expect(
       runSourceSearch("a1", { requireComplete: true, deadline: Date.now() - 1 }),
-    ).rejects.toThrow("Source search deadline exhausted before MusicBrainz");
+    ).rejects.toThrow("Source search deadline exhausted before catalog discovery");
     expect(await runSourceSearch("a1", { deadline: Date.now() - 1 })).toEqual([]);
     expect(h.adoptFromMusicBrainz).not.toHaveBeenCalled();
     expect(h.searchCandidates).not.toHaveBeenCalled();

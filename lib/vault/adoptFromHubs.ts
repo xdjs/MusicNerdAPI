@@ -35,6 +35,7 @@ export async function adoptFromHubs(run: SearchRun): Promise<void> {
       run.artistName,
       { url: hub.url, aboutArtist: hub.aboutArtist },
       run.provisional,
+      run,
     );
     for (const h of handles) run.verifiedHandles.add(h);
     if (adopted > 0) {
