@@ -1,4 +1,4 @@
-import { titleMatchesArtist } from "@/lib/artists/titleMatchesArtist";
+import { catalogTitleMatchesArtist } from "@/lib/musicLinks/catalogTitleMatchesArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { fetchPageContent } from "@/lib/pages/fetchPageContent";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
@@ -35,7 +35,7 @@ export async function adoptMusicDestinations(
       seen.add(identity);
       return true;
     })
-    .map(candidate => ({ url: candidate!.url, type: "music" }));
+    .map(candidate => ({ url: candidate!.url, platform: candidate!.platform, type: "music" }));
   const fresh = targets.filter(
     target => !run.existingUrls.has(normalizeLoreDiscoveryUrl(target.url)),
   );
@@ -53,7 +53,7 @@ export async function adoptMusicDestinations(
     );
     if (!page || page.status === null || page.status >= 400 || !page.title) continue;
     // Matching one MusicBrainz identifier is not proof for its other relations.
-    if (!titleMatchesArtist(page.title, run.artistName)) continue;
+    if (!catalogTitleMatchesArtist(page.title, run.artistName, target.platform)) continue;
     if (outOfBudget(run, "catalog destination insertion")) return;
     const source = await insertVaultSource({
       artistId: run.artistId,

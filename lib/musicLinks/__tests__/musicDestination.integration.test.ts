@@ -93,6 +93,25 @@ const save = (sourceUrl = url) =>
   );
 
 describe("catalog source persistence with real PostgreSQL and application role", () => {
+  it("treats another artist's pending evidence as a source, not a canonical identity reservation", async () => {
+    await database.insert(schema.artistVaultSources).values({
+      artistId: otherId,
+      url,
+      type: "music",
+      status: "pending",
+      origin: "research",
+    });
+    expect(await save()).toMatchObject({ artistId, status: "pending" });
+    expect(await database.query.artistIdMappings.findMany()).toEqual([]);
+    expect(await database.query.artistVaultSources.findMany()).toHaveLength(2);
+    await database.insert(schema.artistIdMappings).values({
+      id: crypto.randomUUID(),
+      artistId: otherId,
+      platform: "apple_music",
+      platformId: "1513734272",
+    });
+    expect(await save("https://itunes.apple.com/artist/id1513734272")).toBeUndefined();
+  });
   it("retains the original URL, pending review and attribution, without writing a mapping", async () => {
     const source = await save();
     expect(source).toMatchObject({ url, status: "pending", type: "music", origin: "research" });

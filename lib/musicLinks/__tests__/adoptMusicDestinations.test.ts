@@ -116,3 +116,27 @@ it("retains the nine-fetch ceiling for new destinations", async () => {
   await adoptMusicDestinations(searchRun(), catalog, "identifier");
   expect(m.fetch).toHaveBeenCalledTimes(9);
 });
+
+it.each([
+  ["Black Dave", "Dave"],
+  ["Dave", "Black Dave"],
+  ["AB", "Gabrielle"],
+  ["Black Dave", "Dave - Apple Music"],
+  ["Dave", "Black Dave - Apple Music"],
+])("rejects a partial catalog identity for %s (%s)", async (artistName, title) => {
+  m.fetch.mockResolvedValueOnce({
+    status: 200,
+    title,
+    extractedText: "Unrelated profile ".repeat(100),
+  });
+  await adoptMusicDestinations(searchRun({ artistName }), [apple], "identifier");
+  expect(m.insert).not.toHaveBeenCalled();
+});
+it.each([
+  [apple, "Black Dave — Apple Music"],
+  [beatport, "Black Dave | Beatport"],
+])("accepts the full name with the expected catalog decoration (%s)", async (url, title) => {
+  m.fetch.mockResolvedValueOnce({ status: 200, title });
+  await adoptMusicDestinations(searchRun({ artistName: "Black Dave" }), [url], "identifier");
+  expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({ url, title, type: "music" }));
+});
