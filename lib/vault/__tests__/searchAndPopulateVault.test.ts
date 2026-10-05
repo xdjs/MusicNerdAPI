@@ -1677,7 +1677,12 @@ describe("searchAndPopulateVault", () => {
   it("keeps catalog profiles from a corroborated own page while preserving its editorial source", async () => {
     const home = "https://grimes.com/";
     const apple = "https://music.apple.com/us/artist/grimes/123";
-    const knownSpotify = "https://open.spotify.com/artist/sp1";
+    const knownSpotify = "https://open.spotify.com/artist/3DmaZbBPnKSGnxYRpHobss";
+    mockGetArtist.mockResolvedValue({
+      id: "a1",
+      name: "Grimes",
+      spotify: "3DmaZbBPnKSGnxYRpHobss",
+    });
     mockWebSearch.mockResolvedValue([hit(home, "Grimes")]);
     mockFetchPage.mockImplementation(async url => ({
       ...goodPage,
@@ -1685,7 +1690,7 @@ describe("searchAndPopulateVault", () => {
       outboundLinks: url === home ? [knownSpotify, apple] : [],
     }));
     mockExtract.mockImplementation(async url =>
-      url === knownSpotify ? { siteName: "spotify", id: "sp1" } : undefined,
+      url === knownSpotify ? { siteName: "spotify", id: "3DmaZbBPnKSGnxYRpHobss" } : undefined,
     );
     mockJudge.mockImplementation(
       async (_anchor, candidates) =>
@@ -1704,10 +1709,10 @@ describe("searchAndPopulateVault", () => {
 
   it("routes judged catalog search hits to music and never turns a release URL into an artist ID", async () => {
     const artist = "https://www.beatport.com/artist/grimes/456";
-    const release = "https://open.spotify.com/album/album123";
+    const release = "https://open.spotify.com/album/2up3OPMp9Tb4dAKM2erWXQ";
     mockWebSearch.mockResolvedValue([hit(artist), hit(release)]);
     mockExtract.mockImplementation(async url =>
-      url === release ? { siteName: "spotify", id: "album123" } : undefined,
+      url === release ? { siteName: "spotify", id: "2up3OPMp9Tb4dAKM2erWXQ" } : undefined,
     );
     mockJudge.mockImplementation(
       async (_anchor, candidates) =>

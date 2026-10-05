@@ -38,7 +38,7 @@ export function parseMusicDestination(raw: string): MusicDestination | null {
       match[2],
     ];
   } else if (host === "open.spotify.com") {
-    match = path.match(/^\/(?:intl-[a-z]{2}\/)?(artist|album|track)\/([a-zA-Z0-9]+)$/);
+    match = path.match(/^\/(?:intl-[a-z]{2}\/)?(artist|album|track)\/([a-zA-Z0-9]{22})$/);
     if (!match) return null;
     [platform, label, kind, id] = [
       "spotify",

@@ -155,12 +155,13 @@ describe("catalog source persistence with real PostgreSQL and application role",
   it.each(["spotify", "deezer"] as const)(
     "does not adopt another artist's canonical %s profile",
     async platform => {
+      const id = platform === "spotify" ? "3DmaZbBPnKSGnxYRpHobss" : "123";
       await database
         .update(schema.artists)
-        .set({ [platform]: "123" })
+        .set({ [platform]: id })
         .where(eq(schema.artists.id, otherId));
       const host = platform === "spotify" ? "open.spotify.com" : "www.deezer.com";
-      expect(await save(`https://${host}/artist/123`)).toBeUndefined();
+      expect(await save(`https://${host}/artist/${id}`)).toBeUndefined();
       expect(await database.query.artistVaultSources.findMany()).toEqual([]);
     },
   );
@@ -182,9 +183,9 @@ describe("catalog source persistence with real PostgreSQL and application role",
   it("keeps canonical Spotify IDs case-sensitive", async () => {
     await database
       .update(schema.artists)
-      .set({ spotify: "AbC" })
+      .set({ spotify: "AAAAAAAAAAAAAAAAAAAAAA" })
       .where(eq(schema.artists.id, otherId));
-    expect(await save("https://open.spotify.com/artist/abc")).toMatchObject({
+    expect(await save("https://open.spotify.com/artist/aaaaaaaaaaaaaaaaaaaaaa")).toMatchObject({
       type: "music",
       status: "pending",
     });
