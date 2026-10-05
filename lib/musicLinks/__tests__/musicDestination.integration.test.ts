@@ -164,6 +164,31 @@ describe("catalog source persistence with real PostgreSQL and application role",
       expect(await database.query.artistVaultSources.findMany()).toEqual([]);
     },
   );
+  it.each([
+    ["bandcamp", "https://dupes.bandcamp.com/"],
+    ["subvert", "https://subvert.fm/dupes"],
+    ["supercollector", "https://release.supercollector.xyz/artist/dupes"],
+    ["soundcloud", "https://soundcloud.com/dupes"],
+    ["audius", "https://audius.co/dupes"],
+    ["mixcloud", "https://www.mixcloud.com/dupes/"],
+  ] as const)("preserves another artist's legacy canonical %s handle", async (platform, url) => {
+    await database
+      .update(schema.artists)
+      .set({ [platform]: platform === "supercollector" ? " @DuPes.ETH " : " @DuPes " })
+      .where(eq(schema.artists.id, otherId));
+    expect(await save(url)).toBeUndefined();
+    expect(await database.query.artistVaultSources.findMany()).toEqual([]);
+  });
+  it("keeps canonical Spotify IDs case-sensitive", async () => {
+    await database
+      .update(schema.artists)
+      .set({ spotify: "AbC" })
+      .where(eq(schema.artists.id, otherId));
+    expect(await save("https://open.spotify.com/artist/abc")).toMatchObject({
+      type: "music",
+      status: "pending",
+    });
+  });
   it("preserves spoken audio through the actual writer and supports explicitly classified music", async () => {
     const spoken = "https://soundcloud.com/pete-rango/a-conversation";
     const music = "https://soundcloud.com/pete-rango/rush";

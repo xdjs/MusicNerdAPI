@@ -45,10 +45,17 @@ export async function canSaveMusicDestination(
       "mixcloud",
     ].includes(destination.platform)
   ) {
+    // Catalog IDs are case-sensitive; handles may use legacy @ prefixes and mixed case.
+    let canonicalId =
+      destination.platform === "spotify" || destination.platform === "deezer"
+        ? sql`${sql.identifier(destination.platform)}`
+        : sql`lower(ltrim(btrim(${sql.identifier(destination.platform)}), '@'))`;
+    if (destination.platform === "supercollector")
+      canonicalId = sql`regexp_replace(${canonicalId}, '[.]eth$', '')`;
     const rows = rowsOf(
       await writer.execute(sql`
       select ${sql.identifier(destination.platform)} as value from artists
-      where id = ${artistId}::uuid or ${sql.identifier(destination.platform)} = ${destination.id}
+      where id = ${artistId}::uuid or ${canonicalId} = ${destination.id}
     `),
     ) as { value: string | null }[];
     if (rows.some(row => row.value)) return false;
