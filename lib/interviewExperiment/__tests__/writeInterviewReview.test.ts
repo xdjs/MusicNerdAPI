@@ -81,6 +81,24 @@ it("writes reusable research and repair audit privately and resolves full origin
           { question: "Failed first question", attempt: "draft", rejection: "Compound question" },
         ],
         reviews: [],
+        editorial: {
+          selectedIndexes: [],
+          candidates: [
+            {
+              observation: "A room choice",
+              evidence: [{ evidenceId: c.evidence[0].id, quote: "Complete original." }],
+              connection: { kind: "hypothesis", explanation: "A possible relationship" },
+              alreadyKnown: "A session location",
+              unknown: "What it changed",
+              payoff: "A musical decision",
+              doNotAssume: ["Improved sound"],
+              decision: "discard",
+              reason: "Already explained",
+            },
+          ],
+          listening: null,
+          call: research.call,
+        },
       },
     };
     await writeInterviewReview(c, [result], dir);
@@ -92,6 +110,10 @@ it("writes reusable research and repair audit privately and resolves full origin
       "critic",
     );
     expect((await stat(join(dir, "research.json"))).mode & 0o777).toBe(0o600);
+    expect(await readFile(join(dir, "editorial.md"), "utf8")).toContain("discard");
+    expect(await readFile(join(dir, "editorial.md"), "utf8")).toContain("Complete original.");
+    expect((await stat(join(dir, "editorial.md"))).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await readFile(join(dir, "methods.json"), "utf8"))[0].editorial).toBe(true);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

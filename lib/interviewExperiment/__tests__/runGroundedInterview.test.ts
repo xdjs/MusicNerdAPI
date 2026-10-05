@@ -265,3 +265,165 @@ it("detects changed originals before paid calls and does not draft from unknown 
     .mockResolvedValueOnce(response({ question: "", citations: [] }));
   expect((await runGroundedInterview(c, { purpose: "Music", research })).questions).toEqual([]);
 });
+
+it("selects a new angle before writing and drops discarded preparation angles", async () => {
+  const c1 = {
+    observation: "A stairwell session",
+    citations: ["c1"],
+    connection: { kind: "direct", explanation: "A recorded practice" },
+    alreadyKnown: "The location",
+    unknown: "How the performance adapted",
+    payoff: "Hear a musical decision",
+    doNotAssume: ["A better result"],
+    decision: "select",
+    reason: "Concrete unexplained process",
+  };
+  call
+    .mockResolvedValueOnce(
+      response({
+        candidates: [{ ...c1, reason: "Redundant" }, c1],
+        selectedIndexes: [1],
+        listening: null,
+      }),
+    )
+    .mockResolvedValueOnce(response(draft))
+    .mockResolvedValueOnce(response({ verdicts: [{ ...verdict, meaningChecks: [] }] }));
+  const r = await runGroundedInterview(c, { purpose: "Music", research, editorial: true });
+  expect(call.mock.calls.map(c => c[0])).toEqual([
+    "editorial-select",
+    "grounded-draft",
+    "grounded-review",
+  ]);
+  expect(call.mock.calls[1][2].angle.unknown).toBe(c1.unknown);
+  expect(call.mock.calls[1][2].angle.editorial.doNotAssume).toEqual(c1.doNotAssume);
+  expect(r.grounding?.editorial?.candidates).toHaveLength(2);
+  expect(r.questions).toHaveLength(1);
+});
+
+it("rechecks the meaning of a repaired follow-up and stays within five calls", async () => {
+  const latest = "The rhythm happened by accident, not because I cannot play it.";
+  const conversation = {
+    kind: "synthetic",
+    artistId: c.artist.id,
+    label: "Intention",
+    turns: [{ speaker: "artist", text: latest }],
+  };
+  const candidate = {
+    observation: "An accidental rhythm",
+    citations: ["c2"],
+    connection: { kind: "direct", explanation: "Latest answer" },
+    alreadyKnown: "An unexpected discovery",
+    unknown: "An example",
+    payoff: "Make the account concrete",
+    doNotAssume: ["Physical inability"],
+    decision: "select",
+    reason: "Follow a new detail",
+  };
+  const wrong = {
+    ...verdict,
+    meaningChecks: [
+      {
+        sourceQuote: latest,
+        interpretation: "Unable to play it",
+        faithful: false,
+        reason: "Accident is not inability",
+      },
+    ],
+  };
+  call
+    .mockResolvedValueOnce(
+      response({
+        candidates: [candidate],
+        selectedIndexes: [0],
+        listening: {
+          citations: ["c2"],
+          meaning: "Unexpected discovery",
+          limits: ["Not inability"],
+          nextMove: "example",
+        },
+      }),
+    )
+    .mockResolvedValueOnce(response(draft))
+    .mockResolvedValueOnce(response({ verdicts: [wrong] }))
+    .mockResolvedValueOnce(response(draft))
+    .mockResolvedValueOnce(response({ verdicts: [wrong] }));
+  const r = await runGroundedInterview(c, {
+    purpose: "Music",
+    research,
+    editorial: true,
+    conversation,
+  });
+  expect(r.questions).toEqual([]);
+  expect(call).toHaveBeenCalledTimes(5);
+  expect(r.rejected.every(r => r.reason.includes("Accident is not inability"))).toBe(true);
+  expect(call.mock.calls[3][2].listening.limits).toEqual(["Not inability"]);
+});
+
+it("honors selection priority and caps three repairs at nine calls including editorial selection", async () => {
+  const candidates = ["Room choice", "Microphone placement", "Vocal performance"].map(unknown => ({
+    observation: "A stairwell session",
+    citations: ["c1"],
+    connection: { kind: "direct", explanation: "Recorded practice" },
+    alreadyKnown: "Location",
+    unknown,
+    payoff: "A decision",
+    doNotAssume: [],
+    reason: "Specific craft unknown",
+  }));
+  call.mockImplementation(async (stage: string) =>
+    response(
+      stage === "editorial-select"
+        ? { candidates, selectedIndexes: [2, 0, 1], listening: null }
+        : stage === "grounded-review"
+          ? {
+              verdicts: [0, 1, 2].map(index => ({
+                ...verdict,
+                index,
+                worthwhile: false,
+                reason: "Already explained",
+                meaningChecks: [],
+              })),
+            }
+          : draft,
+    ),
+  );
+  const r = await runGroundedInterview(c, { purpose: "Music", research, editorial: true });
+  expect(
+    call.mock.calls.filter(c => c[0] === "grounded-draft").map(c => c[2].angle.unknown),
+  ).toEqual(["Vocal performance", "Room choice", "Microphone placement"]);
+  expect(call).toHaveBeenCalledTimes(9);
+  expect(r.questions).toEqual([]);
+});
+
+it("locks a compound repair to the first ask and still reviews its meaning", async () => {
+  const candidate = {
+    observation: "A stairwell recording",
+    citations: ["c1"],
+    connection: { kind: "direct", explanation: "A known setting" },
+    alreadyKnown: "Where it happened",
+    unknown: "Choosing the room",
+    payoff: "A musical decision",
+    doNotAssume: [],
+    reason: "Unknown choice",
+  };
+  const compound = "How did you choose that stairwell, and what did it change?";
+  call
+    .mockResolvedValueOnce(
+      response({ candidates: [candidate], selectedIndexes: [0], listening: null }),
+    )
+    .mockResolvedValueOnce(response({ ...draft, question: compound }))
+    .mockResolvedValueOnce(response(draft))
+    .mockResolvedValueOnce(response({ verdicts: [{ ...verdict, meaningChecks: [] }] }));
+  const r = await runGroundedInterview(c, { purpose: "Music", research, editorial: true });
+  expect(call.mock.calls[2][2].requiredQuestion).toBe(draft.question);
+  expect(call.mock.calls[2][3].shape.question).toBeUndefined();
+  expect(call.mock.calls[3][0]).toBe("grounded-review");
+  expect(r.questions[0].question).toBe(draft.question);
+});
+
+it("does not call a writer when the editor selects no angle", async () => {
+  call.mockResolvedValueOnce(response({ candidates: [], selectedIndexes: [], listening: null }));
+  const r = await runGroundedInterview(c, { purpose: "Music", research, editorial: true });
+  expect(r.questions).toEqual([]);
+  expect(call).toHaveBeenCalledTimes(1);
+});

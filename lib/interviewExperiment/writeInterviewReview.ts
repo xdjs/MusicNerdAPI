@@ -82,6 +82,7 @@ export async function writeInterviewReview(
             preparationModel: result.grounding.research.model,
             preparationCall: result.grounding.research.call,
             preparationReused: true,
+            editorial: Boolean(result.grounding.editorial),
           }
         : {}),
       corpusHash: result.corpusHash,
@@ -95,6 +96,54 @@ export async function writeInterviewReview(
   for (const result of results) {
     if (result.grounding) {
       const { research, reviewModel, attempts } = result.grounding;
+      if (result.grounding.editorial) {
+        const e = result.grounding.editorial;
+        const report = [
+          `# ${corpus.artist.name}: editorial selection`,
+          "",
+          "Private model judgments, not established facts or human quality approval. Originals remain authoritative. Full meaning checks appear in results.json.",
+          "",
+          "## Listening",
+          "",
+          ...(e.listening
+            ? [
+                `Stated meaning: ${e.listening.meaning}`,
+                `Next move: ${e.listening.nextMove}`,
+                ...e.listening.limits.map(l => `- Limit: ${l}`),
+                ...e.listening.anchors.map(a => `- Original ${a.evidenceId}: ${a.quote}`),
+              ]
+            : ["Opening interview; no current answer."]),
+          "",
+          "## Candidate decisions",
+          "",
+          `Selected priority: ${e.selectedIndexes.map(i => i + 1).join(", ") || "None"}`,
+          "",
+          ...e.candidates.flatMap((c, i) => [
+            `### ${i + 1}: ${c.decision}`,
+            "",
+            c.observation,
+            "",
+            `Connection (${c.connection.kind}): ${c.connection.explanation}`,
+            `Already public: ${c.alreadyKnown}`,
+            `Unknown: ${c.unknown}`,
+            `What the answer adds: ${c.payoff}`,
+            `Decision reason: ${c.reason}`,
+            ...(c.validationError
+              ? [
+                  `Program rejection: ${c.validationError}`,
+                  `Rejected references: ${c.rejectedCitations?.join(", ")}`,
+                ]
+              : []),
+            ...c.doNotAssume.map(a => `- Do not assume: ${a}`),
+            ...c.evidence.map(a => `- Original ${a.evidenceId}: ${a.quote}`),
+            "",
+          ]),
+        ];
+        await writeFile(join(directory, "editorial.md"), report.join("\n") + "\n", {
+          mode: 0o600,
+          flag: "wx",
+        });
+      }
       const report = [
         `# ${corpus.artist.name}: complete archive preparation`,
         "",
@@ -116,7 +165,9 @@ export async function writeInterviewReview(
           ...n.evidence.map(e => `- ${e.evidenceId}: ${e.quote}`),
           "",
         ]),
-        "## Angles",
+        result.grounding.editorial
+          ? "## Earlier preparation angles (current selection is in editorial.md)"
+          : "## Angles",
         "",
         ...research.angles.flatMap(a => [
           `- Unknown: ${a.unknown}`,

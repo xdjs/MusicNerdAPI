@@ -27,6 +27,7 @@ const { values, positionals } = parseArgs({
     model: { type: "string" },
     "review-model": { type: "string" },
     research: { type: "string" },
+    editorial: { type: "boolean" },
     "exclude-source": { type: "string", multiple: true },
     "exclusion-reason": { type: "string" },
     arm: { type: "string" },
@@ -44,11 +45,13 @@ const main = async () => {
       "pnpm interview:experiment snapshot --env-file <private-env> --environment production|staging --artist-id <uuid> --expected-handle <handle> --output <private-corpus.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-directory> [--as-of <ISO-date>] [--exclude-source <id> --exclusion-reason <reason>] [--arm signals|context|connections|prepared|grounded]\npnpm interview:experiment index --env-file <preview-env> --corpus <private-corpus.json> --output <new-private-memory.json>\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm prepared --memory <private-memory.json> --purpose <assignment> --output <new-private-directory> [--conversation <private-replay.json>]",
     );
     console.log(
-      "pnpm interview:experiment prepare --env-file <preview-env> --corpus <private-corpus.json> --purpose <assignment> --output <new-private-research.json> [--conversation <private-replay.json>]\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm grounded --research <private-research.json> --purpose <assignment> --output <new-private-directory> [--model <writer-model>] [--review-model <critic-model>] [--conversation <private-replay.json>]",
+      "pnpm interview:experiment prepare --env-file <preview-env> --corpus <private-corpus.json> --purpose <assignment> --output <new-private-research.json> [--conversation <private-replay.json>]\npnpm interview:experiment run --env-file <preview-env> --corpus <private-corpus.json> --arm grounded --research <private-research.json> --purpose <assignment> --output <new-private-directory> [--model <writer-model>] [--review-model <critic-model>] [--editorial] [--conversation <private-replay.json>]",
     );
     return;
   }
   if (!values.output) throw new Error("--output is required");
+  if (values.editorial && (positionals[0] !== "run" || values.arm !== "grounded"))
+    throw new Error("--editorial requires run --arm grounded");
   if (positionals[0] === "snapshot") {
     if (
       !values["artist-id"] ||
@@ -175,6 +178,7 @@ const main = async () => {
             asOf: values["as-of"],
             model: values.model,
             reviewModel: values["review-model"],
+            editorial: values.editorial,
           })
         : arm === "prepared"
           ? await runPreparedInterview(corpus, {
@@ -205,7 +209,25 @@ const main = async () => {
   }
   console.log(await writeInterviewReview(corpus, results, directory));
 };
-main().catch(error => {
+main().catch(async error => {
+  if (values.output && error?.editorialFailure) {
+    await writeFile(
+      join(resolve(values.output), "editorial-failure.json"),
+      JSON.stringify(error.editorialFailure, null, 2),
+      { mode: 0o600, flag: "wx" },
+    );
+  }
+  if (values.output && error?.partialResult) {
+    await writeFile(
+      join(resolve(values.output), "grounded-partial.json"),
+      JSON.stringify(
+        { result: error.partialResult, failedCall: error.call ?? null, error: error.message },
+        null,
+        2,
+      ),
+      { mode: 0o600, flag: "wx" },
+    );
+  }
   console.error(
     error instanceof Error ? `${error.name}: ${error.message.slice(0, 350)}` : "Experiment failed",
   );

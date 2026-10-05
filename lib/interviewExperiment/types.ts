@@ -68,6 +68,7 @@ export interface ExperimentResult {
   evidenceIds: string[];
   searches: string[];
   grounding?: {
+    editorial?: InterviewEditorial;
     research: InterviewResearch;
     reviewModel: string;
     context: InterviewEvidence[];
@@ -91,6 +92,31 @@ export interface ExperimentResult {
       premises: { claim: string; status: string; reason: string }[];
     }[];
   };
+}
+
+export interface InterviewEditorial {
+  selectedIndexes: number[];
+  proposedSelectedIndexes?: number[];
+  candidates: {
+    validationError?: string;
+    rejectedCitations?: string[];
+    observation: string;
+    evidence: EvidenceQuote[];
+    connection: { kind: "direct" | "documented" | "hypothesis"; explanation: string };
+    alreadyKnown: string;
+    unknown: string;
+    payoff: string;
+    doNotAssume: string[];
+    decision: "select" | "discard";
+    reason: string;
+  }[];
+  listening: {
+    anchors: EvidenceQuote[];
+    meaning: string;
+    limits: string[];
+    nextMove: "clarify" | "example" | "decision" | "redirect" | "stop";
+  } | null;
+  call: ExperimentCall;
 }
 
 export interface InterviewResearch {
