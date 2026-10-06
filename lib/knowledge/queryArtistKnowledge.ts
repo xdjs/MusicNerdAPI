@@ -1,3 +1,4 @@
+import { readKnowledgePassage } from "@/lib/knowledge/readKnowledgePassage";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { knowledgeCursor } from "@/lib/knowledge/knowledgeCursor";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
@@ -40,30 +41,9 @@ export function queryArtistKnowledge<Q extends KnowledgeQuery>(
     if (query.operation === "read") {
       const source = snapshot.sources.find(s => s.metadata.sourceId === query.sourceId);
       if (!source) throw new KnowledgeError("not_found", 404, "Source unavailable for this artist");
-      if (source.metadata.revision !== query.revision)
-        throw new KnowledgeError(
-          "revision_changed",
-          409,
-          "Source revision changed; reload its metadata",
-        );
-      const window = knowledgeWindow(source.text, query.start, query.maxChars);
-      const nextStart = window.end < source.text.length ? window.end : null;
-      return {
-        status: "ok",
-        passage: {
-          source: source.metadata,
-          revision: source.metadata.revision,
-          ...window,
-          page: null,
-          startSeconds: null,
-          endSeconds: null,
-        },
-        totalChars: source.text.length,
-        nextStart,
-        returnedChars: window.text.length,
-        truncated: nextStart !== null,
-      };
+      return readKnowledgePassage(source, query);
     }
+
     const sources = snapshot.sources.filter(
       source => query.operation !== "sources" || !query.kind || source.metadata.kind === query.kind,
     );

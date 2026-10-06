@@ -63,9 +63,9 @@ export function createArtistKnowledgeTools(config: KnowledgeToolConfig) {
     }),
     readArtistSource: tool({
       description:
-        "Read original context by sourceId/revision and UTF-16 offset. Inspect a document's opening for authorship and scope, then surrounding relevant passages for qualifications, speaker uncertainty and dates. Continue when a needed qualification lies outside a window. A 409 requires reloading metadata; do not silently cite changed text." +
+        "Read original context by sourceId/revision and UTF-16 offset. Inspect a document's opening for authorship and scope, then surrounding relevant passages for qualifications, speaker uncertainty and dates. Continue when a needed qualification lies outside a window. Historical reads identify the current revision; check it and applicable corrections before using an old statement as current truth. A 409 means that revision was not retained; reload metadata explicitly." +
         untrusted,
-      inputSchema: knowledgeInputSchemas.read,
+      inputSchema: knowledgeInputSchemas.read.omit({ includeVersion: true }),
       outputSchema: knowledgeOutputSchemas.read,
       execute: (input, { abortSignal }) => fetchArtistKnowledge(bound, "read", input, abortSignal),
     }),

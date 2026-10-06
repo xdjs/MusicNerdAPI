@@ -141,6 +141,12 @@ export type Passage = {
   endSeconds: null;
 };
 export type Budget = { returnedChars: number; truncated: boolean; nextCursor: string | null };
+export type SourceReadVersion = {
+  state: "current" | "historical";
+  currentRevision: string;
+  capturedAt: string | null;
+};
+export const MAX_RETAINED_SOURCE_VERSIONS = 512;
 export type KnowledgeResults = {
   brief: {
     status: "ok";
@@ -163,6 +169,7 @@ export type KnowledgeResults = {
     truncated: boolean;
   };
   read: {
+    version?: SourceReadVersion;
     status: "ok";
     passage: Passage;
     totalChars: number;
@@ -184,7 +191,14 @@ export type KnowledgeQuery =
   | { operation: "brief" }
   | { operation: "sources"; limit: number; cursor?: string; kind?: SourceKind }
   | { operation: "search"; query: string; limit: number; maxChars: number; kind?: SourceKind }
-  | { operation: "read"; sourceId: string; revision: string; start: number; maxChars: number }
+  | {
+      operation: "read";
+      sourceId: string;
+      revision: string;
+      start: number;
+      maxChars: number;
+      includeVersion?: boolean;
+    }
   | {
       operation: "history";
       limit: number;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
+import { readArtistKnowledge } from "@/lib/knowledge/readArtistKnowledge";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { loadArtistKnowledge } from "@/lib/knowledge/loadArtistKnowledge";
 import { queryArtistKnowledge } from "@/lib/knowledge/queryArtistKnowledge";
@@ -21,8 +22,11 @@ export async function getArtistKnowledgeHandler(
     const auth = await authenticateRequest(request);
     if (auth instanceof NextResponse)
       throw new KnowledgeError("unauthenticated", 401, "Not signed in");
-    const snapshot = await loadArtistKnowledge(artistId, auth.userId);
-    return NextResponse.json(queryArtistKnowledge(snapshot, input), { headers });
+    const result =
+      input.operation === "read"
+        ? await readArtistKnowledge(artistId, auth.userId, input)
+        : queryArtistKnowledge(await loadArtistKnowledge(artistId, auth.userId), input);
+    return NextResponse.json(result, { headers });
   } catch (error) {
     const failure =
       error instanceof KnowledgeError
