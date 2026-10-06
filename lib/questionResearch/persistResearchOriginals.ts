@@ -23,9 +23,10 @@ export async function persistResearchOriginals(
     curation: string;
     identity: string;
     reviewed_revision: string | null;
+    current_revision: string | null;
     source_id: string | null;
   }>(
-    sql`select id,url,curation,identity,reviewed_revision,source_id from artist_research_candidates where artist_id=${artistId}::uuid limit 5001`,
+    sql`select id,url,curation,identity,reviewed_revision,current_revision,source_id from artist_research_candidates where artist_id=${artistId}::uuid limit 5001`,
   );
   const vault = await tx.execute<{ id: string; url: string; status: string }>(
     sql`select id,url,status from artist_vault_sources where artist_id=${artistId}::uuid limit 5001`,
@@ -63,9 +64,10 @@ export async function persistResearchOriginals(
         curation: string;
         identity: string;
         reviewed_revision: string | null;
+        current_revision: string | null;
         source_id: string | null;
       }>(
-        sql`insert into artist_research_candidates(artist_id,url,destination,platform,platform_id,reason,identity) values(${artistId}::uuid,${url},${original.destination},${original.platform ?? null},${original.platformId ?? null},${state.request.evidenceNeed},${original.identity}) returning id,url,curation,identity,reviewed_revision,source_id`,
+        sql`insert into artist_research_candidates(artist_id,url,destination,platform,platform_id,reason,identity) values(${artistId}::uuid,${url},${original.destination},${original.platform ?? null},${original.platformId ?? null},${state.request.evidenceNeed},${original.identity}) returning id,url,curation,identity,reviewed_revision,current_revision,source_id`,
       );
       if (!candidate) throw new Error("Discovery was not persisted");
       existing.push(candidate);
@@ -84,6 +86,16 @@ export async function persistResearchOriginals(
       text: original.text,
       provenance: stableProvenance,
     });
+    if (
+      candidate.current_revision !== revision &&
+      candidate.identity === "confirmed" &&
+      original.identity !== "confirmed"
+    ) {
+      await tx.execute(
+        sql`update artist_research_candidates set identity='unresolved',updated_at=now() where id=${candidate.id}::uuid`,
+      );
+      candidate.identity = "unresolved";
+    }
     if (candidate.curation === "approved" && candidate.reviewed_revision !== revision) {
       await tx.execute(
         sql`update artist_research_candidates set curation='pending',updated_at=now() where id=${candidate.id}::uuid`,

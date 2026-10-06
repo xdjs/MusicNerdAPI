@@ -268,3 +268,32 @@ it("reviews the most recently observed revision even when a page reverts to an o
     (await client.query("select count(*)::int as n from artist_research_evidence")).rows[0],
   ).toEqual({ n: 2 });
 });
+it("does not carry an earlier identity confirmation into a changed unverified original", async () => {
+  const first = await retained();
+  const next = {
+    ...original,
+    identity: "unresolved" as const,
+    text: "A different musician now appears on this page.",
+  };
+  await database.transaction(async tx =>
+    persistResearchOriginals(
+      tx as Parameters<typeof persistResearchOriginals>[0],
+      artist,
+      first.state,
+      [next],
+    ),
+  );
+  expect((await client.query("select identity from artist_research_candidates")).rows[0]).toEqual({
+    identity: "unresolved",
+  });
+  await expect(
+    readResearchEvidence(
+      artist,
+      { kind: "service" },
+      first.reference.sourceId.split(":")[1],
+      first.reference.revision,
+      0,
+      256,
+    ),
+  ).rejects.toMatchObject({ status: 404 });
+});
