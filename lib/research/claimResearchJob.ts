@@ -11,7 +11,8 @@ import type { JobKind, ResearchJob } from "@/lib/research/types";
  * as an attempt; `attempts` counts failures only, or a long feed would stall
  * after four slices. A job still `running` past its lease is the exception:
  * its last invocation was killed before it could record anything, and that
- * counts, or a job the platform kills every time is retried forever.
+ * counts, or a job the platform kills every time is retried forever. Automatic
+ * source backlog enters the existing live slot only after prior extraction finishes.
  *
  * @param opts - Which kinds to take, optionally one artist, and jobs this tick already touched.
  * @param opts.kinds - The job kinds this caller can run.
@@ -41,8 +42,16 @@ export async function claimResearchJob(opts: {
          set status = 'running', claimed_at = now(), updated_at = now(),
              attempts = attempts + case when status = 'running' then 1 else 0 end
        where id = (
-         select id from artist_research_jobs
-          where status in ('pending', 'running')
+         select candidate.id from artist_research_jobs candidate
+          where (candidate.status in ('pending', 'running') or (
+            candidate.status = 'queued' and candidate.kind = 'source_extract'
+            and candidate.state->>'version' = '2'
+            and not exists (
+              select 1 from artist_research_jobs live
+               where live.artist_id = candidate.artist_id and live.kind = 'source_extract'
+                 and live.status in ('pending','running')
+            )
+          ))
             and attempts < ${MAX_ATTEMPTS}
             and (claimed_at is null or claimed_at < now() - ${`${LEASE_MS} milliseconds`}::interval)
             and kind in (${kinds})
@@ -52,10 +61,14 @@ export async function claimResearchJob(opts: {
           limit 1
           for update skip locked
        )
-      returning *`);
+      returning *, updated_at::text as lease_updated_at`);
     const row = (rows as unknown as Record<string, unknown>[])[0];
     return row ? toResearchJob(row) : null;
   } catch (e) {
+    // Two queued sources may race for the artist's existing live slot. The
+    // unique index rolls the loser back to queued; a later tick can claim it.
+    const error = e as { code?: string; cause?: { code?: string } };
+    if (error?.code === "23505" || error?.cause?.code === "23505") return null;
     console.error("[claimResearchJob] Error:", e);
     return null;
   }

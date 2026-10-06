@@ -19,34 +19,22 @@ beforeEach(() => {
 });
 
 describe("enrichVaultSource", () => {
-  it("fills the source from its page, in the background for an ordinary page", async () => {
-    let resolvePage!: (v: unknown) => void;
-    fetchPage.mockReturnValueOnce(
-      new Promise(r => {
-        resolvePage = r;
-      }),
-    );
+  it("leaves ordinary URL bodies to durable ingestion without a detached fetch", async () => {
     await enrichVaultSource("s1", "https://example.com/a", { keepTitle: false });
+    expect(fetchPage).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
-    resolvePage(page);
-    await vi.waitFor(() => expect(update).toHaveBeenCalled());
-    expect(update).toHaveBeenCalledWith("s1", {
-      podcastEpisodeKey: "k",
-      title: "Page",
-      snippet: "s",
-      extractedText: "e",
-      ogImage: "i",
-    });
   });
 
   it("keeps a title we already have, and waits for a podcast episode", async () => {
     await enrichVaultSource("s1", "https://podcasts.apple.com/us/podcast/x/id1?i=2", {
       keepTitle: true,
     });
-    expect(update).toHaveBeenCalledWith(
-      "s1",
-      expect.not.objectContaining({ title: expect.anything() }),
-    );
+    expect(update).toHaveBeenCalledWith("s1", {
+      podcastEpisodeKey: "k",
+      snippet: "s",
+      ogImage: "i",
+    });
+    expect(update.mock.calls[0][1]).not.toHaveProperty("extractedText");
   });
 
   it("never throws when the read or the write fails", async () => {

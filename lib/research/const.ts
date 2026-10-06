@@ -12,6 +12,7 @@ export const PORTED_JOB_KINDS: JobKind[] = [
   "lore_refresh",
   "source_search",
   "latest_refresh",
+  "source_extract",
 ];
 /** A source search has no cursor, so a slice shorter than this cannot finish one. */
 export const SOURCE_SEARCH_MIN_SLICE_MS = 30_000;

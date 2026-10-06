@@ -45,6 +45,7 @@ describe("advanceResearch", () => {
         "lore_refresh",
         "source_search",
         "latest_refresh",
+        "source_extract",
       ],
       artistId: "artist-1",
       excludeIds: ["x"],

@@ -1355,18 +1355,9 @@ describe("runOnboardingTurn", () => {
     // Confirms and advances like any other successful addition.
     const oqMod = OQ;
     expect(oqMod.confirmOnboardingStep).toHaveBeenCalledWith("a1", "profiles");
-    // Background enrichment mirrors the vault_review addedUrls pattern —
-    // but must NOT touch title: we already captured a real og:title
-    // ("Nova Reyes — Official Site") synchronously, and fetchPageContent
-    // falls back to a generic "Source from <host>" on any hiccup, which
-    // must never downgrade it.
-    expect(fetchPageContent).toHaveBeenCalledWith("https://novareyesmusic.com/");
-    await new Promise(r => setTimeout(r, 0)); // flush the fire-and-forget .then() chain
-    expect(dq.updateVaultSourceContent).toHaveBeenCalledWith("new-src", {
-      snippet: "s",
-      extractedText: "e",
-      ogImage: null,
-    });
+    // The authorized insert owns durable ingestion; this turn must not detach a body write.
+    expect(fetchPageContent).not.toHaveBeenCalled();
+    expect(dq.updateVaultSourceContent).not.toHaveBeenCalled();
   });
 
   it("confirm_profiles: a bare website domain is normalized before fetch and persistence", async () => {
@@ -1400,18 +1391,9 @@ describe("runOnboardingTurn", () => {
     // Confirms and advances like any other successful addition.
     const oqMod = OQ;
     expect(oqMod.confirmOnboardingStep).toHaveBeenCalledWith("a1", "profiles");
-    // Background enrichment mirrors the vault_review addedUrls pattern —
-    // but must NOT touch title: we already captured a real og:title
-    // ("Nova Reyes — Official Site") synchronously, and fetchPageContent
-    // falls back to a generic "Source from <host>" on any hiccup, which
-    // must never downgrade it.
-    expect(fetchPageContent).toHaveBeenCalledWith("https://novareyesmusic.com/");
-    await new Promise(r => setTimeout(r, 0)); // flush the fire-and-forget .then() chain
-    expect(dq.updateVaultSourceContent).toHaveBeenCalledWith("new-src", {
-      snippet: "s",
-      extractedText: "e",
-      ogImage: null,
-    });
+    // The authorized insert owns durable ingestion; this turn must not detach a body write.
+    expect(fetchPageContent).not.toHaveBeenCalled();
+    expect(dq.updateVaultSourceContent).not.toHaveBeenCalled();
   });
 
   it("confirm_profiles → vault: a website routed to the vault this turn does not suppress the web-discovery search for OTHER sources (forceVaultDiscovery)", async () => {
@@ -2429,7 +2411,7 @@ describe("runOnboardingTurn", () => {
     expect(events.some(e => e.kind === "error")).toBe(true);
   });
 
-  it("vault_review enriches an artist-pasted URL in the background via fetchPageContent + updateVaultSourceContent (I4)", async () => {
+  it("vault_review leaves artist-pasted originals to durable ingestion after the approved insert", async () => {
     const oq = OQ;
     oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "vault" });
     const dq = DQ;
@@ -2449,15 +2431,8 @@ describe("runOnboardingTurn", () => {
       type: "article",
       status: "approved",
     });
-    expect(fetchPageContent).toHaveBeenCalledWith("https://example.com/press");
-    // Let the fire-and-forget .then() chain flush before asserting the follow-up write.
-    await new Promise(r => setTimeout(r, 0));
-    expect(dq.updateVaultSourceContent).toHaveBeenCalledWith("new-src-1", {
-      title: "t",
-      snippet: "s",
-      extractedText: "e",
-      ogImage: null,
-    });
+    expect(fetchPageContent).not.toHaveBeenCalled();
+    expect(dq.updateVaultSourceContent).not.toHaveBeenCalled();
   });
 
   it("publish skips the Gemini retry once the retry budget is exhausted, letting the failure propagate (I2)", async () => {

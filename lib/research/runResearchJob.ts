@@ -1,3 +1,4 @@
+import { runSourceExtraction } from "@/lib/sourceExtraction/runSourceExtraction";
 import { runLatestRefresh } from "@/lib/latest/runLatestRefresh";
 import { runCaptionExtract } from "@/lib/research/runCaptionExtract";
 import { runIngest } from "@/lib/research/runIngest";
@@ -14,6 +15,8 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  */
 export async function runResearchJob(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   switch (job.kind) {
+    case "source_extract":
+      return runSourceExtraction(job, deadline);
     case "caption_extract":
       return runCaptionExtract(job, deadline);
     case "lore_refresh":

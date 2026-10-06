@@ -72,3 +72,23 @@ describe("claimResearchJob", () => {
     expect(await claimResearchJob({ kinds: ["social_ingest"] })).toBeNull();
   });
 });
+
+it("allows only automatic source backlog with no other live source extraction for that artist", async () => {
+  execute.mockResolvedValue([]);
+  await claimResearchJob({ kinds: ["source_extract"] });
+  const { text } = renderSql(execute.mock.calls[0][0]);
+  expect(text).toContain("candidate.status = 'queued'");
+  expect(text).toContain("candidate.kind = 'source_extract'");
+  expect(text).toContain("not exists");
+  expect(text).toContain("live.artist_id = candidate.artist_id");
+});
+it("leaves a concurrently claimed source in the backlog when the live unique fence wins", async () => {
+  execute.mockRejectedValueOnce({ cause: { code: "23505" } });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(await claimResearchJob({ kinds: ["source_extract"] })).toBeNull();
+    expect(log).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+  }
+});

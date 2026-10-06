@@ -1,3 +1,4 @@
+import { queueApprovedSourceExtraction } from "@/lib/sourceExtraction/queueApprovedSourceExtraction";
 import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 import { canSaveMusicDestination } from "@/lib/musicLinks/canSaveMusicDestination";
 import { sql } from "drizzle-orm";
@@ -67,5 +68,6 @@ export async function writeVaultSource(
       sql`update artist_vault_sources set activity_id = ${activityId}::uuid where id = ${source.id}::uuid`,
     );
   }
+  await queueApprovedSourceExtraction(writer, source, activityId);
   return { ...source, activityId };
 }
