@@ -88,6 +88,7 @@ export type QuestionResearchState = {
   externalRequested?: boolean;
   runId?: string;
   datasetId?: string;
+  nextPollAt?: string;
   modelCalls: number;
   providerCalls: number;
   inputTokens: number;

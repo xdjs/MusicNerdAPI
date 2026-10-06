@@ -202,6 +202,7 @@ export async function runQuestionResearch(
       }
       case "social_poll": {
         if (!state.runId) throw new Error("Missing saved provider run");
+        if (state.nextPollAt && Date.now() < Date.parse(state.nextPollAt)) return await finish();
         if (!(await reserve("read"))) return stale;
         const result = await checkInstagramScrape(state.runId);
         if (result.status === "ready") {
@@ -211,6 +212,10 @@ export async function runQuestionResearch(
         } else if (result.status === "failed") {
           state.stage = "failed";
           state.errorCode = "provider_failed";
+        } else {
+          // Persist backoff so browser reconnects and multiple pumps share one polling budget.
+          const delay = Math.min(60000, 5000 * 2 ** Math.max(0, state.providerCalls - 2));
+          state.nextPollAt = new Date(Date.now() + delay).toISOString();
         }
         return await finish();
       }

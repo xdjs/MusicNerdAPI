@@ -36,6 +36,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
     (s.nextCandidate !== undefined &&
       (!Number.isInteger(s.nextCandidate) || s.nextCandidate < 0 || s.nextCandidate > 3)) ||
     (s.runId && !/^[a-zA-Z0-9_-]{1,100}$/.test(s.runId)) ||
+    (s.nextPollAt !== undefined && !Number.isFinite(Date.parse(s.nextPollAt))) ||
     (s.datasetId && !/^[a-zA-Z0-9_-]{1,100}$/.test(s.datasetId))
   )
     throw new Error("Invalid research state");

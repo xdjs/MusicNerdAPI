@@ -164,3 +164,24 @@ it("caps job lifetime and stops reporting ongoing work", async () => {
   expect(j.state).toMatchObject({ stage: "failed", errorCode: "research_expired" });
   expect(m.load).not.toHaveBeenCalled();
 });
+it("does not spend provider polling budget when a foreground client resumes too quickly", async () => {
+  m.poll.mockResolvedValue({ status: "running", runId: "run1" });
+  const j = job({
+    ...initial(),
+    providerCalls: 1,
+    request: {
+      topic: "new video",
+      evidenceNeed: "social_caption",
+      freshness: "stored",
+      platform: "tiktok",
+    },
+    step: "social_poll",
+    stage: "waiting_provider",
+    runId: "run1",
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.poll).toHaveBeenCalledTimes(1);
+  expect(j.state.providerCalls).toBe(2);
+  expect(Date.parse(String(j.state.nextPollAt))).toBeGreaterThan(Date.now());
+});
