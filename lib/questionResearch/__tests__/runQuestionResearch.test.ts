@@ -185,3 +185,20 @@ it("does not spend provider polling budget when a foreground client resumes too 
   expect(j.state.providerCalls).toBe(2);
   expect(Date.parse(String(j.state.nextPollAt))).toBeGreaterThan(Date.now());
 });
+it("does not cancel when JSONB storage reorders a persisted provider plan", async () => {
+  m.search.mockResolvedValue([]);
+  const j = job({
+    ...initial(),
+    plan: {
+      reason: "work_specific_originals",
+      query: '"Artist" record credits credits liner notes official release',
+      stage: "searching",
+      provider: "web",
+    },
+    step: "search",
+    stage: "searching",
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.search).toHaveBeenCalledTimes(1);
+  expect(j.state.stage).toBe("unresolved");
+});

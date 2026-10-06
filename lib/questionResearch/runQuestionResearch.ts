@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { webSearch } from "@/lib/search/webSearch";
 import { fetchSourceText } from "@/lib/sourceExtraction/fetchSourceText";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
@@ -79,7 +80,7 @@ export async function runQuestionResearch(
     if (deadline - Date.now() < 25000) return await finish();
     const artist = await loadResearchArtist(job.artistId);
     const plan = planQuestionResearch(state.request, artist);
-    if (state.plan && JSON.stringify(plan) !== JSON.stringify(state.plan)) {
+    if (state.plan && !isDeepStrictEqual(plan, state.plan)) {
       state.stage = "cancelled";
       state.errorCode = "source_identity_changed";
       state.references = [];
