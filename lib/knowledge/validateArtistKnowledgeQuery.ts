@@ -22,6 +22,9 @@ export function validateArtistKnowledgeQuery(
     if (["limit", "maxChars", "start", "sitting"].includes(key)) {
       if (!/^\d+$/.test(value)) return invalid();
       input[key] = Number(value);
+    } else if (key === "includeVersion") {
+      if (value !== "true" && value !== "false") return invalid();
+      input[key] = value === "true";
     } else input[key] = value;
   }
   if (operation === "read") input.sourceId = sourceId;

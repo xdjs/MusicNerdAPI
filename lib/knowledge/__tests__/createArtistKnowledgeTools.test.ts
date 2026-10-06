@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createArtistKnowledgeTools } from "@/lib/knowledge/createArtistKnowledgeTools";
 import { normalizeArtistKnowledge } from "@/lib/knowledge/normalizeArtistKnowledge";
 import { queryArtistKnowledge } from "@/lib/knowledge/queryArtistKnowledge";
-import { artistId, rawKnowledge } from "./fixtures";
+import { artistId, rawKnowledge, vault } from "./fixtures";
 
 const fetchMock = vi.fn();
 const token = vi.fn(async () => "fixture-access-token");
@@ -14,6 +14,34 @@ beforeEach(() => {
 });
 
 describe("createArtistKnowledgeTools", () => {
+  it("opts into explicit source versions and rejects a response that omits that provenance", async () => {
+    const snapshot = normalizeArtistKnowledge({ ...rawKnowledge, vault: [vault] });
+    const source = snapshot.sources[0];
+    const input = {
+      sourceId: source.metadata.sourceId,
+      revision: source.metadata.revision,
+      start: 0,
+      maxChars: 1000,
+    };
+    const result = queryArtistKnowledge(snapshot, {
+      ...input,
+      operation: "read",
+      includeVersion: true,
+    });
+    fetchMock.mockResolvedValueOnce(Response.json(result));
+    const tools = createArtistKnowledgeTools(config);
+    const options = { toolCallId: "retained", messages: [], context: {} };
+    await expect(tools.readArtistSource.execute!(input, options)).resolves.toEqual(result);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get("includeVersion")).toBe(
+      "true",
+    );
+    const { version: _version, ...legacy } = result;
+    void _version;
+    fetchMock.mockResolvedValueOnce(Response.json(legacy));
+    await expect(tools.readArtistSource.execute!(input, options)).rejects.toThrow(
+      /version metadata is missing/,
+    );
+  });
   it("bounds response bytes even when upstream omits Content-Length", async () => {
     fetchMock.mockResolvedValue(new Response(" ".repeat(128 * 1024 + 1)));
     await expect(

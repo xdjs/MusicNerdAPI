@@ -5,9 +5,10 @@ import { normalizeArtistKnowledge } from "@/lib/knowledge/normalizeArtistKnowled
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { artistId, rawKnowledge, vault } from "./fixtures";
 
-const mock = vi.hoisted(() => ({ auth: vi.fn(), load: vi.fn() }));
+const mock = vi.hoisted(() => ({ auth: vi.fn(), load: vi.fn(), read: vi.fn() }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: mock.auth }));
 vi.mock("@/lib/knowledge/loadArtistKnowledge", () => ({ loadArtistKnowledge: mock.load }));
+vi.mock("@/lib/knowledge/readArtistKnowledge", () => ({ readArtistKnowledge: mock.read }));
 beforeEach(() => {
   vi.clearAllMocks();
   mock.auth.mockResolvedValue({ userId: "verified-caller" });
@@ -15,6 +16,36 @@ beforeEach(() => {
 });
 
 describe("getArtistKnowledgeHandler", () => {
+  it("routes an opted-in source read to authorized single-source storage", async () => {
+    const revision = "a".repeat(64);
+    mock.read.mockResolvedValue({ status: "ok", version: { state: "historical" } });
+    const response = await getArtistKnowledgeHandler(
+      new Request(`https://example.org?revision=${revision}&includeVersion=true`),
+      artistId,
+      "read",
+      `vault:${vault.id}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(mock.read).toHaveBeenCalledWith(artistId, "verified-caller", {
+      operation: "read",
+      revision,
+      sourceId: `vault:${vault.id}`,
+      includeVersion: true,
+      start: 0,
+      maxChars: 6000,
+    });
+    expect(mock.load).not.toHaveBeenCalled();
+    mock.read.mockRejectedValue(new Error("private stored original"));
+    const failed = await getArtistKnowledgeHandler(
+      new Request(`https://example.org?revision=${revision}`),
+      artistId,
+      "read",
+      `vault:${vault.id}`,
+    );
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain("private stored original");
+  });
   it("binds storage access to verified auth and returns private, non-cacheable evidence", async () => {
     const response = await getArtistKnowledgeHandler(
       new Request("https://example.org"),

@@ -1,9 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import {
-  artists,
-  users,
-  artistClaims,
   artistVaultSources,
   artistSocialPosts,
   artistDocs,
@@ -11,6 +8,7 @@ import {
   artistDocCorrections,
   artistResearchJobs,
 } from "@/lib/db/schema";
+import { authorizeArtistKnowledge } from "@/lib/knowledge/authorizeArtistKnowledge";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { normalizeArtistKnowledge } from "@/lib/knowledge/normalizeArtistKnowledge";
 import { MAX_KNOWLEDGE_CHARS, MAX_KNOWLEDGE_ROWS } from "@/lib/knowledge/types";
@@ -19,33 +17,7 @@ import { MAX_KNOWLEDGE_CHARS, MAX_KNOWLEDGE_ROWS } from "@/lib/knowledge/types";
 export async function loadArtistKnowledge(artistId: string, userId: string) {
   return db.transaction(
     async tx => {
-      const [user] = await tx
-        .select({ id: users.id, isAdmin: users.isAdmin })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-      if (!user) throw new KnowledgeError("unauthenticated", 401, "Not signed in");
-      if (!user.isAdmin) {
-        const [claim] = await tx
-          .select({ id: artistClaims.id })
-          .from(artistClaims)
-          .where(
-            and(
-              eq(artistClaims.artistId, artistId),
-              eq(artistClaims.userId, userId),
-              eq(artistClaims.status, "approved"),
-            ),
-          )
-          .limit(1);
-        if (!claim)
-          throw new KnowledgeError("forbidden", 403, "Artist claimant or administrator required");
-      }
-      const [artist] = await tx
-        .select({ id: artists.id, name: artists.name, bio: artists.bio })
-        .from(artists)
-        .where(eq(artists.id, artistId))
-        .limit(1);
-      if (!artist) throw new KnowledgeError("not_found", 404, "Artist unavailable");
+      const artist = await authorizeArtistKnowledge(tx, artistId, userId);
       // Bound material in Postgres before transferring large text or JSON to the app.
       const sizes = await tx.execute<{ rows: number; chars: number }>(sql`
       select count(*)::int as rows, coalesce(sum(char_length(coalesce(extracted_text,'')) + char_length(coalesce(title,'')) + char_length(coalesce(snippet,'')) + char_length(url)),0)::bigint as chars

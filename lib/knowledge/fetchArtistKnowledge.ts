@@ -40,6 +40,7 @@ export async function fetchArtistKnowledge<K extends keyof Results>(
     const url = new URL(`/api/artist/${config.artistId}/${path}`, config.apiOrigin);
     for (const [key, value] of Object.entries(validated.data))
       if (key !== "sourceId" && value !== undefined) url.searchParams.set(key, String(value));
+    if (operation === "read") url.searchParams.set("includeVersion", "true");
     let response: Response;
     try {
       response = await fetch(url, {
@@ -86,6 +87,8 @@ export async function fetchArtistKnowledge<K extends keyof Results>(
     }
     const result = knowledgeOutputSchemas[operation].safeParse(body);
     if (!result.success) throw new Error("Invalid Music Nerd API response");
+    if (operation === "read" && !("version" in result.data && result.data.version))
+      throw new Error("Invalid Music Nerd API response: source version metadata is missing");
     return result.data as Results[K];
   };
   try {

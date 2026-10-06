@@ -61,3 +61,21 @@ describe("validateArtistKnowledgeQuery", () => {
     ).toBeInstanceOf(NextResponse);
   });
 });
+
+it("validates the explicit historical-read opt-in and rejects malformed source UUIDs", () => {
+  const base = `https://example.org?revision=${"a".repeat(64)}`;
+  const sourceId = "vault:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  expect(
+    validateArtistKnowledgeQuery(new Request(base + "&includeVersion=true"), id, "read", sourceId),
+  ).toMatchObject({ includeVersion: true });
+  expect(
+    validateArtistKnowledgeQuery(new Request(base + "&includeVersion=false"), id, "read", sourceId),
+  ).toMatchObject({ includeVersion: false });
+  expect(
+    validateArtistKnowledgeQuery(new Request(base + "&includeVersion=yes"), id, "read", sourceId),
+  ).toMatchObject({ status: 400 });
+  expect(
+    validateArtistKnowledgeQuery(new Request(base), id, "read", "vault:" + "-".repeat(36)),
+  ).toMatchObject({ status: 400 });
+});

@@ -129,6 +129,20 @@ export const knowledgeOutputSchemas = {
     truncated: z.boolean(),
   }),
   read: z.strictObject({
+    version: z
+      .discriminatedUnion("state", [
+        z.strictObject({
+          state: z.literal("current"),
+          currentRevision: revision,
+          capturedAt: z.null(),
+        }),
+        z.strictObject({
+          state: z.literal("historical"),
+          currentRevision: revision,
+          capturedAt: z.iso.datetime(),
+        }),
+      ])
+      .optional(),
     status: z.literal("ok"),
     passage,
     totalChars: nonnegative,
