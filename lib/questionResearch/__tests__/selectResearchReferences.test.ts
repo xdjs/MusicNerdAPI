@@ -72,3 +72,11 @@ it("opens an exact target even when the question paraphrases its wording", () =>
   expect(r[0]?.text).toBe(text);
   expect(r[0]?.start).toBe(0);
 });
+it("honors an explicitly requested platform when checking saved public evidence", () => {
+  const r = selectResearchReferences(
+    [{ ...original, url: "https://www.tiktok.com/@artist/video/123", text: "OUT HERE album" }],
+    { topic: "OUT HERE album", evidenceNeed: "social_caption", freshness: "stored", platform: "x" },
+    "Artist",
+  );
+  expect(r).toEqual([]);
+});

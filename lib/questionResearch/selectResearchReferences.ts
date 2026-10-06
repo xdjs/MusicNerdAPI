@@ -24,6 +24,12 @@ export function selectResearchReferences(
     o =>
       (!request.targetUrl ||
         canonicalResearchUrl(o.url) === canonicalResearchUrl(request.targetUrl)) &&
+      (!request.platform ||
+        request.targetUrl ||
+        (request.platform === "x"
+          ? ["x.com", "twitter.com"]
+          : [`${request.platform}.com`]
+        ).includes(new URL(o.url).hostname.replace(/^www\./, ""))) &&
       (request.evidenceNeed !== "spoken_content" || o.evidenceKind === "provider_transcript") &&
       (!from || (o.publishedAt !== null && o.publishedAt.slice(0, 10) >= from)) &&
       (!request.toDate || (o.publishedAt !== null && o.publishedAt.slice(0, 10) <= request.toDate)),
