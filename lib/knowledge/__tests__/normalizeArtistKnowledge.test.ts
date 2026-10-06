@@ -154,3 +154,24 @@ it("exposes automatic extraction backlog as pending without adding a public stat
     normalizeArtistKnowledge({ ...rawKnowledge, jobs: [{ ...jobs[0], kind: "lore_refresh" }] }),
   ).toThrow("Stored research status is unsupported");
 });
+
+it("keeps approved research captions distinct from spoken transcripts", () => {
+  const caption = normalizeArtistKnowledge({
+    ...rawKnowledge,
+    vault: [{ ...vault, origin: "question_research", type: "social_caption" }],
+  }).sources[0];
+  expect(caption.metadata.kind).toBe("social_caption");
+  expect(caption.metadata.provenance).toMatchObject({
+    origin: "social_caption",
+    speaker: "not_applicable",
+  });
+  const speech = normalizeArtistKnowledge({
+    ...rawKnowledge,
+    vault: [{ ...vault, origin: "question_research", type: "reel_transcript" }],
+  }).sources[0];
+  expect(speech.metadata.kind).toBe("reel_transcript");
+  expect(speech.metadata.provenance).toMatchObject({
+    origin: "provider_transcript",
+    speaker: "unverified",
+  });
+});

@@ -57,13 +57,15 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
     if (row.artistId !== raw.artist.id || row.status !== "approved") continue;
     const text = row.extractedText ?? "";
     const upload = Boolean(row.filePath) || row.origin === "upload";
+    const caption = !upload && row.origin === "question_research" && row.type === "social_caption";
+    const speech = !upload && row.origin === "question_research" && row.type === "reel_transcript";
     const limits = ["Legacy extraction completeness is unknown; stored text may omit material."];
     if (/pdf/i.test(row.type ?? "") || /\.pdf(?:$|[?#])/i.test(row.url))
       limits.push("No verified PDF page map or OCR coverage is stored.");
     else limits.push("Legacy website extraction may be capped at 50,000 characters.");
     add(text, {
       sourceId: `vault:${row.id}`,
-      kind: "vault",
+      kind: caption ? "social_caption" : speech ? "reel_transcript" : "vault",
       title: clip(row.title, 300),
       titleTruncated: (row.title?.length ?? 0) > 300,
       description: clip(row.snippet, 600),
@@ -75,10 +77,20 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
       eventDate: null,
       originalSourceUrl: null,
       provenance: {
-        origin: upload ? "vault_upload" : "vault_link",
-        provider: null,
-        method: "legacy_extracted_text",
-        speaker: "unverified",
+        origin: caption
+          ? "social_caption"
+          : speech
+            ? "provider_transcript"
+            : upload
+              ? "vault_upload"
+              : "vault_link",
+        provider: speech ? "apify/instagram-reel-scraper" : null,
+        method: caption
+          ? "approved_caption"
+          : speech
+            ? "approved_provider_transcript"
+            : "legacy_extracted_text",
+        speaker: caption ? "not_applicable" : "unverified",
         publisher: null,
         speakerName: null,
         relationship: "unknown",
@@ -241,6 +253,7 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
           "source_search",
           "latest_refresh",
           "source_extract",
+          "question_research",
         ].includes(row.kind) ||
         (!["pending", "running", "done", "failed"].includes(row.status) &&
           !(row.kind === "source_extract" && row.status === "queued")) ||

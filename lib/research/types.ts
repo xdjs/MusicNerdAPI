@@ -4,7 +4,8 @@ export type JobKind =
   | "lore_refresh"
   | "source_search"
   | "latest_refresh"
-  | "source_extract";
+  | "source_extract"
+  | "question_research";
 export type JobStatus = "queued" | "pending" | "running" | "done" | "failed";
 
 export interface ResearchJob {
