@@ -87,12 +87,16 @@ export function selectResearchReferences(
       limitations: [],
     },
   };
-  const result = searchArtistKnowledge(snapshot, {
-    operation: "search",
-    query: request.topic,
-    limit: 4,
-    maxChars: 6400,
-  });
+  const result = searchArtistKnowledge(
+    snapshot,
+    {
+      operation: "search",
+      query: request.topic,
+      limit: 4,
+      maxChars: 6400,
+    },
+    { maxPassagesPerSource: 2 },
+  );
   // A specific URL is an instruction to inspect that original, even without lexical overlap.
   if (!result.passages.length && request.targetUrl) {
     return eligible

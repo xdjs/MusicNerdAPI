@@ -80,3 +80,28 @@ it("honors an explicitly requested platform when checking saved public evidence"
   );
   expect(r).toEqual([]);
 });
+it("does not let one long interview crowd a relevant short original out of public research", () => {
+  const long = {
+    ...original,
+    sourceId: "vault:long",
+    text: Array.from(
+      { length: 40 },
+      (_, i) =>
+        `Interview section ${i}. Music music music sound sound. ` +
+        "A discussion of creative work. ".repeat(35),
+    ).join("\n"),
+  };
+  const bio = {
+    ...original,
+    sourceId: "vault:bio",
+    url: "https://artist.example/bio",
+    text: "The artist's music moves between hip hop, club and jazz.",
+  };
+  const r = selectResearchReferences(
+    [long, bio],
+    { topic: "music sound", evidenceNeed: "reporting", freshness: "stored" },
+    "Artist",
+  );
+  expect(r.some(p => p.sourceId === bio.sourceId)).toBe(true);
+  expect(r.filter(p => p.sourceId === long.sourceId).length).toBeLessThanOrEqual(2);
+});
