@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { artistInterviewAnswers } from "@/lib/db/schema";
 import type { InterviewAnswerSource } from "@/lib/onboarding/types";
 import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
@@ -26,17 +26,35 @@ export async function upsertInterviewAnswer(input: {
   source: InterviewAnswerSource;
 }): Promise<void> {
   await withScopedArtistWrite(input.artistId, async tx => {
-    await tx
+    const saved = await tx
       .insert(artistInterviewAnswers)
       .values(input)
       .onConflictDoUpdate({
         target: [artistInterviewAnswers.artistId, artistInterviewAnswers.questionKey],
+        setWhere: eq(artistInterviewAnswers.source, "offered"),
         set: {
           question: input.question,
           answer: input.answer,
           source: input.source,
           createdAt: sql`(now() AT TIME ZONE 'utc'::text)`,
         },
-      });
+      })
+      .returning({ id: artistInterviewAnswers.id });
+    if (saved.length === 0) {
+      const [existing] = await tx
+        .select({ answer: artistInterviewAnswers.answer })
+        .from(artistInterviewAnswers)
+        .where(
+          and(
+            eq(artistInterviewAnswers.artistId, input.artistId),
+            eq(artistInterviewAnswers.questionKey, input.questionKey),
+          ),
+        )
+        .limit(1);
+      if (!existing || existing.answer !== input.answer)
+        throw new Error(
+          "This question already has a saved response. Edit it from Questions in your profile.",
+        );
+    }
   });
 }
