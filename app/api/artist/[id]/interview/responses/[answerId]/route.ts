@@ -4,14 +4,18 @@ import { handleInterviewResponse } from "@/lib/interviewResponses/handleIntervie
 
 export const dynamic = "force-dynamic";
 
-/** CORS preflight for authenticated clients.
+/**
+ * CORS preflight for authenticated clients.
+ *
  * @returns The allowed methods and headers.
  */
 export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: getCorsHeaders() });
 }
 
-/** Read saved interview responses for the current claimant or administrator.
+/**
+ * Read saved interview responses for the current claimant or administrator.
+ *
  * @param request - Authenticated incoming request.
  * @param context - Route context.
  * @param context.params - Artist and response identity.
@@ -25,7 +29,9 @@ export async function GET(
   return handleInterviewResponse(request, id, "read", answerId);
 }
 
-/** Revise saved interview responses for the current claimant or administrator.
+/**
+ * Revise saved interview responses for the current claimant or administrator.
+ *
  * @param request - Authenticated incoming request.
  * @param context - Route context.
  * @param context.params - Artist and response identity.
