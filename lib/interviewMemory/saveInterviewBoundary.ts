@@ -34,7 +34,7 @@ export async function saveInterviewBoundary(artistId: string, userId: string, va
     );
     if (!origin) throw new KnowledgeError("not_found", 404, "Offered question unavailable");
     const [latest] = await tx.execute<{ sitting: number }>(
-      sql`select coalesce(max(coalesce(sitting,1)),1)::int as sitting from artist_interview_answers where artist_id=${artistId}::uuid`,
+      sql`select greatest(coalesce((select max(coalesce(sitting,1)) from artist_interview_answers where artist_id=${artistId}::uuid),1),coalesce((select max(sitting) from artist_interview_sessions where artist_id=${artistId}::uuid),1))::int as sitting`,
     );
     if (!latest) throw new Error("Sitting unavailable");
     if (input.scope === "sitting" && origin.sitting < latest.sitting)
