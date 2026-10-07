@@ -20,7 +20,18 @@ export function selectResearchReferences(
     (request.freshness === "recent"
       ? new Date(now - 7 * 86400_000).toISOString().slice(0, 10)
       : undefined);
-  const eligible = originals.filter(
+  // Promotion retains both the discovery and its Lore copy. Identical text at
+  // the same URL is one original, not independent corroboration or extra rank.
+  const seen = new Set<string>();
+  const distinct = [...originals]
+    .sort((a, b) => Number(b.curation === "approved") - Number(a.curation === "approved"))
+    .filter(original => {
+      const key = `${canonicalResearchUrl(original.url)}\0${original.evidenceKind}\0${original.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  const eligible = distinct.filter(
     o =>
       (!request.targetUrl ||
         canonicalResearchUrl(o.url) === canonicalResearchUrl(request.targetUrl)) &&

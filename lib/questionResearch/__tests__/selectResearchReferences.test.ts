@@ -105,3 +105,29 @@ it("does not let one long interview crowd a relevant short original out of publi
   expect(r.some(p => p.sourceId === bio.sourceId)).toBe(true);
   expect(r.filter(p => p.sourceId === long.sourceId).length).toBeLessThanOrEqual(2);
 });
+it("counts a promoted discovery and its identical approved Lore copy as one original", () => {
+  const long = {
+    ...original,
+    sourceId: "vault:long",
+    text: Array.from(
+      { length: 40 },
+      (_, i) =>
+        `Interview section ${i}. Music music music sound sound. ` +
+        "A discussion of creative work. ".repeat(35),
+    ).join("\n"),
+  };
+  const duplicate = { ...long, sourceId: "discovery:copy", curation: "pending" as const };
+  const bio = {
+    ...original,
+    sourceId: "vault:bio",
+    url: "https://artist.example/bio",
+    text: "The artist music moves between hip hop, club and jazz.",
+  };
+  const result = selectResearchReferences(
+    [duplicate, long, bio],
+    { topic: "music sound", evidenceNeed: "reporting", freshness: "stored" },
+    "Artist",
+  );
+  expect(result.some(r => r.sourceId === bio.sourceId)).toBe(true);
+  expect(result.some(r => r.sourceId === duplicate.sourceId)).toBe(false);
+});
