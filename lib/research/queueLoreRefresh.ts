@@ -5,6 +5,7 @@ import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { rowsOf } from "@/lib/db/rowsOf";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
+import type { TransactionDb } from "@/lib/ownership/types";
 
 /**
  * Queues a Lore rebuild under the claim it was requested for. A request that
@@ -15,14 +16,16 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
  * @param expectedClaimId - The artist's approved claim when the request was made.
  * @param opts - Request options.
  * @param opts.manual - A person pressed the button: skip when a refresh is live or ran in the last 30 minutes.
+ * @param writer - Existing transaction when the request must commit with its source edit.
  * @returns False when a manual request was skipped; true otherwise. A changed claim throws.
  */
 export async function queueLoreRefresh(
   artistId: string,
   expectedClaimId: string | null,
   opts?: { manual?: boolean },
+  writer?: TransactionDb,
 ): Promise<boolean> {
-  return db.transaction(async tx => {
+  const enqueue = async (tx: TransactionDb) => {
     await lockArtistRow(tx, artistId);
     const claim = await findApprovedClaim(tx, artistId);
     if ((claim?.id ?? null) !== expectedClaimId) throw new OwnershipChangedError();
@@ -45,5 +48,6 @@ export async function queueLoreRefresh(
           status = case when artist_research_jobs.status = 'running' then 'running' else 'pending' end,
           attempts = 0, updated_at = now()`);
     return true;
-  });
+  };
+  return writer ? enqueue(writer) : db.transaction(enqueue);
 }
