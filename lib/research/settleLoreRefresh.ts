@@ -15,7 +15,7 @@ export async function settleLoreRefresh(jobId: string, requestedAt: string): Pro
   const rows = await db.execute(sql`
     update artist_research_jobs
        set status = case when coalesce(state->>'requestedAt', '') = ${requestedAt} then 'done' else 'pending' end,
-           claimed_at = null, updated_at = now()
+           claimed_at = null, last_error = null, updated_at = now()
      where id = ${jobId}::uuid
     returning status`);
   const status = (rowsOf(rows)[0] as { status?: string } | undefined)?.status;
