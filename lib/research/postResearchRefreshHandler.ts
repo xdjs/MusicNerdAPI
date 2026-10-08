@@ -5,6 +5,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { withArtistOperation } from "@/lib/ownership/withArtistOperation";
 import { requestResearchRefresh } from "@/lib/research/requestResearchRefresh";
+import { validateResearchRefreshBody } from "@/lib/research/validateResearchRefreshBody";
 
 /**
  * `POST /api/artist/{id}/research/refresh`: the claimant (or an admin) asks
@@ -22,12 +23,17 @@ export async function postResearchRefreshHandler(
   try {
     const validated = await validateArtistEditRequest(request, id);
     if (validated instanceof NextResponse) return validated;
+    const mode = await validateResearchRefreshBody(request);
+    if (mode instanceof NextResponse) return mode;
     const { artistId, userId } = validated;
     const claimId = (await findApprovedClaim(db, artistId))?.id ?? null;
     const message = await withArtistOperation(
       artistId,
       { userId, expectedClaimId: claimId, trigger: "manual_refresh" },
-      () => requestResearchRefresh(artistId, claimId),
+      () =>
+        mode
+          ? requestResearchRefresh(artistId, claimId, mode)
+          : requestResearchRefresh(artistId, claimId),
     );
     return NextResponse.json({ status: "ok", message }, { headers });
   } catch (e) {

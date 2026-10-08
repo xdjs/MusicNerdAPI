@@ -45,6 +45,25 @@ describe("requestResearchRefresh", () => {
     expect(m.social).toHaveBeenCalledWith("a1", { force: true });
   });
 
+  it("queues only claim-checked Lore from stored sources in lore-only mode", async () => {
+    expect(await requestResearchRefresh("a1", "c1", { mode: "lore-only" })).toBe(
+      "Rebuilding Lore from your stored sources.",
+    );
+    expect(m.lore).toHaveBeenCalledWith("a1", "c1", { manual: true });
+    expect(m.jobs).not.toHaveBeenCalled();
+    expect(m.reopen).not.toHaveBeenCalled();
+    expect(m.social).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates a recent Lore-only request without touching social jobs", async () => {
+    m.lore.mockResolvedValueOnce(false);
+    expect(await requestResearchRefresh("a1", null, { mode: "lore-only" })).toBe(LORE_SKIPPED);
+    expect(m.lore).toHaveBeenCalledWith("a1", null, { manual: true });
+    expect(m.jobs).not.toHaveBeenCalled();
+    expect(m.reopen).not.toHaveBeenCalled();
+    expect(m.social).not.toHaveBeenCalled();
+  });
+
   it("says when Update Latest is already checking Instagram", async () => {
     m.lore.mockResolvedValueOnce(false);
     m.jobs.mockResolvedValueOnce([

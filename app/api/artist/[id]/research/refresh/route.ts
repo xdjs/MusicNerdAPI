@@ -14,9 +14,9 @@ export async function OPTIONS() {
 }
 
 /**
- * "Look again" for an artist: rebuild the Lore and read the artist's recent
- * posts. The claimant or an admin, signed in with a Privy access token
- * (`Authorization: Bearer`).
+ * "Look again" for an artist: rebuild Lore and read recent posts by default.
+ * An optional `{ "mode": "lore-only" }` body queues only a stored-source Lore
+ * rebuild. The claimant or an admin must send a Privy bearer token.
  *
  * @param request - The request.
  * @param context - The route context.
