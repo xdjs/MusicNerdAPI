@@ -15,8 +15,8 @@ export type DocSource = {
   publishedAt?: string | null;
 };
 
-/** What a rebuild did. "no-document" is not a failure: there was nothing to rebuild. */
-export type DocRefresh = "rebuilt" | "no-document" | "failed" | "cancelled";
+/** An empty source set is distinct from a model or storage failure. */
+export type DocRefresh = "rebuilt" | "no-document" | "no-material" | "failed" | "cancelled";
 
 /** The inventory overview stored beside the document, keyed to the sources it describes. */
 export type LoreSummary = { text: string; sourceKey: string };

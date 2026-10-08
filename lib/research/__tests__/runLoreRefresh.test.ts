@@ -92,6 +92,15 @@ describe("runLoreRefresh", () => {
     });
   });
 
+  it("settles an empty initial source set without recording a rebuild failure", async () => {
+    m.refreshArtistDoc.mockResolvedValueOnce("no-material");
+    expect(await runLoreRefresh(job({ claimId: null }), plenty())).toEqual({
+      progress: "No readable Lore material is ready yet",
+      done: true,
+    });
+    expect(m.settleLoreRefresh).toHaveBeenCalledWith("job-1", "");
+  });
+
   it("throws on a failed rebuild, so the caller counts the attempt", async () => {
     m.refreshArtistDoc.mockResolvedValueOnce("failed");
     await expect(runLoreRefresh(job({ claimId: "c" }), plenty())).rejects.toThrow(

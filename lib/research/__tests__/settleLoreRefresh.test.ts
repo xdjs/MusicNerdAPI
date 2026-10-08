@@ -16,6 +16,7 @@ describe("settleLoreRefresh", () => {
       "status = case when coalesce(state->>'requestedAt', '') = $1 then 'done' else 'pending' end",
     );
     expect(text).toContain("claimed_at = null");
+    expect(text).toContain("last_error = null");
     expect(text).toContain("returning status");
     expect(params).toEqual(["2026-09-29T00:00:00Z", "job-1"]);
   });

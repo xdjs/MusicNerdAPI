@@ -3,6 +3,7 @@ import type { ExtractionSlice } from "@/lib/credits/types";
 import { refreshArtistDoc } from "@/lib/lore/refreshArtistDoc";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
 import { failResearchJob } from "@/lib/research/failResearchJob";
+import { queueLoreRefreshAfterCaptions } from "@/lib/research/queueLoreRefreshAfterCaptions";
 import { saveJobProgress } from "@/lib/research/saveJobProgress";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 
@@ -11,8 +12,8 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  * complete. The rebuild gets its own slice, since starting a model call on the
  * tail of a spent one let the platform kill us between the two writes.
  *
- * "no-document" is not a failure: an artist who has never had a document has
- * nothing to rebuild, and every first-time artist arrives that way.
+ * A first-time artist has no document yet: queue a durable Lore refresh after
+ * captions become readable instead of silently skipping that first rebuild.
  *
  * @param job - The claimed job.
  * @param read - The slice that finished the batches.
@@ -33,9 +34,10 @@ export async function rebuildAfterCaptions(
     await failResearchJob(job.id, "credits stored but the document rebuild failed");
     return { progress: "credits stored, document rebuild failed — will retry", done: false };
   }
+  const queued = rebuilt === "no-document" ? await queueLoreRefreshAfterCaptions(job) : null;
   await completeResearchJob(job.id);
   return {
-    progress: `complete, ${read.totalBatches} batch(es)${rebuilt === "no-document" ? ", no document to rebuild" : ""}`,
+    progress: `complete, ${read.totalBatches} batch(es)${rebuilt === "no-material" ? ", no readable Lore material" : queued === null ? "" : queued ? ", Lore refresh queued" : ", Lore refresh already queued"}`,
     done: true,
   };
 }

@@ -1,8 +1,10 @@
 import { db } from "@/lib/db/db";
 import { generateLoreSummary } from "@/lib/lore/generateLoreSummary";
+import { gatherDocMaterial } from "@/lib/lore/gatherDocMaterial";
 import { getArtistDoc } from "@/lib/lore/getArtistDoc";
 import { persistRefreshedLore } from "@/lib/lore/persistRefreshedLore";
 import { synthesizeArtistDoc } from "@/lib/lore/synthesizeArtistDoc";
+import { toSourceList } from "@/lib/lore/toSourceList";
 import type { DocRefresh } from "@/lib/lore/types";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
@@ -15,7 +17,7 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @param options.createIfMissing - Write a document even when the artist has none yet.
  * @param options.jobId - The lore_refresh job doing the write; the write is skipped if it is gone.
  * @param options.expectedClaimId - The claim the job was queued under; read now when omitted.
- * @returns "rebuilt", "no-document" (nothing to rebuild), "cancelled" (ownership changed) or "failed".
+ * @returns "rebuilt", "no-document" (none exists), "no-material" (no citable sources yet), "cancelled" or "failed".
  */
 export async function refreshArtistDoc(
   artistId: string,
@@ -27,6 +29,7 @@ export async function refreshArtistDoc(
         ? options.expectedClaimId
         : ((await findApprovedClaim(db, artistId))?.id ?? null);
     if (!options.createIfMissing && !(await getArtistDoc(artistId))) return "no-document";
+    if (toSourceList(await gatherDocMaterial(artistId)).length === 0) return "no-material";
     const [{ doc, sources }, summary] = await Promise.all([
       synthesizeArtistDoc(artistId),
       generateLoreSummary(artistId),
