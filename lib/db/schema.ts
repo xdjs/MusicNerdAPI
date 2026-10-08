@@ -293,3 +293,35 @@ export const artistResearchJobs = pgTable("artist_research_jobs", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull(),
 });
+
+/** Explicit API interview sittings; profile reads never create one. */
+export const artistInterviewSessions = pgTable("artist_interview_sessions", {
+  id: uuid()
+    .default(sql`uuid_generate_v4()`)
+    .primaryKey()
+    .notNull(),
+  artistId: uuid("artist_id")
+    .notNull()
+    .references(() => artists.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id").notNull(),
+  sitting: integer().notNull(),
+  state: text().default("active").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true, mode: "string" }),
+});
+
+/** Private immutable original references for a question; not a public activity payload. */
+export const artistInterviewQuestionEvidence = pgTable("artist_interview_question_evidence", {
+  answerId: uuid("answer_id")
+    .primaryKey()
+    .references(() => artistInterviewAnswers.id, { onDelete: "cascade" }),
+  artistId: uuid("artist_id")
+    .notNull()
+    .references(() => artists.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull(),
+  ordinal: integer().notNull(),
+  memorySnapshotId: text("memory_snapshot_id").notNull(),
+  evidenceReferences: jsonb("evidence_references").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+});

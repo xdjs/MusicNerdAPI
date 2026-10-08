@@ -71,7 +71,7 @@ export function createArtistKnowledgeTools(config: KnowledgeToolConfig) {
     }),
     getInterviewHistory: tool({
       description:
-        "Load exact saved answers and corrections across sessions. Follow field continuations to finish corrections and the latestAnswer entry; retrieve older relevant answers to avoid repeats. Topic boundaries are not yet persisted: constraintsComplete=false requires host-supplied boundaries and latest unsaved answer. Never treat empty/error results as complete memory." +
+        "Load exact saved answers and corrections across sessions. Follow field continuations to finish corrections and the latestAnswer entry; retrieve older relevant answers to avoid repeats. This paginated history is not complete interview memory: constraintsComplete=false requires the host to restore latest exact answer, corrections and active boundaries through /interview/memory before drafting, plus any latest unsaved answer. Never treat empty/error results as complete memory." +
         untrusted,
       inputSchema: knowledgeInputSchemas.history,
       outputSchema: knowledgeOutputSchemas.history,
