@@ -10,6 +10,9 @@ export type GenerateTextOptions<OUTPUT extends OutputInterface = TextOutput> = {
   instructions?: string;
   prompt: string;
   temperature?: number;
+  abortSignal?: AbortSignal;
+  maxOutputTokens?: number;
+  maxRetries?: number;
   /** Gemini thinking budget in tokens; omitted means the model's default. */
   thinkingBudget?: number;
   /** `Output.object({ schema })` for a reply parsed as JSON. */
@@ -33,6 +36,9 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     temperature,
     thinkingBudget,
     output,
+    abortSignal,
+    maxOutputTokens,
+    maxRetries,
   } = options;
   return sdkGenerateText({
     model,
@@ -40,6 +46,9 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     prompt,
     temperature,
     output,
+    ...(abortSignal ? { abortSignal } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
     ...(thinkingBudget !== undefined
       ? { providerOptions: { google: { thinkingConfig: { thinkingBudget } } } }
       : {}),

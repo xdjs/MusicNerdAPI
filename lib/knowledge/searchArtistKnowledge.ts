@@ -6,6 +6,7 @@ import type { KnowledgeQuery, KnowledgeResults, KnowledgeSnapshot } from "@/lib/
 export function searchArtistKnowledge(
   snapshot: KnowledgeSnapshot,
   query: Extract<KnowledgeQuery, { operation: "search" }>,
+  options: { maxPassagesPerSource?: number } = {},
 ): KnowledgeResults["search"] {
   const sources = snapshot.sources.filter(
     source => !query.kind || source.metadata.kind === query.kind,
@@ -142,6 +143,14 @@ export function searchArtistKnowledge(
   let returnedChars = 0;
   let omitted = false;
   for (const candidate of candidates) {
+    if (
+      options.maxPassagesPerSource !== undefined &&
+      passages.filter(p => p.source.sourceId === candidate.source.metadata.sourceId).length >=
+        options.maxPassagesPerSource
+    ) {
+      omitted = true;
+      continue;
+    }
     if (
       passages.some(
         p =>

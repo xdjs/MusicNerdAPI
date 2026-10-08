@@ -26,3 +26,13 @@ describe("generateText", () => {
     });
   });
 });
+
+it("passes explicit research cancellation, output and retry limits through without changing other calls", async () => {
+  const abortSignal = AbortSignal.timeout(1000);
+  await generateText({ prompt: "bounded", abortSignal, maxOutputTokens: 100, maxRetries: 0 });
+  expect(sdkGenerateText.mock.calls[0][0]).toMatchObject({
+    abortSignal,
+    maxOutputTokens: 100,
+    maxRetries: 0,
+  });
+});

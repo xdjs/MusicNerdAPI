@@ -119,7 +119,11 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
         extracted.text.length < 5000
       )
         return result("blocked");
-      return result("ready", { text: extracted.text, truncated: extracted.truncated });
+      return result("ready", {
+        text: extracted.text,
+        truncated: extracted.truncated,
+        resolvedUrl: url.href,
+      });
     }
     return result("unavailable");
   } catch {

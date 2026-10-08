@@ -83,3 +83,10 @@ describe("fetchSourceText", () => {
     expect(mocks.request).not.toHaveBeenCalled();
   });
 });
+
+it("reports the final validated URL when a public original redirects", async () => {
+  response(302, "", { location: "https://publisher.example/story" });
+  response(200, "<article>The actual original passage.</article>");
+  const r = await fetchSourceText("https://artist.example/outbound", 2000);
+  expect(r.resolvedUrl).toBe("https://publisher.example/story");
+});

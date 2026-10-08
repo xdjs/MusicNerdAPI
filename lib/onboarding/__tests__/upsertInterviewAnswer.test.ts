@@ -20,7 +20,9 @@ const input = {
 };
 
 beforeEach(() => {
-  onConflictDoUpdate.mockReset().mockResolvedValue(undefined);
+  onConflictDoUpdate
+    .mockReset()
+    .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "saved" }]) });
   values.mockReset().mockReturnValue({ onConflictDoUpdate });
   scoped.mockReset().mockImplementation(async (_a, write) => write({ insert: () => ({ values }) }));
 });
@@ -35,7 +37,8 @@ describe("upsertInterviewAnswer", () => {
 
   it("updates the answer and its time, never the sitting or the offer watermark", async () => {
     await upsertInterviewAnswer({ ...input, source: "followup" });
-    const { set } = onConflictDoUpdate.mock.calls[0][0];
+    const { set, setWhere } = onConflictDoUpdate.mock.calls[0][0];
+    expect(new PgDialect().sqlToQuery(setWhere as SQL).params).toEqual(["offered"]);
     expect(set).toMatchObject({ question: "q", answer: "a", source: "followup" });
     expect(new PgDialect().sqlToQuery(set.createdAt as SQL).sql).toContain(
       "now() AT TIME ZONE 'utc'::text",

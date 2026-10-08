@@ -175,6 +175,24 @@ export const artistInterviewAnswers = pgTable(
   ],
 );
 
+export const artistInterviewAnswerVersions = pgTable(
+  "artist_interview_answer_versions",
+  {
+    answerId: uuid("answer_id").notNull(),
+    artistId: uuid("artist_id").notNull(),
+    revision: text().notNull(),
+    snapshot: jsonb().$type<Record<string, unknown>>().notNull(),
+    note: text(),
+    actorUserId: uuid("actor_user_id"),
+    capturedAt: timestamp("captured_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  table => [
+    unique("artist_interview_answer_versions_answer_revision").on(table.answerId, table.revision),
+  ],
+);
+
 export const artistOnboardingSteps = pgTable(
   "artist_onboarding_steps",
   {
