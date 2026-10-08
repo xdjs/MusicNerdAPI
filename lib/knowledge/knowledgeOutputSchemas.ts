@@ -95,6 +95,7 @@ const job = z.strictObject({
     "source_search",
     "latest_refresh",
     "source_extract",
+    "question_research",
   ]),
   status: z.enum(["pending", "running", "done", "failed"]),
   cursor: nonnegative,

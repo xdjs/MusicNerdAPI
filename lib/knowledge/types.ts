@@ -114,7 +114,8 @@ export type KnowledgeJob = {
     | "lore_refresh"
     | "source_search"
     | "latest_refresh"
-    | "source_extract";
+    | "source_extract"
+    | "question_research";
   status: "pending" | "running" | "done" | "failed";
   cursor: number;
   total: number | null;
