@@ -118,6 +118,24 @@ it("treats database failure as failure, never as missing evidence", async () => 
   expect(j.state).toMatchObject({ stage: "failed", errorCode: "research_unavailable" });
   expect(m.search).not.toHaveBeenCalled();
 });
+it("records safe model failure diagnostics without request or error text", async () => {
+  m.select.mockReturnValue([{ sourceId: "vault:1", text: "exact original" }]);
+  m.assess.mockRejectedValue(
+    Object.assign(new Error("Bearer sk-secret private source text"), {
+      name: "AI_APICallError",
+      statusCode: 503,
+    }),
+  );
+  const j = job();
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "failed",
+    errorCode: "research_unavailable",
+    failure: { step: "saved", name: "AI_APICallError", status: 503 },
+  });
+  expect(JSON.stringify(j.state)).not.toContain("sk-secret");
+  expect(m.start).not.toHaveBeenCalled();
+});
 it("never repeats an ambiguous paid start after a killed worker", async () => {
   const j = job({ ...initial(), step: "social_start", stage: "reading", inFlight: "social_start" });
   await runQuestionResearch(j, Date.now() + 50000);

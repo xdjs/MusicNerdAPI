@@ -94,6 +94,8 @@ export type QuestionResearchState = {
   inputTokens: number;
   outputTokens: number;
   errorCode?: string;
+  /** Server-only diagnostic; never stores the error message or request/source content. */
+  failure?: { step: string; name: string; status: number | null };
   step?:
     "saved" | "search" | "pages" | "social_start" | "social_poll" | "social_collect" | "assess";
   inFlight?: "model" | "web" | "social_start";

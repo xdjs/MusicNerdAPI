@@ -54,6 +54,29 @@ it("retains supporting context and qualifications without turning approval into 
   expect(model.mock.calls[0][0]).toMatchObject({ maxRetries: 0, maxOutputTokens: 1800 });
   expect(model.mock.calls[0][0].abortSignal).toBeInstanceOf(AbortSignal);
 });
+it("accepts the same contiguous quote when the model collapses whitespace", async () => {
+  const spaced = {
+    ...ref,
+    text: "Dutchyyy built the vault  over a year\n\nto escape platform dependency.",
+  };
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [
+        {
+          sourceId: spaced.sourceId,
+          quote: "built the vault over a year to escape platform dependency",
+        },
+      ],
+      identity: [],
+      limitation: "none",
+    },
+    usage: { inputTokens: 100, outputTokens: 20 },
+  });
+  const result = await assessResearchEvidence(request, [spaced], { name: "Dutchyyy" }, [], 5000);
+  expect(result.sufficient).toBe(true);
+  expect(result.references).toEqual([spaced]);
+});
 it("does not convert a provider failure to an absence claim", async () => {
   model.mockRejectedValue(new Error("offline"));
   await expect(

@@ -17,6 +17,7 @@ import { persistResearchOriginals } from "@/lib/questionResearch/persistResearch
 import { classifyQuestionOriginal } from "@/lib/questionResearch/classifyQuestionOriginal";
 import { canonicalResearchUrl } from "@/lib/questionResearch/canonicalResearchUrl";
 import { researchStatusMessage } from "@/lib/questionResearch/researchStatusMessage";
+import { getResearchFailureDiagnostic } from "@/lib/questionResearch/getResearchFailureDiagnostic";
 import {
   QUESTION_RESEARCH_LIFETIME_MS,
   type DiscoveryOriginal,
@@ -285,6 +286,7 @@ export async function runQuestionResearch(
     if (error instanceof OwnershipChangedError) throw error;
     state.stage = "failed";
     state.errorCode = "research_unavailable";
+    state.failure = getResearchFailureDiagnostic(error, state.step);
     return finish();
   }
 }

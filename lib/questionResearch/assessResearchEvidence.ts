@@ -1,6 +1,7 @@
 import { Output } from "ai";
 import { z } from "zod";
 import { generateText } from "@/lib/ai/generateText";
+import { matchesOriginalQuote } from "@/lib/questionResearch/matchesOriginalQuote";
 import type {
   ResearchRequest,
   ResearchReference,
@@ -69,14 +70,17 @@ export async function assessResearchEvidence(
         i.sameArtist &&
         unverifiedIds.includes(i.sourceId) &&
         i.quote.trim().length >= 20 &&
-        references.some(r => r.sourceId === i.sourceId && r.text.includes(i.quote)),
+        references.some(r => r.sourceId === i.sourceId && matchesOriginalQuote(r.text, i.quote)),
     )
     .map(i => i.sourceId);
   const selected = references.filter(
     r =>
       (!unverifiedIds.includes(r.sourceId) || confirmedIds.includes(r.sourceId)) &&
       verdict.supports.some(
-        s => s.sourceId === r.sourceId && s.quote.trim().length >= 15 && r.text.includes(s.quote),
+        s =>
+          s.sourceId === r.sourceId &&
+          s.quote.trim().length >= 15 &&
+          matchesOriginalQuote(r.text, s.quote),
       ),
   );
   return {
