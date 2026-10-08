@@ -35,5 +35,6 @@ export async function runLoreRefresh(job: ResearchJob, deadline: number): Promis
   if (!done) return { progress: "Sources changed during rebuild; another refresh is queued", done };
   if (result === "cancelled")
     return { progress: "Lore refresh cancelled after ownership changed", done };
+  if (result === "no-material") return { progress: "No readable Lore material is ready yet", done };
   return { progress: "Lore rebuilt from current documents and sources", done };
 }

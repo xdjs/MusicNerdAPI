@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   saveJobProgress: vi.fn(),
   failResearchJob: vi.fn(),
   completeResearchJob: vi.fn(),
+  queueLoreRefreshAfterCaptions: vi.fn(),
 }));
 vi.mock("@/lib/lore/refreshArtistDoc", () => ({
   refreshArtistDoc: (...a: unknown[]) => m.refreshArtistDoc(...a),
@@ -18,6 +19,9 @@ vi.mock("@/lib/research/failResearchJob", () => ({
 }));
 vi.mock("@/lib/research/completeResearchJob", () => ({
   completeResearchJob: (...a: unknown[]) => m.completeResearchJob(...a),
+}));
+vi.mock("@/lib/research/queueLoreRefreshAfterCaptions", () => ({
+  queueLoreRefreshAfterCaptions: (...a: unknown[]) => m.queueLoreRefreshAfterCaptions(...a),
 }));
 const { rebuildAfterCaptions } = await import("@/lib/research/rebuildAfterCaptions");
 
@@ -52,11 +56,31 @@ describe("rebuildAfterCaptions", () => {
     expect(m.completeResearchJob).toHaveBeenCalledWith("job-1");
   });
 
-  it("completes, and says so, when there is no document to rebuild", async () => {
+  it("queues first-time Lore after captions supply material instead of silently skipping it", async () => {
     m.refreshArtistDoc.mockResolvedValueOnce("no-document");
+    m.queueLoreRefreshAfterCaptions.mockResolvedValueOnce(true);
     const out = await rebuildAfterCaptions(captionJob(), read, later());
-    expect(out).toEqual({ progress: "complete, 3 batch(es), no document to rebuild", done: true });
+    expect(out).toEqual({ progress: "complete, 3 batch(es), Lore refresh queued", done: true });
+    expect(m.queueLoreRefreshAfterCaptions).toHaveBeenCalledWith(captionJob());
     expect(m.failResearchJob).not.toHaveBeenCalled();
+  });
+
+  it("does not queue a second Lore refresh when a retried caption tail already handed it off", async () => {
+    m.refreshArtistDoc.mockResolvedValueOnce("no-document");
+    m.queueLoreRefreshAfterCaptions.mockResolvedValueOnce(false);
+    expect(await rebuildAfterCaptions(captionJob(), read, later())).toEqual({
+      progress: "complete, 3 batch(es), Lore refresh already queued",
+      done: true,
+    });
+  });
+
+  it("states when extracted captions still contain no citable Lore material", async () => {
+    m.refreshArtistDoc.mockResolvedValueOnce("no-material");
+    expect(await rebuildAfterCaptions(captionJob(), read, later())).toEqual({
+      progress: "complete, 3 batch(es), no readable Lore material",
+      done: true,
+    });
+    expect(m.queueLoreRefreshAfterCaptions).not.toHaveBeenCalled();
   });
 
   it("still fails, and retries, when the rebuild genuinely breaks", async () => {

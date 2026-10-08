@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const m = vi.hoisted(() => ({
   findApprovedClaim: vi.fn(),
   getArtistDoc: vi.fn(),
+  gatherDocMaterial: vi.fn(),
+  toSourceList: vi.fn(),
   synthesizeArtistDoc: vi.fn(),
   generateLoreSummary: vi.fn(),
   persistRefreshedLore: vi.fn(),
@@ -12,6 +14,8 @@ vi.mock("@/lib/ownership/findApprovedClaim", () => ({
   findApprovedClaim: m.findApprovedClaim,
 }));
 vi.mock("@/lib/lore/getArtistDoc", () => ({ getArtistDoc: m.getArtistDoc }));
+vi.mock("@/lib/lore/gatherDocMaterial", () => ({ gatherDocMaterial: m.gatherDocMaterial }));
+vi.mock("@/lib/lore/toSourceList", () => ({ toSourceList: m.toSourceList }));
 vi.mock("@/lib/lore/synthesizeArtistDoc", () => ({ synthesizeArtistDoc: m.synthesizeArtistDoc }));
 vi.mock("@/lib/lore/generateLoreSummary", () => ({ generateLoreSummary: m.generateLoreSummary }));
 vi.mock("@/lib/lore/persistRefreshedLore", () => ({
@@ -26,6 +30,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.findApprovedClaim.mockResolvedValue({ id: "claim-1" });
   m.getArtistDoc.mockResolvedValue({ content: "old" });
+  m.gatherDocMaterial.mockResolvedValue({});
+  m.toSourceList.mockReturnValue(sources);
   m.synthesizeArtistDoc.mockResolvedValue({ doc: "## Overview\nNew.", sources });
   m.generateLoreSummary.mockResolvedValue(summary);
   m.persistRefreshedLore.mockResolvedValue(true);
@@ -57,6 +63,16 @@ describe("refreshArtistDoc", () => {
     m.getArtistDoc.mockResolvedValueOnce(undefined);
     expect(await refreshArtistDoc("a1")).toBe("no-document");
     expect(m.synthesizeArtistDoc).not.toHaveBeenCalled();
+  });
+
+  it("reports no readable material without asking the model or writing an empty Lore", async () => {
+    m.getArtistDoc.mockResolvedValueOnce(undefined);
+    m.toSourceList.mockReturnValueOnce([]);
+    expect(await refreshArtistDoc("a1", { createIfMissing: true, jobId: "j1" })).toBe(
+      "no-material",
+    );
+    expect(m.synthesizeArtistDoc).not.toHaveBeenCalled();
+    expect(m.persistRefreshedLore).not.toHaveBeenCalled();
   });
 
   it("is cancelled when ownership changed while synthesis ran", async () => {
