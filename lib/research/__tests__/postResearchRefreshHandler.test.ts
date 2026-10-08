@@ -16,7 +16,8 @@ const { postResearchRefreshHandler } = await import("@/lib/research/postResearch
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
 
 const ARTIST = "50f23458-df64-4381-8042-7333e8b64531";
-const req = () => new Request("https://api/x", { method: "POST" });
+const req = (body?: string) =>
+  new Request("https://api/x", { method: "POST", ...(body ? { body } : {}) });
 const body = async (res: Response) => ({ code: res.status, json: await res.json() });
 
 beforeEach(() => {
@@ -34,7 +35,7 @@ describe("postResearchRefreshHandler", () => {
       { status: 403 },
     );
     m.validate.mockResolvedValueOnce(forbidden);
-    const request = req();
+    const request = req("{broken");
     expect(await postResearchRefreshHandler(request, "any")).toBe(forbidden);
     expect(m.validate).toHaveBeenCalledWith(request, "any");
     expect(m.refresh).not.toHaveBeenCalled();
@@ -56,6 +57,25 @@ describe("postResearchRefreshHandler", () => {
     await postResearchRefreshHandler(req(), ARTIST);
     expect(m.refresh).toHaveBeenCalledWith(ARTIST, null);
   });
+
+  it("passes the Lore-only mode through the same signed-in claim operation", async () => {
+    const res = await postResearchRefreshHandler(req('{"mode":"lore-only"}'), ARTIST);
+    expect(res.status).toBe(200);
+    expect(m.validate).toHaveBeenCalledOnce();
+    expect(m.operation.mock.calls[0].slice(0, 2)).toEqual([
+      ARTIST,
+      { userId: "u1", expectedClaimId: "c1", trigger: "manual_refresh" },
+    ]);
+    expect(m.refresh).toHaveBeenCalledWith(ARTIST, "c1", { mode: "lore-only" });
+  });
+
+  it.each(['{"mode":"full"}', '{"mode":42}', "{broken"])(
+    "rejects an invalid optional body without queuing research: %s",
+    async invalid => {
+      expect((await postResearchRefreshHandler(req(invalid), ARTIST)).status).toBe(400);
+      expect(m.refresh).not.toHaveBeenCalled();
+    },
+  );
 
   it("500s on any error, including a claim that changed mid-request", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

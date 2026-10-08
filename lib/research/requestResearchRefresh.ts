@@ -14,13 +14,19 @@ import { pluralize } from "@/lib/text/pluralize";
  *
  * @param artistId - The artist.
  * @param claimId - The artist's approved claim, read before the edit check.
+ * @param options - Lore-only recovery from stored material, with no social collection.
  * @returns The message to show.
  */
 export async function requestResearchRefresh(
   artistId: string,
   claimId: string | null,
+  options?: { mode: "lore-only" },
 ): Promise<string> {
   const loreQueued = await queueLoreRefresh(artistId, claimId, { manual: true });
+  if (options?.mode === "lore-only")
+    return loreQueued
+      ? "Rebuilding Lore from your stored sources."
+      : "Lore is already queued or was checked recently. New document changes still trigger a rebuild.";
   const loreMessage =
     loreQueued === false
       ? "Lore is already queued or was checked recently. New document changes still trigger a rebuild."
