@@ -30,3 +30,28 @@ it("records oversized complete snapshots as failed coverage without losing the p
   expect(await refreshLatestProvider(job, "deezer")).toEqual({ status: "failed" });
   expect(m.persist).toHaveBeenCalledWith(job, "deezer", "12", null);
 });
+
+it("logs only provider and fixed diagnostic fields, never credentials or raw errors", async () => {
+  const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  try {
+    m.fetch.mockRejectedValue(
+      Object.assign(new Error("token=SECRET https://private.example"), {
+        latestPhase: "request",
+        latestCode: "http_error",
+        status: 403,
+        body: "SECRET",
+      }),
+    );
+    await refreshLatestProvider(job, "deezer");
+    expect(log).toHaveBeenCalledWith("[latest/provider]", {
+      provider: "deezer",
+      phase: "request",
+      code: "http_error",
+      httpStatus: 403,
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("SECRET");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("https://");
+  } finally {
+    log.mockRestore();
+  }
+});

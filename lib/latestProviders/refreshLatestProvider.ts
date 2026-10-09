@@ -1,3 +1,4 @@
+import { getLatestProviderFailure } from "./getLatestProviderFailure";
 import type { ResearchJob } from "@/lib/research/types";
 import type { LatestRefreshState, SourceResult } from "@/lib/latest/types";
 import { latestProviderAccount } from "./latestProviderAccount";
@@ -16,8 +17,12 @@ export async function refreshLatestProvider(
   try {
     items = await fetchLatestProviderItems(provider, accountId);
     if (items.length > 50 || Buffer.byteLength(JSON.stringify(items)) > 400000)
-      throw new Error("Latest snapshot exceeds budget");
-  } catch {
+      throw Object.assign(new Error("Latest snapshot exceeds budget"), {
+        latestPhase: "snapshot",
+        latestCode: "snapshot_too_large",
+      });
+  } catch (error) {
+    console.warn("[latest/provider]", { provider, ...getLatestProviderFailure(error) });
     items = null;
   }
   if ((await persistLatestProviderSnapshot(job, provider, accountId, items)) === false)
