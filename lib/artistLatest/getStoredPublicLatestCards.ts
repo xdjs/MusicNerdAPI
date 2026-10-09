@@ -14,8 +14,9 @@ export async function getStoredPublicLatestCards(
     url: string;
     posted_at: string | Date;
     image_url: string | null;
+    thumbnail: { url?: string; width?: number; height?: number } | null;
   }>(sql`select id,caption,url,posted_at,
-    coalesce(raw->>'displayUrl',raw->>'thumbnailSrc',raw->'images'->>0) as image_url
+    coalesce(raw->>'displayUrl',raw->>'thumbnailSrc',raw->'images'->>0) as image_url, raw->'_musicnerdThumbnail' as thumbnail
     from artist_social_posts where artist_id=${artistId}::uuid and platform='instagram' and is_own_post=true
     and posted_at is not null and posted_at<=now()
     and coalesce(raw->>'isRepost','false')!='true' and coalesce(raw->>'isRetweet','false')!='true'
@@ -60,6 +61,15 @@ export async function getStoredPublicLatestCards(
         date: new Date(p.posted_at).toISOString(),
         imageUrl: safe(p.image_url),
         imageCaption: `Instagram post by ${name}`,
+        ...(p.thumbnail?.url === safe(p.image_url) &&
+        Number.isInteger(p.thumbnail?.width) &&
+        Number.isInteger(p.thumbnail?.height) &&
+        p.thumbnail!.width! > 0 &&
+        p.thumbnail!.height! > 0 &&
+        p.thumbnail!.width! <= 640 &&
+        p.thumbnail!.height! <= 640
+          ? { imageDimensions: { width: p.thumbnail!.width!, height: p.thumbnail!.height! } }
+          : {}),
         sourceUrl: p.url,
         sourceLabel: "View on Instagram",
       })),
