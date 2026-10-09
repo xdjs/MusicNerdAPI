@@ -11,5 +11,6 @@ export function researchRequestKey(request: ResearchRequest): string {
     request.platform ?? null,
     request.fromDate ?? null,
     request.toDate ?? null,
+    ...(request.retrieval === "latest" ? ["latest"] : []),
   ]);
 }

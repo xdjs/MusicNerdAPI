@@ -15,3 +15,7 @@ it("rejects unbounded and reversed publication-date requests", () => {
   ).toThrow();
   expect(() => validateQuestionResearchBody({ ...base, fromDate: "2026-02-30" })).toThrow();
 });
+it("validates an explicit latest retrieval mode without changing the default", () => {
+  expect(validateQuestionResearchBody({ ...base, retrieval: "latest" }).retrieval).toBe("latest");
+  expect(() => validateQuestionResearchBody({ ...base, retrieval: "all" })).toThrow();
+});

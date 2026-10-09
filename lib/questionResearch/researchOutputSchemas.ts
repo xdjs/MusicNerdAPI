@@ -3,7 +3,10 @@ const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
 export const researchSourceIdSchema = z
   .string()
   .regex(
-    new RegExp(`^(?:(?:discovery|vault):${uuid}|social:${uuid}:(?:caption|transcript))$`, "i"),
+    new RegExp(
+      `^(?:(?:discovery|vault|public_answer):${uuid}|social:${uuid}:(?:caption|transcript))$`,
+      "i",
+    ),
   );
 const passage = z.object({
   sourceId: researchSourceIdSchema,

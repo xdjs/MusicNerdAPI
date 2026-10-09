@@ -2,6 +2,8 @@ export type ResearchRequest = {
   topic: string;
   evidenceNeed: "reporting" | "release_date" | "credits" | "social_caption" | "spoken_content";
   freshness: "stored" | "recent";
+  /** Newest-available overview; explicit date/platform constraints still apply. */
+  retrieval?: "relevance" | "latest";
   targetUrl?: string;
   platform?: "instagram" | "tiktok" | "x";
   fromDate?: string;

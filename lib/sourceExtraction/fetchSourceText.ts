@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
+import { extractPublicationDate } from "@/lib/sourceExtraction/extractPublicationDate";
 import { extractVaultText } from "@/lib/sourceExtraction/extractVaultText";
 import { isPublicAddress } from "@/lib/sourceExtraction/isPublicAddress";
 import type { FetchedSource } from "@/lib/sourceExtraction/types";
@@ -123,6 +124,7 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
         text: extracted.text,
         truncated: extracted.truncated,
         resolvedUrl: url.href,
+        publishedAt: extractPublicationDate(html),
       });
     }
     return result("unavailable");

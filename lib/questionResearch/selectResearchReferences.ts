@@ -17,14 +17,28 @@ export function selectResearchReferences(
 ): ResearchReference[] {
   const from =
     request.fromDate ??
-    (request.freshness === "recent"
+    (request.freshness === "recent" && request.retrieval !== "latest"
       ? new Date(now - 7 * 86400_000).toISOString().slice(0, 10)
       : undefined);
   // Promotion retains both the discovery and its Lore copy. Identical text at
   // the same URL is one original, not independent corroboration or extra rank.
   const seen = new Set<string>();
   const distinct = [...originals]
-    .sort((a, b) => Number(b.curation === "approved") - Number(a.curation === "approved"))
+    .sort((a, b) => {
+      if (request.retrieval === "latest") {
+        const precision = (o: ResearchOriginal) =>
+          o.publishedAt &&
+          Number.isFinite(Date.parse(o.publishedAt)) &&
+          Date.parse(o.publishedAt) <= now
+            ? o.publishedAt.includes("T")
+              ? 2
+              : 1
+            : 0;
+        const difference = precision(b) - precision(a);
+        if (difference) return difference;
+      }
+      return Number(b.curation === "approved") - Number(a.curation === "approved");
+    })
     .filter(original => {
       const key = `${canonicalResearchUrl(original.url)}\0${original.evidenceKind}\0${original.text}`;
       if (seen.has(key)) return false;
@@ -45,6 +59,24 @@ export function selectResearchReferences(
       (!from || (o.publishedAt !== null && o.publishedAt.slice(0, 10) >= from)) &&
       (!request.toDate || (o.publishedAt !== null && o.publishedAt.slice(0, 10) <= request.toDate)),
   );
+  // An overview is a chronological read, not a lexical search for the word "latest".
+  // Unknown/future dates cannot establish the newest available activity.
+  if (request.retrieval === "latest") {
+    return eligible
+      .filter(
+        o =>
+          o.publishedAt &&
+          Number.isFinite(Date.parse(o.publishedAt)) &&
+          Date.parse(o.publishedAt) <= now,
+      )
+      .sort(
+        (a, b) =>
+          Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!) ||
+          a.sourceId.localeCompare(b.sourceId),
+      )
+      .slice(0, 3)
+      .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
+  }
   const sources: Evidence[] = eligible.map(o => ({
     text: o.text,
     metadata: {

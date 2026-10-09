@@ -131,3 +131,107 @@ it("counts a promoted discovery and its identical approved Lore copy as one orig
   expect(result.some(r => r.sourceId === bio.sourceId)).toBe(true);
   expect(result.some(r => r.sourceId === duplicate.sourceId)).toBe(false);
 });
+
+const now = Date.parse("2026-10-09T04:00:00Z");
+const latestRequest = {
+  topic: "latest updates",
+  evidenceNeed: "reporting",
+  freshness: "recent",
+  retrieval: "latest",
+} as const;
+it("reads newest available originals without keyword overlap or a seven-day cutoff", () => {
+  const dated = ["2026-09-01", "2026-09-29", "2026-09-15"].map((publishedAt, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://instagram.com/p/${i}`,
+    publishedAt,
+    text: `I built a handmade synthesizer for recording number ${i}.`,
+  }));
+  const refs = selectResearchReferences(dated, latestRequest, "Artist", now);
+  expect(refs.map(r => r.publishedAt)).toEqual(["2026-09-29", "2026-09-15", "2026-09-01"]);
+  expect(
+    refs.every(
+      r => dated.find(o => o.sourceId === r.sourceId)?.text.slice(r.start, r.end) === r.text,
+    ),
+  ).toBe(true);
+});
+it("latest never ranks future, undated, invalid dates or unrelated platforms as newest", () => {
+  const dated = [null, "invalid", "2026-10-10", "2026-10-08"].map((publishedAt, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://instagram.com/p/${i}`,
+    publishedAt,
+  }));
+  const refs = selectResearchReferences(
+    [
+      ...dated,
+      {
+        ...original,
+        sourceId: "x:1",
+        url: "https://x.com/artist/status/1",
+        publishedAt: "2026-10-09",
+      },
+    ],
+    { ...latestRequest, platform: "instagram" },
+    "Artist",
+    now,
+  );
+  expect(refs.map(r => r.sourceId)).toEqual(["post:3"]);
+});
+it("latest preserves explicit date and speech boundaries", () => {
+  const dated = { ...original, publishedAt: "2026-09-29", evidenceKind: "caption" as const };
+  expect(
+    selectResearchReferences([dated], { ...latestRequest, fromDate: "2026-10-01" }, "Artist", now),
+  ).toEqual([]);
+  expect(
+    selectResearchReferences(
+      [dated],
+      { ...latestRequest, evidenceNeed: "spoken_content" },
+      "Artist",
+      now,
+    ),
+  ).toEqual([]);
+});
+it("latest windows stay bounded and topic relevance remains unchanged", () => {
+  const dated = Array.from({ length: 10 }, (_, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://instagram.com/p/${i}`,
+    publishedAt: "2026-10-08",
+    text: "A handmade synthesizer. ".repeat(1000),
+  }));
+  const refs = selectResearchReferences(dated, latestRequest, "Artist", now);
+  expect(refs).toHaveLength(3);
+  expect(refs.reduce((sum, r) => sum + r.text.length, 0)).toBeLessThanOrEqual(12000);
+  expect(
+    selectResearchReferences(dated, { ...latestRequest, retrieval: "relevance" }, "Artist", now),
+  ).toEqual([]);
+});
+it("retains full publication precision when a promoted Lore copy loses the original time", () => {
+  const post = {
+    ...original,
+    sourceId: "discovery:dated",
+    text: "A new handmade synthesizer.",
+    publishedAt: "2026-10-08T18:00:00Z",
+  };
+  const promoted = { ...post, sourceId: "vault:promoted", publishedAt: "2026-10-08" };
+  const other = {
+    ...post,
+    sourceId: "social:earlier",
+    url: "https://instagram.com/p/earlier",
+    publishedAt: "2026-10-08T10:00:00Z",
+  };
+  expect(
+    selectResearchReferences([promoted, other, post], latestRequest, "Artist", now).map(
+      r => r.sourceId,
+    ),
+  ).toEqual(["discovery:dated", "social:earlier"]);
+  expect(
+    selectResearchReferences(
+      [{ ...promoted, publishedAt: null }, post],
+      latestRequest,
+      "Artist",
+      now,
+    )[0].sourceId,
+  ).toBe("discovery:dated");
+});

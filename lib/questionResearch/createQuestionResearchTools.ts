@@ -66,6 +66,12 @@ export function createQuestionResearchTools(config: {
             "spoken_content",
           ]),
           freshness: z.enum(["stored", "recent"]).default("stored"),
+          retrieval: z
+            .enum(["relevance", "latest"])
+            .optional()
+            .describe(
+              "Use latest for a newest-available overview; explicit dates and platform still constrain evidence.",
+            ),
           targetUrl: z.string().url().max(2048).optional(),
           platform: z.enum(["instagram", "tiktok", "x"]).optional(),
           fromDate: z.string().optional(),

@@ -177,11 +177,11 @@ export async function runQuestionResearch(
               provider: "web",
               speaker: "unverified",
               publisher: new URL(result.resolvedUrl ?? candidate.url).hostname,
-              publishedAt: null,
+              publishedAt: result.publishedAt ?? null,
               retrievedAt: result.capturedAt,
               truncated: result.truncated,
               limitations: [
-                "Search title is metadata; publication/event dates and speaker identities are not inferred.",
+                "Search title is metadata. Publication dates, when available, are declared by the original page; they do not establish event dates or speaker identities.",
               ],
             },
           });
