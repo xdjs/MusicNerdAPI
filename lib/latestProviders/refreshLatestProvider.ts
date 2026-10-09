@@ -15,6 +15,8 @@ export async function refreshLatestProvider(
   let items: LatestProviderItem[] | null;
   try {
     items = await fetchLatestProviderItems(provider, accountId);
+    if (items.length > 50 || Buffer.byteLength(JSON.stringify(items)) > 400000)
+      throw new Error("Latest snapshot exceeds budget");
   } catch {
     items = null;
   }

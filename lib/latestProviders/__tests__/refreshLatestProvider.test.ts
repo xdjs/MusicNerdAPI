@@ -24,3 +24,9 @@ it("does not hide storage/ownership failures as provider failure", async () => {
   await expect(refreshLatestProvider(job, "deezer")).rejects.toThrow("ownership");
   expect(m.persist).toHaveBeenCalledTimes(1);
 });
+
+it("records oversized complete snapshots as failed coverage without losing the previous snapshot", async () => {
+  m.fetch.mockResolvedValue([{ card: { title: "x".repeat(400001) } }]);
+  expect(await refreshLatestProvider(job, "deezer")).toEqual({ status: "failed" });
+  expect(m.persist).toHaveBeenCalledWith(job, "deezer", "12", null);
+});
