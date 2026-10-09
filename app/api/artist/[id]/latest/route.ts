@@ -1,6 +1,7 @@
 import { getArtistLatestHandler } from "@/lib/artistLatest/getArtistLatestHandler";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 /** Read stored public artist activity without initiating research.
+ *
  * @param _request - Public read request.
  * @param context - Route context.
  * @param context.params - Artist identifier.
@@ -10,6 +11,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   return getArtistLatestHandler((await context.params).id);
 }
 /** Public read preflight.
+ *
  * @returns Empty CORS response.
  */
 export function OPTIONS() {
