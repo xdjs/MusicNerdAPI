@@ -7,6 +7,13 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
   const s = value as QuestionResearchState;
   if (
     s.version !== 1 ||
+    (s.savedOnly !== undefined && typeof s.savedOnly !== "boolean") ||
+    (s.savedOnly === true &&
+      ((s.step !== undefined && s.step !== "saved") ||
+        s.plan !== undefined ||
+        s.providerCalls !== 0 ||
+        s.modelCalls > 1 ||
+        (s.inFlight !== undefined && s.inFlight !== "model"))) ||
     typeof s.key !== "string" ||
     !Number.isFinite(Date.parse(s.createdAt)) ||
     !(s.expectedClaimId === null || typeof s.expectedClaimId === "string") ||

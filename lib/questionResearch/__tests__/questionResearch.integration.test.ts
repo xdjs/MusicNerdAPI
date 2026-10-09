@@ -216,13 +216,28 @@ it("enforces the per-artist rolling budget across completed different requests",
       "update artist_research_jobs set status='done',state=jsonb_set(state,'{stage}','\"unresolved\"')",
     );
   }
+  for (let i = 0; i < 5; i++) {
+    const saved = await queueQuestionResearch(
+      artist,
+      { kind: "service" },
+      { ...request, topic: `saved-only record ${i} credits` },
+    );
+    expect(saved).toMatchObject({ outsideResearchReason: "quota" });
+    await client.exec(
+      "update artist_research_jobs set status='done',state=jsonb_set(state,'{stage}','\"unresolved\"')",
+    );
+  }
+  const budgets = await client.query<{ outside: number; saved: number }>(
+    "select count(*) filter(where state->'savedOnly' is distinct from 'true'::jsonb)::int outside,count(*) filter(where state->'savedOnly'='true'::jsonb)::int saved from artist_research_jobs",
+  );
+  expect(budgets.rows[0]).toEqual({ outside: 5, saved: 5 });
   await expect(
     queueQuestionResearch(
       artist,
       { kind: "service" },
-      { ...request, topic: "sixth record credits" },
+      { ...request, topic: "eleventh record credits" },
     ),
-  ).rejects.toMatchObject({ status: 429, code: "research_quota" });
+  ).rejects.toMatchObject({ status: 429, code: "saved_evidence_quota" });
 });
 
 it("preserves a known publication date on approval without making it an event date", async () => {

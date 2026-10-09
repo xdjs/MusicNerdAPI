@@ -4,7 +4,7 @@ export const researchSourceIdSchema = z
   .string()
   .regex(
     new RegExp(
-      `^(?:(?:discovery|vault|public_answer):${uuid}|social:${uuid}:(?:caption|transcript))$`,
+      `^(?:(?:discovery|vault|public_answer):${uuid}|social:${uuid}:(?:caption|transcript)|latest:(?:spotify|deezer|inprocess):[a-f0-9]{64})$`,
       "i",
     ),
   );
@@ -19,6 +19,8 @@ const passage = z.object({
   evidenceKind: z.enum(["original_text", "caption", "provider_transcript"]),
   speaker: z.enum(["not_applicable", "unverified"]),
   publishedAt: z.string().nullable(),
+  activityDate: z.string().optional(),
+  activityDateKind: z.enum(["release", "moment"]).optional(),
   retrievedAt: z.string().nullable(),
   truncated: z.boolean().nullable(),
 });
@@ -43,6 +45,7 @@ export const researchOutputSchemas = {
     references: z.array(passage).max(6),
     limitations: z.array(z.string()).max(30),
     reused: z.boolean().optional(),
+    outsideResearchReason: z.literal("quota").optional(),
   }),
   read: z.object({
     status: z.literal("ok"),

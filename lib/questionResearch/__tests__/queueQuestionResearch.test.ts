@@ -31,7 +31,8 @@ it("reserves quotas and persists queued acknowledgement without provider work", 
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ id: "artist" }])
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ global: 0, artist: 0 }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ global: 0, artist: 0, saved_global: 0, saved_artist: 0 }])
     .mockResolvedValueOnce([{ id: "job", updated_at: new Date().toISOString() }]);
   const result = await queueQuestionResearch("artist", { kind: "service" }, request);
   expect(result).toMatchObject({
@@ -47,31 +48,26 @@ it("reserves quotas and persists queued acknowledgement without provider work", 
     expect.anything(),
   );
 });
-it("reuses the exact active request before spending another quota slot", async () => {
+it("rejects a different request while the artist already has active work", async () => {
   mocks.execute
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ id: "artist" }])
-    .mockResolvedValueOnce([
-      {
-        id: "job",
-        status: "pending",
-        state: { key: "existing" },
-        updated_at: new Date().toISOString(),
-      },
-    ]);
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ id: "job" }]);
   await expect(queueQuestionResearch("artist", { kind: "service" }, request)).rejects.toMatchObject(
     { status: 429 },
   );
   expect(mocks.activity).not.toHaveBeenCalled();
 });
-it("fails closed at the durable global quota", async () => {
+it("fails closed when both outside and saved-evidence global quotas are exhausted", async () => {
   mocks.execute
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ id: "artist" }])
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ global: 100, artist: 0 }]);
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ global: 100, artist: 0, saved_global: 100, saved_artist: 0 }]);
   await expect(queueQuestionResearch("artist", { kind: "service" }, request)).rejects.toMatchObject(
-    { status: 429, code: "research_quota" },
+    { status: 429, code: "saved_evidence_quota" },
   );
   expect(mocks.activity).not.toHaveBeenCalled();
 });
@@ -82,4 +78,15 @@ it("rechecks current private authorization in the locked transaction", async () 
     queueQuestionResearch("artist", { kind: "artist", userId: "user" }, request),
   ).rejects.toThrow("claim revoked");
   expect(mocks.activity).not.toHaveBeenCalled();
+});
+it("admits saved-only research at exhausted outside quota without raising that quota", async () => {
+  mocks.execute
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ id: "artist" }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ global: 100, artist: 5, saved_global: 0, saved_artist: 0 }])
+    .mockResolvedValueOnce([{ id: "job", updated_at: new Date().toISOString() }]);
+  const result = await queueQuestionResearch("artist", { kind: "service" }, request);
+  expect(result).toMatchObject({ stage: "checking_saved", outsideResearchReason: "quota" });
 });

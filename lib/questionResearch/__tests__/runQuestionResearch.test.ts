@@ -246,3 +246,44 @@ it("retains only the original page's explicit publication metadata when collecti
     }),
   );
 });
+it("finishes a saved-only quota fallback from original evidence without a collector", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  const references = [{ sourceId: "vault:1", text: "Exact saved original with the answer." }];
+  m.select.mockReturnValue(references);
+  m.assess.mockResolvedValue({
+    sufficient: true,
+    references,
+    confirmedIds: [],
+    limitation: "none",
+    inputTokens: 10,
+    outputTokens: 10,
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "complete", modelCalls: 1, providerCalls: 0, references });
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
+it("never transitions a saved-only quota fallback into outside research when originals are insufficient", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "unresolved", providerCalls: 0 });
+  expect((j.state as { limitations: string[] }).limitations.join(" ")).toMatch(
+    /outside research.*limit/i,
+  );
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.search).not.toHaveBeenCalled();
+});
+it("rejects a corrupted saved-only external stage before any provider call", async () => {
+  const j = job({ ...initial(), savedOnly: true, step: "social_start", stage: "reading" });
+  await expect(runQuestionResearch(j, Date.now() + 50000)).rejects.toThrow(/state/i);
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
+it("does not spend a second saved-only assessment even if a malformed retry reaches saved again", async () => {
+  const j = job({ ...initial(), savedOnly: true, modelCalls: 1 });
+  m.select.mockReturnValue([{ sourceId: "vault:1", text: "Saved original" }]);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "failed", modelCalls: 1, providerCalls: 0 });
+  expect(m.assess).not.toHaveBeenCalled();
+});

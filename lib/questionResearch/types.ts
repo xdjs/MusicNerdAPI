@@ -40,6 +40,9 @@ export type ResearchPlan =
       reason: string;
     };
 export type ResearchReference = {
+  /** Provider activity date with original precision; not a source publication date. */
+  activityDate?: string;
+  activityDateKind?: "release" | "moment";
   sourceId: string;
   revision: string;
   start: number;
@@ -75,6 +78,8 @@ export type DiscoveryOriginal = {
 };
 export type QuestionResearchState = {
   version: 1;
+  /** Server-admitted saved-evidence lane; never allowed to collect externally. */
+  savedOnly?: boolean;
   request: ResearchRequest;
   key: string;
   expectedClaimId: string | null;
@@ -106,6 +111,8 @@ export type ResearchAuth = { kind: "service" } | { kind: "artist"; userId: strin
 export const QUESTION_RESEARCH_LIFETIME_MS = 15 * 60_000;
 export const QUESTION_RESEARCH_DAILY_ARTIST = 5;
 export const QUESTION_RESEARCH_DAILY_GLOBAL = 100;
+export const SAVED_EVIDENCE_DAILY_ARTIST = 5;
+export const SAVED_EVIDENCE_DAILY_GLOBAL = 100;
 export const QUESTION_RESEARCH_CACHE_MS = 30 * 60_000;
 export type ResearchOriginal = Omit<ResearchReference, "start" | "end">;
 export type ResearchCandidateRow = {

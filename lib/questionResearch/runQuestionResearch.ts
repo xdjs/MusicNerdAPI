@@ -46,7 +46,7 @@ export async function runQuestionResearch(
   };
   const reserve = async (kind: "model" | "web" | "social_start" | "read") => {
     if (kind === "model") {
-      if (state.modelCalls >= 2) throw new Error("Model budget exceeded");
+      if (state.modelCalls >= (state.savedOnly ? 1 : 2)) throw new Error("Model budget exceeded");
       state.modelCalls++;
     } else {
       if (state.providerCalls >= 16) throw new Error("Provider budget exceeded");
@@ -109,6 +109,14 @@ export async function runQuestionResearch(
             state.stage = "complete";
             return await finish();
           }
+        }
+        if (state.savedOnly) {
+          state.stage = "unresolved";
+          state.references = [];
+          state.limitations.push(
+            "Outside research is at its limit. The saved sources checked did not establish this answer; no external search or scrape was started.",
+          );
+          return await finish();
         }
         state.plan = plan;
         state.stage = plan.stage;
