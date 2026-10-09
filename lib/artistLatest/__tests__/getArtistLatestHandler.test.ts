@@ -1,7 +1,8 @@
+import { beforeEach, expect, it, vi } from "vitest";
+import { getArtistLatestHandler } from "../getArtistLatestHandler";
 vi.mock("@/lib/db/db", () => ({
   db: { transaction: async (fn: (tx: object) => unknown) => fn({}) },
 }));
-import { beforeEach, expect, it, vi } from "vitest";
 const { artist, stored, cards } = vi.hoisted(() => ({
   artist: vi.fn(),
   stored: vi.fn(),
@@ -12,7 +13,6 @@ vi.mock("@/lib/latestProviders/getStoredLatestProviders", () => ({
   getStoredLatestProviders: stored,
 }));
 vi.mock("../getStoredPublicLatestCards", () => ({ getStoredPublicLatestCards: cards }));
-import { getArtistLatestHandler } from "../getArtistLatestHandler";
 beforeEach(() => {
   vi.clearAllMocks();
   artist.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000001", name: "Artist" });
