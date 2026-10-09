@@ -17,6 +17,21 @@ export function getResearchFailureDiagnostic(error: unknown, step: QuestionResea
   const rawStatus =
     "statusCode" in value ? value.statusCode : "status" in value ? value.status : null;
   return {
+    ...("finishReason" in value &&
+    typeof value.finishReason === "string" &&
+    ["stop", "length", "content-filter", "tool-calls", "error", "other", "unknown"].includes(
+      value.finishReason,
+    )
+      ? { finishReason: value.finishReason }
+      : {}),
+    ...("cause" in value &&
+    value.cause &&
+    typeof value.cause === "object" &&
+    "name" in value.cause &&
+    typeof value.cause.name === "string" &&
+    ["AI_TypeValidationError", "AI_JSONParseError", "SyntaxError"].includes(value.cause.name)
+      ? { causeName: value.cause.name }
+      : {}),
     step: step ?? "saved",
     name: typeof name === "string" && knownNames.has(name) ? name : "UnknownError",
     status:

@@ -47,8 +47,10 @@ export function selectResearchReferences(
       seen.add(key);
       return true;
     });
+  const excluded = new Set((request.excludeSourceUrls ?? []).map(canonicalResearchUrl));
   const eligible = distinct.filter(
     o =>
+      !excluded.has(canonicalResearchUrl(o.url)) &&
       (!request.targetUrl ||
         canonicalResearchUrl(o.url) === canonicalResearchUrl(request.targetUrl)) &&
       (!request.platform || researchPlatformForUrl(o.url) === request.platform) &&

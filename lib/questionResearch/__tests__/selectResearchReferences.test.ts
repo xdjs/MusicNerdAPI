@@ -354,3 +354,32 @@ it("prefers eligible release dates over newer posts only for latest release requ
     ).map(r => r.sourceId),
   ).toEqual([moment.sourceId]);
 });
+it("excludes already-covered originals before picking newest evidence", () => {
+  const first = {
+    ...original,
+    sourceId: "first",
+    text: "One project",
+    publishedAt: "2026-10-08",
+    url: "https://example.com/one",
+  };
+  const next = {
+    ...first,
+    sourceId: "next",
+    text: "Other project",
+    publishedAt: "2026-10-07",
+    url: "https://example.com/two",
+  };
+  const refs = selectResearchReferences(
+    [first, next],
+    {
+      topic: "other updates",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      retrieval: "latest",
+      excludeSourceUrls: [first.url],
+    },
+    "Artist",
+    Date.parse("2026-10-09"),
+  );
+  expect(refs.map(r => r.sourceId)).toEqual(["next"]);
+});

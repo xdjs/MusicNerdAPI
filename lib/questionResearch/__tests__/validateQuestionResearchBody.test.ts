@@ -28,3 +28,18 @@ it.each(["inprocess", "spotify", "deezer"] as const)(
     });
   },
 );
+it("bounds exclusions to ten validated public URLs", () => {
+  expect(
+    validateQuestionResearchBody({ ...base, excludeSourceUrls: ["https://example.com/one"] })
+      .excludeSourceUrls,
+  ).toEqual(["https://example.com/one"]);
+  expect(() =>
+    validateQuestionResearchBody({
+      ...base,
+      excludeSourceUrls: Array(11).fill("https://example.com"),
+    }),
+  ).toThrow();
+  expect(() =>
+    validateQuestionResearchBody({ ...base, excludeSourceUrls: ["http://127.0.0.1/private"] }),
+  ).toThrow();
+});

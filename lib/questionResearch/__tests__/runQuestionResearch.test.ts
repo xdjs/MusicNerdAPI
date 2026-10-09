@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from "ai";
 import { it, expect, vi, beforeEach } from "vitest";
 import { runQuestionResearch } from "@/lib/questionResearch/runQuestionResearch";
 import type { ResearchJob } from "@/lib/research/types";
@@ -322,3 +323,52 @@ it.each([true, false])(
     expect(m.fetch).not.toHaveBeenCalled();
   },
 );
+it("retries one known completed structured-output failure durably without external research", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  m.select.mockReturnValue([
+    { sourceId: "vault:1", text: "Exact original sufficient for this answer" },
+  ]);
+  m.assess
+    .mockRejectedValueOnce(
+      new NoObjectGeneratedError({
+        response: { id: "test", timestamp: new Date(), modelId: "test" },
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } as never,
+        finishReason: "length",
+      }),
+    )
+    .mockResolvedValueOnce({
+      sufficient: true,
+      references: [{ sourceId: "vault:1", text: "Exact original sufficient for this answer" }],
+      confirmedIds: [],
+      limitation: "none",
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+  expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(false);
+  expect(j.state).toMatchObject({ stage: "checking_saved", modelCalls: 1, outputRetries: 1 });
+  expect(j.state.inFlight).toBeUndefined();
+  expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(true);
+  expect(j.state).toMatchObject({ stage: "complete", modelCalls: 2, outputRetries: 1 });
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
+});
+it("fails honestly after the single structured-output retry is exhausted", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  m.select.mockReturnValue([{ sourceId: "vault:1", text: "Exact original" }]);
+  m.assess.mockRejectedValue(
+    new NoObjectGeneratedError({
+      response: { id: "test", timestamp: new Date(), modelId: "test" },
+      usage: {} as never,
+      finishReason: "stop",
+    }),
+  );
+  await runQuestionResearch(j, Date.now() + 50000);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "failed",
+    errorCode: "research_unavailable",
+    modelCalls: 2,
+    outputRetries: 1,
+  });
+  expect(m.assess).toHaveBeenCalledTimes(2);
+});

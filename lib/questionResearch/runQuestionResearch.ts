@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from "ai";
 import { isDeepStrictEqual } from "node:util";
 import { webSearch } from "@/lib/search/webSearch";
 import { fetchSourceText } from "@/lib/sourceExtraction/fetchSourceText";
@@ -46,7 +47,8 @@ export async function runQuestionResearch(
   };
   const reserve = async (kind: "model" | "web" | "social_start" | "read") => {
     if (kind === "model") {
-      if (state.modelCalls >= (state.savedOnly ? 1 : 2)) throw new Error("Model budget exceeded");
+      if (state.modelCalls >= (state.savedOnly ? 1 : 2) + (state.outputRetries ?? 0))
+        throw new Error("Model budget exceeded");
       state.modelCalls++;
     } else {
       if (state.providerCalls >= 16) throw new Error("Provider budget exceeded");
@@ -292,6 +294,24 @@ export async function runQuestionResearch(
     }
   } catch (error) {
     if (error instanceof OwnershipChangedError) throw error;
+    if (
+      NoObjectGeneratedError.isInstance(error) &&
+      state.inFlight === "model" &&
+      (!state.step || state.step === "saved" || state.step === "assess")
+    ) {
+      const usage = error.usage;
+      if (Number.isFinite(usage?.inputTokens))
+        state.inputTokens += Math.max(0, usage!.inputTokens!);
+      if (Number.isFinite(usage?.outputTokens))
+        state.outputTokens += Math.max(0, usage!.outputTokens!);
+      delete state.inFlight;
+      state.failure = getResearchFailureDiagnostic(error, state.step);
+      if (!state.outputRetries) {
+        state.outputRetries = 1;
+        state.stage = "checking_saved";
+        return finish();
+      }
+    }
     state.stage = "failed";
     state.errorCode = "research_unavailable";
     state.failure = getResearchFailureDiagnostic(error, state.step);

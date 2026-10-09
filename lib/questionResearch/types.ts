@@ -5,6 +5,7 @@ export type ResearchRequest = {
   /** Newest-available overview; explicit date/platform constraints still apply. */
   retrieval?: "relevance" | "latest";
   targetUrl?: string;
+  excludeSourceUrls?: string[];
   platform?: "instagram" | "tiktok" | "x" | "inprocess" | "spotify" | "deezer";
   fromDate?: string;
   toDate?: string;
@@ -97,12 +98,19 @@ export type QuestionResearchState = {
   datasetId?: string;
   nextPollAt?: string;
   modelCalls: number;
+  outputRetries?: number;
   providerCalls: number;
   inputTokens: number;
   outputTokens: number;
   errorCode?: string;
   /** Server-only diagnostic; never stores the error message or request/source content. */
-  failure?: { step: string; name: string; status: number | null };
+  failure?: {
+    step: string;
+    name: string;
+    status: number | null;
+    finishReason?: string;
+    causeName?: string;
+  };
   step?:
     "saved" | "search" | "pages" | "social_start" | "social_poll" | "social_collect" | "assess";
   inFlight?: "model" | "web" | "social_start";
