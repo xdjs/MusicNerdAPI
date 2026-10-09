@@ -128,3 +128,33 @@ it("routes an unscoped latest overview to a connected social account after saved
     ),
   ).toMatchObject({ provider: "page" });
 });
+
+it.each(["inprocess", "spotify", "deezer"] as const)(
+  "does not fall back from explicit %s to TikTok",
+  platform => {
+    const connections = {
+      inprocess: "0x" + "a".repeat(40),
+      spotify: "a".repeat(22),
+      deezer: "123",
+      tiktok: "example",
+    };
+    expect(
+      planQuestionResearch(
+        { ...base, retrieval: "latest", platform },
+        { ...artist, ...connections },
+      ),
+    ).toMatchObject({ provider: null, reason: "provider_latest_refresh_required" });
+    expect(planQuestionResearch({ ...base, retrieval: "latest", platform }, artist)).toMatchObject({
+      provider: null,
+      reason: "connected_account_required",
+    });
+  },
+);
+it("refuses a conflicting explicit source and URL", () => {
+  expect(
+    planQuestionResearch(
+      { ...base, platform: "inprocess", targetUrl: "https://www.tiktok.com/@example/video/123" },
+      artist,
+    ),
+  ).toMatchObject({ provider: null, reason: "source_platform_mismatch" });
+});

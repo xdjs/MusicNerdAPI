@@ -264,3 +264,39 @@ it("ranks release/moment activity alongside posts without relabelling activity a
   expect(refs.every(r => r.publishedAt === null)).toBe(true);
   expect(refs[1].activityDate).toBe("2026-09");
 });
+
+it.each([
+  ["inprocess", "https://www.inprocess.world/collect/base:abc/2"],
+  ["spotify", "https://open.spotify.com/album/abc"],
+  ["deezer", "https://www.deezer.com/album/123"],
+] as const)("retrieves only exact %s hosts for latest", (platform, url) => {
+  const item = { ...original, text: "Exact original", publishedAt: "2026-10-01T00:00:00Z", url };
+  const unrelated = {
+    ...item,
+    sourceId: "other",
+    url: "https://www.tiktok.com/@example/video/123",
+  };
+  const spoof = {
+    ...item,
+    sourceId: "spoof",
+    url: url.replace(new URL(url).hostname, new URL(url).hostname + ".evil.example"),
+  };
+  const request = {
+    topic: "latest",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+    platform,
+  } as const;
+  expect(
+    selectResearchReferences([item, unrelated, spoof], request, "Artist", Date.parse("2026-10-09")),
+  ).toMatchObject([{ url }]);
+  expect(
+    selectResearchReferences(
+      [unrelated],
+      { ...request, targetUrl: unrelated.url },
+      "Artist",
+      Date.parse("2026-10-09"),
+    ),
+  ).toEqual([]);
+});

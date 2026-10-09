@@ -19,3 +19,12 @@ it("validates an explicit latest retrieval mode without changing the default", (
   expect(validateQuestionResearchBody({ ...base, retrieval: "latest" }).retrieval).toBe("latest");
   expect(() => validateQuestionResearchBody({ ...base, retrieval: "all" })).toThrow();
 });
+it.each(["inprocess", "spotify", "deezer"] as const)(
+  "preserves explicit %s source constraints",
+  platform => {
+    expect(validateQuestionResearchBody({ ...base, platform, retrieval: "latest" })).toMatchObject({
+      platform,
+      retrieval: "latest",
+    });
+  },
+);

@@ -5,7 +5,7 @@ export type ResearchRequest = {
   /** Newest-available overview; explicit date/platform constraints still apply. */
   retrieval?: "relevance" | "latest";
   targetUrl?: string;
-  platform?: "instagram" | "tiktok" | "x";
+  platform?: "instagram" | "tiktok" | "x" | "inprocess" | "spotify" | "deezer";
   fromDate?: string;
   toDate?: string;
 };

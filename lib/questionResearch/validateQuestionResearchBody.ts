@@ -27,7 +27,7 @@ const schema = z
     freshness: z.enum(["stored", "recent"]).default("stored"),
     retrieval: z.enum(["relevance", "latest"]).optional(),
     targetUrl: z.string().max(2048).optional(),
-    platform: z.enum(["instagram", "tiktok", "x"]).optional(),
+    platform: z.enum(["instagram", "tiktok", "x", "inprocess", "spotify", "deezer"]).optional(),
     fromDate: date.optional(),
     toDate: date.optional(),
   })

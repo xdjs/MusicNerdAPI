@@ -1,3 +1,4 @@
+import { researchPlatformForUrl } from "@/lib/questionResearch/researchPlatformForUrl";
 import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
 import { canonicalResearchUrl } from "@/lib/questionResearch/canonicalResearchUrl";
 import { searchArtistKnowledge } from "@/lib/knowledge/searchArtistKnowledge";
@@ -50,12 +51,7 @@ export function selectResearchReferences(
     o =>
       (!request.targetUrl ||
         canonicalResearchUrl(o.url) === canonicalResearchUrl(request.targetUrl)) &&
-      (!request.platform ||
-        request.targetUrl ||
-        (request.platform === "x"
-          ? ["x.com", "twitter.com"]
-          : [`${request.platform}.com`]
-        ).includes(new URL(o.url).hostname.replace(/^www\./, ""))) &&
+      (!request.platform || researchPlatformForUrl(o.url) === request.platform) &&
       (request.evidenceNeed !== "spoken_content" || o.evidenceKind === "provider_transcript") &&
       (!from || (Number.isFinite(timeOf(o)) && timeOf(o) >= Date.parse(from))) &&
       (!request.toDate ||

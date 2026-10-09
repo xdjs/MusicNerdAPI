@@ -287,3 +287,38 @@ it("does not spend a second saved-only assessment even if a malformed retry reac
   expect(j.state).toMatchObject({ stage: "failed", modelCalls: 1, providerCalls: 0 });
   expect(m.assess).not.toHaveBeenCalled();
 });
+
+it.each([true, false])(
+  "keeps explicit InProcess research in saved provider evidence (sufficient=%s)",
+  async sufficient => {
+    m.artist.mockResolvedValue({ name: "Pete", tiktok: "pete", inprocess: "0x" + "a".repeat(40) });
+    const references = [
+      { sourceId: "latest:inprocess:" + "a".repeat(64), text: "Exact moment title" },
+    ];
+    m.select.mockReturnValue(references);
+    m.assess.mockResolvedValue({
+      sufficient,
+      references: sufficient ? references : [],
+      confirmedIds: [],
+      limitation: "missing_original",
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    const j = job({
+      ...initial(),
+      request: {
+        topic: "latest InProcess post",
+        evidenceNeed: "reporting",
+        freshness: "stored",
+        retrieval: "latest",
+        platform: "inprocess",
+      },
+    });
+    expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(true);
+    expect(j.state.stage).toBe(sufficient ? "complete" : "unresolved");
+    if (!sufficient) expect(j.state.limitations).toContain("provider_latest_refresh_required");
+    expect(m.start).not.toHaveBeenCalled();
+    expect(m.search).not.toHaveBeenCalled();
+    expect(m.fetch).not.toHaveBeenCalled();
+  },
+);

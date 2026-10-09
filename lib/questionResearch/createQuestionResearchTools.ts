@@ -73,7 +73,9 @@ export function createQuestionResearchTools(config: {
               "Use latest for a newest-available overview; explicit dates and platform still constrain evidence.",
             ),
           targetUrl: z.string().url().max(2048).optional(),
-          platform: z.enum(["instagram", "tiktok", "x"]).optional(),
+          platform: z
+            .enum(["instagram", "tiktok", "x", "inprocess", "spotify", "deezer"])
+            .optional(),
           fromDate: z.string().optional(),
           toDate: z.string().optional(),
         })
