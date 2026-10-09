@@ -300,3 +300,57 @@ it.each([
     ),
   ).toEqual([]);
 });
+
+it("prefers eligible release dates over newer posts only for latest release requests", () => {
+  const release = {
+    ...original,
+    sourceId: "latest:spotify:1",
+    url: "https://open.spotify.com/album/abc",
+    text: '"releaseDate":"2026-09-25"',
+    activityDate: "2026-09-25",
+    activityDateKind: "release" as const,
+  };
+  const moment = {
+    ...original,
+    sourceId: "latest:inprocess:2",
+    url: "https://www.inprocess.world/collect/base:abc/2",
+    text: "Experimenting with plugins",
+    activityDate: "2026-10-08T12:00:00Z",
+    activityDateKind: "moment" as const,
+  };
+  const request = {
+    topic: "latest release",
+    evidenceNeed: "release_date",
+    freshness: "stored",
+    retrieval: "latest",
+  } as const;
+  const now = Date.parse("2026-10-09");
+  expect(
+    selectResearchReferences([moment, release], request, "Pete", now).map(r => r.sourceId),
+  ).toEqual([release.sourceId]);
+  expect(
+    selectResearchReferences(
+      [moment, release],
+      { ...request, evidenceNeed: "reporting" },
+      "Pete",
+      now,
+    )[0].sourceId,
+  ).toBe(moment.sourceId);
+  const scoped = selectResearchReferences(
+    [moment, release],
+    { ...request, platform: "inprocess" },
+    "Pete",
+    now,
+  );
+  expect(scoped.map(r => r.sourceId)).toEqual([moment.sourceId]);
+  expect(scoped[0].activityDateKind).toBe("moment");
+  expect(scoped[0].publishedAt).toBeNull();
+  expect(
+    selectResearchReferences(
+      [moment, release],
+      { ...request, fromDate: "2026-10-01" },
+      "Pete",
+      now,
+    ).map(r => r.sourceId),
+  ).toEqual([moment.sourceId]);
+});

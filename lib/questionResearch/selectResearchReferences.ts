@@ -60,8 +60,13 @@ export function selectResearchReferences(
   // An overview is a chronological read, not a lexical search for the word "latest".
   // Unknown/future dates cannot establish the newest available activity.
   if (request.retrieval === "latest") {
-    return eligible
-      .filter(o => dateOf(o) && Number.isFinite(timeOf(o)) && timeOf(o) <= now)
+    const dated = eligible.filter(o => dateOf(o) && Number.isFinite(timeOf(o)) && timeOf(o) <= now);
+    const releases = dated.filter(o => o.activityDateKind === "release");
+    // A newer post is not a newer release. Source/date constraints remain authoritative;
+    // without catalog evidence, other originals are only candidates for assessment.
+    const candidates =
+      request.evidenceNeed === "release_date" && releases.length ? releases : dated;
+    return candidates
       .sort((a, b) => timeOf(b) - timeOf(a) || a.sourceId.localeCompare(b.sourceId))
       .slice(0, 3)
       .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
