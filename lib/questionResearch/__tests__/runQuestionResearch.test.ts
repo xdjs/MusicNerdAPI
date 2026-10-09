@@ -220,3 +220,29 @@ it("does not cancel when JSONB storage reorders a persisted provider plan", asyn
   expect(m.search).toHaveBeenCalledTimes(1);
   expect(j.state.stage).toBe("unresolved");
 });
+it("retains only the original page's explicit publication metadata when collecting web evidence", async () => {
+  const j = job({
+    ...initial(),
+    step: "pages",
+    stage: "reading",
+    candidates: [{ url: "https://artist.example/news", title: "An unverified headline" }],
+    nextCandidate: 0,
+  });
+  m.fetch.mockResolvedValue({
+    status: "ready",
+    text: "The original article explains the work.",
+    capturedAt: "2026-10-09T00:00:00Z",
+    publishedAt: "2026-10-08",
+    truncated: false,
+  });
+  m.classify.mockImplementation(async o => o);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.classify).toHaveBeenCalledWith(
+    expect.objectContaining({
+      provenance: expect.objectContaining({
+        publishedAt: "2026-10-08",
+        retrievedAt: "2026-10-09T00:00:00Z",
+      }),
+    }),
+  );
+});

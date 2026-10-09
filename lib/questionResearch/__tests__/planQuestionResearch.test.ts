@@ -99,3 +99,32 @@ it("does not use a platform hint to treat a web page as spoken content", () => {
     ),
   ).toMatchObject({ stage: "unresolved", reason: "unsupported_speech" });
 });
+
+it("routes an unscoped latest overview to a connected social account after saved evidence is insufficient", () => {
+  const request = {
+    topic: "latest updates",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+  } as const;
+  expect(planQuestionResearch(request, { name: "Artist", instagram: "artist" })).toMatchObject({
+    provider: "instagram",
+    handle: "artist",
+    limit: 20,
+  });
+  expect(planQuestionResearch(request, { name: "Artist", tiktok: "artist" })).toMatchObject({
+    provider: "tiktok",
+  });
+  expect(
+    planQuestionResearch(
+      { ...request, evidenceNeed: "credits" },
+      { name: "Artist", instagram: "artist" },
+    ),
+  ).toMatchObject({ provider: "web", reason: "work_specific_originals" });
+  expect(
+    planQuestionResearch(
+      { ...request, targetUrl: "https://artist.example/news" },
+      { name: "Artist", instagram: "artist" },
+    ),
+  ).toMatchObject({ provider: "page" });
+});

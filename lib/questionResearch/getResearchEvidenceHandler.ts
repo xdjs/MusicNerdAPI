@@ -25,7 +25,11 @@ export async function getResearchEvidenceHandler(
         !researchSourceIdSchema.safeParse(evidenceId).success)
     )
       throw new KnowledgeError("invalid_request", 400, "Invalid original revision or text window");
-    if (evidenceId.startsWith("vault:") || evidenceId.startsWith("social:"))
+    if (
+      evidenceId.startsWith("vault:") ||
+      evidenceId.startsWith("social:") ||
+      evidenceId.startsWith("public_answer:")
+    )
       return readPublicResearchSource(
         artistId,
         evidenceId,

@@ -10,6 +10,12 @@ export function planQuestionResearch(
   const targetUrl = request.targetUrl ? validateResearchUrl(request.targetUrl) : undefined;
   const url = targetUrl ? new URL(targetUrl) : null;
   const host = url?.hostname.replace(/^www\./, "");
+  const latestPlatform =
+    !targetUrl &&
+    request.retrieval === "latest" &&
+    ["reporting", "social_caption"].includes(request.evidenceNeed)
+      ? (["instagram", "tiktok", "x"] as const).find(p => connectedResearchHandle(artist[p], p))
+      : undefined;
   const platform =
     host === "instagram.com"
       ? "instagram"
@@ -17,7 +23,7 @@ export function planQuestionResearch(
         ? "tiktok"
         : host === "x.com" || host === "twitter.com"
           ? "x"
-          : request.platform;
+          : (request.platform ?? latestPlatform);
   const unresolved = (reason: string): ResearchPlan => ({
     provider: null,
     stage: "unresolved",

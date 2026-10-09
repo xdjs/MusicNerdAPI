@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
+import { loadPublicLatestOriginals } from "@/lib/questionResearch/loadPublicLatestOriginals";
 import { db } from "@/lib/db/db";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { normalizeKnowledgeSourceSnapshot } from "@/lib/knowledge/normalizeKnowledgeSourceSnapshot";
 import { MAX_KNOWLEDGE_CHARS, MAX_KNOWLEDGE_ROWS } from "@/lib/knowledge/types";
 import type { ResearchOriginal, DiscoveryOriginal } from "@/lib/questionResearch/types";
 
-/** Read bounded public originals only; uploads, answers, corrections and private review rows never enter this corpus. */
+/** Read bounded public originals only; uploads, unpublished answers, corrections and private review rows never enter this corpus. */
 export async function loadPublicResearchOriginals(artistId: string): Promise<ResearchOriginal[]> {
   return db.transaction(
     async tx => {
@@ -76,7 +77,19 @@ export async function loadPublicResearchOriginals(artistId: string): Promise<Res
           retrievedAt: d.provenance.retrievedAt,
           truncated: d.provenance.truncated,
         });
-      return sources;
+      const latest = await loadPublicLatestOriginals(tx, artistId);
+      if (
+        sources.length + latest.length > MAX_KNOWLEDGE_ROWS ||
+        sources.reduce((total, source) => total + source.text.length, 0) +
+          latest.reduce((total, source) => total + source.text.length, 0) >
+          MAX_KNOWLEDGE_CHARS
+      )
+        throw new KnowledgeError(
+          "corpus_too_large",
+          413,
+          "Public evidence exceeds the supported snapshot size",
+        );
+      return [...sources, ...latest];
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
