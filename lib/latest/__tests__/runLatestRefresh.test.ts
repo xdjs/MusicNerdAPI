@@ -115,3 +115,11 @@ it("processes one bounded provider per slice and keeps remaining providers queue
   expect(await runLatestRefresh(j, later())).toMatchObject({ done: false, waiting: true });
   expect(m.provider).toHaveBeenCalledTimes(1);
 });
+
+it("does not checkpoint an expired provider lease over a newer worker", async () => {
+  const j = job("disconnected");
+  j.state.sources.inprocess = { status: "pending" };
+  m.provider.mockResolvedValue({ status: "pending", stale: true });
+  expect(await runLatestRefresh(j, later())).toMatchObject({ done: false, waiting: true });
+  expect(m.store).not.toHaveBeenCalled();
+});

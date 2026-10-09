@@ -57,6 +57,6 @@ it("refuses late writes after provider connection or job lease changes", async (
   await client.exec(
     "update artists set deezer='12';update artist_research_jobs set updated_at=now()",
   );
-  await expect(persistLatestProviderSnapshot(job, "deezer", "12", items)).rejects.toThrow();
+  expect(await persistLatestProviderSnapshot(job, "deezer", "12", items)).toBe(false);
   expect((await client.query("select * from artist_latest_provider_snapshots")).rows).toEqual([]);
 });

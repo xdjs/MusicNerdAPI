@@ -8,7 +8,7 @@ import type { LatestProvider, LatestProviderItem } from "./types";
 export async function refreshLatestProvider(
   job: ResearchJob,
   provider: LatestProvider,
-): Promise<SourceResult> {
+): Promise<SourceResult & { stale?: boolean }> {
   const state = job.state as unknown as LatestRefreshState;
   const accountId = latestProviderAccount(provider, state[provider]);
   if (!accountId) return { status: "disconnected" };
@@ -20,7 +20,8 @@ export async function refreshLatestProvider(
   } catch {
     items = null;
   }
-  await persistLatestProviderSnapshot(job, provider, accountId, items);
+  if ((await persistLatestProviderSnapshot(job, provider, accountId, items)) === false)
+    return { status: "pending", stale: true };
   return items === null
     ? { status: "failed" }
     : { status: "checked", checkedAt: new Date().toISOString() };

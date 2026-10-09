@@ -23,8 +23,14 @@ export async function runLatestRefresh(job: ResearchJob, deadline: number): Prom
     p => state.sources[p]?.status === "pending",
   );
   if (provider) {
-    if (deadline - Date.now() > 10000)
-      state.sources[provider] = await refreshLatestProvider(job, provider);
+    if (deadline - Date.now() > 10000) {
+      const result = await refreshLatestProvider(job, provider);
+      if (result.stale)
+        return { done: false, waiting: true, progress: "Latest refresh lease changed" };
+      const { stale: _stale, ...source } = result;
+      void _stale;
+      state.sources[provider] = source;
+    }
     const done = !Object.values(state.sources).some(source => source.status === "pending");
     await latestRefreshStore(job, state, done, true);
     return done

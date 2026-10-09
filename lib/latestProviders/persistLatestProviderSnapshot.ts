@@ -10,10 +10,10 @@ export async function persistLatestProviderSnapshot(
   provider: LatestProvider,
   accountId: string,
   items: LatestProviderItem[] | null,
-): Promise<void> {
+): Promise<boolean> {
   if (items && (items.length > 50 || Buffer.byteLength(JSON.stringify(items)) > 400000))
     throw new Error("Latest snapshot exceeds budget");
-  await withResearchJobWrite(job.artistId, job.id, async tx => {
+  return withResearchJobWrite(job.artistId, job.id, async tx => {
     const [artist] = await tx.execute<{
       spotify: string | null;
       deezer: string | null;
@@ -22,7 +22,8 @@ export async function persistLatestProviderSnapshot(
     const live = await tx.execute(
       sql`select id from artist_research_jobs where id=${job.id}::uuid and artist_id=${job.artistId}::uuid and status='running' and updated_at is not distinct from ${job.updatedAt}::timestamptz for update`,
     );
-    if (!artist || !live.length || latestProviderAccount(provider, artist[provider]) !== accountId)
+    if (!live.length) return false;
+    if (!artist || latestProviderAccount(provider, artist[provider]) !== accountId)
       throw new OwnershipChangedError();
     if (items !== null)
       await tx.execute(
@@ -32,5 +33,6 @@ export async function persistLatestProviderSnapshot(
       await tx.execute(
         sql`insert into artist_latest_provider_snapshots(artist_id,provider,account_id,items,checked_at,last_attempt_at,status) values(${job.artistId}::uuid,${provider},${accountId},'[]'::jsonb,null,now(),'failed') on conflict(artist_id,provider) do update set account_id=excluded.account_id,items=case when artist_latest_provider_snapshots.account_id=excluded.account_id then artist_latest_provider_snapshots.items else '[]'::jsonb end,checked_at=case when artist_latest_provider_snapshots.account_id=excluded.account_id then artist_latest_provider_snapshots.checked_at else null end,last_attempt_at=excluded.last_attempt_at,status='failed'`,
       );
+    return true;
   });
 }
