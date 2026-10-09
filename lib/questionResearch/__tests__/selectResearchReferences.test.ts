@@ -235,3 +235,32 @@ it("retains full publication precision when a promoted Lore copy loses the origi
     )[0].sourceId,
   ).toBe("discovery:dated");
 });
+
+it("ranks release/moment activity alongside posts without relabelling activity as publication", () => {
+  const moment: ResearchOriginal = {
+    ...original,
+    sourceId: "latest:inprocess:1",
+    text: "Plugin experiments",
+    url: "https://www.inprocess.world/moment/1",
+    activityDate: "2026-10-08T14:15:12Z",
+    activityDateKind: "moment",
+  };
+  const release: ResearchOriginal = {
+    ...original,
+    sourceId: "latest:spotify:1",
+    text: "Release date 2026-09",
+    url: "https://open.spotify.com/album/1",
+    activityDate: "2026-09",
+    activityDateKind: "release",
+  };
+  const future = {
+    ...release,
+    sourceId: "latest:spotify:2",
+    url: "https://open.spotify.com/album/2",
+    activityDate: "2026-10",
+  };
+  const refs = selectResearchReferences([release, moment, future], latestRequest, "Artist", now);
+  expect(refs.map(r => r.sourceId)).toEqual([moment.sourceId, release.sourceId]);
+  expect(refs.every(r => r.publishedAt === null)).toBe(true);
+  expect(refs[1].activityDate).toBe("2026-09");
+});

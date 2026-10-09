@@ -11,6 +11,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -325,3 +326,22 @@ export const artistInterviewQuestionEvidence = pgTable("artist_interview_questio
   evidenceReferences: jsonb("evidence_references").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
 });
+
+/** Current bounded public provider snapshots; MusicNerdWeb migration 0045 owns storage. */
+export const artistLatestProviderSnapshots = pgTable(
+  "artist_latest_provider_snapshots",
+  {
+    artistId: uuid("artist_id")
+      .notNull()
+      .references(() => artists.id, { onDelete: "cascade" }),
+    provider: text().notNull(),
+    accountId: text("account_id").notNull(),
+    items: jsonb().notNull().default([]),
+    checkedAt: timestamp("checked_at", { withTimezone: true, mode: "string" }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .defaultNow(),
+    status: text().notNull(),
+  },
+  table => [primaryKey({ columns: [table.artistId, table.provider] })],
+);

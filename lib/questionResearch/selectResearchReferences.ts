@@ -1,3 +1,4 @@
+import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
 import { canonicalResearchUrl } from "@/lib/questionResearch/canonicalResearchUrl";
 import { searchArtistKnowledge } from "@/lib/knowledge/searchArtistKnowledge";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
@@ -15,6 +16,8 @@ export function selectResearchReferences(
   artistName: string,
   now = Date.now(),
 ): ResearchReference[] {
+  const dateOf = (o: ResearchOriginal) => o.activityDate ?? o.publishedAt;
+  const timeOf = (o: ResearchOriginal) => (dateOf(o) ? latestActivityTime(dateOf(o)!) : NaN);
   const from =
     request.fromDate ??
     (request.freshness === "recent" && request.retrieval !== "latest"
@@ -27,10 +30,8 @@ export function selectResearchReferences(
     .sort((a, b) => {
       if (request.retrieval === "latest") {
         const precision = (o: ResearchOriginal) =>
-          o.publishedAt &&
-          Number.isFinite(Date.parse(o.publishedAt)) &&
-          Date.parse(o.publishedAt) <= now
-            ? o.publishedAt.includes("T")
+          dateOf(o) && Number.isFinite(timeOf(o)) && timeOf(o) <= now
+            ? dateOf(o)!.includes("T")
               ? 2
               : 1
             : 0;
@@ -56,24 +57,16 @@ export function selectResearchReferences(
           : [`${request.platform}.com`]
         ).includes(new URL(o.url).hostname.replace(/^www\./, ""))) &&
       (request.evidenceNeed !== "spoken_content" || o.evidenceKind === "provider_transcript") &&
-      (!from || (o.publishedAt !== null && o.publishedAt.slice(0, 10) >= from)) &&
-      (!request.toDate || (o.publishedAt !== null && o.publishedAt.slice(0, 10) <= request.toDate)),
+      (!from || (Number.isFinite(timeOf(o)) && timeOf(o) >= Date.parse(from))) &&
+      (!request.toDate ||
+        (Number.isFinite(timeOf(o)) && timeOf(o) < Date.parse(request.toDate) + 86400000)),
   );
   // An overview is a chronological read, not a lexical search for the word "latest".
   // Unknown/future dates cannot establish the newest available activity.
   if (request.retrieval === "latest") {
     return eligible
-      .filter(
-        o =>
-          o.publishedAt &&
-          Number.isFinite(Date.parse(o.publishedAt)) &&
-          Date.parse(o.publishedAt) <= now,
-      )
-      .sort(
-        (a, b) =>
-          Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!) ||
-          a.sourceId.localeCompare(b.sourceId),
-      )
+      .filter(o => dateOf(o) && Number.isFinite(timeOf(o)) && timeOf(o) <= now)
+      .sort((a, b) => timeOf(b) - timeOf(a) || a.sourceId.localeCompare(b.sourceId))
       .slice(0, 3)
       .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
   }

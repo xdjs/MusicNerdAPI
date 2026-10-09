@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const m = vi.hoisted(() => ({ authorize: vi.fn(), instagram: vi.fn(), store: vi.fn() }));
+const m = vi.hoisted(() => ({
+  authorize: vi.fn(),
+  instagram: vi.fn(),
+  store: vi.fn(),
+  provider: vi.fn(),
+}));
 vi.mock("@/lib/latest/authorizeLatestRefresh", () => ({ authorizeLatestRefresh: m.authorize }));
 vi.mock("@/lib/latest/refreshLatestInstagram", () => ({ refreshLatestInstagram: m.instagram }));
 vi.mock("@/lib/latest/latestRefreshStore", () => ({ latestRefreshStore: m.store }));
+vi.mock("@/lib/latestProviders/refreshLatestProvider", () => ({
+  refreshLatestProvider: m.provider,
+}));
 const { runLatestRefresh } = await import("@/lib/latest/runLatestRefresh");
 
 const job = (instagram: string) => ({
@@ -90,4 +98,20 @@ it("resets successful polling only when handing the lease back, without leaking 
   await runLatestRefresh(j, later());
   expect(m.store).toHaveBeenCalledWith(j, expect.any(Object), false, true);
   expect(j.state.sources.instagram).toEqual({ status: "pending" });
+});
+
+it("refreshes pending durable providers even when Instagram is disconnected", async () => {
+  const j = job("disconnected");
+  j.state.sources.inprocess = { status: "pending" };
+  m.provider.mockResolvedValue({ status: "checked", checkedAt: "2026-10-09T00:00:00Z" });
+  expect(await runLatestRefresh(j, later())).toMatchObject({ done: true });
+  expect(m.provider).toHaveBeenCalledWith(j, "inprocess");
+});
+it("processes one bounded provider per slice and keeps remaining providers queued", async () => {
+  const j = job("disconnected");
+  j.state.sources.inprocess = { status: "pending" };
+  j.state.sources.deezer = { status: "pending" };
+  m.provider.mockResolvedValue({ status: "checked" });
+  expect(await runLatestRefresh(j, later())).toMatchObject({ done: false, waiting: true });
+  expect(m.provider).toHaveBeenCalledTimes(1);
 });
