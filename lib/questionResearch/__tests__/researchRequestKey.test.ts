@@ -1,3 +1,4 @@
+import { knowledgeRevision } from "@/lib/knowledge/knowledgeRevision";
 import { it, expect } from "vitest";
 import { researchRequestKey } from "@/lib/questionResearch/researchRequestKey";
 it("never reuses a failed lexical query for a new chronological overview", () => {
@@ -44,5 +45,29 @@ it("separates an overview from focused cached evidence and preserves omitted sco
   );
   expect(researchRequestKey({ ...request, answerScope: "focused" })).toBe(
     researchRequestKey(request),
+  );
+});
+it("versions only overview evidence so completed old overviews are reassessed", () => {
+  const request = {
+    topic: "latest updates",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+    answerScope: "overview",
+  } as const;
+  const old = knowledgeRevision([
+    "latest updates",
+    "reporting",
+    "stored",
+    null,
+    null,
+    null,
+    null,
+    "latest",
+    "overview",
+  ]);
+  expect(researchRequestKey(request)).not.toBe(old);
+  expect(researchRequestKey({ ...request, answerScope: "focused" })).toBe(
+    knowledgeRevision(["latest updates", "reporting", "stored", null, null, null, null, "latest"]),
   );
 });

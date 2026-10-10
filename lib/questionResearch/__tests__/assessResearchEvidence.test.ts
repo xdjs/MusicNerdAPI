@@ -178,3 +178,24 @@ it("caps supported overview originals at three even if an editor over-selects", 
   );
   expect(result.references).toHaveLength(3);
 });
+it("treats semantic exclusions as eligibility boundaries before accepting dated latest evidence", async () => {
+  model.mockResolvedValue({
+    output: { sufficient: false, supports: [], identity: [], limitation: "missing_original" },
+    usage: {},
+  });
+  const request = {
+    topic: "other activity excluding the archive project",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+    answerScope: "overview",
+  } as const;
+  const result = await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000);
+  expect(result.sufficient).toBe(false);
+  expect(model.mock.calls[0][0].instructions).toContain(
+    "Apply explicit topic exclusions before deciding sufficiency",
+  );
+  expect(model.mock.calls[0][0].instructions).toContain(
+    "A different URL does not make the same excluded project a new activity",
+  );
+});
