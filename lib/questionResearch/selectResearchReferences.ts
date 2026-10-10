@@ -68,10 +68,15 @@ export function selectResearchReferences(
     // without catalog evidence, other originals are only candidates for assessment.
     const candidates =
       request.evidenceNeed === "release_date" && releases.length ? releases : dated;
+    const overview = request.answerScope === "overview" && request.evidenceNeed === "reporting";
+    // Broader candidate coverage stays within the existing 12,000-character total budget.
     return candidates
       .sort((a, b) => timeOf(b) - timeOf(a) || a.sourceId.localeCompare(b.sourceId))
-      .slice(0, 3)
-      .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
+      .slice(0, overview ? 6 : 3)
+      .map(original => ({
+        ...original,
+        ...knowledgeWindow(original.text, 0, overview ? 2000 : 4000),
+      }));
   }
   const sources: Evidence[] = eligible.map(o => ({
     text: o.text,

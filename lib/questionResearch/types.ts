@@ -4,6 +4,8 @@ export type ResearchRequest = {
   freshness: "stored" | "recent";
   /** Newest-available overview; explicit date/platform constraints still apply. */
   retrieval?: "relevance" | "latest";
+  /** Omitted/focused preserves single-topic behavior; overview requests distinct recent activities. */
+  answerScope?: "overview" | "focused";
   targetUrl?: string;
   excludeSourceUrls?: string[];
   platform?: "instagram" | "tiktok" | "x" | "inprocess" | "spotify" | "deezer";

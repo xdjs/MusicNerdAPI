@@ -31,3 +31,18 @@ it("keys exclusions as a canonical set and preserves legacy keys when empty", ()
     researchRequestKey(request),
   );
 });
+
+it("separates an overview from focused cached evidence and preserves omitted scope identity", () => {
+  const request = {
+    topic: "latest updates",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+  } as const;
+  expect(researchRequestKey({ ...request, answerScope: "overview" })).not.toBe(
+    researchRequestKey(request),
+  );
+  expect(researchRequestKey({ ...request, answerScope: "focused" })).toBe(
+    researchRequestKey(request),
+  );
+});

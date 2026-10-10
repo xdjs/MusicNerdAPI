@@ -15,5 +15,6 @@ export function researchRequestKey(request: ResearchRequest): string {
       ? [[...new Set(request.excludeSourceUrls.map(canonicalResearchUrl))].sort()]
       : []),
     ...(request.retrieval === "latest" ? ["latest"] : []),
+    ...(request.answerScope === "overview" ? ["overview"] : []),
   ]);
 }

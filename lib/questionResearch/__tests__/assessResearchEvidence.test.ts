@@ -89,3 +89,92 @@ it("does not invoke a model when there are no readable originals", async () => {
   );
   expect(model).not.toHaveBeenCalled();
 });
+
+it("asks for distinct overview activities in one assessment and retains all supported original context", async () => {
+  const archive = {
+    ...ref,
+    sourceId: "archive",
+    text: "I still have not found the original WAV for this 2013 recording.",
+  };
+  const tour = { ...ref, sourceId: "tour", text: "I announced two live shows for next month." };
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [archive, tour].map(r => ({ sourceId: r.sourceId, quote: r.text })),
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(
+    {
+      topic: "latest updates",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      retrieval: "latest",
+      answerScope: "overview",
+    },
+    [archive, tour],
+    { name: "Artist" },
+    [],
+    5000,
+  );
+  expect(result.references).toEqual([archive, tour]);
+  expect(model).toHaveBeenCalledTimes(1);
+  expect(model.mock.calls[0][0].instructions).toContain("distinct activities");
+  expect(model.mock.calls[0][0].instructions).toContain(
+    "Do not stop after the first useful update",
+  );
+});
+it("does not require invented extra activities when only one overview original is supported", async () => {
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [{ sourceId: ref.sourceId, quote: ref.text }],
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(
+    {
+      topic: "latest updates",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      retrieval: "latest",
+      answerScope: "overview",
+    },
+    [ref],
+    { name: "Artist" },
+    [],
+    5000,
+  );
+  expect(result.sufficient).toBe(true);
+  expect(result.references).toEqual([ref]);
+});
+it("caps supported overview originals at three even if an editor over-selects", async () => {
+  const originals = Array.from({ length: 6 }, (_, i) => ({ ...ref, sourceId: `source:${i}` }));
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: originals.map(r => ({ sourceId: r.sourceId, quote: r.text })),
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(
+    {
+      topic: "latest updates",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      retrieval: "latest",
+      answerScope: "overview",
+    },
+    originals,
+    { name: "Artist" },
+    [],
+    5000,
+  );
+  expect(result.references).toHaveLength(3);
+});

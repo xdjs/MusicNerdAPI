@@ -383,3 +383,47 @@ it("excludes already-covered originals before picking newest evidence", () => {
   );
   expect(refs.map(r => r.sourceId)).toEqual(["next"]);
 });
+
+it("opens six overview candidates within the same total budget so a fourth activity is visible", () => {
+  const dated = Array.from({ length: 8 }, (_, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://example.com/${i}`,
+    publishedAt: `2026-10-0${8 - i}`,
+    text: `${i < 3 ? "Archive project" : "Other activity"}: `.repeat(1000),
+  }));
+  const refs = selectResearchReferences(
+    dated,
+    { ...latestRequest, answerScope: "overview" },
+    "Artist",
+    now,
+  );
+  expect(refs).toHaveLength(6);
+  expect(refs.some(r => r.text.includes("Other activity"))).toBe(true);
+  expect(refs.reduce((sum, r) => sum + r.text.length, 0)).toBeLessThanOrEqual(12000);
+  expect(
+    refs.every(
+      r => dated.find(o => o.sourceId === r.sourceId)?.text.slice(r.start, r.end) === r.text,
+    ),
+  ).toBe(true);
+  expect(
+    selectResearchReferences(dated, { ...latestRequest, answerScope: "focused" }, "Artist", now),
+  ).toHaveLength(3);
+});
+it("does not widen latest release or caption focus even when overview scope is supplied", () => {
+  const dated = Array.from({ length: 8 }, (_, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://example.com/${i}`,
+    publishedAt: "2026-10-08",
+  }));
+  for (const evidenceNeed of ["release_date", "social_caption"] as const)
+    expect(
+      selectResearchReferences(
+        dated,
+        { ...latestRequest, evidenceNeed, answerScope: "overview" },
+        "Artist",
+        now,
+      ),
+    ).toHaveLength(3);
+});

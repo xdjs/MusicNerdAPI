@@ -43,3 +43,14 @@ it("bounds exclusions to ten validated public URLs", () => {
     validateQuestionResearchBody({ ...base, excludeSourceUrls: ["http://127.0.0.1/private"] }),
   ).toThrow();
 });
+
+it("accepts explicit overview scope and rejects unknown scopes without changing omitted requests", () => {
+  expect(validateQuestionResearchBody({ ...base, answerScope: "overview" }).answerScope).toBe(
+    "overview",
+  );
+  expect(validateQuestionResearchBody({ ...base, answerScope: "focused" }).answerScope).toBe(
+    "focused",
+  );
+  expect(validateQuestionResearchBody(base).answerScope).toBeUndefined();
+  expect(() => validateQuestionResearchBody({ ...base, answerScope: "everything" })).toThrow();
+});
