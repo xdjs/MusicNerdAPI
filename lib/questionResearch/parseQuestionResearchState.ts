@@ -7,6 +7,18 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
   const s = value as QuestionResearchState;
   if (
     s.version !== 1 ||
+    (s.outputRetries !== undefined &&
+      (!Number.isInteger(s.outputRetries) ||
+        s.outputRetries < 0 ||
+        s.outputRetries > 1 ||
+        s.modelCalls < s.outputRetries)) ||
+    (s.savedOnly !== undefined && typeof s.savedOnly !== "boolean") ||
+    (s.savedOnly === true &&
+      ((s.step !== undefined && s.step !== "saved") ||
+        s.plan !== undefined ||
+        s.providerCalls !== 0 ||
+        s.modelCalls > 1 + (s.outputRetries ?? 0) ||
+        (s.inFlight !== undefined && s.inFlight !== "model"))) ||
     typeof s.key !== "string" ||
     !Number.isFinite(Date.parse(s.createdAt)) ||
     !(s.expectedClaimId === null || typeof s.expectedClaimId === "string") ||
@@ -27,7 +39,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
     s.limitations.length > 30 ||
     !Number.isInteger(s.modelCalls) ||
     s.modelCalls < 0 ||
-    s.modelCalls > 2 ||
+    s.modelCalls > 2 + (s.outputRetries ?? 0) ||
     !Number.isInteger(s.providerCalls) ||
     s.providerCalls < 0 ||
     s.providerCalls > 16 ||

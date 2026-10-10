@@ -11,6 +11,10 @@ export function researchRequestKey(request: ResearchRequest): string {
     request.platform ?? null,
     request.fromDate ?? null,
     request.toDate ?? null,
+    ...(request.excludeSourceUrls?.length
+      ? [[...new Set(request.excludeSourceUrls.map(canonicalResearchUrl))].sort()]
+      : []),
     ...(request.retrieval === "latest" ? ["latest"] : []),
+    ...(request.answerScope === "overview" ? ["overview"] : []),
   ]);
 }

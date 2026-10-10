@@ -19,3 +19,38 @@ it("validates an explicit latest retrieval mode without changing the default", (
   expect(validateQuestionResearchBody({ ...base, retrieval: "latest" }).retrieval).toBe("latest");
   expect(() => validateQuestionResearchBody({ ...base, retrieval: "all" })).toThrow();
 });
+it.each(["inprocess", "spotify", "deezer"] as const)(
+  "preserves explicit %s source constraints",
+  platform => {
+    expect(validateQuestionResearchBody({ ...base, platform, retrieval: "latest" })).toMatchObject({
+      platform,
+      retrieval: "latest",
+    });
+  },
+);
+it("bounds exclusions to ten validated public URLs", () => {
+  expect(
+    validateQuestionResearchBody({ ...base, excludeSourceUrls: ["https://example.com/one"] })
+      .excludeSourceUrls,
+  ).toEqual(["https://example.com/one"]);
+  expect(() =>
+    validateQuestionResearchBody({
+      ...base,
+      excludeSourceUrls: Array(11).fill("https://example.com"),
+    }),
+  ).toThrow();
+  expect(() =>
+    validateQuestionResearchBody({ ...base, excludeSourceUrls: ["http://127.0.0.1/private"] }),
+  ).toThrow();
+});
+
+it("accepts explicit overview scope and rejects unknown scopes without changing omitted requests", () => {
+  expect(validateQuestionResearchBody({ ...base, answerScope: "overview" }).answerScope).toBe(
+    "overview",
+  );
+  expect(validateQuestionResearchBody({ ...base, answerScope: "focused" }).answerScope).toBe(
+    "focused",
+  );
+  expect(validateQuestionResearchBody(base).answerScope).toBeUndefined();
+  expect(() => validateQuestionResearchBody({ ...base, answerScope: "everything" })).toThrow();
+});

@@ -1,3 +1,4 @@
+import { getStoredLatestProviders } from "@/lib/latestProviders/getStoredLatestProviders";
 import { sql } from "drizzle-orm";
 import { loadPublicLatestOriginals } from "@/lib/questionResearch/loadPublicLatestOriginals";
 import { db } from "@/lib/db/db";
@@ -77,7 +78,10 @@ export async function loadPublicResearchOriginals(artistId: string): Promise<Res
           retrievedAt: d.provenance.retrievedAt,
           truncated: d.provenance.truncated,
         });
-      const latest = await loadPublicLatestOriginals(tx, artistId);
+      const latest = [
+        ...(await loadPublicLatestOriginals(tx, artistId)),
+        ...(await getStoredLatestProviders(artistId, tx)).originals,
+      ];
       if (
         sources.length + latest.length > MAX_KNOWLEDGE_ROWS ||
         sources.reduce((total, source) => total + source.text.length, 0) +

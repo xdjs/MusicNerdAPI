@@ -19,3 +19,30 @@ it("does not persist arbitrary names or nonnumeric status values", () => {
   );
   expect(diagnostic).toEqual({ step: "saved", name: "UnknownError", status: null });
 });
+it("records only allowlisted structured-output failure details", () => {
+  expect(
+    getResearchFailureDiagnostic(
+      {
+        name: "AI_NoObjectGeneratedError",
+        finishReason: "length",
+        cause: { name: "AI_TypeValidationError", message: "private completion" },
+        text: "private completion",
+      },
+      "saved",
+    ),
+  ).toEqual({
+    step: "saved",
+    name: "AI_NoObjectGeneratedError",
+    status: null,
+    finishReason: "length",
+    causeName: "AI_TypeValidationError",
+  });
+  expect(
+    JSON.stringify(
+      getResearchFailureDiagnostic(
+        { finishReason: "private completion", cause: { name: "private completion" } },
+        "saved",
+      ),
+    ),
+  ).not.toContain("private completion");
+});

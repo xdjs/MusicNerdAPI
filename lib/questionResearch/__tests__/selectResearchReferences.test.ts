@@ -235,3 +235,195 @@ it("retains full publication precision when a promoted Lore copy loses the origi
     )[0].sourceId,
   ).toBe("discovery:dated");
 });
+
+it("ranks release/moment activity alongside posts without relabelling activity as publication", () => {
+  const moment: ResearchOriginal = {
+    ...original,
+    sourceId: "latest:inprocess:1",
+    text: "Plugin experiments",
+    url: "https://www.inprocess.world/moment/1",
+    activityDate: "2026-10-08T14:15:12Z",
+    activityDateKind: "moment",
+  };
+  const release: ResearchOriginal = {
+    ...original,
+    sourceId: "latest:spotify:1",
+    text: "Release date 2026-09",
+    url: "https://open.spotify.com/album/1",
+    activityDate: "2026-09",
+    activityDateKind: "release",
+  };
+  const future = {
+    ...release,
+    sourceId: "latest:spotify:2",
+    url: "https://open.spotify.com/album/2",
+    activityDate: "2026-10",
+  };
+  const refs = selectResearchReferences([release, moment, future], latestRequest, "Artist", now);
+  expect(refs.map(r => r.sourceId)).toEqual([moment.sourceId, release.sourceId]);
+  expect(refs.every(r => r.publishedAt === null)).toBe(true);
+  expect(refs[1].activityDate).toBe("2026-09");
+});
+
+it.each([
+  ["inprocess", "https://www.inprocess.world/collect/base:abc/2"],
+  ["spotify", "https://open.spotify.com/album/abc"],
+  ["deezer", "https://www.deezer.com/album/123"],
+] as const)("retrieves only exact %s hosts for latest", (platform, url) => {
+  const item = { ...original, text: "Exact original", publishedAt: "2026-10-01T00:00:00Z", url };
+  const unrelated = {
+    ...item,
+    sourceId: "other",
+    url: "https://www.tiktok.com/@example/video/123",
+  };
+  const spoof = {
+    ...item,
+    sourceId: "spoof",
+    url: url.replace(new URL(url).hostname, new URL(url).hostname + ".evil.example"),
+  };
+  const request = {
+    topic: "latest",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    retrieval: "latest",
+    platform,
+  } as const;
+  expect(
+    selectResearchReferences([item, unrelated, spoof], request, "Artist", Date.parse("2026-10-09")),
+  ).toMatchObject([{ url }]);
+  expect(
+    selectResearchReferences(
+      [unrelated],
+      { ...request, targetUrl: unrelated.url },
+      "Artist",
+      Date.parse("2026-10-09"),
+    ),
+  ).toEqual([]);
+});
+
+it("prefers eligible release dates over newer posts only for latest release requests", () => {
+  const release = {
+    ...original,
+    sourceId: "latest:spotify:1",
+    url: "https://open.spotify.com/album/abc",
+    text: '"releaseDate":"2026-09-25"',
+    activityDate: "2026-09-25",
+    activityDateKind: "release" as const,
+  };
+  const moment = {
+    ...original,
+    sourceId: "latest:inprocess:2",
+    url: "https://www.inprocess.world/collect/base:abc/2",
+    text: "Experimenting with plugins",
+    activityDate: "2026-10-08T12:00:00Z",
+    activityDateKind: "moment" as const,
+  };
+  const request = {
+    topic: "latest release",
+    evidenceNeed: "release_date",
+    freshness: "stored",
+    retrieval: "latest",
+  } as const;
+  const now = Date.parse("2026-10-09");
+  expect(
+    selectResearchReferences([moment, release], request, "Pete", now).map(r => r.sourceId),
+  ).toEqual([release.sourceId]);
+  expect(
+    selectResearchReferences(
+      [moment, release],
+      { ...request, evidenceNeed: "reporting" },
+      "Pete",
+      now,
+    )[0].sourceId,
+  ).toBe(moment.sourceId);
+  const scoped = selectResearchReferences(
+    [moment, release],
+    { ...request, platform: "inprocess" },
+    "Pete",
+    now,
+  );
+  expect(scoped.map(r => r.sourceId)).toEqual([moment.sourceId]);
+  expect(scoped[0].activityDateKind).toBe("moment");
+  expect(scoped[0].publishedAt).toBeNull();
+  expect(
+    selectResearchReferences(
+      [moment, release],
+      { ...request, fromDate: "2026-10-01" },
+      "Pete",
+      now,
+    ).map(r => r.sourceId),
+  ).toEqual([moment.sourceId]);
+});
+it("excludes already-covered originals before picking newest evidence", () => {
+  const first = {
+    ...original,
+    sourceId: "first",
+    text: "One project",
+    publishedAt: "2026-10-08",
+    url: "https://example.com/one",
+  };
+  const next = {
+    ...first,
+    sourceId: "next",
+    text: "Other project",
+    publishedAt: "2026-10-07",
+    url: "https://example.com/two",
+  };
+  const refs = selectResearchReferences(
+    [first, next],
+    {
+      topic: "other updates",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      retrieval: "latest",
+      excludeSourceUrls: [first.url],
+    },
+    "Artist",
+    Date.parse("2026-10-09"),
+  );
+  expect(refs.map(r => r.sourceId)).toEqual(["next"]);
+});
+
+it("opens six overview candidates within the same total budget so a fourth activity is visible", () => {
+  const dated = Array.from({ length: 8 }, (_, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://example.com/${i}`,
+    publishedAt: `2026-10-0${8 - i}`,
+    text: `${i < 3 ? "Archive project" : "Other activity"}: `.repeat(1000),
+  }));
+  const refs = selectResearchReferences(
+    dated,
+    { ...latestRequest, answerScope: "overview" },
+    "Artist",
+    now,
+  );
+  expect(refs).toHaveLength(6);
+  expect(refs.some(r => r.text.includes("Other activity"))).toBe(true);
+  expect(refs.reduce((sum, r) => sum + r.text.length, 0)).toBeLessThanOrEqual(12000);
+  expect(
+    refs.every(
+      r => dated.find(o => o.sourceId === r.sourceId)?.text.slice(r.start, r.end) === r.text,
+    ),
+  ).toBe(true);
+  expect(
+    selectResearchReferences(dated, { ...latestRequest, answerScope: "focused" }, "Artist", now),
+  ).toHaveLength(3);
+});
+it("does not widen latest release or caption focus even when overview scope is supplied", () => {
+  const dated = Array.from({ length: 8 }, (_, i) => ({
+    ...original,
+    sourceId: `post:${i}`,
+    url: `https://example.com/${i}`,
+    publishedAt: "2026-10-08",
+  }));
+  for (const evidenceNeed of ["release_date", "social_caption"] as const)
+    expect(
+      selectResearchReferences(
+        dated,
+        { ...latestRequest, evidenceNeed, answerScope: "overview" },
+        "Artist",
+        now,
+      ),
+    ).toHaveLength(3);
+});

@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from "ai";
 import { it, expect, vi, beforeEach } from "vitest";
 import { runQuestionResearch } from "@/lib/questionResearch/runQuestionResearch";
 import type { ResearchJob } from "@/lib/research/types";
@@ -245,4 +246,129 @@ it("retains only the original page's explicit publication metadata when collecti
       }),
     }),
   );
+});
+it("finishes a saved-only quota fallback from original evidence without a collector", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  const references = [{ sourceId: "vault:1", text: "Exact saved original with the answer." }];
+  m.select.mockReturnValue(references);
+  m.assess.mockResolvedValue({
+    sufficient: true,
+    references,
+    confirmedIds: [],
+    limitation: "none",
+    inputTokens: 10,
+    outputTokens: 10,
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "complete", modelCalls: 1, providerCalls: 0, references });
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
+it("never transitions a saved-only quota fallback into outside research when originals are insufficient", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "unresolved", providerCalls: 0 });
+  expect((j.state as { limitations: string[] }).limitations.join(" ")).toMatch(
+    /outside research.*limit/i,
+  );
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.search).not.toHaveBeenCalled();
+});
+it("rejects a corrupted saved-only external stage before any provider call", async () => {
+  const j = job({ ...initial(), savedOnly: true, step: "social_start", stage: "reading" });
+  await expect(runQuestionResearch(j, Date.now() + 50000)).rejects.toThrow(/state/i);
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
+it("does not spend a second saved-only assessment even if a malformed retry reaches saved again", async () => {
+  const j = job({ ...initial(), savedOnly: true, modelCalls: 1 });
+  m.select.mockReturnValue([{ sourceId: "vault:1", text: "Saved original" }]);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({ stage: "failed", modelCalls: 1, providerCalls: 0 });
+  expect(m.assess).not.toHaveBeenCalled();
+});
+
+it.each([true, false])(
+  "keeps explicit InProcess research in saved provider evidence (sufficient=%s)",
+  async sufficient => {
+    m.artist.mockResolvedValue({ name: "Pete", tiktok: "pete", inprocess: "0x" + "a".repeat(40) });
+    const references = [
+      { sourceId: "latest:inprocess:" + "a".repeat(64), text: "Exact moment title" },
+    ];
+    m.select.mockReturnValue(references);
+    m.assess.mockResolvedValue({
+      sufficient,
+      references: sufficient ? references : [],
+      confirmedIds: [],
+      limitation: "missing_original",
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    const j = job({
+      ...initial(),
+      request: {
+        topic: "latest InProcess post",
+        evidenceNeed: "reporting",
+        freshness: "stored",
+        retrieval: "latest",
+        platform: "inprocess",
+      },
+    });
+    expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(true);
+    expect(j.state.stage).toBe(sufficient ? "complete" : "unresolved");
+    if (!sufficient) expect(j.state.limitations).toContain("provider_latest_refresh_required");
+    expect(m.start).not.toHaveBeenCalled();
+    expect(m.search).not.toHaveBeenCalled();
+    expect(m.fetch).not.toHaveBeenCalled();
+  },
+);
+it("retries one known completed structured-output failure durably without external research", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  m.select.mockReturnValue([
+    { sourceId: "vault:1", text: "Exact original sufficient for this answer" },
+  ]);
+  m.assess
+    .mockRejectedValueOnce(
+      new NoObjectGeneratedError({
+        response: { id: "test", timestamp: new Date(), modelId: "test" },
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } as never,
+        finishReason: "length",
+      }),
+    )
+    .mockResolvedValueOnce({
+      sufficient: true,
+      references: [{ sourceId: "vault:1", text: "Exact original sufficient for this answer" }],
+      confirmedIds: [],
+      limitation: "none",
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+  expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(false);
+  expect(j.state).toMatchObject({ stage: "checking_saved", modelCalls: 1, outputRetries: 1 });
+  expect(j.state.inFlight).toBeUndefined();
+  expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(true);
+  expect(j.state).toMatchObject({ stage: "complete", modelCalls: 2, outputRetries: 1 });
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
+});
+it("fails honestly after the single structured-output retry is exhausted", async () => {
+  const j = job({ ...initial(), savedOnly: true });
+  m.select.mockReturnValue([{ sourceId: "vault:1", text: "Exact original" }]);
+  m.assess.mockRejectedValue(
+    new NoObjectGeneratedError({
+      response: { id: "test", timestamp: new Date(), modelId: "test" },
+      usage: {} as never,
+      finishReason: "stop",
+    }),
+  );
+  await runQuestionResearch(j, Date.now() + 50000);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "failed",
+    errorCode: "research_unavailable",
+    modelCalls: 2,
+    outputRetries: 1,
+  });
+  expect(m.assess).toHaveBeenCalledTimes(2);
 });

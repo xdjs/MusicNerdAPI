@@ -28,7 +28,8 @@ export async function getResearchEvidenceHandler(
     if (
       evidenceId.startsWith("vault:") ||
       evidenceId.startsWith("social:") ||
-      evidenceId.startsWith("public_answer:")
+      evidenceId.startsWith("public_answer:") ||
+      evidenceId.startsWith("latest:")
     )
       return readPublicResearchSource(
         artistId,

@@ -4,8 +4,11 @@ export type ResearchRequest = {
   freshness: "stored" | "recent";
   /** Newest-available overview; explicit date/platform constraints still apply. */
   retrieval?: "relevance" | "latest";
+  /** Omitted/focused preserves single-topic behavior; overview requests distinct recent activities. */
+  answerScope?: "overview" | "focused";
   targetUrl?: string;
-  platform?: "instagram" | "tiktok" | "x";
+  excludeSourceUrls?: string[];
+  platform?: "instagram" | "tiktok" | "x" | "inprocess" | "spotify" | "deezer";
   fromDate?: string;
   toDate?: string;
 };
@@ -40,6 +43,9 @@ export type ResearchPlan =
       reason: string;
     };
 export type ResearchReference = {
+  /** Provider activity date with original precision; not a source publication date. */
+  activityDate?: string;
+  activityDateKind?: "release" | "moment";
   sourceId: string;
   revision: string;
   start: number;
@@ -75,6 +81,8 @@ export type DiscoveryOriginal = {
 };
 export type QuestionResearchState = {
   version: 1;
+  /** Server-admitted saved-evidence lane; never allowed to collect externally. */
+  savedOnly?: boolean;
   request: ResearchRequest;
   key: string;
   expectedClaimId: string | null;
@@ -92,12 +100,19 @@ export type QuestionResearchState = {
   datasetId?: string;
   nextPollAt?: string;
   modelCalls: number;
+  outputRetries?: number;
   providerCalls: number;
   inputTokens: number;
   outputTokens: number;
   errorCode?: string;
   /** Server-only diagnostic; never stores the error message or request/source content. */
-  failure?: { step: string; name: string; status: number | null };
+  failure?: {
+    step: string;
+    name: string;
+    status: number | null;
+    finishReason?: string;
+    causeName?: string;
+  };
   step?:
     "saved" | "search" | "pages" | "social_start" | "social_poll" | "social_collect" | "assess";
   inFlight?: "model" | "web" | "social_start";
@@ -106,6 +121,8 @@ export type ResearchAuth = { kind: "service" } | { kind: "artist"; userId: strin
 export const QUESTION_RESEARCH_LIFETIME_MS = 15 * 60_000;
 export const QUESTION_RESEARCH_DAILY_ARTIST = 5;
 export const QUESTION_RESEARCH_DAILY_GLOBAL = 100;
+export const SAVED_EVIDENCE_DAILY_ARTIST = 5;
+export const SAVED_EVIDENCE_DAILY_GLOBAL = 100;
 export const QUESTION_RESEARCH_CACHE_MS = 30 * 60_000;
 export type ResearchOriginal = Omit<ResearchReference, "start" | "end">;
 export type ResearchCandidateRow = {

@@ -1,3 +1,5 @@
+import { latestProviderAccount } from "@/lib/latestProviders/latestProviderAccount";
+import { researchPlatformForUrl } from "@/lib/questionResearch/researchPlatformForUrl";
 import { connectedResearchHandle } from "@/lib/questionResearch/connectedResearchHandle";
 import { validateResearchUrl } from "@/lib/questionResearch/validateResearchUrl";
 import type { ResearchRequest, ResearchArtist, ResearchPlan } from "@/lib/questionResearch/types";
@@ -16,14 +18,8 @@ export function planQuestionResearch(
     ["reporting", "social_caption"].includes(request.evidenceNeed)
       ? (["instagram", "tiktok", "x"] as const).find(p => connectedResearchHandle(artist[p], p))
       : undefined;
-  const platform =
-    host === "instagram.com"
-      ? "instagram"
-      : host === "tiktok.com"
-        ? "tiktok"
-        : host === "x.com" || host === "twitter.com"
-          ? "x"
-          : (request.platform ?? latestPlatform);
+  const targetPlatform = targetUrl ? researchPlatformForUrl(targetUrl) : undefined;
+  const platform = targetPlatform ?? request.platform ?? latestPlatform;
   const unresolved = (reason: string): ResearchPlan => ({
     provider: null,
     stage: "unresolved",
@@ -34,6 +30,15 @@ export function planQuestionResearch(
     (platform !== "instagram" || (url && host !== "instagram.com"))
   )
     return unresolved("unsupported_speech");
+  if (request.platform && targetUrl && targetPlatform !== request.platform)
+    return unresolved("source_platform_mismatch");
+  if (platform === "inprocess" || platform === "spotify" || platform === "deezer") {
+    if (!latestProviderAccount(platform, artist[platform]))
+      return unresolved("connected_account_required");
+    // These providers refresh through bounded latest_refresh jobs, never a question read.
+    // Saved snapshots were already assessed before reaching external planning.
+    return unresolved("provider_latest_refresh_required");
+  }
   if (platform) {
     const handle = connectedResearchHandle(artist[platform], platform);
     if (!handle) return unresolved("connected_account_required");

@@ -72,8 +72,17 @@ export function createQuestionResearchTools(config: {
             .describe(
               "Use latest for a newest-available overview; explicit dates and platform still constrain evidence.",
             ),
+          answerScope: z
+            .enum(["overview", "focused"])
+            .optional()
+            .describe(
+              "Use overview with latest reporting for a broad recent-activity summary. Omitted/focused keeps a specific post, release or topic focused.",
+            ),
           targetUrl: z.string().url().max(2048).optional(),
-          platform: z.enum(["instagram", "tiktok", "x"]).optional(),
+          excludeSourceUrls: z.array(z.string().max(2000)).max(10).optional(),
+          platform: z
+            .enum(["instagram", "tiktok", "x", "inprocess", "spotify", "deezer"])
+            .optional(),
           fromDate: z.string().optional(),
           toDate: z.string().optional(),
         })

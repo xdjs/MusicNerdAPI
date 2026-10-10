@@ -59,6 +59,7 @@ export async function getQuestionResearchStatus(
   return {
     status: "ok" as const,
     jobId,
+    ...(state.savedOnly ? { outsideResearchReason: "quota" as const } : {}),
     stage,
     provider: state.plan?.provider ?? null,
     message: researchStatusMessage(stage, state.plan?.provider ?? null),

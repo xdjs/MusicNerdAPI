@@ -10,7 +10,10 @@ import type { SpotifyHeaders } from "@/lib/spotify/types";
 export async function getSpotifyHeaders(): Promise<SpotifyHeaders> {
   const clientId = process.env.SPOTIFY_WEB_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_WEB_CLIENT_SECRET;
-  if (!clientId || !clientSecret) throw new Error("Spotify credentials not configured");
+  if (!clientId || !clientSecret)
+    throw Object.assign(new Error("Spotify credentials not configured"), {
+      latestCode: "missing_credentials",
+    });
 
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
@@ -22,7 +25,16 @@ export async function getSpotifyHeaders(): Promise<SpotifyHeaders> {
     }),
     signal: AbortSignal.timeout(2_000),
   });
+  if (!res.ok)
+    throw Object.assign(new Error("Failed to get Spotify access token"), {
+      latestCode: "http_error",
+      status: res.status,
+    });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string };
-  if (!data.access_token) throw new Error("Failed to get Spotify access token");
+  if (!data.access_token)
+    throw Object.assign(new Error("Failed to get Spotify access token"), {
+      latestCode: "invalid_payload",
+      status: res.status,
+    });
   return { headers: { Authorization: `Bearer ${data.access_token}` } };
 }
