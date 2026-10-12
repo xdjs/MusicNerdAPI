@@ -24,6 +24,11 @@ beforeEach(() => {
 });
 
 describe("emitVaultStep", () => {
+  it("shows an empty review after completed discovery without starting a second search", async () => {
+    const events = await collect(emitVaultStep("a1", false, true));
+    expect(m.search).not.toHaveBeenCalled();
+    expect(events.at(-1)).toEqual({ kind: "step", step: "vault", payload: { sources: [] } });
+  });
   it("shows pending sources with whether each was verified, without searching", async () => {
     m.sources.mockImplementation(async (_a: string, status: string) =>
       status === "pending" ? [src("1"), src("2", { extractedText: null })] : [],
