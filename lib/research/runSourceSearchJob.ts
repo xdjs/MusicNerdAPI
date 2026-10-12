@@ -1,3 +1,4 @@
+import { queueDirectoryPreparation } from "@/lib/directoryPreparation/queueDirectoryPreparation";
 import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
 import { queueSocialIngest } from "@/lib/research/queueSocialIngest";
 import { eq } from "drizzle-orm";
@@ -67,6 +68,7 @@ export async function runSourceSearchJob(
         deadline,
         requireComplete: true,
       });
+      if (directory) await queueDirectoryPreparation(job.artistId);
       if (directory && !(await queueSocialIngest(job.artistId, { directoryActivityId: event.id })))
         throw new Error("Could not queue directory social discovery");
       return sources;

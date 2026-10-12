@@ -73,6 +73,9 @@ const m = vi.hoisted(() => ({
   dbUpdate: vi.fn<AnyFn>(),
 }));
 
+vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
+  getReusableDirectoryDraft: async () => null,
+}));
 vi.mock("@/lib/bio/persistArtistBio", () => ({ persistArtistBio: m.persistArtistBio }));
 vi.mock("@/lib/onboarding/getOnboardingState", () => ({
   getOnboardingState: m.getOnboardingState,

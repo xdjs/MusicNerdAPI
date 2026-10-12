@@ -1,3 +1,4 @@
+import { getReusableDirectoryDraft } from "@/lib/directoryPreparation/getReusableDirectoryDraft";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { buildDocSources } from "@/lib/lore/buildDocSources";
 import { extractCitedIds } from "@/lib/lore/extractCitedIds";
@@ -16,6 +17,19 @@ import type { TurnEvent } from "@/lib/onboarding/types";
  * @returns The step's events, ending in a `draft` at stage "doc".
  */
 export async function* emitPublishStep(artistId: string): AsyncGenerator<TurnEvent> {
+  const prepared = await getReusableDirectoryDraft(artistId);
+  if (prepared) {
+    yield { kind: "chat", text: NARRATION.docReady };
+    const cited = extractCitedIds(prepared.document);
+    yield {
+      kind: "draft",
+      stage: "doc",
+      doc: prepared.document,
+      about: null,
+      sources: prepared.sources.filter(s => cited.has(s.id)),
+    };
+    return;
+  }
   yield { kind: "chat", text: NARRATION.generating };
   yield { kind: "progress", label: "Reading your sources and answers", done: false };
   const startedAt = Date.now();

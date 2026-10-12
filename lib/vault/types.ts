@@ -16,6 +16,8 @@ export type VaultSource = typeof artistVaultSources.$inferSelect;
 
 /** What the pipeline writes for one source. */
 export type VaultSourceInput = {
+  /** Internal affirmative identity assessment; only directory research may persist it. */
+  identityAssessed?: boolean;
   artistId: string;
   url: string;
   title?: string;

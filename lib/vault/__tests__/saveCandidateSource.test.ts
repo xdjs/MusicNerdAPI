@@ -5,7 +5,9 @@ vi.mock("@/lib/identity/nameIsAmbiguousInDirectory", () => ({
   nameIsAmbiguousInDirectory: vi.fn(async () => false),
 }));
 
-const { insertVaultSource } = vi.hoisted(() => ({ insertVaultSource: vi.fn() }));
+const { insertVaultSource } = vi.hoisted(() => ({
+  insertVaultSource: vi.fn(),
+}));
 vi.mock("@/lib/vault/insertVaultSource", () => ({ insertVaultSource }));
 const { saveCandidateSource } = await import("@/lib/vault/saveCandidateSource");
 
@@ -21,6 +23,29 @@ const save = (
 ) => saveCandidateSource(run, { result: hit(url, title), page: page as never }, verdict as never);
 
 describe("saveCandidateSource", () => {
+  it("passes private eligibility only after affirmative identity and readable text", async () => {
+    await save(searchRun(), "https://example.com/a", goodPage, "about-artist");
+    expect(insertVaultSource.mock.calls.at(-1)![0]).toMatchObject({
+      identityAssessed: true,
+      status: "pending",
+    });
+    await save(searchRun(), "https://example.com/b", goodPage, "undecided");
+    expect(insertVaultSource.mock.calls.at(-1)![0]).toMatchObject({
+      identityAssessed: false,
+      status: "pending",
+    });
+    await save(
+      searchRun(),
+      "https://example.com/c",
+      { title: "A Grimes Interview", extractedText: null, status: 403 },
+      "about-artist",
+    );
+    expect(insertVaultSource.mock.calls.at(-1)![0]).toMatchObject({
+      identityAssessed: false,
+      status: "pending",
+    });
+  });
+
   it("stores a verified page with the page's own content", async () => {
     const run = searchRun();
     await save(run, "https://example.com/a", {

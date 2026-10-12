@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 
 const m = vi.hoisted(() => ({
+  prepared: vi.fn(),
   sources: vi.fn(),
   synth: vi.fn(),
   fallback: vi.fn(),
@@ -11,6 +12,9 @@ vi.mock("@/lib/lore/buildDocSources", () => ({ buildDocSources: m.sources }));
 vi.mock("@/lib/lore/synthesizeArtistDoc", () => ({ synthesizeArtistDoc: m.synth }));
 vi.mock("@/lib/lore/synthesizeFallbackAbout", () => ({ synthesizeFallbackAbout: m.fallback }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.artist }));
+vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
+  getReusableDirectoryDraft: m.prepared,
+}));
 const { emitPublishStep } = await import("@/lib/onboarding/emitPublishStep");
 
 const S = [
@@ -19,6 +23,7 @@ const S = [
 ];
 
 beforeEach(() => {
+  m.prepared.mockReset().mockResolvedValue(null);
   m.sources.mockReset().mockResolvedValue(S);
   m.synth.mockReset().mockResolvedValue({ doc: "## Overview\nCited[2].", sources: S });
   m.fallback.mockReset().mockResolvedValue("Plain about.");
@@ -62,4 +67,21 @@ describe("emitPublishStep", () => {
     await expect(collect(emitPublishStep("a1"))).rejects.toThrow("slow");
     now.mockRestore();
   });
+});
+
+it("offers the reviewed prepared document without regeneration or publication", async () => {
+  m.prepared.mockResolvedValue({
+    document: "Prepared[1].",
+    about: "Prepared About[1].",
+    sources: S,
+  });
+  const events = await collect(emitPublishStep("a1"));
+  expect(events.at(-1)).toMatchObject({
+    kind: "draft",
+    stage: "doc",
+    doc: "Prepared[1].",
+    about: null,
+  });
+  expect(m.synth).not.toHaveBeenCalled();
+  expect(events.some(e => e.kind === "complete")).toBe(false);
 });

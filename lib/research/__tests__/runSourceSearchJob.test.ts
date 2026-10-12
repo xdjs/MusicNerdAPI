@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   limit: vi.fn(),
   lock: vi.fn(),
   social: vi.fn(),
+  prepare: vi.fn(),
   complete: vi.fn(async () => {}),
   save: vi.fn(async () => {}),
   search: vi.fn(async () => [] as unknown[]),
@@ -16,6 +17,9 @@ vi.mock("@/lib/db/db", () => ({
 }));
 vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite: h.lock }));
 vi.mock("@/lib/research/queueSocialIngest", () => ({ queueSocialIngest: h.social }));
+vi.mock("@/lib/directoryPreparation/queueDirectoryPreparation", () => ({
+  queueDirectoryPreparation: h.prepare,
+}));
 vi.mock("@/lib/research/completeResearchJob", () => ({ completeResearchJob: h.complete }));
 vi.mock("@/lib/research/saveJobProgress", () => ({ saveJobProgress: h.save }));
 vi.mock("@/lib/vault/searchAndPopulateVault", () => ({ searchAndPopulateVault: h.search }));
@@ -45,6 +49,7 @@ const event = {
 beforeEach(() => {
   h.limit.mockReset().mockResolvedValue([event]);
   h.complete.mockClear();
+  h.prepare.mockReset().mockResolvedValue(undefined);
   h.lock.mockReset().mockResolvedValue(undefined);
   h.social.mockReset().mockResolvedValue(true);
   h.save.mockClear();
@@ -80,6 +85,7 @@ describe("runSourceSearchJob", () => {
       activityId: "event",
     });
     expect(h.lock).toHaveBeenCalled();
+    expect(h.prepare).toHaveBeenCalledWith("a1");
     expect(h.social).toHaveBeenCalledWith("a1", { directoryActivityId: "event" });
   });
   it("refuses a directory job whose purpose or immutable creation event was changed", async () => {
