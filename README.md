@@ -18,3 +18,7 @@ Public research may use public social posts and catalog/Latest material before a
 ### Claim handoff: explicit source review (#1371)
 
 The fresh-claim automatic build may discover profile links and read sources, but it must not approve pending sources or publish About. After discovery, it opens the existing vault review step. The artist's existing review, interview/About choice, and publish actions remain authoritative. Already approved/rejected sources are not rewritten. Source discovery is not repeated merely to show the review card, including when discovery returns no sources.
+
+### Directory-add research authorization (#1371)
+
+Web atomically writes a `directory_add` activity and a `source_search` job with the newly inserted artist. Existing artist matches do not enqueue work. The API may perform narrowly scoped pre-claim discovery only when that exact immutable creation event belongs to the new artist and its original adder, and no claim has begun. The adder receives no editing rights. All writes recheck this authorization under the artist lock; a claim or deleted initiating account cancels it. Ordinary claim-approval research continues to use its existing authorized caller. Discovery keeps new sources pending and chains public social ingestion under the same creation lineage; it never writes a public About.
