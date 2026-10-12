@@ -33,7 +33,7 @@ export async function readResearchEvidence(
         throw new KnowledgeError("revision_changed", 409, "Original revision unavailable");
       if (auth.kind === "service" && row.reviewed_revision && row.destination === "lore") {
         const eligible = await tx.execute(
-          sql`select id from artist_vault_sources where id=${row.source_id}::uuid and artist_id=${artistId}::uuid and status='approved' and file_path is null`,
+          sql`select id from artist_vault_sources where id=${row.source_id}::uuid and artist_id=${artistId}::uuid and status='approved' and file_path is null and exists(select 1 from artist_claims claim where claim.artist_id=${artistId}::uuid and claim.status='approved')`,
         );
         if (!eligible.length) throw new KnowledgeError("not_found", 404, "Original unavailable");
       }
