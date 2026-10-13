@@ -73,3 +73,16 @@ describe("lookupArtists", () => {
     ]);
   });
 });
+
+describe("lookupArtists column names", () => {
+  it("names every column, even after the app's own artists table has been queried", async () => {
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    const schema = await import("@/lib/db/schema");
+    const db = drizzle.mock({ schema });
+    db.select().from(schema.artists).toSQL();
+    const { sql } = db.select().from(lookupArtists).toSQL();
+    expect(sql).not.toContain('"undefined"');
+    expect(sql).toContain('"wallets"');
+    expect(sql).toContain('"webmapdata"');
+  });
+});
