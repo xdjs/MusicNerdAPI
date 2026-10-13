@@ -17,6 +17,7 @@ export async function startSocialScrape(task: SocialTask): Promise<ApifyRunState
     task.source === "tiktok"
       ? {
           profiles: [task.handle],
+          ...(task.scan?.after ? { oldestPostDateUnified: task.scan.after.slice(0, 10) } : {}),
           resultsPerPage: limit,
           profileScrapeSections: ["videos"],
           profileSorting: "latest",
@@ -30,7 +31,9 @@ export async function startSocialScrape(task: SocialTask): Promise<ApifyRunState
         }
       : task.source === "x"
         ? {
-            searchTerms: [`from:${task.handle} -filter:retweets`],
+            searchTerms: [
+              `from:${task.handle} -filter:retweets${task.scan?.after ? ` since:${task.scan.after.slice(0, 10)}` : ""}`,
+            ],
             sort: "Latest",
             maxItems: limit,
           }

@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@/lib/socialRefresh/readSocialRefresh", () => ({ readSocialRefresh: m.refresh }));
+vi.mock("@/lib/social/persistSocialResearch", () => ({ persistSocialResearch: m.persist }));
 
 const m = vi.hoisted(() => ({
   guard: vi.fn(),
   scopedSave: vi.fn(),
+  refresh: vi.fn(),
+  persist: vi.fn(),
   instagramHandleFor: vi.fn(),
   hasSocialPosts: vi.fn(),
   startInstagramScrape: vi.fn(),
@@ -77,6 +81,8 @@ const later = () => Date.now() + 55_000;
 beforeEach(() => {
   Object.values(m).forEach(fn => fn.mockReset());
   m.instagramHandleFor.mockResolvedValue("biorritmo");
+  m.refresh.mockResolvedValue({ startedAt: "2026-10-12T12:00:00Z" });
+  m.persist.mockResolvedValue(undefined);
   m.hasSocialPosts.mockResolvedValue(false);
 });
 
@@ -105,17 +111,11 @@ describe("runIngest", () => {
     expect(m.completeResearchJob).toHaveBeenCalledWith("job-1");
   });
 
-  it("skips the scrape when posts exist and nobody forced a fresh look, then queues extraction", async () => {
+  it("saved posts alone cannot suppress an account scan", async () => {
     m.hasSocialPosts.mockResolvedValue(true);
-    expect(await runIngest(job(), later())).toEqual({
-      progress: "posts already present",
-      done: true,
-    });
-    expect(m.startInstagramScrape).not.toHaveBeenCalled();
-    expect(m.enqueueResearchJob).toHaveBeenCalledWith("artist-1", "caption_extract", {
-      parentJobId: "job-1",
-      state: {},
-    });
+    m.startInstagramScrape.mockResolvedValue({ status: "started", runId: "new" });
+    await runIngest(job(), later());
+    expect(m.startInstagramScrape).toHaveBeenCalledTimes(1);
   });
 
   it("starts a scrape, saves its run id first, and waits", async () => {
@@ -125,14 +125,26 @@ describe("runIngest", () => {
       done: false,
       waiting: true,
     });
-    expect(m.saveJobProgress).toHaveBeenCalledWith("job-1", 0, { state: { apifyRunId: "run-1" } });
+    expect(m.persist).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        state: expect.objectContaining({
+          apifyRunId: "run-1",
+          instagramStartRequested: true,
+          instagramHandle: "biorritmo",
+        }),
+      }),
+      true,
+    );
+    expect(m.persist.mock.invocationCallOrder[0]).toBeLessThan(
+      m.startInstagramScrape.mock.invocationCallOrder[0],
+    );
   });
 
   it("scrapes again when forced even though posts exist", async () => {
     m.hasSocialPosts.mockResolvedValue(true);
     m.startInstagramScrape.mockResolvedValue({ status: "started", runId: "run-2" });
     await runIngest(job({ force: true }), later());
-    expect(m.startInstagramScrape).toHaveBeenCalledWith("biorritmo");
+    expect(m.startInstagramScrape).toHaveBeenCalledWith("biorritmo", {});
   });
 
   it("fails the attempt when the scrape does not start", async () => {
@@ -197,7 +209,7 @@ describe("runIngest", () => {
       done: true,
     });
     expect(m.checkInstagramScrape).not.toHaveBeenCalled();
-    expect(m.instagramHandleFor).not.toHaveBeenCalled();
+    expect(m.instagramHandleFor).toHaveBeenCalledTimes(1);
     expect(m.completeResearchJob).toHaveBeenCalledWith("job-1");
     expect(m.enqueueResearchJob).toHaveBeenCalledWith("artist-1", "caption_extract", {
       parentJobId: "job-1",
@@ -310,5 +322,22 @@ it("a saved dataset still requires the same connected profile before importing p
     later(),
   );
   expect(m.collectInstagramScrape).not.toHaveBeenCalled();
+});
+it("does not restart a paid run whose start response was lost", async () => {
+  await runIngest(job({ instagramStartRequested: true, instagramHandle: "biorritmo" }), later());
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
+});
+it("does not pay if persisting start intent failed", async () => {
+  m.persist.mockRejectedValue(new Error("save failed"));
+  await expect(runIngest(job(), later())).rejects.toThrow("save failed");
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
+});
+it("reuses the current account checkpoint even for a forced refresh", async () => {
+  m.refresh.mockResolvedValue({
+    startedAt: "2026-10-12T12:00:00Z",
+    skip: true,
+    checkedAt: "2026-10-12T11:55:00Z",
+  });
+  await runIngest(job({ force: true }), later());
   expect(m.startInstagramScrape).not.toHaveBeenCalled();
 });

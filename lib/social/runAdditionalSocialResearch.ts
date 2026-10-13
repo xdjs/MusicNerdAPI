@@ -1,4 +1,5 @@
 import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
+import { readSocialRefresh } from "@/lib/socialRefresh/readSocialRefresh";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { persistSocialResearch } from "@/lib/social/persistSocialResearch";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
@@ -53,6 +54,17 @@ export async function runAdditionalSocialResearch(
     if (task.startRequested)
       failure = "apify start outcome unknown; inspect provider before retrying";
     else {
+      if (task.source !== "reels")
+        task.scan ??= await readSocialRefresh(job.artistId, task.source, task.handle);
+      if (task.scan?.skip) {
+        task.status = "checked";
+        task.stored = 0;
+        state.index++;
+        await persistSocialResearch(job, state.index < state.tasks.length);
+        return state.index < state.tasks.length
+          ? { done: false, waiting: true, progress: "Reusing recent social check" }
+          : null;
+      }
       task.startRequested = true;
       await persistSocialResearch(job, false);
       await assertSocialJobActive(job);
@@ -65,6 +77,7 @@ export async function runAdditionalSocialResearch(
     const result = await checkInstagramScrape(task.runId);
     if (result.status === "ready") {
       task.datasetId = result.datasetId;
+      if (task.scan && result.limitReached) task.scan.providerLimited = true;
       task.attempts = 0;
     } else if (result.status === "failed") {
       failure = result.reason;

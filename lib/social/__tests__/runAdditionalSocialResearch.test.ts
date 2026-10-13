@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/socialRefresh/readSocialRefresh", () => ({ readSocialRefresh: m.refresh }));
 const m = vi.hoisted(() => ({
+  refresh: vi.fn(),
   plan: vi.fn(),
   start: vi.fn(),
   check: vi.fn(),
@@ -35,6 +37,7 @@ const job = (tasks?: unknown[]) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   m.plan.mockResolvedValue([]);
+  m.refresh.mockResolvedValue({ startedAt: "2026-10-12T12:00:00Z" });
   m.connected.mockResolvedValue(true);
   m.account.mockResolvedValue("xdjs");
 });
@@ -77,7 +80,15 @@ describe("additional durable social stages", () => {
           apifyAccountCheckedAt: expect.any(String),
           instagramFinished: true,
           additionalSocial: {
-            tasks: [{ source: "tiktok", handle: "artist", startRequested: true, runId: "paid" }],
+            tasks: [
+              {
+                source: "tiktok",
+                handle: "artist",
+                startRequested: true,
+                runId: "paid",
+                scan: { startedAt: "2026-10-12T12:00:00Z" },
+              },
+            ],
             index: 0,
           },
         },
@@ -152,5 +163,19 @@ describe("additional durable social stages", () => {
     expect(m.save.mock.calls[0][0].state.additionalSocial.tasks[0]).toMatchObject({
       status: "failed",
     });
+  });
+});
+
+it("reuses a recent completed account scan without another paid start", async () => {
+  m.refresh.mockResolvedValue({
+    startedAt: "2026-10-12T12:00:00Z",
+    skip: true,
+    checkedAt: "2026-10-12T11:55:00Z",
+  });
+  const current = job([{ source: "x", handle: "artist" }]);
+  await runAdditionalSocialResearch(current, Date.now() + 55_000);
+  expect(m.start).not.toHaveBeenCalled();
+  expect(current.state).toMatchObject({
+    additionalSocial: { index: 1, tasks: [{ status: "checked" }] },
   });
 });
