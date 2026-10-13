@@ -7,14 +7,14 @@ const where = vi.fn((_condition: SQL) => ({ limit }));
 vi.mock("@/lib/db/db", () => ({
   db: { select: () => ({ from: () => ({ where }) }) },
 }));
-const { findLegacyArtistByWallet } = await import("@/lib/legacyLookups/findLegacyArtistByWallet");
+const { findArtistByWallet } = await import("@/lib/artistLookups/findArtistByWallet");
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("findLegacyArtistByWallet", () => {
+describe("findArtistByWallet", () => {
   it("returns the first artist whose wallets contain the address", async () => {
     limit.mockResolvedValueOnce([{ id: "a1" }]);
-    expect(await findLegacyArtistByWallet("0xabc")).toEqual({ id: "a1" });
+    expect(await findArtistByWallet("0xabc")).toEqual({ id: "a1" });
     const { sql, params } = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
     expect(sql).toMatch(/"wallets" @>/);
     expect(params).toEqual([`{"0xabc"}`]);
@@ -23,6 +23,6 @@ describe("findLegacyArtistByWallet", () => {
 
   it("returns undefined when no wallet matches", async () => {
     limit.mockResolvedValueOnce([]);
-    expect(await findLegacyArtistByWallet("0xabc")).toBeUndefined();
+    expect(await findArtistByWallet("0xabc")).toBeUndefined();
   });
 });

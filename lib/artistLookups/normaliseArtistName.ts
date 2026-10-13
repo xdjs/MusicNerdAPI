@@ -7,7 +7,7 @@
  * @param input - Any name.
  * @returns The normalised name.
  */
-export function normaliseLegacyName(input: string): string {
+export function normaliseArtistName(input: string): string {
   return input
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

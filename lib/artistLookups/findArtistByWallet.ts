@@ -1,6 +1,6 @@
 import { arrayContains } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { legacyArtists, type LegacyArtist } from "@/lib/legacyLookups/legacyArtists";
+import { lookupArtists, type LookupArtist } from "@/lib/artistLookups/lookupArtists";
 
 /**
  * The first artist whose `wallets` contain the address, as MusicNerdWeb's
@@ -9,11 +9,11 @@ import { legacyArtists, type LegacyArtist } from "@/lib/legacyLookups/legacyArti
  * @param wallet - The address.
  * @returns The whole row, or undefined; throws on a database error.
  */
-export async function findLegacyArtistByWallet(wallet: string): Promise<LegacyArtist | undefined> {
+export async function findArtistByWallet(wallet: string): Promise<LookupArtist | undefined> {
   const rows = await db
     .select()
-    .from(legacyArtists)
-    .where(arrayContains(legacyArtists.wallets, [wallet]))
+    .from(lookupArtists)
+    .where(arrayContains(lookupArtists.wallets, [wallet]))
     .limit(1);
   return rows[0];
 }

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { normaliseLegacyName } from "@/lib/legacyLookups/normaliseLegacyName";
+import { normaliseArtistName } from "@/lib/artistLookups/normaliseArtistName";
 
 /**
  * The best match for a name, ranked as MusicNerdWeb's `searchForArtistByName`
@@ -11,10 +11,8 @@ import { normaliseLegacyName } from "@/lib/legacyLookups/normaliseLegacyName";
  * @param name - The name searched for.
  * @returns The top artist's `x`, or undefined; throws on a database error.
  */
-export async function searchLegacyArtistByName(
-  name: string,
-): Promise<{ x: string | null } | undefined> {
-  const query = normaliseLegacyName(name);
+export async function searchArtistByName(name: string): Promise<{ x: string | null } | undefined> {
+  const query = normaliseArtistName(name);
   const compact = query.replace(/\s+/g, "");
   const twoForms = compact && compact !== query;
   const nameMatch = twoForms

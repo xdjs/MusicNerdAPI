@@ -1,6 +1,6 @@
-import { findTwitterHandleHandler } from "@/lib/legacyLookups/findTwitterHandleHandler";
+import { findTwitterHandleHandler } from "@/lib/artistLookups/findTwitterHandleHandler";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
-/** Legacy lookup kept for Sleeve Note: an artist's X handle by ethAddress or name, in MusicNerdWeb's shape.
+/** Artist lookup: an artist's X handle by ethAddress or name, in MusicNerdWeb's shape.
  *
  * @param request - POST with `{ "ethAddress"?: string, "name"?: string }`.
  * @returns `{ result: handle }` (or `{}` for an unmatched name), or a plain-text 400, 404 or 500.

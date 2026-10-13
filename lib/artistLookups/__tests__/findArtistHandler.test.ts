@@ -1,36 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { find } = vi.hoisted(() => ({ find: vi.fn() }));
-vi.mock("@/lib/legacyLookups/findLegacyArtist", () => ({ findLegacyArtist: find }));
-const { findLegacyArtistHandler } = await import("@/lib/legacyLookups/findLegacyArtistHandler");
-const { legacyArtists } = await import("@/lib/legacyLookups/legacyArtists");
+vi.mock("@/lib/artistLookups/findArtistByColumn", () => ({ findArtistByColumn: find }));
+const { findArtistHandler } = await import("@/lib/artistLookups/findArtistHandler");
+const { lookupArtists } = await import("@/lib/artistLookups/lookupArtists");
 
 const MISSING = "Missing or invalid required parameters: spotifyID";
 const post = (body: string) =>
   new Request("https://api.test/api/findArtistBySpotifyID", { method: "POST", body });
 const run = (body: string) =>
-  findLegacyArtistHandler(post(body), "spotifyID", legacyArtists.spotify, MISSING);
+  findArtistHandler(post(body), "spotifyID", lookupArtists.spotify, MISSING);
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("findLegacyArtistHandler", () => {
+describe("findArtistHandler", () => {
   it("answers 200 { result: row } for a match, with CORS", async () => {
     find.mockResolvedValueOnce({ id: "a1", spotify: "sp1" });
     const r = await run('{"spotifyID":"sp1"}');
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ result: { id: "a1", spotify: "sp1" } });
     expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(find).toHaveBeenCalledWith(legacyArtists.spotify, "sp1");
+    expect(find).toHaveBeenCalledWith(lookupArtists.spotify, "sp1");
   });
 
-  it("answers 404 with the legacy plain-text message when nothing matches", async () => {
+  it("answers 404 with MusicNerdWeb's plain-text message when nothing matches", async () => {
     find.mockResolvedValueOnce(undefined);
     const r = await run('{"spotifyID":"nobody"}');
     expect(r.status).toBe(404);
     expect(await r.text()).toBe("The artist you're searching for is not found");
   });
 
-  it("answers 400 with the legacy message for a missing, non-string or non-JSON value", async () => {
+  it("answers 400 with MusicNerdWeb's message for a missing, non-string or non-JSON value", async () => {
     for (const body of ["{}", '{"spotifyID":5}', "not json", "null"]) {
       const r = await run(body);
       expect(r.status).toBe(400);
