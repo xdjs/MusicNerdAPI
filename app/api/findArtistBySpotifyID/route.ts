@@ -1,16 +1,16 @@
-import { findLegacyArtistHandler } from "@/lib/legacyLookups/findLegacyArtistHandler";
-import { legacyArtists } from "@/lib/legacyLookups/legacyArtists";
+import { findArtistHandler } from "@/lib/artistLookups/findArtistHandler";
+import { lookupArtists } from "@/lib/artistLookups/lookupArtists";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
-/** Legacy lookup kept for Sleeve Note: the artist with this Spotify ID, in MusicNerdWeb's shape.
+/** Artist lookup: the artist with this Spotify ID, in MusicNerdWeb's shape.
  *
  * @param request - POST with `{ "spotifyID": string }`.
  * @returns `{ result: artist }`, or a plain-text 400, 404 or 500.
  */
 export async function POST(request: Request) {
-  return findLegacyArtistHandler(
+  return findArtistHandler(
     request,
     "spotifyID",
-    legacyArtists.spotify,
+    lookupArtists.spotify,
     "Missing or invalid required parameters: spotifyID",
   );
 }

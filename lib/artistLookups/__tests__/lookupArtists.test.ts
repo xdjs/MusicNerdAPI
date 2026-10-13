@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getTableColumns } from "drizzle-orm";
-import { legacyArtists } from "@/lib/legacyLookups/legacyArtists";
+import { lookupArtists } from "@/lib/artistLookups/lookupArtists";
 
-describe("legacyArtists", () => {
-  it("declares MusicNerdWeb's artists columns in its order, so responses keep the legacy keys", () => {
-    expect(Object.keys(getTableColumns(legacyArtists))).toEqual([
+describe("lookupArtists", () => {
+  it("declares MusicNerdWeb's artists columns in its order, so responses keep MusicNerdWeb's keys", () => {
+    expect(Object.keys(getTableColumns(lookupArtists))).toEqual([
       "id",
       "legacyId",
       "bandcamp",

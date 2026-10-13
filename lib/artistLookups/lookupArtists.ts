@@ -1,12 +1,12 @@
 /**
  * MusicNerdWeb's whole `artists` table, column for column and in its order
- * (`src/server/db/schema.ts`), for the legacy lookups that must return the row
+ * (`src/server/db/schema.ts`), for the artist lookups that must return the row
  * exactly as the website's routes did (xdjs/MusicNerdWeb#1480). Kept apart from
  * `lib/db/schema.ts` so no other endpoint starts returning internal columns.
  */
 import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-export const legacyArtists = pgTable("artists", {
+export const lookupArtists = pgTable("artists", {
   id: uuid().primaryKey().notNull(),
   legacyId: text("legacy_id"),
   bandcamp: text(),
@@ -74,5 +74,5 @@ export const legacyArtists = pgTable("artists", {
   inprocess: text(),
 });
 
-/** A whole legacy artist row. */
-export type LegacyArtist = typeof legacyArtists.$inferSelect;
+/** A whole artist row, in MusicNerdWeb's shape. */
+export type LookupArtist = typeof lookupArtists.$inferSelect;
