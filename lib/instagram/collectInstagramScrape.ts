@@ -80,7 +80,23 @@ export async function collectInstagramScrape(
             handle,
             ...opts.refresh,
             itemCount: items.length,
-            allMapped: mapped.length === items.length && rows.length === mapped.length,
+            allMapped:
+              mapped.length === items.length &&
+              mapped.length <= opts.refresh.limit &&
+              mapped.every(row => row.isOwnPost),
+            posts: mapped
+              .filter(
+                row =>
+                  rows.some(stored => stored.platformPostId === row.platformPostId) ||
+                  opts.refresh?.scan.reference?.anchors.some(
+                    anchor => anchor.id === row.platformPostId,
+                  ),
+              )
+              .map(row => ({
+                id: row.platformPostId,
+                postedAt: row.postedAt ?? "",
+                pinned: (row.raw as Record<string, unknown> | null)?.isPinned === true,
+              })),
           });
         return result;
       });

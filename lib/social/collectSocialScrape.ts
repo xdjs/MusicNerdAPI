@@ -33,6 +33,7 @@ export async function collectSocialScrape(
         throw new Error("social profile changed during collection");
       let stored = 0;
       let mapped = 0;
+      const posts: { id: string; postedAt: string; pinned: boolean }[] = [];
       for (const item of items.slice(0, SOCIAL_POST_LIMIT)) {
         if (task.source === "reels") {
           if (await storeReelTranscript(item, artistId, task, writer)) stored++;
@@ -40,6 +41,11 @@ export async function collectSocialScrape(
           const row = mapSocialPost(item, artistId, task.source, task.handle);
           if (row) {
             mapped++;
+            posts.push({
+              id: row.platformPostId,
+              postedAt: row.postedAt!,
+              pinned: (row.raw as Record<string, unknown> | null)?.isPinned === true,
+            });
             await upsertSocialPost(row, writer);
             stored++;
           }
@@ -55,6 +61,7 @@ export async function collectSocialScrape(
           itemCount: items.length,
           limit: SOCIAL_POST_LIMIT,
           allMapped: mapped === items.length,
+          posts,
         });
       return stored;
     });
