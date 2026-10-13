@@ -1,8 +1,10 @@
+import type { SocialScan } from "@/lib/socialRefresh/types";
 export type ProfilePlatform = "tiktok" | "x";
 export type SocialSource = ProfilePlatform | "reels";
 export type ReelTarget = { id: string; url: string; owner: string };
 export type SocialTask = {
   source: SocialSource;
+  scan?: SocialScan;
   handle: string;
   reels?: ReelTarget[];
   runId?: string;

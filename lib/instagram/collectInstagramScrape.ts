@@ -1,3 +1,6 @@
+import { storeSocialRefresh } from "@/lib/socialRefresh/storeSocialRefresh";
+import { socialTaskIsConnected } from "@/lib/social/socialTaskIsConnected";
+import type { SocialScan } from "@/lib/socialRefresh/types";
 import {
   APIFY_DATASET_TIMEOUT_MS,
   APIFY_DATASETS_URL,
@@ -36,7 +39,7 @@ export async function collectInstagramScrape(
   datasetId: string,
   jobId: string,
   cursor = 0,
-  opts?: { latestOnly?: boolean },
+  opts?: { latestOnly?: boolean; refresh?: { scan: SocialScan; runId: string; limit: number } },
 ): Promise<IngestResult | null> {
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return null;
@@ -48,7 +51,8 @@ export async function collectInstagramScrape(
       return null;
     }
     const items = await res.json();
-    if (!Array.isArray(items)) return null;
+    if (!Array.isArray(items) || items.some(item => item && typeof item === "object" && item.error))
+      return null;
 
     const artistName = await getArtistNameById(artistId);
     const mapped = items
@@ -62,7 +66,24 @@ export async function collectInstagramScrape(
     const prepared = await retainMappedThumbnails(batch, scope);
     let result: IngestResult;
     try {
-      result = await withResearchJobWrite(artistId, jobId, tx => upsertMappedRows(prepared, tx));
+      result = await withResearchJobWrite(artistId, jobId, async tx => {
+        if (
+          opts?.refresh &&
+          !(await socialTaskIsConnected(artistId, { source: "reels", handle }, tx))
+        )
+          throw new OwnershipChangedError();
+        const result = await upsertMappedRows(prepared, tx);
+        if (opts?.refresh && cursor + batch.length >= rows.length)
+          await storeSocialRefresh(tx, {
+            artistId,
+            platform: "instagram",
+            handle,
+            ...opts.refresh,
+            itemCount: items.length,
+            allMapped: mapped.length === items.length && rows.length === mapped.length,
+          });
+        return result;
+      });
     } catch (error) {
       // Every upload has settled. Revocation may already have purged the
       // artist's folder, so remove this job's late uploads explicitly.

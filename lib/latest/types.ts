@@ -1,3 +1,4 @@
+import type { SocialScan } from "@/lib/socialRefresh/types";
 /** Update Latest's sources. MusicNerdWeb checks every one but Instagram inline. */
 export type LatestSource = "instagram" | "inprocess" | "spotify" | "deezer" | "interviews";
 
@@ -17,6 +18,7 @@ export type LatestRefreshState = {
   sources: Record<LatestSource, SourceResult>;
   /** Private diagnostic, excluded from the editor response. */
   instagramFailure?: { phase: "status" | "collection"; reason: string; at: string };
+  scan?: SocialScan;
   providerStarted?: boolean;
   runId?: string;
   datasetId?: string;

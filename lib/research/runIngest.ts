@@ -1,6 +1,10 @@
+import { readSocialRefresh } from "@/lib/socialRefresh/readSocialRefresh";
+import { persistSocialResearch } from "@/lib/social/persistSocialResearch";
+import type { SocialScan } from "@/lib/socialRefresh/types";
+import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
+import { DEFAULT_SCRAPE_LIMIT } from "@/lib/instagram/const";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { collectInstagramScrape } from "@/lib/instagram/collectInstagramScrape";
-import { hasSocialPosts } from "@/lib/instagram/hasSocialPosts";
 import { instagramHandleFor } from "@/lib/instagram/instagramHandleFor";
 import { startInstagramScrape } from "@/lib/instagram/startInstagramScrape";
 import { COLLECTION_RESERVE_MS } from "@/lib/research/const";
@@ -27,15 +31,10 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     throw new Error("invalid social research state");
   if (job.state.instagramFinished === true)
     return finishSocialIngest(job, deadline, "social research finished");
-  const force = job.state.force === true;
   const runId = typeof job.state.apifyRunId === "string" ? job.state.apifyRunId : null;
   const readyDatasetId =
     typeof job.state.apifyDatasetId === "string" ? job.state.apifyDatasetId : null;
-  // A finished scrape is immutable: resume its saved dataset and handle.
-  const handle =
-    readyDatasetId && typeof job.state.instagramHandle === "string"
-      ? job.state.instagramHandle
-      : await instagramHandleFor(job.artistId);
+  const handle = await instagramHandleFor(job.artistId);
   if (handle === "error") {
     await failResearchJob(job.id, "could not read the artist's handle");
     return { progress: "handle lookup failed, will retry", done: false };
@@ -44,20 +43,41 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     return finishSocialIngest(job, deadline, "no instagram handle");
   }
 
-  if (!force && !runId && (await hasSocialPosts(job.artistId))) {
-    return finishSocialIngest(job, deadline, "posts already present");
+  if (
+    typeof job.state.instagramHandle === "string" &&
+    normalizeHandle(job.state.instagramHandle) !== normalizeHandle(handle)
+  ) {
+    await failResearchJob(job.id, "Instagram account changed during refresh");
+    return { done: false, progress: "Instagram account changed" };
   }
 
   if (!runId) {
-    const started = await startInstagramScrape(handle);
+    if (job.state.instagramStartRequested === true) {
+      await failResearchJob(
+        job.id,
+        "Apify start outcome unknown; inspect existing run before retrying",
+      );
+      return { done: false, progress: "Instagram start requires inspection" };
+    }
+    const scan = await readSocialRefresh(job.artistId, "instagram", handle);
+    if (scan.skip) return finishSocialIngest(job, deadline, "Reusing recent Instagram check");
+    job.state = {
+      ...job.state,
+      instagramHandle: handle,
+      instagramScan: scan,
+      instagramStartRequested: true,
+    };
+    await persistSocialResearch(job, false);
+    const started = await startInstagramScrape(handle, {
+      ...(scan.after ? { onlyPostsNewerThan: scan.after } : {}),
+    });
     if (started.status !== "started") {
       const reason = started.status === "failed" ? started.reason : "apify did not start";
       await failResearchJob(job.id, reason);
       return { progress: `scrape did not start: ${reason}`, done: false };
     }
-    await saveJobProgress(job.id, job.cursor, {
-      state: { ...job.state, apifyRunId: started.runId },
-    });
+    job.state = { ...job.state, apifyRunId: started.runId };
+    await persistSocialResearch(job, true);
     return { progress: `scrape started (${started.runId})`, done: false, waiting: true };
   }
 
@@ -77,6 +97,14 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     ...job.state,
     apifyDatasetId: run.datasetId,
     instagramHandle: handle,
+    ...(job.state.instagramScan
+      ? {
+          instagramScan: {
+            ...(job.state.instagramScan as SocialScan),
+            ...(run.limitReached ? { providerLimited: true } : {}),
+          },
+        }
+      : {}),
   };
   if (deadline - Date.now() < COLLECTION_RESERVE_MS) {
     await saveJobProgress(job.id, job.cursor, { state: collectionState });
@@ -92,6 +120,17 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     run.datasetId,
     job.id,
     job.cursor,
+    ...(collectionState.instagramScan
+      ? [
+          {
+            refresh: {
+              scan: collectionState.instagramScan as SocialScan,
+              runId,
+              limit: DEFAULT_SCRAPE_LIMIT,
+            },
+          },
+        ]
+      : []),
   );
   if (result === null) {
     // A failed dataset read is not an empty feed: keep the dataset and retry.

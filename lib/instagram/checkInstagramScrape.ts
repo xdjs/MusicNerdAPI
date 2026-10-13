@@ -20,11 +20,30 @@ export async function checkInstagramScrape(runId: string): Promise<ApifyRunState
         reason: `apify status ${res.status}`,
         ...([408, 429].includes(res.status) || res.status >= 500 ? { retryable: true } : {}),
       };
-    const body = (await res.json()) as { data?: { status?: string; defaultDatasetId?: string } };
+    const body = (await res.json()) as {
+      data?: {
+        status?: string;
+        defaultDatasetId?: string;
+        statusMessage?: string;
+        usageTotalUsd?: number;
+        options?: { maxTotalChargeUsd?: number };
+      };
+    };
     const state = body?.data?.status;
     const datasetId = body?.data?.defaultDatasetId;
     if (state === "SUCCEEDED" && typeof datasetId === "string" && datasetId.length > 0)
-      return { status: "ready", runId, datasetId };
+      return {
+        status: "ready",
+        runId,
+        datasetId,
+        ...(/limit|budget|maximum.*(?:charge|result)/i.test(body.data?.statusMessage ?? "") ||
+        // A provider may stop before the next charge would exceed the budget.
+        // SUCCEEDED and usage below the cap do not prove account exhaustion.
+        // Until the actor supplies a reliable completion signal, preserve coverage.
+        typeof body.data?.options?.maxTotalChargeUsd === "number"
+          ? { limitReached: true }
+          : {}),
+      };
     if (["READY", "RUNNING", "TIMING-OUT", "ABORTING"].includes(state ?? ""))
       return { status: "running", runId };
     if (["FAILED", "TIMED-OUT", "ABORTED"].includes(state ?? "")) {

@@ -57,3 +57,25 @@ describe("bounded provider inputs", () => {
     });
   });
 });
+
+it.each(["x", "tiktok"] as const)("restricts %s to a saved scan boundary", async source => {
+  vi.stubEnv("APIFY_API_TOKEN", "token");
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ({ data: { id: "run" } }) });
+  vi.stubGlobal("fetch", fetcher);
+  await startSocialScrape({
+    source,
+    handle: "artist",
+    scan: { startedAt: "2026-10-12T12:00:00Z", after: "2026-10-10T12:00:00Z" },
+  });
+  const input = JSON.parse(fetcher.mock.calls[0][1].body);
+  if (source === "x")
+    expect(input.searchTerms).toEqual(["from:artist -filter:retweets since:2026-10-10"]);
+  else
+    expect(input).toMatchObject({
+      oldestPostDateUnified: "2026-10-10",
+      profileSorting: "latest",
+      resultsPerPage: 50,
+    });
+});
