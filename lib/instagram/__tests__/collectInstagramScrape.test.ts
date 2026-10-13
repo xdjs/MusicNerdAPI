@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const checkpoint = vi.fn();
+vi.mock("@/lib/socialRefresh/storeSocialRefresh", () => ({
+  storeSocialRefresh: (...a: unknown[]) => checkpoint(...a),
+}));
+vi.mock("@/lib/social/socialTaskIsConnected", () => ({ socialTaskIsConnected: async () => true }));
 const retain = vi.fn();
 const cleanup = vi.fn();
 const findMany = vi.fn();
@@ -57,6 +62,7 @@ beforeEach(() => {
   });
   cleanup.mockReset();
   findMany.mockReset().mockResolvedValue([]);
+  checkpoint.mockReset();
   written.length = 0;
   revoked = false;
 });
@@ -184,4 +190,81 @@ describe("collectInstagramScrape", () => {
     vi.stubEnv("APIFY_API_TOKEN", "");
     expect(await collectInstagramScrape(artist, "artist", "ds", "job")).toBeNull();
   });
+});
+
+it("reconnects an aged saved anchor without storing old pinned posts as Latest", async () => {
+  const old = new Date(Date.now() - 40 * 86400000).toISOString();
+  const now = new Date().toISOString();
+  const items = [
+    { ...feed(1)[0], id: "new", timestamp: now },
+    { ...feed(1)[0], id: "anchor", timestamp: old },
+    { ...feed(1)[0], id: "pin", timestamp: old, isPinned: true },
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => items })),
+  );
+  await collectInstagramScrape(artist, "artist", "ds", "job", 0, {
+    latestOnly: true,
+    refresh: {
+      runId: "run",
+      limit: 9,
+      scan: {
+        startedAt: now,
+        reference: { anchors: [{ id: "anchor", postedAt: old }], observedAt: old, gapSince: null },
+      },
+    },
+  });
+  expect(written.map(row => row.platformPostId)).toEqual(["new"]);
+  const input = checkpoint.mock.calls[0][1];
+  expect(input.allMapped).toBe(true);
+  expect(input.posts.map((post: { id: string }) => post.id)).toEqual(["new", "anchor"]);
+});
+
+it("reconnects the captured Instagram run through the actual Latest collector", async () => {
+  const { default: captures } =
+    await import("@/lib/socialRefresh/__tests__/fixtures/latasha-2026-10-12.json");
+  const { assessSocialScan } = await import("@/lib/socialRefresh/assessSocialScan");
+  const capture = captures.find(row => row.platform === "instagram")!;
+  const reference = assessSocialScan(
+    { startedAt: capture.baselineStartedAt },
+    capture.baseline,
+    true,
+  ).reference;
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(capture.startedAt));
+  try {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () =>
+          capture.posts.map(post => ({
+            id: post.id,
+            timestamp: post.postedAt,
+            isPinned: post.pinned,
+            ownerUsername: "artist",
+            url: `https://www.instagram.com/p/${post.id}/`,
+          })),
+      })),
+    );
+    await collectInstagramScrape(artist, "artist", "ds", "job", 0, {
+      latestOnly: true,
+      refresh: {
+        runId: capture.runId,
+        limit: 9,
+        scan: { startedAt: capture.startedAt, reference, providerLimited: true },
+      },
+    });
+    const input = checkpoint.mock.calls[0][1];
+    expect(input.allMapped).toBe(true);
+    expect(assessSocialScan(input.scan, input.posts, input.allMapped).connected).toBe(true);
+    expect(
+      assessSocialScan(input.scan, input.posts, input.allMapped).reference.anchors.some(
+        anchor => capture.posts.find(post => post.id === anchor.id)?.pinned,
+      ),
+    ).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

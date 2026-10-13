@@ -13,11 +13,21 @@ export function planSocialRefresh(
   const checked = checkpoint && valid(checkpoint.checkedAt);
   if (checked && time - checked < 15 * 60_000)
     return { startedAt: now.toISOString(), skip: true, checkedAt: new Date(checked).toISOString() };
+  const reference = checkpoint?.reference;
+  const anchorFloor = reference?.anchors.length
+    ? Math.min(...reference.anchors.map(a => Date.parse(a.postedAt))) - 48 * 3_600_000
+    : null;
   const covered = checkpoint && valid(checkpoint.coveredThrough);
   const floor = lookbackDays ? time - lookbackDays * 86_400_000 : null;
-  const after = covered ? Math.max(covered - 48 * 3_600_000, floor ?? -Infinity) : floor;
+  const after =
+    anchorFloor !== null
+      ? anchorFloor
+      : covered
+        ? Math.max(covered - 48 * 3_600_000, floor ?? -Infinity)
+        : floor;
   return {
     startedAt: now.toISOString(),
+    ...(reference ? { reference } : {}),
     ...(after !== null ? { after: new Date(after).toISOString() } : {}),
   };
 }

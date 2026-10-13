@@ -37,3 +37,18 @@ describe("account scan window", () => {
     ).toBe("2026-09-12T12:00:00.000Z");
   });
 });
+
+it("keeps saved anchors within the next query even after a quiet month", () => {
+  const reference = {
+    anchors: [{ id: "old", postedAt: "2026-08-01T00:00:00Z" }],
+    observedAt: "2026-08-02T00:00:00Z",
+    gapSince: null,
+  };
+  const result = planSocialRefresh(
+    { checkedAt: "2026-08-02T00:00:00Z", coveredThrough: null, reference },
+    new Date("2026-10-12T00:00:00Z"),
+    30,
+  );
+  expect(result.after).toBe("2026-07-30T00:00:00.000Z");
+  expect(result.reference).toEqual(reference);
+});

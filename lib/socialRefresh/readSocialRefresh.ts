@@ -1,3 +1,4 @@
+import { parseScanReference } from "./parseScanReference";
 import { sql } from "drizzle-orm";
 import { db, type WriteDb } from "@/lib/db/db";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -15,9 +16,16 @@ export async function readSocialRefresh(
   const scope = lookbackDays === 30 ? "latest" : "profile";
   const rows = rowsOf(
     await reader.execute(
-      sql`select covered_through::text as "coveredThrough", checked_at::text as "checkedAt" from artist_social_refreshes where artist_id=${artistId}::uuid and platform=${platform} and account_handle=${normalizeHandle(handle)} and scope=${scope}`,
+      sql`select covered_through::text as "coveredThrough", checked_at::text as "checkedAt", scan_reference as "reference" from artist_social_refreshes where artist_id=${artistId}::uuid and platform=${platform} and account_handle=${normalizeHandle(handle)} and scope=${scope}`,
     ),
   );
-  const row = rows[0] as { coveredThrough: string | null; checkedAt: string } | undefined;
-  return { ...planSocialRefresh(row ?? null, new Date(), lookbackDays), scope };
+  const row = rows[0] as
+    { coveredThrough: string | null; reference?: unknown; checkedAt: string } | undefined;
+  const reference = parseScanReference(row?.reference);
+  if (row?.reference && JSON.stringify(row.reference) !== "{}" && !reference)
+    throw new Error("Invalid saved social scan reference");
+  return {
+    ...planSocialRefresh(row ? { ...row, reference } : null, new Date(), lookbackDays),
+    scope,
+  };
 }
