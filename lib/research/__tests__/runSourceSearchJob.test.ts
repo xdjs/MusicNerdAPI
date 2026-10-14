@@ -2,12 +2,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const h = vi.hoisted(() => ({
   limit: vi.fn(),
+  lock: vi.fn(),
+  social: vi.fn(),
+  prepare: vi.fn(),
   complete: vi.fn(async () => {}),
   save: vi.fn(async () => {}),
   search: vi.fn(async () => [] as unknown[]),
 }));
 vi.mock("@/lib/db/db", () => ({
-  db: { select: () => ({ from: () => ({ where: () => ({ limit: h.limit }) }) }) },
+  db: {
+    transaction: (fn: (tx: unknown) => unknown) => fn({}),
+    select: () => ({ from: () => ({ where: () => ({ limit: h.limit }) }) }),
+  },
+}));
+vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite: h.lock }));
+vi.mock("@/lib/research/queueSocialIngest", () => ({ queueSocialIngest: h.social }));
+vi.mock("@/lib/directoryPreparation/queueDirectoryPreparation", () => ({
+  queueDirectoryPreparation: h.prepare,
 }));
 vi.mock("@/lib/research/completeResearchJob", () => ({ completeResearchJob: h.complete }));
 vi.mock("@/lib/research/saveJobProgress", () => ({ saveJobProgress: h.save }));
@@ -38,11 +49,52 @@ const event = {
 beforeEach(() => {
   h.limit.mockReset().mockResolvedValue([event]);
   h.complete.mockClear();
+  h.prepare.mockReset().mockResolvedValue(undefined);
+  h.lock.mockReset().mockResolvedValue(undefined);
+  h.social.mockReset().mockResolvedValue(true);
   h.save.mockClear();
   h.search.mockReset().mockResolvedValue([]);
 });
 
 describe("runSourceSearchJob", () => {
+  it("uses narrowly fenced directory authority rather than granting the adder editing rights", async () => {
+    h.limit.mockResolvedValue([
+      {
+        ...event,
+        trigger: "directory_add",
+        action: "directory_add",
+        actorUserId: "ordinary-adder",
+      },
+    ]);
+    let observed: unknown;
+    h.search.mockImplementation(async () => {
+      observed = artistOperations.getStore();
+      return [];
+    });
+    await runSourceSearchJob(
+      {
+        ...job,
+        state: { claimId: null, purpose: "directory_preparation", creationActivityId: "event" },
+      },
+      Date.now() + 50_000,
+    );
+    expect(observed).toMatchObject({
+      userId: undefined,
+      expectedClaimId: null,
+      trigger: "directory_add",
+      activityId: "event",
+    });
+    expect(h.lock).toHaveBeenCalled();
+    expect(h.prepare).toHaveBeenCalledWith("a1");
+    expect(h.social).toHaveBeenCalledWith("a1", { directoryActivityId: "event" });
+  });
+  it("refuses a directory job whose purpose or immutable creation event was changed", async () => {
+    h.limit.mockResolvedValue([{ ...event, trigger: "directory_add", action: "directory_add" }]);
+    await expect(runSourceSearchJob(job, Date.now() + 50_000)).rejects.toThrow(
+      "Invalid directory research authorization",
+    );
+    expect(h.search).not.toHaveBeenCalled();
+  });
   it("runs as the approving admin, under the job's claim and event, and completes", async () => {
     let observed: unknown;
     h.search.mockImplementation(async () => {

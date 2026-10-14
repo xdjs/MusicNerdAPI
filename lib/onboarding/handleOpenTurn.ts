@@ -4,7 +4,7 @@ import { runAutoBuild } from "@/lib/onboarding/runAutoBuild";
 import type { TurnContext, TurnEvent } from "@/lib/onboarding/types";
 
 /**
- * The chat opening. A fresh claim builds the page outright; a resume (something
+ * The chat opening. A fresh claim discovers links and requests source review; a resume (something
  * failed, or they stepped away) goes back in with the step-by-step card.
  *
  * @param ctx - The turn's context.

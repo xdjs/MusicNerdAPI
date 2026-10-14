@@ -73,6 +73,9 @@ const m = vi.hoisted(() => ({
   dbUpdate: vi.fn<AnyFn>(),
 }));
 
+vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
+  getReusableDirectoryDraft: async () => null,
+}));
 vi.mock("@/lib/bio/persistArtistBio", () => ({ persistArtistBio: m.persistArtistBio }));
 vi.mock("@/lib/onboarding/getOnboardingState", () => ({
   getOnboardingState: m.getOnboardingState,
@@ -238,146 +241,59 @@ describe("runOnboardingTurn", () => {
     expect(events.find(e => e.kind === "step")?.step).toBe("vault");
   });
 
-  it("a fresh claim builds the whole page without asking anything, and asks no question first", async () => {
-    // The claim already established who this is — an admin approved this
-    // user on this artist record. Re-asking "is this you?" proves nothing
-    // (anyone claiming falsely clicks yes too) and costs a step. Carl,
-    // 2026-08-20: "ideally we should create the perfect profile for them
-    // without them having to do anything."
-    const oq = OQ;
-    oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
-    oq.confirmOnboardingStep.mockClear();
-    const { runOnboardingTurn } = TH;
-
-    const events = await collect(runOnboardingTurn("a1", { type: "open" }));
-
-    // No card is put in front of the artist at all.
-    expect(events.some(e => e.kind === "step")).toBe(false);
-    expect(events.some(e => e.kind === "complete")).toBe(true);
-    expect(events.some(e => e.kind === "error")).toBe(false);
-
-    // Every stage confirms its own step, so a crash mid-build leaves the
-    // artist resuming at exactly the stage that failed.
-    const confirmed = oq.confirmOnboardingStep.mock.calls.map(c => c[1]);
-    expect(confirmed).toEqual(["profiles", "vault"]);
-    const { persistArtistBio } = BIO;
-    expect(persistArtistBio).toHaveBeenCalledWith(
-      "a1",
-      expect.any(String),
-      expect.objectContaining({ confirmSteps: ["interview", "publish"] }),
+  it("a fresh claim discovers public links and requests review without publishing prepared material", async () => {
+    OQ.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
+    DQ.getVaultSourcesByArtistId.mockImplementation(async (_id, status) =>
+      status === "pending"
+        ? [
+            {
+              id: "pending-source",
+              title: "Pending interview",
+              url: "https://example.org/interview",
+              extractedText: "x".repeat(500),
+            },
+          ]
+        : [],
     );
-
-    // And it narrates what it's doing rather than sitting silent for a minute.
+    const ownership = { userId: "owner", expectedClaimId: "claim-1" };
+    const checkpoints: any[] = [];
+    OQ.confirmOnboardingStep.mockImplementation(async () =>
+      checkpoints.push(OPCTX.getActiveArtistOperation()),
+    );
+    const events = await collect(TH.runOnboardingTurn("a1", { type: "open" }, ownership));
+    expect(events.find(e => e.kind === "step")).toMatchObject({
+      step: "vault",
+      payload: { sources: [{ id: "pending-source" }] },
+    });
+    expect(events.some(e => e.kind === "complete")).toBe(false);
+    expect(DQ.updateVaultSourceStatus).not.toHaveBeenCalled();
+    expect(BIO.persistArtistBio).not.toHaveBeenCalled();
+    expect(DOC.synthesizeArtistDoc).not.toHaveBeenCalled();
+    expect(DOC.generateAboutFromDoc).not.toHaveBeenCalled();
+    expect(OQ.confirmOnboardingStep.mock.calls.map(c => c[1])).toEqual(["profiles"]);
+    expect(checkpoints).toEqual([{ artistId: "a1", ...ownership, trigger: "onboarding" }]);
+    expect(OPCTX.getActiveArtistOperation()).toBeUndefined();
     const labels = events.filter(e => e.kind === "progress").map(e => e.label);
     expect(labels.some(l => /profiles/i.test(l))).toBe(true);
     expect(labels.some(l => /written about you|sources/i.test(l))).toBe(true);
-    expect(labels.some(l => /About/i.test(l))).toBe(true);
   });
 
-  it("auto-build streams the Lore document and the About into the popup as they are written", async () => {
-    const oq = OQ;
-    oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
-    const docService = DOC;
-    docService.synthesizeArtistDoc.mockImplementationOnce(
-      async (_id, _sources, { onTextDelta }) => {
-        onTextDelta("## Overview\n");
-        await new Promise(resolve => setTimeout(resolve, 0));
-        onTextDelta("doc");
-        return "## Overview\ndoc";
-      },
-    );
-    docService.generateAboutFromDoc.mockImplementationOnce(
-      async (_name, _doc, _sources, { onTextDelta }) => {
-        onTextDelta("An ");
-        onTextDelta("About.");
-        return "An About.";
-      },
-    );
-    const { runOnboardingTurn } = TH;
-
-    const events = await collect(runOnboardingTurn("a1", { type: "open" }));
-
-    const aboutStage = events.slice(
-      events.findIndex(e => e.kind === "progress" && e.label === "Writing your About"),
-      events.findIndex(e => e.kind === "progress" && e.label === "Wrote your About") + 1,
-    );
-    expect(aboutStage.filter(e => e.kind === "text-delta")).toEqual([
-      { kind: "text-delta", group: "about-write", call: "doc", delta: "## Overview\n" },
-      { kind: "text-delta", group: "about-write", call: "doc", delta: "doc" },
-      { kind: "text-delta", group: "about-write", call: "about", delta: "An " },
-      { kind: "text-delta", group: "about-write", call: "about", delta: "About." },
-    ]);
-    const { persistArtistBio } = BIO;
-    expect(persistArtistBio).toHaveBeenCalledWith(
-      "a1",
-      "An About.",
-      expect.objectContaining({
-        document: expect.objectContaining({ content: "## Overview\ndoc" }),
-      }),
-    );
-    expect(events.some(e => e.kind === "complete")).toBe(true);
-  });
-
-  it("auto-build still reports a failed Lore document after streaming part of it", async () => {
-    const oq = OQ;
-    oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
-    const docService = DOC;
-    docService.synthesizeArtistDoc.mockImplementationOnce(
-      async (_id, _sources, { onTextDelta }) => {
-        onTextDelta("## Over");
-        throw new Error("Gemini timeout");
-      },
-    );
-    const { runOnboardingTurn } = TH;
-
-    const events = await collect(runOnboardingTurn("a1", { type: "open" }));
-
-    expect(events.filter(e => e.kind === "text-delta").map(e => e.delta)).toEqual(["## Over"]);
-    expect(events.some(e => e.kind === "error")).toBe(true);
-    expect(events.some(e => e.kind === "complete")).toBe(false);
-    expect(docService.generateAboutFromDoc).not.toHaveBeenCalled();
-  });
-
-  it("auto-build publishes when inherited history has reached the explicit-save cap", async () => {
-    const oq = OQ;
-    oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
-    const dq = DQ;
-    dq.saveBioVersion.mockRejectedValue(new Error("Bio history is full"));
-    const { getActiveArtistOperation } = OPCTX;
-    const ownership = { userId: "owner", expectedClaimId: "claim-1" };
-    const checkpoints: any[] = [];
-    oq.confirmOnboardingStep.mockImplementation(async () => {
-      checkpoints.push(getActiveArtistOperation());
+  it("opening onboarding preserves an existing bio and does not consume bio history", async () => {
+    OQ.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
+    AQ.getArtistById.mockResolvedValue({
+      id: "a1",
+      name: "Nova Reyes",
+      bio: "Artist edited biography",
     });
-    const artistQ = AQ;
-    artistQ.getArtistById.mockResolvedValue({ id: "a1", name: "Nova Reyes", bio: "Existing bio" });
-    const { runOnboardingTurn } = TH;
-    const events = await collect(runOnboardingTurn("a1", { type: "open" }, ownership));
-    const { persistArtistBio } = BIO;
-    expect(persistArtistBio).toHaveBeenCalledWith(
-      "a1",
-      "An About.",
-      expect.objectContaining({
-        generated: true,
-        expectedBio: "Existing bio",
-        document: expect.objectContaining({ content: "## Overview\ndoc" }),
-      }),
-    );
-    expect(checkpoints).toEqual(
-      Array(2).fill({ artistId: "a1", ...ownership, trigger: "onboarding" }),
-    );
-    expect(getActiveArtistOperation()).toBeUndefined();
-    expect(dq.saveBioVersion).not.toHaveBeenCalled();
-    expect(persistArtistBio).toHaveBeenCalledWith(
-      "a1",
-      expect.any(String),
-      expect.objectContaining({ confirmSteps: ["interview", "publish"] }),
-    );
-    expect(events.some(e => e.kind === "progress" && e.label === "Wrote your About")).toBe(true);
-    expect(events.some(e => e.kind === "complete")).toBe(true);
+    DQ.saveBioVersion.mockRejectedValue(new Error("Bio history is full"));
+    const events = await collect(TH.runOnboardingTurn("a1", { type: "open" }));
+    expect(BIO.persistArtistBio).not.toHaveBeenCalled();
+    expect(DQ.saveBioVersion).not.toHaveBeenCalled();
+    expect(events.find(e => e.kind === "step")?.step).toBe("vault");
+    expect(events.some(e => e.kind === "error")).toBe(false);
   });
 
-  it.each(["open", "publish"])(
+  it.each(["publish"])(
     "a bio conflict in %s never finalizes onboarding or overwrites Lore",
     async type => {
       const oq = OQ;
@@ -413,18 +329,6 @@ describe("runOnboardingTurn", () => {
       );
     },
   );
-
-  it("auto-build leaves publication retryable when its atomic persistence fails", async () => {
-    const oq = OQ;
-    oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
-    const { persistArtistBio } = BIO;
-    persistArtistBio.mockRejectedValue(new Error("document write failed"));
-    const { runOnboardingTurn } = TH;
-    const events = await collect(runOnboardingTurn("a1", { type: "open" }));
-    expect(oq.confirmOnboardingStep).not.toHaveBeenCalledWith("a1", "publish");
-    expect(events.some(e => e.kind === "error")).toBe(true);
-    expect(events.some(e => e.kind === "complete")).toBe(false);
-  });
 
   it("the auto-build runs every identity guard before writing a discovered link, and refuses one they reject", async () => {
     // The guards existed, had their own passing tests, and NOTHING CALLED

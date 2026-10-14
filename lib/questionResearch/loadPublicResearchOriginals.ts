@@ -14,6 +14,7 @@ export async function loadPublicResearchOriginals(artistId: string): Promise<Res
       const scope = sql`
       select public.knowledge_vault_source_snapshot(v) as snapshot from artist_vault_sources v
       where artist_id=${artistId}::uuid and status='approved' and file_path is null
+        and exists(select 1 from artist_claims claim where claim.artist_id=${artistId}::uuid and claim.status='approved')
       union all select public.knowledge_social_post_snapshot(s) from artist_social_posts s
       where artist_id=${artistId}::uuid and is_own_post=true
         and raw->'isRepost' is distinct from 'true'::jsonb and raw->'isRetweet' is distinct from 'true'::jsonb`;
@@ -21,7 +22,7 @@ export async function loadPublicResearchOriginals(artistId: string): Promise<Res
         sql`with originals as (${scope}) select count(*)::int as n, coalesce(sum(char_length(snapshot::text)),0)::bigint as chars from originals`,
       );
       const [discoverySize] = await tx.execute<{ n: number; chars: number }>(
-        sql`select count(*)::int as n,coalesce(sum(char_length(e.original_text)),0)::bigint as chars from artist_research_evidence e join artist_research_candidates c on c.id=e.candidate_id and c.artist_id=e.artist_id where e.revision=c.current_revision and c.artist_id=${artistId}::uuid and c.identity='confirmed' and c.curation in ('pending','approved') and (c.reviewed_revision is null or (c.destination='lore' and exists(select 1 from artist_vault_sources v where v.id=c.source_id and v.artist_id=c.artist_id and v.status='approved' and v.file_path is null)) or (c.destination='link' and exists(select 1 from artists a where a.id=c.artist_id and to_jsonb(a)->>c.platform=c.platform_id)))`,
+        sql`select count(*)::int as n,coalesce(sum(char_length(e.original_text)),0)::bigint as chars from artist_research_evidence e join artist_research_candidates c on c.id=e.candidate_id and c.artist_id=e.artist_id where e.revision=c.current_revision and c.artist_id=${artistId}::uuid and c.identity='confirmed' and c.curation in ('pending','approved') and (c.reviewed_revision is null or (c.destination='lore' and exists(select 1 from artist_vault_sources v where v.id=c.source_id and v.artist_id=c.artist_id and v.status='approved' and v.file_path is null and exists(select 1 from artist_claims claim where claim.artist_id=c.artist_id and claim.status='approved'))) or (c.destination='link' and exists(select 1 from artists a where a.id=c.artist_id and to_jsonb(a)->>c.platform=c.platform_id)))`,
       );
       if (!size || !discoverySize) throw new Error("Research corpus unavailable");
       if (
@@ -63,7 +64,7 @@ export async function loadPublicResearchOriginals(artistId: string): Promise<Res
         curation: "approved" | "pending";
         provenance: DiscoveryOriginal["provenance"];
       }>(
-        sql`select distinct on (c.id) e.id,e.revision,e.original_text,c.url,case when c.curation='approved' and c.reviewed_revision=e.revision then 'approved' else 'pending' end as curation,e.provenance from artist_research_evidence e join artist_research_candidates c on c.id=e.candidate_id and c.artist_id=e.artist_id where e.revision=c.current_revision and c.artist_id=${artistId}::uuid and c.identity='confirmed' and c.curation in ('pending','approved') and (c.reviewed_revision is null or (c.destination='lore' and exists(select 1 from artist_vault_sources v where v.id=c.source_id and v.artist_id=c.artist_id and v.status='approved' and v.file_path is null)) or (c.destination='link' and exists(select 1 from artists a where a.id=c.artist_id and to_jsonb(a)->>c.platform=c.platform_id))) order by c.id,e.retrieved_at desc,e.id desc`,
+        sql`select distinct on (c.id) e.id,e.revision,e.original_text,c.url,case when c.curation='approved' and c.reviewed_revision=e.revision then 'approved' else 'pending' end as curation,e.provenance from artist_research_evidence e join artist_research_candidates c on c.id=e.candidate_id and c.artist_id=e.artist_id where e.revision=c.current_revision and c.artist_id=${artistId}::uuid and c.identity='confirmed' and c.curation in ('pending','approved') and (c.reviewed_revision is null or (c.destination='lore' and exists(select 1 from artist_vault_sources v where v.id=c.source_id and v.artist_id=c.artist_id and v.status='approved' and v.file_path is null and exists(select 1 from artist_claims claim where claim.artist_id=c.artist_id and claim.status='approved'))) or (c.destination='link' and exists(select 1 from artists a where a.id=c.artist_id and to_jsonb(a)->>c.platform=c.platform_id))) order by c.id,e.retrieved_at desc,e.id desc`,
       );
       for (const d of discoveries)
         sources.push({

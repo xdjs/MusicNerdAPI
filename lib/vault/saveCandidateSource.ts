@@ -77,6 +77,10 @@ export async function saveCandidateSource(
   try {
     if (outOfBudget(run, "source insertion")) return "stop";
     const source = await insertVaultSource({
+      identityAssessed:
+        isVerified &&
+        verdict === "about-artist" &&
+        !(await nameIsAmbiguousInDirectory(run.artistId, run.artistName)),
       artistId: run.artistId,
       url: result.url,
       // The page is the authority on its own title and description.

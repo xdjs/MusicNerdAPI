@@ -1,3 +1,4 @@
+import { assertDirectoryDiscoveryScope } from "@/lib/ownership/assertDirectoryDiscoveryScope";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
@@ -17,6 +18,11 @@ export async function lockScopedArtistWrite(tx: TransactionDb, artistId: string)
   const context = getArtistOperationOwnership(artistId);
   if (!context) return;
   await lockArtistRow(tx, artistId);
+  if (context.trigger === "directory_add") {
+    if (context.userId || context.expectedClaimId !== null) throw new OwnershipChangedError();
+    await assertDirectoryDiscoveryScope(tx, artistId, context.activityId);
+    return;
+  }
   if (context.userId) {
     await authorizeLockedArtistWrite(tx, artistId, {
       userId: context.userId,

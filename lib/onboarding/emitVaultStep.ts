@@ -14,14 +14,16 @@ import { searchAndPopulateVault } from "@/lib/vault/searchAndPopulateVault";
  *
  * @param artistId - The artist.
  * @param forceVaultDiscovery - Search even with sources pending (the confirm turn just routed some in).
+ * @param discoveryComplete - The current turn already performed discovery; do not repeat it.
  * @returns The step's events.
  */
 export async function* emitVaultStep(
   artistId: string,
   forceVaultDiscovery: boolean,
+  discoveryComplete = false,
 ): AsyncGenerator<TurnEvent> {
   let pending = await getVaultSourcesByStatus(artistId, "pending");
-  if (forceVaultDiscovery || pending.length === 0) {
+  if (!discoveryComplete && (forceVaultDiscovery || pending.length === 0)) {
     const approved = (await getVaultSourcesByStatus(artistId, "approved")).filter(s => !s.filePath);
     if (forceVaultDiscovery || approved.length === 0) {
       yield { kind: "progress", label: "Searching the web for sources about you", done: false };
