@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   prepare: vi.fn(),
   complete: vi.fn(async () => {}),
   checkpoint: vi.fn(),
+  record: vi.fn(),
+  saved: vi.fn(),
   save: vi.fn(async () => {}),
   search: vi.fn(async () => [] as unknown[]),
 }));
@@ -20,6 +22,12 @@ vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite:
 vi.mock("@/lib/research/queueSocialIngest", () => ({ queueSocialIngest: h.social }));
 vi.mock("@/lib/directoryPreparation/queueDirectoryPreparation", () => ({
   queueDirectoryPreparation: h.prepare,
+}));
+vi.mock("@/lib/directoryPreparation/recordDirectoryDiscovery", () => ({
+  recordDirectoryDiscovery: h.record,
+}));
+vi.mock("@/lib/directoryPreparation/hasSavedDirectoryDiscovery", () => ({
+  hasSavedDirectoryDiscovery: h.saved,
 }));
 vi.mock("@/lib/directoryPreparation/completeDirectoryDiscovery", () => ({
   completeDirectoryDiscovery: h.checkpoint,
@@ -54,6 +62,11 @@ beforeEach(() => {
   h.limit.mockReset().mockResolvedValue([event]);
   h.complete.mockClear();
   h.checkpoint.mockReset().mockResolvedValue(true);
+  h.record.mockReset().mockImplementation(async job => ({
+    ...job,
+    state: { ...job.state, directoryDiscovery: { version: 1, completedAt: Date.now() } },
+  }));
+  h.saved.mockReset().mockResolvedValue(false);
   h.prepare.mockReset().mockResolvedValue(undefined);
   h.lock.mockReset().mockResolvedValue(undefined);
   h.social.mockReset().mockResolvedValue(true);
@@ -168,4 +181,51 @@ describe("runSourceSearchJob", () => {
     expect(h.complete).toHaveBeenCalledWith("job");
     expect(h.search).not.toHaveBeenCalled();
   });
+});
+
+it.each(["social", "private"])(
+  "a %s child queue failure retries the handoff with exactly one search",
+  async kind => {
+    h.limit.mockResolvedValue([
+      { ...event, trigger: "directory_add", action: "directory_add", actorUserId: "adder" },
+    ]);
+    const dir = {
+      ...job,
+      state: { claimId: null, purpose: "directory_preparation", creationActivityId: "event" },
+    };
+    if (kind === "social") h.social.mockResolvedValueOnce(false);
+    else h.prepare.mockRejectedValueOnce(new Error("queue unavailable"));
+    await expect(runSourceSearchJob(dir, Date.now() + 50_000)).rejects.toThrow();
+    expect(h.record).toHaveBeenCalledOnce();
+    expect(h.checkpoint).not.toHaveBeenCalled();
+    h.saved.mockResolvedValue(true);
+    await runSourceSearchJob(
+      {
+        ...dir,
+        state: { ...dir.state, directoryDiscovery: { version: 1, completedAt: Date.now() } },
+      },
+      Date.now() + 50_000,
+    );
+    expect(h.search).toHaveBeenCalledTimes(1);
+    expect(h.record).toHaveBeenCalledTimes(1);
+    expect(h.social).toHaveBeenLastCalledWith("a1", { directoryActivityId: "event" });
+    expect(h.checkpoint).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("does not repeat paid discovery after another worker takes the lease", async () => {
+  h.limit.mockResolvedValue([{ ...event, trigger: "directory_add", action: "directory_add" }]);
+  h.saved.mockResolvedValue(null);
+  const result = await runSourceSearchJob(
+    {
+      ...job,
+      state: { claimId: null, purpose: "directory_preparation", creationActivityId: "event" },
+    },
+    Date.now() + 50_000,
+  );
+  expect(result).toMatchObject({ done: false, waiting: true });
+  expect(h.search).not.toHaveBeenCalled();
+  expect(h.prepare).not.toHaveBeenCalled();
+  expect(h.social).not.toHaveBeenCalled();
+  expect(h.checkpoint).not.toHaveBeenCalled();
 });

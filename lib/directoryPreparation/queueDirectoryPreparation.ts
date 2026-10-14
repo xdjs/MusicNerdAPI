@@ -10,6 +10,12 @@ export async function queueDirectoryPreparation(artistId: string): Promise<void>
     throw new Error("Invalid private preparation authority");
   await db.transaction(async tx => {
     await lockScopedArtistWrite(tx, artistId);
+    const existing = rowsOf(
+      await tx.execute(
+        sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='lore_refresh' and activity_id=${scope.activityId}::uuid and state->>'purpose'='directory_preparation' and state->>'creationActivityId'=${scope.activityId} and state->'claimId'='null'::jsonb limit 1`,
+      ),
+    );
+    if (existing.length) return;
     await tx.execute(sql`insert into artist_research_jobs(artist_id,kind,status,activity_id,state)
    values(${artistId}::uuid,'lore_refresh','pending',${scope.activityId}::uuid,${JSON.stringify({ claimId: null, purpose: "directory_preparation", creationActivityId: scope.activityId })}::jsonb) on conflict do nothing`);
     const rows = rowsOf(

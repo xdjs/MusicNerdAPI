@@ -63,3 +63,17 @@ it("rejects missing creation scope without creating a job", async () => {
   await expect(queueDirectoryPreparation(artist)).rejects.toThrow("authority");
   expect((await client.query("select * from artist_research_jobs")).rows).toHaveLength(0);
 });
+it.each(["done", "failed"])(
+  "does not recreate a %s private child when source handoff retries",
+  async status => {
+    await queue();
+    await client.query("update artist_research_jobs set status=$1", [status]);
+    await queue();
+    expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
+      { n: 1 },
+    ]);
+    expect((await client.query("select status from artist_research_jobs")).rows).toEqual([
+      { status },
+    ]);
+  },
+);

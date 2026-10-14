@@ -9,6 +9,8 @@ const store = {
 vi.mock("@/lib/db/db", () => ({
   db: { ...store, transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(store) },
 }));
+const { recordDirectoryDiscovery } = await import("../recordDirectoryDiscovery");
+const { hasSavedDirectoryDiscovery } = await import("../hasSavedDirectoryDiscovery");
 const { completeDirectoryDiscovery } = await import("../completeDirectoryDiscovery");
 const { hasReusableDirectoryDiscovery } = await import("../hasReusableDirectoryDiscovery");
 const a = "00000000-0000-4000-8000-000000000001",
@@ -41,7 +43,10 @@ beforeEach(async () => {
   );
 });
 const claim = () => client.exec(`insert into artist_claims values('${c}','${a}','approved')`);
-const complete = () => completeDirectoryDiscovery(job);
+const complete = async () => {
+  const recorded = await recordDirectoryDiscovery(job);
+  return recorded ? completeDirectoryDiscovery(recorded) : false;
+};
 const read = () => hasReusableDirectoryDiscovery(a, c);
 it("records complete discovery atomically and reuses only after the current claim is approved", async () => {
   expect(await complete()).toBe(true);
@@ -72,9 +77,8 @@ it.each([
   "delete from artist_vault_sources",
   "update artist_activity_events set actor_user_id=null",
   "update artist_claims set status='rejected'",
-  "update artist_research_jobs set updated_at=now()-interval '25 hours'",
-  "update artist_research_jobs set updated_at=now()+interval '1 hour'",
-  "update artist_research_jobs set status='running'",
+  "update artist_research_jobs set state=jsonb_set(state,'{directoryDiscovery,completedAt}',to_jsonb(extract(epoch from now()-interval '25 hours')*1000))",
+  "update artist_research_jobs set state=jsonb_set(state,'{directoryDiscovery,completedAt}',to_jsonb(extract(epoch from now()+interval '1 hour')*1000))",
   "update artist_research_jobs set state=state-'directoryDiscovery'",
   "update artist_research_jobs set state=jsonb_set(state,'{directoryDiscovery,version}','2')",
   "update artist_research_jobs set state=jsonb_set(state,'{claimId}','\"some-claim\"')",
@@ -105,4 +109,56 @@ it("replaced leases cannot declare discovery complete", async () => {
   expect((await client.query("select state from artist_research_jobs")).rows).toEqual([
     { state: job.state },
   ]);
+});
+
+it.each(["pending", "running", "failed", "done"])(
+  "completed discovery remains reusable while parent is %s for downstream retry",
+  async status => {
+    await recordDirectoryDiscovery(job);
+    await claim();
+    await client.query("update artist_research_jobs set status=$1,updated_at=now()", [status]);
+    expect(await read()).toBe(true);
+  },
+);
+it.each(["null", '"bad date"', "{}", "[]"])(
+  "malformed checkpoint time %s is nonreusable without throwing",
+  async time => {
+    await complete();
+    await claim();
+    await client.query(
+      "update artist_research_jobs set state=jsonb_set(state,'{directoryDiscovery,completedAt}',$1::jsonb)",
+      [time],
+    );
+    expect(await read()).toBe(false);
+  },
+);
+it("resumes the saved directory stage without changing its discovery time and rejects changed originals", async () => {
+  const recorded = await recordDirectoryDiscovery(job);
+  expect(recorded).not.toBeNull();
+  expect(await hasSavedDirectoryDiscovery(recorded!)).toBe(true);
+  const before = recorded!.state.directoryDiscovery;
+  await completeDirectoryDiscovery(recorded!);
+  expect((await client.query("select state from artist_research_jobs")).rows).toEqual([
+    { state: { ...job.state, directoryDiscovery: before } },
+  ]);
+  await client.exec("update artist_vault_sources set body='Changed'");
+  expect(await hasSavedDirectoryDiscovery(recorded!)).toBeNull();
+});
+it("a claim after discovery but before child enqueue reuses discovery while cancelling old directory authority", async () => {
+  const recorded = await recordDirectoryDiscovery(job);
+  await claim();
+  expect(await read()).toBe(true);
+  await expect(hasSavedDirectoryDiscovery(recorded!)).rejects.toThrow("ownership changed");
+  await expect(completeDirectoryDiscovery(recorded!)).rejects.toThrow("ownership changed");
+  expect((await client.query("select status from artist_research_jobs")).rows).toEqual([
+    { status: "running" },
+  ]);
+});
+
+it("changed inputs on a current retry require discovery but a replaced lease cannot start it", async () => {
+  const recorded = await recordDirectoryDiscovery(job);
+  await client.exec("update artist_vault_sources set body='Different'");
+  expect(await hasSavedDirectoryDiscovery(recorded!)).toBe(false);
+  await client.exec("update artist_research_jobs set attempts=2");
+  expect(await hasSavedDirectoryDiscovery(recorded!)).toBeNull();
 });

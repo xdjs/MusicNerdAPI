@@ -1,3 +1,4 @@
+import { directoryDiscoveryMatchesCurrentInputs } from "./directoryDiscoveryMatchesCurrentInputs";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -18,17 +19,11 @@ where a.id=${artistId}::uuid
   and exists(select 1 from artist_claims c where c.id=${claimId}::uuid and c.artist_id=a.id and c.status='approved')
   and e.actor_kind='user' and e.action='directory_add' and e.trigger='directory_add'
   and e.actor_user_id=a.added_by
-  and j.kind='source_search' and j.status='done'
+  and j.kind='source_search'
   and j.state->'claimId'='null'::jsonb
   and j.state->>'purpose'='directory_preparation'
   and j.state->>'creationActivityId'=e.id::text
-  and j.state->'directoryDiscovery'->'version'='1'::jsonb
-  and j.updated_at between now()-interval '24 hours' and now()
-  and j.state->'directoryDiscovery'->'identity'=jsonb_build_object('name',a.name,'spotify',a.spotify,'deezer',a.deezer)
-  and j.state->'directoryDiscovery'->>'sourcesRevision'=(
-    select md5(coalesce(jsonb_agg(public.knowledge_vault_source_snapshot(v)-'status'-'updatedAt' order by v.id),'[]'::jsonb)::text)
-    from artist_vault_sources v where v.artist_id=a.id and v.activity_id=e.id and v.origin='research'
-  )
+  and ${directoryDiscoveryMatchesCurrentInputs()}
 limit 1`),
       ).length > 0
     );

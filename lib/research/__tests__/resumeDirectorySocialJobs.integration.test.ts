@@ -132,3 +132,9 @@ it("an explicit refresh is not swallowed by a completed handoff", async () => {
   await run();
   expect(await resumeDirectorySocialJobs(tx, a, c, e, true)).toBe(false);
 });
+it("a claim with no directory child falls back to the normal social queue", async () => {
+  expect(await run()).toBe(false);
+  expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
+    { n: 0 },
+  ]);
+});
