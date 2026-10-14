@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { TransactionDb } from "@/lib/ownership/types";
 import { loadPublicLatestOriginals } from "../loadPublicLatestOriginals";
+import { MAX_KNOWLEDGE_CHARS, MAX_KNOWLEDGE_ROWS } from "@/lib/knowledge/types";
 
 import { readPublicResearchSource } from "../readPublicResearchSource";
 vi.mock("@/lib/questionResearch/loadPublicResearchOriginals", () => ({
@@ -73,13 +74,13 @@ it("keeps source identity stable but changes revision when the public answer is 
   expect(after.text).not.toContain("The home take.");
 });
 
-it("matches Latest's bounded newest-six published answer selection", async () => {
+it("exposes all published answers beyond Latest's newest-six display selection", async () => {
   await client.exec(`insert into artist_interview_answers(artist_id,question,answer,source,created_at)
     select '${artist}'::uuid,'Question '||n,'Answer '||n,'followup','2026-10-01'::timestamptz + n * interval '1 hour' from generate_series(1,8) n;`);
   const rows = await loadPublicLatestOriginals(tx, artist);
-  expect(rows).toHaveLength(6);
+  expect(rows).toHaveLength(8);
   expect(rows[0].text).toContain("Answer 8");
-  expect(rows[5].text).toContain("Answer 3");
+  expect(rows[7].text).toContain("Answer 1");
 });
 
 it("replay rejects a changed public answer revision instead of returning stale wording", async () => {
@@ -126,11 +127,61 @@ it("keeps unknown response dates null and orders dated responses ahead of them",
   expect(JSON.stringify(rows)).not.toContain("1970");
 });
 
-it("does not let undated responses crowd dated responses out of the bounded window", async () => {
+it("retains dated and undated public answers with dated originals first", async () => {
   await client.exec(`insert into artist_interview_answers(artist_id,question,answer,source,created_at)
     select '${artist}'::uuid,'Unknown date '||n,'Undated response '||n,'followup',null from generate_series(1,6) n;
     insert into artist_interview_answers(artist_id,question,answer,source,created_at) values ('${artist}','Dated?','Dated response','followup','2026-10-01');`);
   const rows = await loadPublicLatestOriginals(tx, artist);
-  expect(rows).toHaveLength(6);
+  expect(rows).toHaveLength(7);
   expect(rows[0].text).toContain("Dated response");
+});
+
+it("fails explicitly when the public answer corpus exceeds the row limit", async () => {
+  await client.query(
+    `insert into artist_interview_answers(artist_id,question,answer,source,created_at)
+    select $1::uuid,'Question '||n,'Answer '||n,'followup','2026-10-01'::timestamptz from generate_series(1,$2::int) n`,
+    [artist, MAX_KNOWLEDGE_ROWS + 1],
+  );
+  await expect(loadPublicLatestOriginals(tx, artist)).rejects.toMatchObject({
+    code: "corpus_too_large",
+    status: 413,
+  });
+});
+
+it("fails explicitly when public answer text exceeds the character limit", async () => {
+  await client.query(
+    `insert into artist_interview_answers(artist_id,question,answer,source,created_at)
+    values ($1,'Why?',repeat('a',$2::int),'followup','2026-10-01')`,
+    [artist, MAX_KNOWLEDGE_CHARS + 1],
+  );
+  await expect(loadPublicLatestOriginals(tx, artist)).rejects.toMatchObject({
+    code: "corpus_too_large",
+    status: 413,
+  });
+});
+
+it("includes question labels and date context in the final corpus character limit", async () => {
+  await client.query(
+    `insert into artist_interview_answers(artist_id,question,answer,source,created_at)
+    values ($1,'Why?',repeat('a',$2::int),'followup','2026-10-01')`,
+    [artist, MAX_KNOWLEDGE_CHARS - 50],
+  );
+  await expect(loadPublicLatestOriginals(tx, artist)).rejects.toMatchObject({
+    code: "corpus_too_large",
+    status: 413,
+  });
+});
+
+it("does not count private or another artist's answers against public corpus limits", async () => {
+  await client.query(
+    `insert into artist_interview_answers(artist_id,question,answer,source,created_at) values
+      ($1,'Public?','Public response','followup','2026-10-01'),
+      ($1,'Private?',repeat('a',$3::int),'interview','2026-10-01'),
+      ($1,'Unpublished?',repeat('a',$3::int),'onboarding','2026-10-01'),
+      ($2,'Other artist?',repeat('a',$3::int),'followup','2026-10-01')`,
+    [artist, other, MAX_KNOWLEDGE_CHARS + 1],
+  );
+  const rows = await loadPublicLatestOriginals(tx, artist);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].text).toContain("Public response");
 });

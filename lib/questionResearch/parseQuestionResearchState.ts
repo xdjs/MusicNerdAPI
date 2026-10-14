@@ -1,5 +1,18 @@
 import { validateQuestionResearchBody } from "@/lib/questionResearch/validateQuestionResearchBody";
-import type { QuestionResearchState } from "@/lib/questionResearch/types";
+import { z } from "zod";
+import {
+  SAVED_RESEARCH_MODEL_STEPS,
+  type QuestionResearchState,
+} from "@/lib/questionResearch/types";
+const explorationSchema = z.strictObject({
+  eligibleSources: z.number().int().min(0).max(5000),
+  toolCalls: z.number().int().min(0).max(12),
+  readChars: z.number().int().min(0).max(24000),
+  calls: z.array(z.enum(["browse", "search", "read", "finish", "lookup", "unresolved"])).max(12),
+  readSourceIds: z.array(z.string().max(200)).max(72),
+  rejectedIdCount: z.number().int().min(0).max(72),
+  stopReason: z.enum(["supported", "outside_lookup", "insufficient", "incomplete"]),
+});
 /** Reject malformed persisted work before it can choose a provider or exceed a saved budget. */
 export function parseQuestionResearchState(value: unknown): QuestionResearchState {
   if (!value || typeof value !== "object" || JSON.stringify(value).length > 400000)
@@ -7,6 +20,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
   const s = value as QuestionResearchState;
   if (
     s.version !== 1 ||
+    (s.exploration !== undefined && !explorationSchema.safeParse(s.exploration).success) ||
     (s.outputRetries !== undefined &&
       (!Number.isInteger(s.outputRetries) ||
         s.outputRetries < 0 ||
@@ -17,7 +31,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
       ((s.step !== undefined && s.step !== "saved") ||
         s.plan !== undefined ||
         s.providerCalls !== 0 ||
-        s.modelCalls > 1 + (s.outputRetries ?? 0) ||
+        s.modelCalls > SAVED_RESEARCH_MODEL_STEPS + (s.outputRetries ?? 0) ||
         (s.inFlight !== undefined && s.inFlight !== "model"))) ||
     typeof s.key !== "string" ||
     !Number.isFinite(Date.parse(s.createdAt)) ||
@@ -39,7 +53,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
     s.limitations.length > 30 ||
     !Number.isInteger(s.modelCalls) ||
     s.modelCalls < 0 ||
-    s.modelCalls > 2 + (s.outputRetries ?? 0) ||
+    s.modelCalls > SAVED_RESEARCH_MODEL_STEPS + 1 + (s.outputRetries ?? 0) ||
     !Number.isInteger(s.providerCalls) ||
     s.providerCalls < 0 ||
     s.providerCalls > 16 ||

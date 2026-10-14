@@ -28,21 +28,22 @@ it("rejects a model-invented source ID", async () => {
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [{ sourceId: "vault:invented", quote: "Artist produced the track" }],
+      supports: [{ referenceId: "reference:invented" }],
       identity: [],
       limitation: "none",
     },
     usage: { inputTokens: 100, outputTokens: 20 },
   });
-  expect(
-    (await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000)).sufficient,
-  ).toBe(false);
+  expect(await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000)).toMatchObject({
+    sufficient: false,
+    failure: "invalid_evidence_selection",
+  });
 });
 it("retains supporting context and qualifications without turning approval into editorial acceptance", async () => {
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [{ sourceId: "vault:1", quote: ref.text }],
+      supports: [{ referenceId: "reference:0" }],
       identity: [],
       limitation: "none",
     },
@@ -64,16 +65,27 @@ it("accepts the same contiguous quote when the model collapses whitespace", asyn
       sufficient: true,
       supports: [
         {
+          referenceId: "reference:0",
+        },
+      ],
+      identity: [
+        {
           sourceId: spaced.sourceId,
+          sameArtist: true,
           quote: "built the vault over a year to escape platform dependency",
         },
       ],
-      identity: [],
       limitation: "none",
     },
     usage: { inputTokens: 100, outputTokens: 20 },
   });
-  const result = await assessResearchEvidence(request, [spaced], { name: "Dutchyyy" }, [], 5000);
+  const result = await assessResearchEvidence(
+    request,
+    [spaced],
+    { name: "Dutchyyy" },
+    [spaced.sourceId],
+    5000,
+  );
   expect(result.sufficient).toBe(true);
   expect(result.references).toEqual([spaced]);
 });
@@ -100,7 +112,7 @@ it("asks for distinct overview activities in one assessment and retains all supp
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [archive, tour].map(r => ({ sourceId: r.sourceId, quote: r.text })),
+      supports: [archive, tour].map((_, i) => ({ referenceId: `reference:${i}` })),
       identity: [],
       limitation: "none",
     },
@@ -130,7 +142,7 @@ it("does not require invented extra activities when only one overview original i
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [{ sourceId: ref.sourceId, quote: ref.text }],
+      supports: [{ referenceId: "reference:0" }],
       identity: [],
       limitation: "none",
     },
@@ -152,12 +164,12 @@ it("does not require invented extra activities when only one overview original i
   expect(result.sufficient).toBe(true);
   expect(result.references).toEqual([ref]);
 });
-it("caps supported overview originals at three even if an editor over-selects", async () => {
+it("rejects an overview selection larger than three windows", async () => {
   const originals = Array.from({ length: 6 }, (_, i) => ({ ...ref, sourceId: `source:${i}` }));
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: originals.map(r => ({ sourceId: r.sourceId, quote: r.text })),
+      supports: originals.map((_, i) => ({ referenceId: `reference:${i}` })),
       identity: [],
       limitation: "none",
     },
@@ -176,7 +188,11 @@ it("caps supported overview originals at three even if an editor over-selects", 
     [],
     5000,
   );
-  expect(result.references).toHaveLength(3);
+  expect(result).toMatchObject({
+    sufficient: false,
+    failure: "invalid_evidence_selection",
+    references: [],
+  });
 });
 it("treats semantic exclusions as eligibility boundaries before accepting dated latest evidence", async () => {
   model.mockResolvedValue({
@@ -204,7 +220,7 @@ it("selects readable originals without requiring a duplicate generated quotation
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [{ sourceId: ref.sourceId }],
+      supports: [{ referenceId: "reference:0" }],
       identity: [],
       limitation: "none",
     },
@@ -213,4 +229,69 @@ it("selects readable originals without requiring a duplicate generated quotation
   const result = await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000);
   expect(result.sufficient).toBe(true);
   expect(result.references).toEqual([ref]);
+});
+
+it("selects exact windows when three saved and four external passages span five sources", async () => {
+  const originals = ["vault:1", "vault:2", "vault:3", "new:0", "new:0", "new:1", "new:1"].map(
+    (sourceId, i) => ({ ...ref, sourceId, start: i * 100, end: i * 100 + ref.text.length }),
+  );
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [0, 1, 2, 4, 6].map(i => ({ referenceId: `reference:${i}` })),
+      identity: [
+        { sourceId: "new:0", sameArtist: true, quote: ref.text },
+        { sourceId: "new:1", sameArtist: true, quote: ref.text },
+      ],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(
+    request,
+    originals,
+    { name: "Artist" },
+    ["new:0", "new:1"],
+    5000,
+  );
+  expect(result.sufficient).toBe(true);
+  expect(result.references).toEqual([0, 1, 2, 4, 6].map(i => originals[i]));
+  expect(result.confirmedIds).toEqual(["new:0", "new:1"]);
+  const prompt = JSON.parse(model.mock.calls[0][0].prompt);
+  expect(prompt.originals[4]).toMatchObject({
+    referenceId: "reference:4",
+    sourceId: "new:0",
+    start: 400,
+  });
+});
+it("does not accept a source ID in place of a window ID", async () => {
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [{ referenceId: ref.sourceId }],
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  expect(await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000)).toMatchObject({
+    sufficient: false,
+    failure: "invalid_evidence_selection",
+    references: [],
+  });
+});
+it("rejects focused over-selection rather than silently removing supporting windows", async () => {
+  const originals = Array.from({ length: 7 }, (_, i) => ({ ...ref, sourceId: `source:${i}` }));
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: originals.map((_, i) => ({ referenceId: `reference:${i}` })),
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  expect(
+    await assessResearchEvidence(request, originals, { name: "Artist" }, [], 5000),
+  ).toMatchObject({ sufficient: false, failure: "invalid_evidence_selection", references: [] });
 });

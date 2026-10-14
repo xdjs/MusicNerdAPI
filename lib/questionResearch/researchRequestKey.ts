@@ -4,6 +4,7 @@ import type { ResearchRequest } from "@/lib/questionResearch/types";
 /** Canonical request identity for concurrent reuse; never hash or persist an entire chat turn. */
 export function researchRequestKey(request: ResearchRequest): string {
   return knowledgeRevision([
+    "public-evidence-exploration-v1",
     request.topic.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim(),
     request.evidenceNeed,
     request.freshness,

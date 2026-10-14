@@ -95,7 +95,9 @@ export async function getStoredLatestProviders(
       latestActivityTime(b.card.date) - latestActivityTime(a.card.date) ||
       a.card.id.localeCompare(b.card.id),
   );
-  const originals: ResearchOriginal[] = selected.map(i => ({
+  // Card counts are presentation limits, not evidence eligibility. Preserve every
+  // connected stored original, including alternate provider records of a release.
+  const originals: ResearchOriginal[] = retained.map(i => ({
     ...i.original,
     retrievedAt: i.retrievedAt,
   }));

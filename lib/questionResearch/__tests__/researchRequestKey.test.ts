@@ -47,7 +47,7 @@ it("separates an overview from focused cached evidence and preserves omitted sco
     researchRequestKey(request),
   );
 });
-it("versions only overview evidence so completed old overviews are reassessed", () => {
+it("versions all evidence so cached cutoff results are reassessed", () => {
   const request = {
     topic: "latest updates",
     evidenceNeed: "reporting",
@@ -67,7 +67,7 @@ it("versions only overview evidence so completed old overviews are reassessed", 
     "overview",
   ]);
   expect(researchRequestKey(request)).not.toBe(old);
-  expect(researchRequestKey({ ...request, answerScope: "focused" })).toBe(
+  expect(researchRequestKey({ ...request, answerScope: "focused" })).not.toBe(
     knowledgeRevision(["latest updates", "reporting", "stored", null, null, null, null, "latest"]),
   );
 });

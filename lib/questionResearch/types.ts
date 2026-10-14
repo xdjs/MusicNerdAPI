@@ -113,6 +113,16 @@ export type QuestionResearchState = {
     finishReason?: string;
     causeName?: string;
   };
+  /** Bounded diagnostics only: source IDs and tool names, never source or conversation text. */
+  exploration?: {
+    eligibleSources: number;
+    toolCalls: number;
+    readChars: number;
+    calls: string[];
+    readSourceIds: string[];
+    rejectedIdCount: number;
+    stopReason: string;
+  };
   step?:
     "saved" | "search" | "pages" | "social_start" | "social_poll" | "social_collect" | "assess";
   inFlight?: "model" | "web" | "social_start";
@@ -124,6 +134,7 @@ export const QUESTION_RESEARCH_DAILY_GLOBAL = 100;
 export const SAVED_EVIDENCE_DAILY_ARTIST = 5;
 export const SAVED_EVIDENCE_DAILY_GLOBAL = 100;
 export const QUESTION_RESEARCH_CACHE_MS = 30 * 60_000;
+export const SAVED_RESEARCH_MODEL_STEPS = 5;
 export type ResearchOriginal = Omit<ResearchReference, "start" | "end">;
 export type ResearchCandidateRow = {
   id: string;

@@ -105,4 +105,48 @@ it("deduplicates release cards across known providers while retaining links and 
   expect(releases).toHaveLength(1);
   expect(releases[0].date).toBe("2025");
   expect(releases[0].listeningLinks?.map(l => l.siteName)).toEqual(["spotify", "deezer"]);
+  expect(result.originals.filter(i => i.activityDateKind === "release")).toHaveLength(2);
+});
+
+it("keeps every stored original available to research while retaining Latest card limits", async () => {
+  const storedMoments = Array.from(
+    { length: 13 },
+    (_, i) =>
+      normalizeLatestProviderItems("inprocess", addr, {
+        moments: [
+          {
+            id: String(i + 1),
+            address: addr,
+            token_id: String(i + 1),
+            chain_id: 8453,
+            created_at: `2026-09-${String(i + 1).padStart(2, "0")}T12:00:00Z`,
+            metadata: { name: `Moment ${i + 1}`, description: `Original ${i + 1}` },
+          },
+        ],
+      })[0],
+  );
+  const releases = normalizeLatestProviderItems("deezer", "12", {
+    data: Array.from({ length: 5 }, (_, i) => ({
+      id: i + 1,
+      title: `Release ${i + 1}`,
+      record_type: "album",
+      release_date: `2026-09-${String(i + 1).padStart(2, "0")}`,
+      link: `https://www.deezer.com/album/${i + 1}`,
+    })),
+  });
+  await client.query("update artist_latest_provider_snapshots set items=$1::jsonb", [
+    JSON.stringify(storedMoments),
+  ]);
+  await client.exec("update artists set deezer='12'");
+  await client.query(
+    "insert into artist_latest_provider_snapshots values($1,'deezer','12',$2::jsonb,'2026-10-08T15:00:00Z','2026-10-08T15:00:00Z','checked')",
+    [artist, JSON.stringify(releases)],
+  );
+  const result = await getStoredLatestProviders(artist, tx, Date.parse("2026-10-09T00:00:00Z"));
+  expect(result.items.filter(i => i.kind === "moment")).toHaveLength(12);
+  expect(result.items.filter(i => i.kind === "release")).toHaveLength(3);
+  expect(result.originals).toHaveLength(18);
+  expect(result.originals).toContainEqual(expect.objectContaining(storedMoments[0].original));
+  expect(result.originals).toContainEqual(expect.objectContaining(releases[0].original));
+  expect(result.originals.every(i => i.retrievedAt === "2026-10-08T15:00:00.000Z")).toBe(true);
 });
