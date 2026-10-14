@@ -312,3 +312,19 @@ it("does not carry an earlier identity confirmation into a changed unverified or
     ),
   ).rejects.toMatchObject({ status: 404 });
 });
+
+it("does not reopen approved Lore evidence publicly after the claim is revoked", async () => {
+  const { reference, candidate } = await retained();
+  await reviewResearchDiscovery(artist, user, candidate.id, reference.revision, "approve");
+  await client.exec("update artist_claims set status='rejected'");
+  await expect(
+    readResearchEvidence(
+      artist,
+      { kind: "service" },
+      reference.sourceId.split(":")[1],
+      reference.revision,
+      0,
+      4000,
+    ),
+  ).rejects.toMatchObject({ status: 404 });
+});
