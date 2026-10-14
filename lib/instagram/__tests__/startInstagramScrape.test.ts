@@ -48,13 +48,18 @@ describe("startInstagramScrape", () => {
 
   it("fails without a token, on a bad status, without an id and when fetch throws", async () => {
     vi.stubEnv("APIFY_API_TOKEN", "");
-    expect(await startInstagramScrape("x")).toEqual({ status: "failed", reason: "no apify token" });
+    expect(await startInstagramScrape("x")).toEqual({
+      status: "failed",
+      reason: "no apify token",
+      startRejected: true,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     vi.stubEnv("APIFY_API_TOKEN", "tok");
     fetchMock.mockResolvedValueOnce(json({}, false, 402));
     expect(await startInstagramScrape("x")).toEqual({
       status: "failed",
       reason: "apify start 402",
+      startRejected: true,
     });
     fetchMock.mockResolvedValueOnce(json({ data: {} }));
     expect(await startInstagramScrape("x")).toEqual({

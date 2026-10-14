@@ -1,3 +1,5 @@
+import { hasReusableDirectoryDiscovery } from "@/lib/directoryPreparation/hasReusableDirectoryDiscovery";
+import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import { waitAtMost } from "@/lib/async/waitAtMost";
 import { NARRATION, VAULT_DISCOVERY_BUDGET_MS } from "@/lib/onboarding/const";
 import type { TurnEvent } from "@/lib/onboarding/types";
@@ -14,14 +16,22 @@ import { searchAndPopulateVault } from "@/lib/vault/searchAndPopulateVault";
  *
  * @param artistId - The artist.
  * @param forceVaultDiscovery - Search even with sources pending (the confirm turn just routed some in).
+ * @param discoveryComplete - The current turn already performed discovery; do not repeat it.
  * @returns The step's events.
  */
 export async function* emitVaultStep(
   artistId: string,
   forceVaultDiscovery: boolean,
+  discoveryComplete = false,
 ): AsyncGenerator<TurnEvent> {
+  discoveryComplete ||=
+    !forceVaultDiscovery &&
+    (await hasReusableDirectoryDiscovery(
+      artistId,
+      getArtistOperationOwnership(artistId)?.expectedClaimId ?? null,
+    ));
   let pending = await getVaultSourcesByStatus(artistId, "pending");
-  if (forceVaultDiscovery || pending.length === 0) {
+  if (!discoveryComplete && (forceVaultDiscovery || pending.length === 0)) {
     const approved = (await getVaultSourcesByStatus(artistId, "approved")).filter(s => !s.filePath);
     if (forceVaultDiscovery || approved.length === 0) {
       yield { kind: "progress", label: "Searching the web for sources about you", done: false };

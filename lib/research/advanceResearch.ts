@@ -1,7 +1,7 @@
 import { claimResearchJob } from "@/lib/research/claimResearchJob";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
 import { MAX_ATTEMPTS, PERSIST_RESERVE_MS, PORTED_JOB_KINDS } from "@/lib/research/const";
-import { failResearchJob } from "@/lib/research/failResearchJob";
+import { failSocialJob } from "@/lib/research/failSocialJob";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { runResearchJob } from "@/lib/research/runResearchJob";
 import type { AdvanceResult, JobKind } from "@/lib/research/types";
@@ -35,7 +35,13 @@ export async function advanceResearch(opts: {
   // Killed mid-slice on every attempt (counted at the claim): stop here.
   if (job.attempts >= MAX_ATTEMPTS) {
     const message = `stopped before finishing ${job.attempts} times`;
-    await failResearchJob(job.id, message);
+    try {
+      await failSocialJob(job, message);
+    } catch (failure) {
+      if (!(failure instanceof OwnershipChangedError)) throw failure;
+      await completeResearchJob(job.id);
+      return { ...about, done: true, progress: "Research cancelled after ownership changed" };
+    }
     return { ...about, done: false, progress: `failed: ${message}` };
   }
   const deadline = Date.now() + Math.max(0, opts.budgetMs - PERSIST_RESERVE_MS);
@@ -50,7 +56,13 @@ export async function advanceResearch(opts: {
     }
     const message = e instanceof Error ? e.message : String(e);
     console.error(`[research] ${job.kind} failed for ${job.artistId}:`, message);
-    await failResearchJob(job.id, message);
+    try {
+      await failSocialJob(job, message);
+    } catch (failure) {
+      if (!(failure instanceof OwnershipChangedError)) throw failure;
+      await completeResearchJob(job.id);
+      return { ...about, done: true, progress: "Research cancelled after ownership changed" };
+    }
     return {
       ...about,
       progress: `failed: ${message}`,

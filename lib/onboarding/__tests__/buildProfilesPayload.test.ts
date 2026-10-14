@@ -76,4 +76,46 @@ describe("buildProfilesPayload", () => {
     m.getArtistById.mockResolvedValueOnce(undefined);
     await expect(buildProfilesPayload("a1")).rejects.toThrow("Artist not found: a1");
   });
+
+  it("includes the saved YouTube channel without treating it as a handle or changing its removal key", async () => {
+    m.getArtistById.mockResolvedValueOnce({
+      id: "a1",
+      name: "Nova Reyes",
+      deezer: "65660322",
+      youtube: null,
+      youtubechannel: "UCexample",
+    });
+    m.getAllLinks.mockResolvedValueOnce([
+      { siteName: "deezer", cardPlatformName: "Deezer", appStringFormat: "deezer" },
+      {
+        siteName: "youtube",
+        cardPlatformName: "YouTube",
+        siteImage: "youtube-logo",
+        appStringFormat: "https://youtube.com/@%@",
+      },
+    ]);
+    const payload = await buildProfilesPayload("a1");
+    expect(payload.links).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          siteName: "deezer",
+          profileUrl: "https://www.deezer.com/artist/65660322",
+        }),
+        expect.objectContaining({
+          siteName: "youtubechannel",
+          value: "UCexample",
+          displayName: "YouTube",
+          logoUrl: "youtube-logo",
+          profileUrl: "https://www.youtube.com/channel/UCexample",
+        }),
+      ]),
+    );
+    expect(payload.links.some(l => l.siteName === "youtube")).toBe(false);
+    expect(m.previews).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        ["deezer", "https://www.deezer.com/artist/65660322"],
+        ["youtubechannel", "https://www.youtube.com/channel/UCexample"],
+      ]),
+    );
+  });
 });

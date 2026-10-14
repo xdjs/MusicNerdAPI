@@ -1,12 +1,12 @@
+import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
 import { appendSocialCredits } from "@/lib/credits/appendSocialCredits";
 import { claimedSourceUrls } from "@/lib/credits/claimedSourceUrls";
 import { SWEEP_RESERVE_MS } from "@/lib/credits/const";
 import { sweepSilentCaptions } from "@/lib/credits/sweepSilentCaptions";
 import type { ExtractionSlice } from "@/lib/credits/types";
 import type { SocialPostRow } from "@/lib/instagram/types";
-import { failJobAtCursor } from "@/lib/research/failJobAtCursor";
-import { failResearchJob } from "@/lib/research/failResearchJob";
-import { saveJobProgress } from "@/lib/research/saveJobProgress";
+import { failSocialJob } from "@/lib/research/failSocialJob";
+import { saveSocialJobProgress } from "@/lib/research/saveSocialJobProgress";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 
 /**
@@ -36,7 +36,7 @@ export async function sweepCaptionJob(
   if (job.state?.swept === true) return null;
   const progress = { total: read.totalBatches, state: job.state };
   if (deadline - Date.now() < SWEEP_RESERVE_MS) {
-    await saveJobProgress(job.id, read.nextBatch, progress);
+    await saveSocialJobProgress(job, read.nextBatch, progress);
     return { progress: "batches done, sweep deferred to the next slice", done: false };
   }
   const sweepStart = typeof job.state?.sweepCursor === "number" ? job.state.sweepCursor : 0;
@@ -45,10 +45,14 @@ export async function sweepCaptionJob(
     await claimedSourceUrls(job.artistId),
     artist.name,
     artist.instagram ?? "",
-    { budgetMs: deadline - Date.now(), startBatch: sweepStart },
+    {
+      budgetMs: deadline - Date.now(),
+      startBatch: sweepStart,
+      beforeBatch: () => assertSocialJobActive(job),
+    },
   );
   if ((await appendSocialCredits(job.artistId, swept.extraction, postedAtByUrl, job.id)) === null) {
-    await failResearchJob(job.id, "could not store swept credits");
+    await failSocialJob(job, "could not store swept credits");
     return { progress: "sweep storage failed", done: false };
   }
   job.state = swept.done
@@ -56,16 +60,14 @@ export async function sweepCaptionJob(
     : { ...job.state, sweepCursor: swept.nextBatch };
   if (swept.failed) {
     // One write: saving progress first would reset attempts and the job could never give up.
-    await failJobAtCursor(
-      job.id,
-      read.nextBatch,
-      read.totalBatches,
-      job.state,
-      "a sweep batch could not be read",
-    );
+    await failSocialJob(job, "a sweep batch could not be read", {
+      cursor: read.nextBatch,
+      total: read.totalBatches,
+      state: job.state,
+    });
     return { progress: "sweep batch failed, will retry", done: false };
   }
-  await saveJobProgress(job.id, read.nextBatch, { total: read.totalBatches, state: job.state });
+  await saveSocialJobProgress(job, read.nextBatch, { total: read.totalBatches, state: job.state });
   if (!swept.done)
     return { progress: `sweeping, ${swept.nextBatch}/${swept.totalBatches}`, done: false };
   return null;

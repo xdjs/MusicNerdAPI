@@ -1,3 +1,4 @@
+import { getReusableDirectoryDraft } from "@/lib/directoryPreparation/getReusableDirectoryDraft";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { ARTIST_DOC_MAX_CHARS } from "@/lib/lore/const";
 import { extractCitedIds } from "@/lib/lore/extractCitedIds";
@@ -41,6 +42,20 @@ export async function* handleAboutChoiceTurn(
     return;
   }
 
+  const prepared = await getReusableDirectoryDraft(artistId);
+  if (prepared?.document === doc) {
+    yield { kind: "chat", text: NARRATION.draftReady };
+    const citedIds = new Set([...extractCitedIds(doc), ...extractCitedIds(prepared.about)]);
+    yield {
+      kind: "draft",
+      stage: "about",
+      doc,
+      about: prepared.about,
+      sources: prepared.sources.filter(s => citedIds.has(s.id)),
+      expectedBio,
+    };
+    return;
+  }
   yield { kind: "chat", text: NARRATION.writingAbout };
   yield { kind: "progress", label: "Writing your About", done: false };
   const startedAt = Date.now();

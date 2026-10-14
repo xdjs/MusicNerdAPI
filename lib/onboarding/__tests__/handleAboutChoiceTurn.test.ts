@@ -4,6 +4,7 @@ import { emitStepMock } from "@/lib/onboarding/__tests__/emitStepMock";
 import { turnContext } from "@/lib/onboarding/__tests__/turnContext";
 
 const m = vi.hoisted(() => ({
+  prepared: vi.fn(),
   emitStep: vi.fn(),
   artist: vi.fn(),
   about: vi.fn(),
@@ -13,6 +14,9 @@ vi.mock("@/lib/onboarding/emitStep", () => ({ emitStep: m.emitStep }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.artist }));
 vi.mock("@/lib/lore/generateAboutFromDoc", () => ({ generateAboutFromDoc: m.about }));
 vi.mock("@/lib/lore/synthesizeFallbackAbout", () => ({ synthesizeFallbackAbout: m.fallback }));
+vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
+  getReusableDirectoryDraft: m.prepared,
+}));
 const { handleAboutChoiceTurn } = await import("@/lib/onboarding/handleAboutChoiceTurn");
 
 const S = [
@@ -22,6 +26,7 @@ const S = [
 ];
 
 beforeEach(() => {
+  m.prepared.mockReset().mockResolvedValue(null);
   m.emitStep.mockReset().mockImplementation(emitStepMock());
   m.artist.mockReset().mockResolvedValue({ id: "a1", name: "Nova", bio: "Bio now" });
   m.about.mockReset().mockResolvedValue("About[2].");
@@ -108,4 +113,27 @@ describe("handleAboutChoiceTurn", () => {
     });
     expect(m.emitStep).toHaveBeenCalledWith("a1", "publish");
   });
+});
+
+it("reuses prepared About only when the artist kept the exact reviewed document", async () => {
+  m.prepared.mockResolvedValue({ document: "Prepared[1].", about: "Ready About[1].", sources: S });
+  const events = await collect(
+    handleAboutChoiceTurn(turnContext("publish"), {
+      type: "about_choice",
+      mode: "generate",
+      doc: "Prepared[1].",
+      sources: S as never,
+    }),
+  );
+  expect(events.at(-1)).toMatchObject({ kind: "draft", stage: "about", about: "Ready About[1]." });
+  expect(m.about).not.toHaveBeenCalled();
+  await collect(
+    handleAboutChoiceTurn(turnContext("publish"), {
+      type: "about_choice",
+      mode: "generate",
+      doc: "Artist corrected this[1].",
+      sources: S as never,
+    }),
+  );
+  expect(m.about).toHaveBeenCalled();
 });

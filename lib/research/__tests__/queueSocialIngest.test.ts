@@ -9,6 +9,9 @@ const { txExecute, lockScoped, lockRow, ownership, record } = vi.hoisted(() => (
   record: vi.fn(),
 }));
 const tx = { execute: txExecute };
+vi.mock("@/lib/research/resumeDirectorySocialJobs", () => ({
+  resumeDirectorySocialJobs: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("@/lib/db/db", () => ({
   db: { transaction: async (fn: (t: unknown) => unknown) => fn(tx) },
 }));
@@ -67,4 +70,16 @@ describe("queueSocialIngest", () => {
     expect(await queueSocialIngest("a1", {})).toBe(false);
     error.mockRestore();
   });
+});
+it("does not recreate an already queued directory social child after it completes or fails", async () => {
+  ownership.mockReturnValue({
+    expectedClaimId: null,
+    trigger: "directory_add",
+    activityId: "directory",
+  });
+  txExecute.mockResolvedValueOnce([{ id: "already-durable" }]);
+  expect(await queueSocialIngest("a1", { directoryActivityId: "directory" })).toBe(true);
+  expect(record).not.toHaveBeenCalled();
+  expect(txExecute).toHaveBeenCalledTimes(1);
+  expect(renderSql(txExecute.mock.calls[0][0]).text).toContain("state->>'directoryActivityId'");
 });

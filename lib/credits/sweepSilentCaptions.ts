@@ -24,7 +24,7 @@ export async function sweepSilentCaptions(
   claimedUrls: Set<string>,
   artistName: string,
   artistHandle: string,
-  opts?: { budgetMs?: number; startBatch?: number },
+  opts?: { budgetMs?: number; startBatch?: number; beforeBatch?: () => Promise<void> },
 ): Promise<ExtractionSlice> {
   const silent = captionBearingPosts(allPosts).filter(p => !claimedUrls.has(p.url));
   if (silent.length === 0) {

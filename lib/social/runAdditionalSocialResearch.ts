@@ -1,3 +1,4 @@
+import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { persistSocialResearch } from "@/lib/social/persistSocialResearch";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
@@ -14,6 +15,7 @@ export async function runAdditionalSocialResearch(
   job: ResearchJob,
   deadline: number,
 ): Promise<SliceOutcome | null> {
+  await assertSocialJobActive(job);
   if (deadline - Date.now() < 35_000) {
     job.state = { ...job.state, instagramFinished: true };
     await persistSocialResearch(job, true);
@@ -53,7 +55,9 @@ export async function runAdditionalSocialResearch(
     else {
       task.startRequested = true;
       await persistSocialResearch(job, false);
+      await assertSocialJobActive(job);
       const result = await startSocialScrape(task);
+      await assertSocialJobActive(job);
       if (result.status === "started") task.runId = result.runId;
       else failure = result.status === "failed" ? result.reason : "apify did not start";
     }

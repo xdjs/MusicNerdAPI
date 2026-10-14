@@ -135,6 +135,7 @@ describe("runCaptionExtract", () => {
     expect(m.extractCaptionCredits).toHaveBeenCalledWith(posts, "Bio Ritmo", "bioritmo", {
       startBatch: 1,
       budgetMs: expect.any(Number),
+      beforeBatch: expect.any(Function),
     });
     const dated = m.appendSocialCredits.mock.calls[0][2] as Map<string, string | null>;
     expect(dated.get(posts[0].url)).toBe(posts[0].postedAt);

@@ -1,3 +1,5 @@
+import { hasReusableDirectoryDiscovery } from "@/lib/directoryPreparation/hasReusableDirectoryDiscovery";
+import { emitVaultStep } from "@/lib/onboarding/emitVaultStep";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { PROFILE_DISPLAY_COLUMNS } from "@/lib/links/const";
 import { applyProfileLinkDecisions } from "@/lib/onboarding/applyProfileLinkDecisions";
@@ -57,8 +59,14 @@ export async function* handleConfirmProfilesTurn(
   if (outcome.routedToVaultPending.length > 0)
     yield { kind: "chat", text: buildRoutedToVaultPendingMessage(outcome.routedToVaultPending) };
   yield { kind: "chat", text: NARRATION.profilesDone };
-  yield* emitStep(artistId, "vault", {
-    forceVaultDiscovery:
-      outcome.routedToVaultApproved.length + outcome.routedToVaultPending.length > 0,
-  });
+  const reuse =
+    addedLinks.length === 0 &&
+    (turn.removedSiteNames ?? []).length === 0 &&
+    (await hasReusableDirectoryDiscovery(artistId, ctx.ownership?.expectedClaimId ?? null));
+  if (reuse) yield* emitVaultStep(artistId, false, true);
+  else
+    yield* emitStep(artistId, "vault", {
+      forceVaultDiscovery:
+        outcome.routedToVaultApproved.length + outcome.routedToVaultPending.length > 0,
+    });
 }

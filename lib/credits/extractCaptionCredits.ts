@@ -28,7 +28,7 @@ export async function extractCaptionCredits(
   allPosts: SocialPostRow[],
   artistName: string,
   artistHandle: string,
-  opts?: { startBatch?: number; budgetMs?: number },
+  opts?: { startBatch?: number; budgetMs?: number; beforeBatch?: () => Promise<void> },
 ): Promise<ExtractionSlice> {
   const posts = captionBearingPosts(allPosts);
   const batches: SocialPostRow[][] = [];
@@ -58,6 +58,7 @@ export async function extractCaptionCredits(
     // Stop BEFORE starting a batch we cannot finish.
     if (Date.now() + callBudget > deadline && i > start) break;
 
+    await opts?.beforeBatch?.();
     const group = batches.slice(i, i + BATCH_CONCURRENCY);
     const results = await Promise.all(
       group.map((batch, n) =>

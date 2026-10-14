@@ -29,7 +29,7 @@ export async function failJobAtCursor(
              attempts = attempts + 1,
              status = case when attempts + 1 >= ${MAX_ATTEMPTS} then 'failed' else 'pending' end,
              claimed_at = null, last_error = ${error.slice(0, 500)}, updated_at = now()
-       where id = ${jobId}::uuid`);
+       where id = ${jobId}::uuid and not (state ? 'directoryHandedOffToClaim')`);
   } catch (e) {
     console.error("[failJobAtCursor] Error:", e);
   }

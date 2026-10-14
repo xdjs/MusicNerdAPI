@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   complete: vi.fn(),
   enqueue: vi.fn(),
 }));
+vi.mock("@/lib/research/saveSocialJobState", () => ({ saveSocialJobState: vi.fn() }));
 vi.mock("@/lib/social/runAdditionalSocialResearch", () => ({
   runAdditionalSocialResearch: m.additional,
 }));
@@ -32,5 +33,18 @@ describe("social research handoff", () => {
       parentJobId: "job-1",
       state: { incremental: true, rebuildForVideoContext: true },
     });
+  });
+});
+
+it("preserves original directory authority in the caption child", async () => {
+  m.additional.mockResolvedValueOnce(null);
+  await finishSocialIngest(
+    captionJob({ directoryActivityId: "event" }),
+    Date.now() + 55_000,
+    "done",
+  );
+  expect(m.enqueue).toHaveBeenLastCalledWith("artist-1", "caption_extract", {
+    parentJobId: "job-1",
+    state: { directoryActivityId: "event" },
   });
 });

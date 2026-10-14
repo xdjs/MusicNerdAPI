@@ -1,3 +1,9 @@
+import { recordDirectoryDiscovery } from "@/lib/directoryPreparation/recordDirectoryDiscovery";
+import { hasSavedDirectoryDiscovery } from "@/lib/directoryPreparation/hasSavedDirectoryDiscovery";
+import { completeDirectoryDiscovery } from "@/lib/directoryPreparation/completeDirectoryDiscovery";
+import { queueDirectoryPreparation } from "@/lib/directoryPreparation/queueDirectoryPreparation";
+import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
+import { queueSocialIngest } from "@/lib/research/queueSocialIngest";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { artistActivityEvents } from "@/lib/db/schema";
@@ -37,17 +43,57 @@ export async function runSourceSearchJob(
     await completeResearchJob(job.id);
     return { progress: "Research cancelled: initiating account was deleted", done: true };
   }
+  const directory = event.trigger === "directory_add";
+  if (
+    directory &&
+    (event.action !== "directory_add" ||
+      event.actorKind !== "user" ||
+      job.state.claimId !== null ||
+      job.state.purpose !== "directory_preparation" ||
+      job.state.creationActivityId !== event.id)
+  ) {
+    throw new Error("Invalid directory research authorization");
+  }
+  if (!directory && job.state.purpose === "directory_preparation")
+    throw new Error("Invalid directory research authorization");
+  let activeJob = job;
+  let leaseChanged = false;
   const sources = await withArtistOperation(
     job.artistId,
     {
-      userId: event.actorUserId ?? undefined,
+      userId: directory ? undefined : (event.actorUserId ?? undefined),
       expectedClaimId: typeof job.state.claimId === "string" ? job.state.claimId : null,
       trigger: event.trigger,
       activityId: event.id,
       sourceOrigin: "research",
     },
-    () => searchAndPopulateVault(job.artistId, { deadline, requireComplete: true }),
+    async () => {
+      if (directory) await db.transaction(tx => lockScopedArtistWrite(tx, job.artistId));
+      const reuse = directory && (await hasSavedDirectoryDiscovery(activeJob));
+      if (reuse === null) {
+        leaseChanged = true;
+        return [];
+      }
+      const sources = reuse
+        ? []
+        : await searchAndPopulateVault(job.artistId, { deadline, requireComplete: true });
+      if (directory && !reuse) {
+        const recorded = await recordDirectoryDiscovery(activeJob);
+        if (!recorded) {
+          leaseChanged = true;
+          return sources;
+        }
+        activeJob = recorded;
+      }
+      if (directory) await queueDirectoryPreparation(job.artistId);
+      if (directory && !(await queueSocialIngest(job.artistId, { directoryActivityId: event.id })))
+        throw new Error("Could not queue directory social discovery");
+      return sources;
+    },
   );
-  await completeResearchJob(job.id);
+  if (directory) {
+    if (leaseChanged || !(await completeDirectoryDiscovery(activeJob)))
+      return { progress: "Directory discovery lease changed", done: false, waiting: true };
+  } else await completeResearchJob(job.id);
   return { progress: `Source search finished, ${sources.length} sources added`, done: true };
 }

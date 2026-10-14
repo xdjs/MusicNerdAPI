@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 
-const m = vi.hoisted(() => ({ sources: vi.fn(), search: vi.fn() }));
+const m = vi.hoisted(() => ({ sources: vi.fn(), search: vi.fn(), reuse: vi.fn() }));
+vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
+  hasReusableDirectoryDiscovery: m.reuse,
+}));
 vi.mock("@/lib/vault/getVaultSourcesByStatus", () => ({ getVaultSourcesByStatus: m.sources }));
 vi.mock("@/lib/vault/searchAndPopulateVault", () => ({ searchAndPopulateVault: m.search }));
 const { emitVaultStep } = await import("@/lib/onboarding/emitVaultStep");
@@ -19,11 +22,17 @@ const src = (id: string, extra: object = {}) => ({
 });
 
 beforeEach(() => {
+  m.reuse.mockReset().mockResolvedValue(false);
   m.sources.mockReset().mockResolvedValue([]);
   m.search.mockReset().mockResolvedValue([]);
 });
 
 describe("emitVaultStep", () => {
+  it("shows an empty review after completed discovery without starting a second search", async () => {
+    const events = await collect(emitVaultStep("a1", false, true));
+    expect(m.search).not.toHaveBeenCalled();
+    expect(events.at(-1)).toEqual({ kind: "step", step: "vault", payload: { sources: [] } });
+  });
   it("shows pending sources with whether each was verified, without searching", async () => {
     m.sources.mockImplementation(async (_a: string, status: string) =>
       status === "pending" ? [src("1"), src("2", { extractedText: null })] : [],
@@ -91,4 +100,15 @@ describe("emitVaultStep", () => {
     await collect(emitVaultStep("a1", false));
     expect(m.search).not.toHaveBeenCalled();
   });
+});
+
+it("a resumed empty review reuses completed directory discovery", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(emitVaultStep("a1", false));
+  expect(m.search).not.toHaveBeenCalled();
+});
+it("an explicit forced search still works after completed directory discovery", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(emitVaultStep("a1", true));
+  expect(m.search).toHaveBeenCalled();
 });

@@ -1,3 +1,4 @@
+import { runDirectoryPreparation } from "@/lib/directoryPreparation/runDirectoryPreparation";
 import { DOC_REBUILD_RESERVE_MS } from "@/lib/lore/const";
 import { refreshArtistDoc } from "@/lib/lore/refreshArtistDoc";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
@@ -15,6 +16,7 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  * @returns What the slice did. Throws when the rebuild failed, so the caller counts the attempt.
  */
 export async function runLoreRefresh(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
+  if (job.state.purpose === "directory_preparation") return runDirectoryPreparation(job, deadline);
   if (deadline - Date.now() < DOC_REBUILD_RESERVE_MS) {
     await saveJobProgress(job.id, job.cursor);
     return { progress: "Waiting for a full Lore rebuild budget", done: false, waiting: true };

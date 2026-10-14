@@ -23,7 +23,7 @@ export async function startInstagramScrape(
   opts?: { limit?: number; maxTotalChargeUsd?: number; onlyPostsNewerThan?: string },
 ): Promise<ApifyRunState> {
   const token = process.env.APIFY_API_TOKEN ?? "";
-  if (!token) return { status: "failed", reason: "no apify token" };
+  if (!token) return { status: "failed", reason: "no apify token", startRejected: true };
   const limit = Math.min(Math.max(1, opts?.limit ?? DEFAULT_SCRAPE_LIMIT), MAX_SCRAPE_LIMIT);
   try {
     const query = new URLSearchParams({ token });
@@ -43,7 +43,14 @@ export async function startInstagramScrape(
       }),
       signal: AbortSignal.timeout(APIFY_CONTROL_TIMEOUT_MS),
     });
-    if (!res.ok) return { status: "failed", reason: `apify start ${res.status}` };
+    if (!res.ok)
+      return {
+        status: "failed",
+        reason: `apify start ${res.status}`,
+        ...(res.status >= 400 && res.status < 500 && res.status !== 408
+          ? { startRejected: true as const }
+          : {}),
+      };
     const body = (await res.json()) as { data?: { id?: string } };
     const runId = body?.data?.id;
     return runId

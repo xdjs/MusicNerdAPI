@@ -1,3 +1,4 @@
+import { resumeDirectorySocialJobs } from "@/lib/research/resumeDirectorySocialJobs";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { db } from "@/lib/db/db";
@@ -14,7 +15,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
  *
  * @param artistId - The artist.
  * @param state - The job's starting state, e.g. `{ force: true }`.
- * @returns True when a scrape is live afterwards; false while Latest owns the check or on a database error. A changed claim throws.
+ * @returns True when the durable handoff is accepted or already exists, including terminal jobs; false while Latest owns the check or on a database error. A changed claim throws.
  */
 export async function queueSocialIngest(
   artistId: string,
@@ -24,12 +25,32 @@ export async function queueSocialIngest(
     return await db.transaction(async tx => {
       if (getArtistOperationOwnership(artistId)) await lockScopedArtistWrite(tx, artistId);
       else await lockArtistRow(tx, artistId);
+      if (typeof state.directoryActivityId === "string") {
+        const existing = rowsOf(
+          await tx.execute(
+            sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='social_ingest' and state->>'directoryActivityId'=${state.directoryActivityId} limit 1`,
+          ),
+        );
+        if (existing.length) return true;
+      }
       const latest = await tx.execute(sql`select id from artist_research_jobs
         where artist_id=${artistId}::uuid and kind='latest_refresh'
         and status in ('pending','running') and state->'sources'->'instagram'->>'status'='pending'
         limit 1`);
       if (rowsOf(latest).length) return false;
       const activityId = await recordArtistActivity(artistId, "social_ingest", {}, tx);
+      const scope = getArtistOperationOwnership(artistId);
+      if (
+        scope?.expectedClaimId &&
+        (await resumeDirectorySocialJobs(
+          tx,
+          artistId,
+          scope.expectedClaimId,
+          activityId,
+          state.force === true,
+        ))
+      )
+        return true;
       await tx.execute(sql`
         insert into artist_research_jobs (artist_id, kind, total, state, activity_id)
         values (${artistId}::uuid, ${"social_ingest"}, ${null}, ${JSON.stringify(state)}::jsonb, ${activityId}::uuid)

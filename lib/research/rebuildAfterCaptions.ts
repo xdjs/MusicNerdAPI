@@ -1,10 +1,12 @@
+import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
+import { saveSocialJobState } from "@/lib/research/saveSocialJobState";
 import { DOC_REBUILD_RESERVE_MS } from "@/lib/lore/const";
 import type { ExtractionSlice } from "@/lib/credits/types";
 import { refreshArtistDoc } from "@/lib/lore/refreshArtistDoc";
 import { completeResearchJob } from "@/lib/research/completeResearchJob";
-import { failResearchJob } from "@/lib/research/failResearchJob";
+import { failSocialJob } from "@/lib/research/failSocialJob";
 import { queueLoreRefreshAfterCaptions } from "@/lib/research/queueLoreRefreshAfterCaptions";
-import { saveJobProgress } from "@/lib/research/saveJobProgress";
+import { saveSocialJobProgress } from "@/lib/research/saveSocialJobProgress";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 
 /**
@@ -25,13 +27,28 @@ export async function rebuildAfterCaptions(
   read: ExtractionSlice,
   deadline: number,
 ): Promise<SliceOutcome> {
+  await assertSocialJobActive(job);
+  if ("directoryActivityId" in job.state) {
+    await saveSocialJobState(job, { ...job.state, directoryCaptionsComplete: true });
+    await completeResearchJob(job.id);
+    return { progress: "Public captions prepared for artist review", done: true };
+  }
   if (deadline - Date.now() < DOC_REBUILD_RESERVE_MS) {
-    await saveJobProgress(job.id, read.nextBatch, { total: read.totalBatches, state: job.state });
+    await saveSocialJobProgress(job, read.nextBatch, {
+      total: read.totalBatches,
+      state: job.state,
+    });
     return { progress: "credits stored, document rebuild deferred", done: false };
+  }
+  if (job.state.resumedFromDirectoryJobId) {
+    await queueLoreRefreshAfterCaptions(job);
+    await saveSocialJobState(job, { ...job.state, directoryCaptionsComplete: true });
+    await completeResearchJob(job.id);
+    return { progress: "Captions complete, Lore refresh queued", done: true };
   }
   const rebuilt = await refreshArtistDoc(job.artistId);
   if (rebuilt === "failed") {
-    await failResearchJob(job.id, "credits stored but the document rebuild failed");
+    await failSocialJob(job, "credits stored but the document rebuild failed");
     return { progress: "credits stored, document rebuild failed — will retry", done: false };
   }
   const queued = rebuilt === "no-document" ? await queueLoreRefreshAfterCaptions(job) : null;
