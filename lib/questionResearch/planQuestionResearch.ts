@@ -12,14 +12,8 @@ export function planQuestionResearch(
   const targetUrl = request.targetUrl ? validateResearchUrl(request.targetUrl) : undefined;
   const url = targetUrl ? new URL(targetUrl) : null;
   const host = url?.hostname.replace(/^www\./, "");
-  const latestPlatform =
-    !targetUrl &&
-    request.retrieval === "latest" &&
-    ["reporting", "social_caption"].includes(request.evidenceNeed)
-      ? (["instagram", "tiktok", "x"] as const).find(p => connectedResearchHandle(artist[p], p))
-      : undefined;
   const targetPlatform = targetUrl ? researchPlatformForUrl(targetUrl) : undefined;
-  const platform = targetPlatform ?? request.platform ?? latestPlatform;
+  const platform = targetPlatform ?? request.platform;
   const unresolved = (reason: string): ResearchPlan => ({
     provider: null,
     stage: "unresolved",

@@ -427,3 +427,35 @@ it("does not widen latest release or caption focus even when overview scope is s
       ),
     ).toHaveLength(3);
 });
+
+it("reads a date-scoped caption even when the question has no caption keywords", () => {
+  const post = {
+    ...original,
+    sourceId: "social:date",
+    url: "https://www.instagram.com/p/dated/",
+    evidenceKind: "caption" as const,
+    text: "Which version of PPNE is your favorite?",
+    publishedAt: "2026-10-07T18:13:17Z",
+  };
+  const other = {
+    ...post,
+    sourceId: "social:other",
+    url: "https://www.instagram.com/p/other/",
+    publishedAt: "2026-10-05T12:00:00Z",
+  };
+  const result = selectResearchReferences(
+    [other, post],
+    {
+      topic: "LATASHA October 7 2026 social media post content",
+      evidenceNeed: "social_caption",
+      freshness: "stored",
+      retrieval: "relevance",
+      fromDate: "2026-10-07",
+      toDate: "2026-10-07",
+    },
+    "LATASHA",
+    Date.parse("2026-10-14"),
+  );
+  expect(result.map(r => r.sourceId)).toEqual([post.sourceId]);
+  expect(result[0].text).toBe(post.text);
+});

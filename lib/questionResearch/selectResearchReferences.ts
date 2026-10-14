@@ -141,9 +141,14 @@ export function selectResearchReferences(
     },
     { maxPassagesPerSource: 2 },
   );
-  // A specific URL is an instruction to inspect that original, even without lexical overlap.
-  if (!result.passages.length && request.targetUrl) {
-    return eligible
+  // Explicit source/date constraints identify originals even when the question has no body keywords.
+  if (!result.passages.length && (request.targetUrl || request.fromDate || request.toDate)) {
+    return [...eligible]
+      .sort(
+        (a, b) =>
+          (Number.isFinite(timeOf(b)) ? timeOf(b) : 0) -
+          (Number.isFinite(timeOf(a)) ? timeOf(a) : 0),
+      )
       .slice(0, 3)
       .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
   }

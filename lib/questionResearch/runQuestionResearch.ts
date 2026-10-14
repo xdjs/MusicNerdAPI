@@ -11,6 +11,7 @@ import { loadPublicResearchOriginals } from "@/lib/questionResearch/loadPublicRe
 import { selectResearchReferences } from "@/lib/questionResearch/selectResearchReferences";
 import { assessResearchEvidence } from "@/lib/questionResearch/assessResearchEvidence";
 import { checkpointQuestionResearch } from "@/lib/questionResearch/checkpointQuestionResearch";
+import { getQuestionResearchOptions } from "@/lib/questionResearch/getQuestionResearchOptions";
 import { planQuestionResearch } from "@/lib/questionResearch/planQuestionResearch";
 import { startQuestionSocialRun } from "@/lib/questionResearch/startQuestionSocialRun";
 import { collectQuestionSocialOriginals } from "@/lib/questionResearch/collectQuestionSocialOriginals";
@@ -82,8 +83,13 @@ export async function runQuestionResearch(
     }
     if (deadline - Date.now() < 25000) return await finish();
     const artist = await loadResearchArtist(job.artistId);
-    const plan = planQuestionResearch(state.request, artist);
-    if (state.plan && !isDeepStrictEqual(plan, state.plan)) {
+    const options = getQuestionResearchOptions(state.request, artist);
+    let plan = state.plan ?? planQuestionResearch(state.request, artist);
+    if (
+      state.plan &&
+      state.plan.provider &&
+      !options.some(option => isDeepStrictEqual(option, state.plan))
+    ) {
       state.stage = "cancelled";
       state.errorCode = "source_identity_changed";
       state.references = [];
@@ -94,7 +100,7 @@ export async function runQuestionResearch(
         const originals = await loadPublicResearchOriginals(job.artistId);
         const references = selectResearchReferences(originals, state.request, artist.name ?? "");
         state.references = references;
-        if (references.length) {
+        if (references.length || (!state.savedOnly && options.length)) {
           if (!(await reserve("model"))) return stale;
           const assessment = await assessResearchEvidence(
             state.request,
@@ -102,6 +108,7 @@ export async function runQuestionResearch(
             artist,
             [],
             deadline - Date.now() - 1000,
+            state.savedOnly ? [] : options,
           );
           delete state.inFlight;
           state.inputTokens += assessment.inputTokens;
@@ -110,6 +117,14 @@ export async function runQuestionResearch(
             state.references = assessment.references;
             state.stage = "complete";
             return await finish();
+          }
+          // The model selects a tool, but only the server's validated plan can execute.
+          if (assessment.nextLookup !== undefined) {
+            plan = options.find(option => option.provider === assessment.nextLookup) ?? {
+              provider: null,
+              stage: "unresolved",
+              reason: assessment.limitation,
+            };
           }
         }
         if (state.savedOnly) {

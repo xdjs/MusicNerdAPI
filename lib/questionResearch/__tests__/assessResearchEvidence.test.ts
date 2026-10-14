@@ -24,11 +24,11 @@ const ref = {
 beforeEach(() => {
   vi.resetAllMocks();
 });
-it("requires literal original support, not a model's unsupported source label", async () => {
+it("rejects a model-invented source ID", async () => {
   model.mockResolvedValue({
     output: {
       sufficient: true,
-      supports: [{ sourceId: "vault:1", quote: "Artist produced the track" }],
+      supports: [{ sourceId: "vault:invented", quote: "Artist produced the track" }],
       identity: [],
       limitation: "none",
     },
@@ -51,7 +51,7 @@ it("retains supporting context and qualifications without turning approval into 
   const r = await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000);
   expect(r.sufficient).toBe(true);
   expect(r.references[0].text).toContain("not used");
-  expect(model.mock.calls[0][0]).toMatchObject({ maxRetries: 0, maxOutputTokens: 1800 });
+  expect(model.mock.calls[0][0]).toMatchObject({ maxRetries: 0, maxOutputTokens: 2800 });
   expect(model.mock.calls[0][0].abortSignal).toBeInstanceOf(AbortSignal);
 });
 it("accepts the same contiguous quote when the model collapses whitespace", async () => {
@@ -198,4 +198,19 @@ it("treats semantic exclusions as eligibility boundaries before accepting dated 
   expect(model.mock.calls[0][0].instructions).toContain(
     "A different URL does not make the same excluded project a new activity",
   );
+});
+
+it("selects readable originals without requiring a duplicate generated quotation", async () => {
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [{ sourceId: ref.sourceId }],
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(request, [ref], { name: "Artist" }, [], 5000);
+  expect(result.sufficient).toBe(true);
+  expect(result.references).toEqual([ref]);
 });
