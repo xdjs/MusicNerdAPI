@@ -18,7 +18,8 @@ export async function buildProfilesPayload(artistId: string) {
   const artist = await getArtistById(artistId);
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const record = artist as unknown as Record<string, unknown>;
-  const rawLinks = PROFILE_DISPLAY_COLUMNS.flatMap(col => {
+  // A saved channel is displayable without expanding discovery's writable targets.
+  const rawLinks = [...PROFILE_DISPLAY_COLUMNS, "youtubechannel"].flatMap(col => {
     const value = record[col];
     return typeof value === "string" && value ? [{ siteName: col as string, value }] : [];
   });
@@ -29,7 +30,12 @@ export async function buildProfilesPayload(artistId: string) {
     metaBySiteName = new Map(
       rawLinks.map(({ siteName, value }) => [
         siteName,
-        buildLinkPresentationMeta(bySiteName.get(siteName), siteName, value),
+        buildLinkPresentationMeta(
+          bySiteName.get(siteName) ??
+            (siteName === "youtubechannel" ? bySiteName.get("youtube") : undefined),
+          siteName,
+          value,
+        ),
       ]),
     );
   } catch (e) {
