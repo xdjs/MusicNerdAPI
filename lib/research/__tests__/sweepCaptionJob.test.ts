@@ -87,6 +87,7 @@ describe("sweepCaptionJob", () => {
       "bioritmo",
       {
         budgetMs: expect.any(Number),
+        beforeBatch: expect.any(Function),
         startBatch: 3,
       },
     );

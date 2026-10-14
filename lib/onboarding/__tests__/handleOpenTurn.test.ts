@@ -3,12 +3,16 @@ import { collect } from "@/lib/onboarding/__tests__/collect";
 import { emitStepMock } from "@/lib/onboarding/__tests__/emitStepMock";
 import { turnContext } from "@/lib/onboarding/__tests__/turnContext";
 
-const m = vi.hoisted(() => ({ emitStep: vi.fn(), autoBuild: vi.fn() }));
+const m = vi.hoisted(() => ({ emitStep: vi.fn(), autoBuild: vi.fn(), reuse: vi.fn() }));
+vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
+  hasReusableDirectoryDiscovery: m.reuse,
+}));
 vi.mock("@/lib/onboarding/emitStep", () => ({ emitStep: m.emitStep }));
 vi.mock("@/lib/onboarding/runAutoBuild", () => ({ runAutoBuild: m.autoBuild }));
 const { handleOpenTurn } = await import("@/lib/onboarding/handleOpenTurn");
 
 beforeEach(() => {
+  m.reuse.mockReset().mockResolvedValue(false);
   m.emitStep.mockReset().mockImplementation(emitStepMock());
   m.autoBuild.mockReset().mockImplementation(async function* () {
     yield { kind: "complete" };
@@ -36,4 +40,12 @@ describe("handleOpenTurn", () => {
       { kind: "complete" },
     ]);
   });
+});
+
+it("opens saved profiles without repeating any profile or source discovery", async () => {
+  m.reuse.mockResolvedValue(true);
+  const events = await collect(handleOpenTurn(turnContext("profiles")));
+  expect(m.autoBuild).not.toHaveBeenCalled();
+  expect(m.emitStep).toHaveBeenCalledWith("a1", "profiles");
+  expect(events.at(-1)).toMatchObject({ kind: "step", step: "profiles" });
 });

@@ -9,6 +9,9 @@ const { txExecute, lockScoped, lockRow, ownership, record } = vi.hoisted(() => (
   record: vi.fn(),
 }));
 const tx = { execute: txExecute };
+vi.mock("@/lib/research/resumeDirectorySocialJobs", () => ({
+  resumeDirectorySocialJobs: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("@/lib/db/db", () => ({
   db: { transaction: async (fn: (t: unknown) => unknown) => fn(tx) },
 }));

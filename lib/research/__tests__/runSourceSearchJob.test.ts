@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   social: vi.fn(),
   prepare: vi.fn(),
   complete: vi.fn(async () => {}),
+  checkpoint: vi.fn(),
   save: vi.fn(async () => {}),
   search: vi.fn(async () => [] as unknown[]),
 }));
@@ -19,6 +20,9 @@ vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite:
 vi.mock("@/lib/research/queueSocialIngest", () => ({ queueSocialIngest: h.social }));
 vi.mock("@/lib/directoryPreparation/queueDirectoryPreparation", () => ({
   queueDirectoryPreparation: h.prepare,
+}));
+vi.mock("@/lib/directoryPreparation/completeDirectoryDiscovery", () => ({
+  completeDirectoryDiscovery: h.checkpoint,
 }));
 vi.mock("@/lib/research/completeResearchJob", () => ({ completeResearchJob: h.complete }));
 vi.mock("@/lib/research/saveJobProgress", () => ({ saveJobProgress: h.save }));
@@ -49,6 +53,7 @@ const event = {
 beforeEach(() => {
   h.limit.mockReset().mockResolvedValue([event]);
   h.complete.mockClear();
+  h.checkpoint.mockReset().mockResolvedValue(true);
   h.prepare.mockReset().mockResolvedValue(undefined);
   h.lock.mockReset().mockResolvedValue(undefined);
   h.social.mockReset().mockResolvedValue(true);
@@ -86,6 +91,8 @@ describe("runSourceSearchJob", () => {
     });
     expect(h.lock).toHaveBeenCalled();
     expect(h.prepare).toHaveBeenCalledWith("a1");
+    expect(h.checkpoint).toHaveBeenCalledWith(expect.objectContaining({ id: "job" }));
+    expect(h.complete).not.toHaveBeenCalled();
     expect(h.social).toHaveBeenCalledWith("a1", { directoryActivityId: "event" });
   });
   it("refuses a directory job whose purpose or immutable creation event was changed", async () => {

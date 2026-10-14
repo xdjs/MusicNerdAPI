@@ -8,6 +8,8 @@ const m = vi.hoisted(() => ({
   completeResearchJob: vi.fn(),
   queueLoreRefreshAfterCaptions: vi.fn(),
 }));
+vi.mock("@/lib/research/assertSocialJobActive", () => ({ assertSocialJobActive: vi.fn() }));
+vi.mock("@/lib/research/saveSocialJobState", () => ({ saveSocialJobState: vi.fn() }));
 vi.mock("@/lib/lore/refreshArtistDoc", () => ({
   refreshArtistDoc: (...a: unknown[]) => m.refreshArtistDoc(...a),
 }));
@@ -96,4 +98,11 @@ describe("rebuildAfterCaptions", () => {
     );
     expect(m.completeResearchJob).not.toHaveBeenCalled();
   });
+});
+
+it("directory captions never rebuild public Lore or silently create a claim-scoped job", async () => {
+  await rebuildAfterCaptions(captionJob({ directoryActivityId: "event" }), read, later());
+  expect(m.refreshArtistDoc).not.toHaveBeenCalled();
+  expect(m.queueLoreRefreshAfterCaptions).not.toHaveBeenCalled();
+  expect(m.completeResearchJob).toHaveBeenCalled();
 });

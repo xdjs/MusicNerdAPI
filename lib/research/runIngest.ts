@@ -1,3 +1,4 @@
+import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { collectInstagramScrape } from "@/lib/instagram/collectInstagramScrape";
 import { hasSocialPosts } from "@/lib/instagram/hasSocialPosts";
@@ -5,9 +6,9 @@ import { instagramHandleFor } from "@/lib/instagram/instagramHandleFor";
 import { startInstagramScrape } from "@/lib/instagram/startInstagramScrape";
 import { COLLECTION_RESERVE_MS } from "@/lib/research/const";
 import { finishSocialIngest } from "@/lib/research/finishSocialIngest";
-import { failResearchJob } from "@/lib/research/failResearchJob";
-import { saveJobProgress } from "@/lib/research/saveJobProgress";
-import { saveJobState } from "@/lib/research/saveJobState";
+import { failSocialJob } from "@/lib/research/failSocialJob";
+import { saveSocialJobProgress } from "@/lib/research/saveSocialJobProgress";
+import { saveSocialJobState } from "@/lib/research/saveSocialJobState";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 
 /**
@@ -25,6 +26,7 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 export async function runIngest(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   if (!job.state || typeof job.state !== "object" || Array.isArray(job.state))
     throw new Error("invalid social research state");
+  await assertSocialJobActive(job);
   if (job.state.instagramFinished === true)
     return finishSocialIngest(job, deadline, "social research finished");
   const force = job.state.force === true;
@@ -36,8 +38,22 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     readyDatasetId && typeof job.state.instagramHandle === "string"
       ? job.state.instagramHandle
       : await instagramHandleFor(job.artistId);
+  if (runId && ("directoryActivityId" in job.state || "resumedFromDirectoryJobId" in job.state)) {
+    const currentHandle = await instagramHandleFor(job.artistId);
+    await assertSocialJobActive(job);
+    if (
+      typeof job.state.instagramHandle !== "string" ||
+      currentHandle !== job.state.instagramHandle
+    ) {
+      await failSocialJob(
+        job,
+        "Saved Instagram run belongs to a changed or unverified profile; review before retrying",
+      );
+      return { progress: "Saved social profile changed", done: false };
+    }
+  }
   if (handle === "error") {
-    await failResearchJob(job.id, "could not read the artist's handle");
+    await failSocialJob(job, "could not read the artist's handle");
     return { progress: "handle lookup failed, will retry", done: false };
   }
   if (!handle) {
@@ -49,13 +65,29 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
   }
 
   if (!runId) {
+    await assertSocialJobActive(job);
+    if ("directoryActivityId" in job.state || "resumedFromDirectoryJobId" in job.state) {
+      if (job.state.instagramStartRequested === true)
+        throw new Error("Instagram start outcome unknown; inspect provider before retrying");
+      job.state = { ...job.state, instagramStartRequested: true, instagramHandle: handle };
+      await saveSocialJobState(job, job.state);
+    }
     const started = await startInstagramScrape(handle);
+    await assertSocialJobActive(job);
     if (started.status !== "started") {
+      if (
+        started.status === "failed" &&
+        started.startRejected &&
+        job.state.instagramStartRequested
+      ) {
+        job.state = { ...job.state, instagramStartRequested: false };
+        await saveSocialJobState(job, job.state);
+      }
       const reason = started.status === "failed" ? started.reason : "apify did not start";
-      await failResearchJob(job.id, reason);
+      await failSocialJob(job, reason);
       return { progress: `scrape did not start: ${reason}`, done: false };
     }
-    await saveJobProgress(job.id, job.cursor, {
+    await saveSocialJobProgress(job, job.cursor, {
       state: { ...job.state, apifyRunId: started.runId },
     });
     return { progress: `scrape started (${started.runId})`, done: false, waiting: true };
@@ -64,12 +96,13 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
   const run = readyDatasetId
     ? { status: "ready" as const, runId, datasetId: readyDatasetId }
     : await checkInstagramScrape(runId);
+  await assertSocialJobActive(job);
   if (run.status === "started" || run.status === "running") {
-    await saveJobProgress(job.id, job.cursor, { state: job.state });
+    await saveSocialJobProgress(job, job.cursor, { state: job.state });
     return { progress: "scrape still running", done: false, waiting: true };
   }
   if (run.status === "failed") {
-    await failResearchJob(job.id, run.reason);
+    await failSocialJob(job, run.reason);
     return { progress: `scrape failed: ${run.reason}`, done: false };
   }
 
@@ -79,7 +112,7 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     instagramHandle: handle,
   };
   if (deadline - Date.now() < COLLECTION_RESERVE_MS) {
-    await saveJobProgress(job.id, job.cursor, { state: collectionState });
+    await saveSocialJobProgress(job, job.cursor, { state: collectionState });
     return {
       progress: "Waiting for a full thumbnail collection budget",
       done: false,
@@ -93,14 +126,15 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     job.id,
     job.cursor,
   );
+  await assertSocialJobActive(job);
   if (result === null) {
     // A failed dataset read is not an empty feed: keep the dataset and retry.
-    await saveJobState(job.id, collectionState);
-    await failResearchJob(job.id, "could not collect the finished scrape");
+    await saveSocialJobState(job, collectionState);
+    await failSocialJob(job, "could not collect the finished scrape");
     return { progress: "collection failed, will retry", done: false };
   }
   if (result.nextCursor !== undefined) {
-    await saveJobProgress(job.id, result.nextCursor, { state: collectionState });
+    await saveSocialJobProgress(job, result.nextCursor, { state: collectionState });
     return {
       progress: `Stored posts and thumbnails through ${result.nextCursor}`,
       done: false,

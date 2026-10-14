@@ -1,3 +1,4 @@
+import { hasReusableDirectoryDiscovery } from "@/lib/directoryPreparation/hasReusableDirectoryDiscovery";
 import { NARRATION } from "@/lib/onboarding/const";
 import { emitStep } from "@/lib/onboarding/emitStep";
 import { runAutoBuild } from "@/lib/onboarding/runAutoBuild";
@@ -18,7 +19,13 @@ export async function* handleOpenTurn(ctx: TurnContext): AsyncGenerator<TurnEven
     return;
   }
   if (state.currentStep === "profiles") {
-    yield* runAutoBuild(artistId, ctx.ownership);
+    if (await hasReusableDirectoryDiscovery(artistId, ctx.ownership?.expectedClaimId ?? null)) {
+      yield {
+        kind: "chat",
+        text: "Your profiles are ready. Review them before we move on to your sources.",
+      };
+      yield* emitStep(artistId, "profiles");
+    } else yield* runAutoBuild(artistId, ctx.ownership);
     return;
   }
   yield { kind: "chat", text: NARRATION.welcomeBack };

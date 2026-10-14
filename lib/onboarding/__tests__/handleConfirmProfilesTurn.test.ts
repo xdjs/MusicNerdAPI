@@ -9,7 +9,13 @@ const m = vi.hoisted(() => ({
   artist: vi.fn(),
   confirm: vi.fn(),
   queue: vi.fn(),
+  reuse: vi.fn(),
+  vault: vi.fn(),
 }));
+vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
+  hasReusableDirectoryDiscovery: m.reuse,
+}));
+vi.mock("@/lib/onboarding/emitVaultStep", () => ({ emitVaultStep: m.vault }));
 vi.mock("@/lib/onboarding/emitStep", () => ({ emitStep: m.emitStep }));
 vi.mock("@/lib/onboarding/applyProfileLinkDecisions", () => ({
   applyProfileLinkDecisions: m.apply,
@@ -35,6 +41,10 @@ const turn = (addedLinks: { url: string }[] = []) => ({
 });
 
 beforeEach(() => {
+  m.reuse.mockReset().mockResolvedValue(false);
+  m.vault.mockReset().mockImplementation(async function* () {
+    yield { kind: "step", step: "vault", payload: { sources: [] } };
+  });
   m.emitStep.mockReset().mockImplementation(emitStepMock());
   m.apply.mockReset().mockResolvedValue(empty);
   m.artist.mockReset().mockResolvedValue({ id: "a1", instagram: "nova" });
@@ -113,4 +123,20 @@ describe("handleConfirmProfilesTurn", () => {
     });
     expect(m.apply).not.toHaveBeenCalled();
   });
+});
+
+it("does not rediscover even an empty saved corpus on unchanged confirmation", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(handleConfirmProfilesTurn(turnContext("profiles"), turn()));
+  expect(m.vault).toHaveBeenCalledWith("a1", false, true);
+  expect(m.emitStep).not.toHaveBeenCalled();
+  expect(m.queue).toHaveBeenCalledWith("a1", {});
+});
+it("explicit link edits still use the normal discovery path", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(
+    handleConfirmProfilesTurn(turnContext("profiles"), turn([{ url: "https://example.com" }])),
+  );
+  expect(m.vault).not.toHaveBeenCalled();
+  expect(m.emitStep).toHaveBeenCalled();
 });

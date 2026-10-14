@@ -1,3 +1,4 @@
+import { resumeDirectorySocialJobs } from "@/lib/research/resumeDirectorySocialJobs";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { db } from "@/lib/db/db";
@@ -30,6 +31,18 @@ export async function queueSocialIngest(
         limit 1`);
       if (rowsOf(latest).length) return false;
       const activityId = await recordArtistActivity(artistId, "social_ingest", {}, tx);
+      const scope = getArtistOperationOwnership(artistId);
+      if (
+        scope?.expectedClaimId &&
+        (await resumeDirectorySocialJobs(
+          tx,
+          artistId,
+          scope.expectedClaimId,
+          activityId,
+          state.force === true,
+        ))
+      )
+        return true;
       await tx.execute(sql`
         insert into artist_research_jobs (artist_id, kind, total, state, activity_id)
         values (${artistId}::uuid, ${"social_ingest"}, ${null}, ${JSON.stringify(state)}::jsonb, ${activityId}::uuid)

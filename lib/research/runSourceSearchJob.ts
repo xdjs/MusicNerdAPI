@@ -1,3 +1,4 @@
+import { completeDirectoryDiscovery } from "@/lib/directoryPreparation/completeDirectoryDiscovery";
 import { queueDirectoryPreparation } from "@/lib/directoryPreparation/queueDirectoryPreparation";
 import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
 import { queueSocialIngest } from "@/lib/research/queueSocialIngest";
@@ -74,6 +75,9 @@ export async function runSourceSearchJob(
       return sources;
     },
   );
-  await completeResearchJob(job.id);
+  if (directory) {
+    if (!(await completeDirectoryDiscovery(job)))
+      return { progress: "Directory discovery lease changed", done: false, waiting: true };
+  } else await completeResearchJob(job.id);
   return { progress: `Source search finished, ${sources.length} sources added`, done: true };
 }

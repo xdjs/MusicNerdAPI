@@ -24,7 +24,7 @@ export async function saveJobProgress(
              total = coalesce(${opts?.total ?? null}, total),
              state = coalesce(${opts?.state ? JSON.stringify(opts.state) : null}::jsonb, state),
              updated_at = now()
-       where id = ${jobId}::uuid`);
+       where id = ${jobId}::uuid and not (state ? 'directoryHandedOffToClaim')`);
   } catch (e) {
     console.error("[saveJobProgress] Error:", e);
   }

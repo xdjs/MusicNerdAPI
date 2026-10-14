@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
+  guard: vi.fn(),
+  scopedSave: vi.fn(),
   instagramHandleFor: vi.fn(),
   hasSocialPosts: vi.fn(),
   startInstagramScrape: vi.fn(),
@@ -11,6 +13,16 @@ const m = vi.hoisted(() => ({
   completeResearchJob: vi.fn(),
   failResearchJob: vi.fn(),
   enqueueResearchJob: vi.fn(),
+}));
+vi.mock("@/lib/research/failSocialJob", () => ({
+  failSocialJob: async (job: { id: string }, error: string) => m.failResearchJob(job.id, error),
+}));
+vi.mock("@/lib/research/assertSocialJobActive", () => ({ assertSocialJobActive: m.guard }));
+vi.mock("@/lib/research/saveSocialJobState", () => ({
+  saveSocialJobState: async (job: { id: string }, state: Record<string, unknown>) => {
+    m.scopedSave(job, state);
+    return m.saveJobState(job.id, state);
+  },
 }));
 vi.mock("@/lib/instagram/instagramHandleFor", () => ({
   instagramHandleFor: (...a: unknown[]) => m.instagramHandleFor(...a),
@@ -225,4 +237,78 @@ describe("runIngest", () => {
       "could not collect the finished scrape",
     );
   });
+});
+
+it("does not start paid collection after directory authority changes", async () => {
+  m.guard.mockRejectedValue(new Error("ownership changed"));
+  await expect(runIngest(job({ directoryActivityId: "event" }), later())).rejects.toThrow(
+    "ownership changed",
+  );
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
+});
+it("records start intent and refuses to retry an unknown paid start", async () => {
+  await expect(
+    runIngest(job({ directoryActivityId: "event", instagramStartRequested: true }), later()),
+  ).rejects.toThrow("outcome unknown");
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
+});
+it("rechecks after provider start and never writes stale directory progress", async () => {
+  m.guard
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error("ownership changed"));
+  m.startInstagramScrape.mockResolvedValue({ status: "started", runId: "paid" });
+  await expect(runIngest(job({ directoryActivityId: "event" }), later())).rejects.toThrow(
+    "ownership changed",
+  );
+  expect(m.scopedSave).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ instagramStartRequested: true, instagramHandle: "biorritmo" }),
+  );
+  expect(m.saveJobProgress).not.toHaveBeenCalled();
+});
+it("a definite provider rejection clears the start marker for a later bounded retry", async () => {
+  m.startInstagramScrape.mockResolvedValue({
+    status: "failed",
+    reason: "apify start 402",
+    startRejected: true,
+  });
+  await runIngest(job({ directoryActivityId: "event" }), later());
+  expect(m.scopedSave).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ instagramStartRequested: false }),
+  );
+});
+it("resumes a saved paid run without another start only on the same connected profile", async () => {
+  m.checkInstagramScrape.mockResolvedValue({ status: "running", runId: "paid" });
+  await runIngest(
+    job({
+      resumedFromDirectoryJobId: "old",
+      claimId: "claim",
+      apifyRunId: "paid",
+      instagramHandle: "other",
+    }),
+    later(),
+  );
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
+  expect(m.checkInstagramScrape).not.toHaveBeenCalled();
+  expect(m.failResearchJob).toHaveBeenCalledWith(
+    "job-1",
+    expect.stringContaining("changed or unverified"),
+  );
+});
+
+it("a saved dataset still requires the same connected profile before importing posts", async () => {
+  await runIngest(
+    job({
+      resumedFromDirectoryJobId: "old",
+      claimId: "claim",
+      apifyRunId: "paid",
+      apifyDatasetId: "ready",
+      instagramHandle: "disconnected",
+    }),
+    later(),
+  );
+  expect(m.collectInstagramScrape).not.toHaveBeenCalled();
+  expect(m.startInstagramScrape).not.toHaveBeenCalled();
 });

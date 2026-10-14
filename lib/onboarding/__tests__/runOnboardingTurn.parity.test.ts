@@ -11,6 +11,9 @@
  * web's `requestArtistResearch(artistId)` is `queueSocialIngest(artistId, {})`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
+  hasReusableDirectoryDiscovery: vi.fn().mockResolvedValue(false),
+}));
 
 /** The web test drives mocks with any shape; typed loosely on purpose (tests allow `any`). */
 type AnyFn = (...args: any[]) => any;

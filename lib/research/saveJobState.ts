@@ -14,7 +14,7 @@ export async function saveJobState(jobId: string, state: Record<string, unknown>
     await db.execute(sql`
       update artist_research_jobs
          set state = ${JSON.stringify(state)}::jsonb, claimed_at = now(), updated_at = now()
-       where id = ${jobId}::uuid`);
+       where id = ${jobId}::uuid and not (state ? 'directoryHandedOffToClaim')`);
   } catch (e) {
     console.error("[saveJobState] Error:", e);
   }

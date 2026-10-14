@@ -30,3 +30,34 @@ describe("withResearchJobWrite", () => {
     expect(write).not.toHaveBeenCalled();
   });
 });
+
+it("rejects a directory descendant after any claim begins before its write", async () => {
+  tx.query.artistResearchJobs.findFirst.mockResolvedValue({
+    id: "job",
+    state: { directoryActivityId: "event" },
+  });
+  tx.execute.mockResolvedValue([]);
+  const write = vi.fn();
+  await expect(withResearchJobWrite("artist", "job", write)).rejects.toThrow("ownership changed");
+  expect(write).not.toHaveBeenCalled();
+});
+it("keeps directory descendants writable only under original creation scope", async () => {
+  tx.query.artistResearchJobs.findFirst.mockResolvedValue({
+    id: "job",
+    state: { directoryActivityId: "event" },
+  });
+  tx.execute.mockResolvedValue([{ id: "artist" }]);
+  const write = vi.fn(async () => true);
+  expect(await withResearchJobWrite("artist", "job", write)).toBe(true);
+  expect(tx.execute).toHaveBeenCalledTimes(2);
+});
+it("refuses resumed work when its exact approved claim no longer exists", async () => {
+  tx.query.artistResearchJobs.findFirst.mockResolvedValue({
+    id: "job",
+    state: { resumedFromDirectoryJobId: "old", claimId: "claim" },
+  });
+  tx.execute.mockResolvedValue([]);
+  const write = vi.fn();
+  await expect(withResearchJobWrite("artist", "job", write)).rejects.toThrow("ownership changed");
+  expect(write).not.toHaveBeenCalled();
+});

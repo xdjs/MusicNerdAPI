@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 
-const m = vi.hoisted(() => ({ sources: vi.fn(), search: vi.fn() }));
+const m = vi.hoisted(() => ({ sources: vi.fn(), search: vi.fn(), reuse: vi.fn() }));
+vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
+  hasReusableDirectoryDiscovery: m.reuse,
+}));
 vi.mock("@/lib/vault/getVaultSourcesByStatus", () => ({ getVaultSourcesByStatus: m.sources }));
 vi.mock("@/lib/vault/searchAndPopulateVault", () => ({ searchAndPopulateVault: m.search }));
 const { emitVaultStep } = await import("@/lib/onboarding/emitVaultStep");
@@ -19,6 +22,7 @@ const src = (id: string, extra: object = {}) => ({
 });
 
 beforeEach(() => {
+  m.reuse.mockReset().mockResolvedValue(false);
   m.sources.mockReset().mockResolvedValue([]);
   m.search.mockReset().mockResolvedValue([]);
 });
@@ -96,4 +100,15 @@ describe("emitVaultStep", () => {
     await collect(emitVaultStep("a1", false));
     expect(m.search).not.toHaveBeenCalled();
   });
+});
+
+it("a resumed empty review reuses completed directory discovery", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(emitVaultStep("a1", false));
+  expect(m.search).not.toHaveBeenCalled();
+});
+it("an explicit forced search still works after completed directory discovery", async () => {
+  m.reuse.mockResolvedValue(true);
+  await collect(emitVaultStep("a1", true));
+  expect(m.search).toHaveBeenCalled();
 });
