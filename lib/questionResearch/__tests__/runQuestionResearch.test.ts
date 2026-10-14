@@ -26,6 +26,35 @@ vi.mock("@/lib/questionResearch/selectResearchReferences", () => ({
 vi.mock("@/lib/questionResearch/assessResearchEvidence", () => ({
   assessResearchEvidence: m.assess,
 }));
+vi.mock("@/lib/questionResearch/researchSavedOriginals", () => ({
+  researchSavedOriginals: async (
+    _request: unknown,
+    _originals: unknown,
+    _artist: unknown,
+    _options: unknown,
+    _ms: unknown,
+    budget: {
+      remainingSteps: number;
+      reserve: () => Promise<boolean>;
+      checkpoint: (usage: unknown, trace: unknown) => Promise<boolean>;
+    },
+  ) => {
+    if (budget.remainingSteps < 1) throw new Error("Model budget exceeded");
+    if (!(await budget.reserve())) throw new Error("Research lease lost");
+    const result = await m.assess();
+    const trace = {
+      eligibleSources: 1,
+      toolCalls: 3,
+      readChars: 10,
+      calls: ["browse", "read", "finish"],
+      readSourceIds: [],
+      rejectedIdCount: 0,
+      stopReason: result.sufficient ? "supported" : "insufficient",
+    };
+    if (!(await budget.checkpoint(result, trace))) throw new Error("Research lease lost");
+    return { ...result, trace };
+  },
+}));
 vi.mock("@/lib/questionResearch/checkpointQuestionResearch", () => ({
   checkpointQuestionResearch: m.checkpoint,
 }));
@@ -74,7 +103,7 @@ const job = (state: Record<string, unknown> = initial()) =>
 beforeEach(() => {
   vi.resetAllMocks();
   m.artist.mockResolvedValue({ name: "Artist", tiktok: "artist" });
-  m.load.mockResolvedValue([]);
+  m.load.mockResolvedValue([{ sourceId: "vault:1", text: "Original evidence" }]);
   m.select.mockReturnValue([]);
   m.checkpoint.mockImplementation(async (j, s, _release, write) => {
     if (write) await write({});
@@ -281,11 +310,11 @@ it("rejects a corrupted saved-only external stage before any provider call", asy
   expect(m.start).not.toHaveBeenCalled();
   expect(m.fetch).not.toHaveBeenCalled();
 });
-it("does not spend a second saved-only assessment even if a malformed retry reaches saved again", async () => {
-  const j = job({ ...initial(), savedOnly: true, modelCalls: 1 });
+it("does not exceed the saved-only exploration budget even if a malformed retry reaches saved again", async () => {
+  const j = job({ ...initial(), savedOnly: true, modelCalls: 5 });
   m.select.mockReturnValue([{ sourceId: "vault:1", text: "Saved original" }]);
   await runQuestionResearch(j, Date.now() + 50000);
-  expect(j.state).toMatchObject({ stage: "failed", modelCalls: 1, providerCalls: 0 });
+  expect(j.state).toMatchObject({ stage: "failed", modelCalls: 5, providerCalls: 0 });
   expect(m.assess).not.toHaveBeenCalled();
 });
 
@@ -414,4 +443,84 @@ it("never executes a model-selected unavailable provider", async () => {
   expect(j.state.stage).toBe("unresolved");
   expect(m.start).not.toHaveBeenCalled();
   expect(m.search).not.toHaveBeenCalled();
+});
+
+it("combines still-public partial support with new evidence and preserves the assessed windows", async () => {
+  const saved = {
+    sourceId: "vault:1",
+    revision: "r",
+    url: "https://artist.example/credits",
+    text: "Artist produced the track.",
+    start: 0,
+    end: 26,
+  };
+  saved.end = saved.text.length;
+  const fresh = {
+    sourceId: "new:0",
+    revision: "pending",
+    url: "https://artist.example/mixer",
+    text: "Engineer mixed the track.",
+    start: 0,
+    end: 25,
+  };
+  fresh.end = fresh.text.length;
+  const discovery = { ...fresh, sourceId: "discovery:1", revision: "persisted" };
+  const j = job({
+    ...initial(),
+    step: "assess",
+    stage: "reading",
+    references: [saved],
+    originals: [
+      {
+        url: fresh.url,
+        text: fresh.text,
+        identity: "confirmed",
+        provenance: {
+          kind: "original_text",
+          speaker: "not_applicable",
+          publishedAt: null,
+          retrievedAt: null,
+          truncated: false,
+        },
+      },
+    ],
+  });
+  m.load.mockResolvedValue([saved]);
+  m.select.mockReturnValue([fresh]);
+  m.assess.mockResolvedValue({
+    sufficient: true,
+    references: [saved, fresh],
+    confirmedIds: [],
+    limitation: "none",
+    inputTokens: 1,
+    outputTokens: 1,
+  });
+  m.persist.mockResolvedValue([discovery]);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.assess).toHaveBeenCalledWith(
+    expect.anything(),
+    [saved, fresh],
+    expect.anything(),
+    [],
+    expect.any(Number),
+  );
+  expect(j.state).toMatchObject({ stage: "complete", references: [saved, discovery] });
+});
+
+it("does not pass revoked partial evidence back into a model", async () => {
+  const j = job({
+    ...initial(),
+    step: "assess",
+    stage: "reading",
+    references: [
+      { sourceId: "vault:private", revision: "old", text: "withdrawn", start: 0, end: 9 },
+    ],
+    originals: [],
+  });
+  m.load.mockResolvedValue([]);
+  m.select.mockReturnValue([]);
+  m.persist.mockResolvedValue([]);
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.assess).not.toHaveBeenCalled();
+  expect(j.state).toMatchObject({ stage: "unresolved", references: [] });
 });

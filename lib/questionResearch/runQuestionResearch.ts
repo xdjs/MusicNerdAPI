@@ -10,6 +10,7 @@ import { loadResearchArtist } from "@/lib/questionResearch/loadResearchArtist";
 import { loadPublicResearchOriginals } from "@/lib/questionResearch/loadPublicResearchOriginals";
 import { selectResearchReferences } from "@/lib/questionResearch/selectResearchReferences";
 import { assessResearchEvidence } from "@/lib/questionResearch/assessResearchEvidence";
+import { researchSavedOriginals } from "@/lib/questionResearch/researchSavedOriginals";
 import { checkpointQuestionResearch } from "@/lib/questionResearch/checkpointQuestionResearch";
 import { getQuestionResearchOptions } from "@/lib/questionResearch/getQuestionResearchOptions";
 import { planQuestionResearch } from "@/lib/questionResearch/planQuestionResearch";
@@ -22,8 +23,10 @@ import { researchStatusMessage } from "@/lib/questionResearch/researchStatusMess
 import { getResearchFailureDiagnostic } from "@/lib/questionResearch/getResearchFailureDiagnostic";
 import {
   QUESTION_RESEARCH_LIFETIME_MS,
+  SAVED_RESEARCH_MODEL_STEPS,
   type DiscoveryOriginal,
   type ResearchOriginal,
+  type ResearchReference,
 } from "@/lib/questionResearch/types";
 
 /** Advance one durable research stage; publish transitions before slow work and never repeat paid starts. */
@@ -48,7 +51,10 @@ export async function runQuestionResearch(
   };
   const reserve = async (kind: "model" | "web" | "social_start" | "read") => {
     if (kind === "model") {
-      if (state.modelCalls >= (state.savedOnly ? 1 : 2) + (state.outputRetries ?? 0))
+      if (
+        state.modelCalls >=
+        SAVED_RESEARCH_MODEL_STEPS + (state.savedOnly ? 0 : 1) + (state.outputRetries ?? 0)
+      )
         throw new Error("Model budget exceeded");
       state.modelCalls++;
     } else {
@@ -98,32 +104,44 @@ export async function runQuestionResearch(
     switch (state.step ?? "saved") {
       case "saved": {
         const originals = await loadPublicResearchOriginals(job.artistId);
-        const references = selectResearchReferences(originals, state.request, artist.name ?? "");
-        state.references = references;
-        if (references.length || (!state.savedOnly && options.length)) {
-          if (!(await reserve("model"))) return stale;
-          const assessment = await assessResearchEvidence(
+        if (originals.length || (!state.savedOnly && options.length)) {
+          const assessment = await researchSavedOriginals(
             state.request,
-            references,
+            originals,
             artist,
-            [],
-            deadline - Date.now() - 1000,
             state.savedOnly ? [] : options,
+            deadline - Date.now() - 1000,
+            {
+              remainingSteps: SAVED_RESEARCH_MODEL_STEPS - state.modelCalls,
+              reserve: () => reserve("model"),
+              checkpoint: async (usage, trace) => {
+                delete state.inFlight;
+                state.inputTokens += usage.inputTokens;
+                state.outputTokens += usage.outputTokens;
+                state.exploration = trace;
+                return checkpointQuestionResearch(job, state, false);
+              },
+            },
           );
-          delete state.inFlight;
-          state.inputTokens += assessment.inputTokens;
-          state.outputTokens += assessment.outputTokens;
+          state.exploration = assessment.trace;
+          if ("failure" in assessment) {
+            state.stage = "failed";
+            state.errorCode = assessment.failure;
+            state.references = [];
+            return await finish();
+          }
           if (assessment.sufficient) {
             state.references = assessment.references;
             state.stage = "complete";
             return await finish();
           }
+          state.references = assessment.references;
           // The model selects a tool, but only the server's validated plan can execute.
           if (assessment.nextLookup !== undefined) {
             plan = options.find(option => option.provider === assessment.nextLookup) ?? {
               provider: null,
               stage: "unresolved",
-              reason: assessment.limitation,
+              reason: plan.provider === null ? plan.reason : assessment.limitation,
             };
           }
         }
@@ -271,12 +289,23 @@ export async function runQuestionResearch(
       }
       case "assess": {
         const originals = state.originals ?? [];
-        const refs = selectResearchReferences(
-          originals.map(asOriginal),
-          state.request,
-          artist.name ?? "",
+        const current = state.references.length
+          ? await loadPublicResearchOriginals(job.artistId)
+          : [];
+        const partial = state.references.filter(ref =>
+          current.some(
+            o =>
+              o.sourceId === ref.sourceId &&
+              o.revision === ref.revision &&
+              o.text.slice(ref.start, ref.end) === ref.text,
+          ),
         );
+        const refs = [
+          ...partial,
+          ...selectResearchReferences(originals.map(asOriginal), state.request, artist.name ?? ""),
+        ];
         let sufficient = false;
+        let selected: ResearchReference[] = [];
         if (refs.length) {
           if (!(await reserve("model"))) return stale;
           const assessment = await assessResearchEvidence(
@@ -289,7 +318,14 @@ export async function runQuestionResearch(
           delete state.inFlight;
           state.inputTokens += assessment.inputTokens;
           state.outputTokens += assessment.outputTokens;
+          if ("failure" in assessment && assessment.failure) {
+            state.stage = "failed";
+            state.errorCode = assessment.failure;
+            state.references = [];
+            return await finish();
+          }
           sufficient = assessment.sufficient;
+          selected = assessment.references;
           for (const [i, original] of originals.entries())
             if (assessment.confirmedIds.includes(`new:${i}`)) original.identity = "confirmed";
           if (assessment.limitation !== "none") state.limitations.push(assessment.limitation);
@@ -297,7 +333,18 @@ export async function runQuestionResearch(
         state.stage = sufficient ? "complete" : "unresolved";
         const saved = await checkpointQuestionResearch(job, state, true, async tx => {
           const retained = await persistResearchOriginals(tx, job.artistId, state, originals);
-          state.references = selectResearchReferences(retained, state.request, artist.name ?? "");
+          // Preserve the model's actual selection and offsets instead of re-ranking only
+          // the newly persisted pages and losing useful evidence from the first read.
+          state.references = selected.flatMap(ref => {
+            if (!ref.sourceId.startsWith("new:")) return [ref];
+            const saved = retained.find(
+              o =>
+                canonicalResearchUrl(o.url) === canonicalResearchUrl(ref.url) &&
+                o.text.slice(ref.start, ref.end) === ref.text,
+            );
+            return saved ? [{ ...saved, start: ref.start, end: ref.end, text: ref.text }] : [];
+          });
+          if (state.references.length !== selected.length) state.stage = "unresolved";
           if (!state.references.length) state.stage = "unresolved";
           delete state.originals;
           delete state.candidates;

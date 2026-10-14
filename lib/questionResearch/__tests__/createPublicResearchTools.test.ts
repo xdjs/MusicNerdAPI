@@ -1,0 +1,224 @@
+import { expect, it } from "vitest";
+import { createPublicResearchTools } from "../createPublicResearchTools";
+import type { ResearchOriginal, ResearchRequest } from "../types";
+
+const request: ResearchRequest = {
+  topic: "Latest activities",
+  evidenceNeed: "reporting",
+  freshness: "stored",
+  retrieval: "latest",
+  answerScope: "overview",
+};
+const original = (
+  id: string,
+  url: string,
+  text: string,
+  publishedAt = "2026-10-07",
+): ResearchOriginal => ({
+  sourceId: id,
+  revision: "r1",
+  url,
+  text,
+  publishedAt,
+  retrievedAt: null,
+  curation: "approved",
+  evidenceKind: "caption",
+  speaker: "not_applicable",
+  truncated: false,
+});
+const context = { toolCallId: "test", messages: [], context: {} };
+const corpus = [
+  ...Array.from({ length: 50 }, (_, i) =>
+    original(`x:${i}`, `https://x.com/artist/status/${i}`, "Thanks!", "2026-10-12"),
+  ),
+  original(
+    "moment:1",
+    "https://inprocess.world/post/1",
+    "By Design: I am sharing the studio recordings behind this project.",
+  ),
+  original("ig:1", "https://instagram.com/p/abc", "Project REACH is a new collaboration."),
+];
+
+it("makes quieter providers visible without discarding or hiding the busy account", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  const first = await s.tools.browseSources.execute!({ offset: 0 }, context);
+  expect(first).toMatchObject({ total: 52, nextOffset: 12 });
+  expect(JSON.stringify(first)).toContain("moment:1");
+  expect(JSON.stringify(first)).toContain("ig:1");
+  const x = await s.tools.browseSources.execute!({ offset: 36, provider: "x" }, context);
+  expect(x).toMatchObject({ total: 50, nextOffset: 48 });
+  expect(JSON.stringify(x)).toContain("x:");
+});
+
+it("lets a model search a new term and return only an actually read original", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  const result = await s.tools.searchSources.execute!({ query: "studio recordings" }, context);
+  expect(result).toMatchObject({ references: [expect.objectContaining({ sourceId: "moment:1" })] });
+  await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context);
+  expect(s.outcome()).toMatchObject({
+    sufficient: true,
+    references: [expect.objectContaining({ sourceId: "moment:1" })],
+  });
+});
+
+it("rejects invented and unread IDs, allowing a later valid selection", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  expect(
+    await s.tools.finishEvidence.execute!({ referenceIds: ["moment:1"] }, context),
+  ).toMatchObject({ error: "unread_reference" });
+  expect(s.outcome()).toBeUndefined();
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context);
+  expect(s.outcome()?.sufficient).toBe(true);
+});
+
+it("preserves original scope even when the model asks to broaden it", async () => {
+  const s = createPublicResearchTools(
+    corpus,
+    { ...request, platform: "instagram", fromDate: "2026-10-07", toDate: "2026-10-08" },
+    "Artist",
+    [],
+  );
+  expect(s.inventory).toMatchObject({ eligibleSources: 1 });
+  expect(
+    await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context),
+  ).toMatchObject({ error: "source_unavailable" });
+  expect(await s.tools.browseSources.execute!({ offset: 0, provider: "x" }, context)).toMatchObject(
+    { total: 0 },
+  );
+  const speech = createPublicResearchTools(
+    corpus,
+    { ...request, evidenceNeed: "spoken_content" },
+    "Artist",
+    [],
+  );
+  expect(speech.inventory.eligibleSources).toBe(0);
+});
+
+it("opens later original context with exact offsets and enforces the aggregate text budget", async () => {
+  const text = "a".repeat(28000) + "credit: another musician";
+  const s = createPublicResearchTools(
+    [original("long", "https://artist.example/story", text)],
+    request,
+    "Artist",
+    [],
+  );
+  const late = await s.tools.readSources.execute!(
+    { sources: [{ sourceId: "long", start: 28000 }] },
+    context,
+  );
+  expect(late).toMatchObject({
+    references: [
+      expect.objectContaining({ start: 28000, end: text.length, text: "credit: another musician" }),
+    ],
+  });
+  for (let i = 0; i < 6; i++)
+    await s.tools.readSources.execute!(
+      { sources: [{ sourceId: "long", start: i * 4000 }] },
+      context,
+    );
+  expect(s.trace().readChars).toBeLessThanOrEqual(24000);
+  expect(
+    await s.tools.readSources.execute!({ sources: [{ sourceId: "long", start: 24000 }] }, context),
+  ).toMatchObject({ error: "evidence_budget_exhausted" });
+});
+
+it("offers only server-approved external choices and cannot silently finish with no reason", async () => {
+  const s = createPublicResearchTools([], request, "Artist", [
+    {
+      provider: "web",
+      stage: "searching",
+      query: "Artist news",
+      reason: "work_specific_originals",
+    },
+  ]);
+  expect(
+    await s.tools.requestLookup.execute!({ provider: "x", reason: "missing_original" }, context),
+  ).toMatchObject({ error: "lookup_unavailable" });
+  expect(s.outcome()).toBeUndefined();
+  await s.tools.requestLookup.execute!({ provider: "web", reason: "missing_original" }, context);
+  expect(s.outcome()).toMatchObject({
+    sufficient: false,
+    nextLookup: "web",
+    limitation: "missing_original",
+  });
+});
+
+it("does not treat a browse page as sufficient inspection for a negative conclusion", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  await s.tools.browseSources.execute!({ offset: 0, provider: "not-present" }, context);
+  expect(
+    await s.tools.finishUnresolved.execute!({ reason: "missing_original" }, context),
+  ).toMatchObject({ error: "read_saved_sources_first" });
+  expect(s.outcome()).toBeUndefined();
+});
+
+it("keeps read partial support when another fact needs an outside lookup", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", [
+    { provider: "web", stage: "searching", query: "Artist", reason: "work_specific_originals" },
+  ]);
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  await s.tools.requestLookup.execute!(
+    { provider: "web", reason: "missing_original", referenceIds: ["read:0"] },
+    context,
+  );
+  expect(s.outcome()).toMatchObject({
+    sufficient: false,
+    references: [expect.objectContaining({ sourceId: "moment:1" })],
+    nextLookup: "web",
+  });
+});
+
+it.each(["read", "browse"])(
+  "cannot report absence when %s exactly consumes the reading budget",
+  async mode => {
+    const s = createPublicResearchTools(
+      [original("long", "https://artist.example/story", "a".repeat(30000))],
+      request,
+      "Artist",
+      [{ provider: "web", stage: "searching", query: "Artist", reason: "work_specific_originals" }],
+    );
+    for (let i = 0; i < 6; i++)
+      await s.tools.readSources.execute!(
+        { sources: [{ sourceId: "long", start: i * 4000 }] },
+        context,
+      );
+    if (mode === "browse") await s.tools.browseSources.execute!({ offset: 0 }, context);
+    expect(s.trace().readChars).toBe(24000);
+    expect(
+      await s.tools.finishUnresolved.execute!({ reason: "missing_original" }, context),
+    ).toMatchObject({ error: "evidence_budget_exhausted" });
+    expect(
+      await s.tools.requestLookup.execute!(
+        { provider: "web", reason: "missing_original" },
+        context,
+      ),
+    ).toMatchObject({ error: "evidence_budget_exhausted" });
+    expect(s.outcome()).toBeUndefined();
+    await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context);
+    expect(s.outcome()?.sufficient).toBe(true);
+  },
+);
+
+it("cannot report absence after a browse truncates at the remaining text budget", async () => {
+  const s = createPublicResearchTools(
+    Array.from({ length: 12 }, (_, i) =>
+      original(`long:${i}`, `https://artist.example/${i}`, "a".repeat(30000)),
+    ),
+    request,
+    "Artist",
+    [],
+  );
+  for (let i = 0; i < 5; i++)
+    await s.tools.readSources.execute!(
+      { sources: [{ sourceId: "long:0", start: i * 4000 }] },
+      context,
+    );
+  await s.tools.browseSources.execute!({ offset: 0 }, context);
+  await s.tools.browseSources.execute!({ offset: 0 }, context);
+  expect(s.trace().readChars).toBe(24000);
+  expect(
+    await s.tools.finishUnresolved.execute!({ reason: "missing_original" }, context),
+  ).toMatchObject({ error: "evidence_budget_exhausted" });
+  expect(s.outcome()).toBeUndefined();
+});
