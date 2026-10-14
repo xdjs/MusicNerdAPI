@@ -372,3 +372,46 @@ it("fails honestly after the single structured-output retry is exhausted", async
   });
   expect(m.assess).toHaveBeenCalledTimes(2);
 });
+
+it("executes the model-selected connected lookup and persists that choice across slices", async () => {
+  m.artist.mockResolvedValue({ name: "Artist", instagram: "artist", x: "artistnews" });
+  m.assess.mockResolvedValue({
+    sufficient: false,
+    references: [],
+    confirmedIds: [],
+    limitation: "missing_original",
+    nextLookup: "x",
+    inputTokens: 1,
+    outputTokens: 1,
+  });
+  const j = job();
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    step: "social_start",
+    plan: { provider: "x", handle: "artistnews" },
+    providerCalls: 0,
+  });
+  m.start.mockResolvedValue("run-id");
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.start).toHaveBeenCalledWith(
+    expect.objectContaining({ provider: "x", handle: "artistnews" }),
+    expect.anything(),
+  );
+  expect(j.state.stage).toBe("waiting_provider");
+});
+it("never executes a model-selected unavailable provider", async () => {
+  m.assess.mockResolvedValue({
+    sufficient: false,
+    references: [],
+    confirmedIds: [],
+    limitation: "missing_original",
+    nextLookup: "instagram",
+    inputTokens: 1,
+    outputTokens: 1,
+  });
+  const j = job();
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state.stage).toBe("unresolved");
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.search).not.toHaveBeenCalled();
+});

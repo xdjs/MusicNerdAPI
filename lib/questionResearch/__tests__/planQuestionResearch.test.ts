@@ -100,7 +100,7 @@ it("does not use a platform hint to treat a web page as spoken content", () => {
   ).toMatchObject({ stage: "unresolved", reason: "unsupported_speech" });
 });
 
-it("routes an unscoped latest overview to a connected social account after saved evidence is insufficient", () => {
+it("does not pick a connected social account merely because it exists", () => {
   const request = {
     topic: "latest updates",
     evidenceNeed: "reporting",
@@ -108,12 +108,10 @@ it("routes an unscoped latest overview to a connected social account after saved
     retrieval: "latest",
   } as const;
   expect(planQuestionResearch(request, { name: "Artist", instagram: "artist" })).toMatchObject({
-    provider: "instagram",
-    handle: "artist",
-    limit: 20,
+    provider: "web",
   });
   expect(planQuestionResearch(request, { name: "Artist", tiktok: "artist" })).toMatchObject({
-    provider: "tiktok",
+    provider: "web",
   });
   expect(
     planQuestionResearch(
