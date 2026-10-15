@@ -58,6 +58,9 @@ export async function collectInstagramScrape(
     const mapped = items
       .map(item => mapApifyPost(item, artistId, handle, artistName))
       .filter((r): r is SocialPostInsert => r !== null);
+    // An account scan must not turn unknown rows into an empty successful check.
+    // Fail before thumbnail work; retries keep the same paid dataset.
+    if (opts?.refresh && mapped.length !== items.length) return null;
     const rows = opts?.latestOnly ? selectLatestPosts(mapped) : mapped.slice(0, MAX_SCRAPE_LIMIT);
     const batch = rows.slice(cursor, cursor + THUMBNAILS_PER_SLICE);
     const scope: ThumbnailUploadScope = { jobId, attemptedPaths: new Set() };
@@ -80,6 +83,7 @@ export async function collectInstagramScrape(
             handle,
             ...opts.refresh,
             itemCount: items.length,
+            payloadRecognized: mapped.length === items.length,
             allMapped:
               mapped.length === items.length &&
               mapped.length <= opts.refresh.limit &&

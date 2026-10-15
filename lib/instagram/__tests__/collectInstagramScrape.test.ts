@@ -268,3 +268,18 @@ it("reconnects the captured Instagram run through the actual Latest collector", 
     vi.useRealTimers();
   }
 });
+
+it("rejects an unrecognized account-scan row before thumbnail work or a success checkpoint", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => [...feed(1), { unexpected: true }] }),
+  );
+  expect(
+    await collectInstagramScrape(artist, "artist", "ds", "job", 0, {
+      refresh: { runId: "run", limit: 9, scan: { startedAt: new Date().toISOString() } },
+    }),
+  ).toBeNull();
+  expect(retain).not.toHaveBeenCalled();
+  expect(checkpoint).not.toHaveBeenCalled();
+  expect(written).toEqual([]);
+});

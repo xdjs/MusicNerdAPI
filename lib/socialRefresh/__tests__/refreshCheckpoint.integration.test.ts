@@ -57,7 +57,7 @@ it("durably reuses a normalized successful empty scan", async () => {
     (await readSocialRefresh(artistId, "tiktok", "artist", undefined, writer)).skip,
   ).toBeUndefined();
 });
-it.each([{ itemCount: 50, posts: [] }, { allMapped: false }, { posts: [] }])(
+it.each([{ itemCount: 50, posts: [] }, { posts: [] }])(
   "does not advance covered interval on limited results %j",
   async change => {
     await storeSocialRefresh(writer, input);
@@ -164,4 +164,33 @@ it("does not overwrite a concurrent completed reference with a stale planned ref
   expect(row.scan_reference.anchors).toEqual(firstPosts);
   expect(row.scan_reference.gapSince).toBe("2026-10-02T00:00:00Z");
   expect((await saved()).covered_through).toBeNull();
+});
+
+it("an unrecognized dataset cannot establish a successful refresh cooldown", async () => {
+  await expect(
+    storeSocialRefresh(writer, { ...input, allMapped: false, posts: [] }),
+  ).rejects.toThrow("Unrecognized account scan results");
+  expect(await saved()).toBeUndefined();
+  expect(
+    (await readSocialRefresh(artistId, "x", "artist", undefined, writer)).skip,
+  ).toBeUndefined();
+});
+it("an unrecognized result cannot replace an earlier valid reference or cooldown", async () => {
+  await storeSocialRefresh(writer, input);
+  const before = await saved();
+  await expect(
+    storeSocialRefresh(writer, {
+      ...input,
+      runId: "bad-payload",
+      scan: { startedAt: new Date().toISOString() },
+      allMapped: false,
+    }),
+  ).rejects.toThrow("Unrecognized account scan results");
+  expect(await saved()).toEqual(before);
+});
+
+it("recognized but limited results retain a gap without becoming a malformed collection", async () => {
+  await storeSocialRefresh(writer, { ...input, payloadRecognized: true, allMapped: false });
+  expect(await saved()).toMatchObject({ status: "limited", covered_through: null });
+  expect((await readSocialRefresh(artistId, "x", "artist", undefined, writer)).skip).toBe(true);
 });
