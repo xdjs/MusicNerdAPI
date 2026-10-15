@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
 import type { ArtistLinkExecutor } from "@/lib/artistLinks/types";
 import { artists } from "@/lib/db/schema";
+import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit";
 
 /**
  * Nulls one link column on an artist's row. The caller has already checked
@@ -23,5 +24,7 @@ export async function clearArtistLinkColumn(
   await database.execute(
     sql`UPDATE artists SET ${sql.identifier(columnName)} = NULL WHERE id = ${artistId}`,
   );
+  if (columnName === "spotify" || columnName === "deezer")
+    await cancelSpotifyMatchForIdentityEdit(database, artistId);
   return { oldValue };
 }

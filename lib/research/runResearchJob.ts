@@ -1,3 +1,4 @@
+import { runSpotifyMatch } from "@/lib/spotifyMatch/runSpotifyMatch";
 import { runQuestionResearch } from "@/lib/questionResearch/runQuestionResearch";
 import { runSourceExtraction } from "@/lib/sourceExtraction/runSourceExtraction";
 import { runLatestRefresh } from "@/lib/latest/runLatestRefresh";
@@ -16,6 +17,8 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  */
 export async function runResearchJob(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   switch (job.kind) {
+    case "spotify_match":
+      return runSpotifyMatch(job, deadline);
     case "question_research":
       return runQuestionResearch(job, deadline);
     case "source_extract":
