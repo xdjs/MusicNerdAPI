@@ -17,10 +17,15 @@ export async function storeSocialRefresh(
     itemCount: number;
     limit: number;
     allMapped: boolean;
+    payloadRecognized?: boolean;
     posts: ScanPost[];
   },
 ): Promise<void> {
   const { artistId, platform, handle, scan, runId, itemCount, allMapped } = input;
+  // A response we could not interpret is a collection failure, not a recent
+  // successful account check. Throw inside the caller's guarded transaction
+  // so partial post writes roll back and the saved paid dataset can be retried.
+  if (!(input.payloadRecognized ?? allMapped)) throw new Error("Unrecognized account scan results");
   // Reconcile against the currently stored reference under the artist/job write lock.
   // Another account job may have completed since this run saved its immutable input.
   const current = rowsOf(

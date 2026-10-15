@@ -60,6 +60,7 @@ export async function collectSocialScrape(
           runId: task.runId,
           itemCount: items.length,
           limit: SOCIAL_POST_LIMIT,
+          payloadRecognized: mapped === items.length,
           allMapped: mapped === items.length,
           posts,
         });
