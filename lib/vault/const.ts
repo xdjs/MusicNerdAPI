@@ -51,6 +51,9 @@ export const ACCOUNT_PLATFORMS = new Set([
   "deezer",
 ]);
 
+/** Provider-assigned identities cannot be checked by artist-name handle prefixes. */
+export const OPAQUE_ACCOUNT_PLATFORMS = new Set(["spotify", "deezer", "youtubechannel"]);
+
 /** Opaque account IDs must not be folded like user-chosen handles. */
 export const CASE_SENSITIVE_ACCOUNT_IDS = new Set(["spotify", "youtubechannel"]);
 

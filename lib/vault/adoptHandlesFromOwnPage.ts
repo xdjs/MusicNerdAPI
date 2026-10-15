@@ -5,7 +5,12 @@ import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts"
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { ambiguousPlatforms } from "@/lib/vault/ambiguousPlatforms";
-import { ACCOUNT_PLATFORMS, HANDLE_STEM_MIN, REFERENCE_PLATFORMS } from "@/lib/vault/const";
+import {
+  ACCOUNT_PLATFORMS,
+  HANDLE_STEM_MIN,
+  OPAQUE_ACCOUNT_PLATFORMS,
+  REFERENCE_PLATFORMS,
+} from "@/lib/vault/const";
 import { findCorroborator } from "@/lib/vault/findCorroborator";
 import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
@@ -92,7 +97,14 @@ export async function adoptHandlesFromOwnPage(
   const adoptedHandles = new Set<string>();
   for (const r of accountHandles) {
     if (run && outOfBudget(run, "own-page handle verification")) break;
-    if (anyResembles && sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN) {
+    // Provider-assigned IDs cannot resemble the artist name. Only an
+    // affirmed own domain or saved owned account can supply that exception;
+    // third-party corroboration alone still cannot bypass the mixed-handle guard.
+    if (
+      anyResembles &&
+      sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN &&
+      !(ownedCatalogPage && OPAQUE_ACCOUNT_PLATFORMS.has(r.siteName))
+    ) {
       console.log(
         `[vaultWebSearch] Page mixes "${artistName}" accounts with ${r.siteName}=${r.id}; keeping only theirs`,
       );
