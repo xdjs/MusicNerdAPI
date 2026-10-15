@@ -20,6 +20,15 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
   const s = value as QuestionResearchState;
   if (
     s.version !== 1 ||
+    (s.selection !== undefined && !["candidates", "research"].includes(s.selection)) ||
+    (s.directAttempted !== undefined && s.directAttempted !== true) ||
+    (s.selection !== undefined) !== (s.directAttempted === true) ||
+    (s.selection === "candidates" &&
+      (s.stage !== "complete" ||
+        s.modelCalls !== 0 ||
+        s.providerCalls !== 0 ||
+        s.plan !== undefined ||
+        s.inFlight !== undefined)) ||
     (s.exploration !== undefined && !explorationSchema.safeParse(s.exploration).success) ||
     (s.outputRetries !== undefined &&
       (!Number.isInteger(s.outputRetries) ||

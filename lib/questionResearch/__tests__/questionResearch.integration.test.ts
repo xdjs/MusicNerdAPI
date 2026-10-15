@@ -29,6 +29,8 @@ vi.mock("@/lib/db/db", () => ({
   },
 }));
 const { queueQuestionResearch } = await import("@/lib/questionResearch/queueQuestionResearch");
+const { continueQuestionResearch } =
+  await import("@/lib/questionResearch/continueQuestionResearch");
 const { checkpointQuestionResearch } =
   await import("@/lib/questionResearch/checkpointQuestionResearch");
 const { persistResearchOriginals } =
@@ -327,4 +329,201 @@ it("does not reopen approved Lore evidence publicly after the claim is revoked",
       4000,
     ),
   ).rejects.toMatchObject({ status: 404 });
+});
+
+const directReference = {
+  sourceId: "vault:example",
+  revision: "a".repeat(64),
+  start: 0,
+  end: original.text.length,
+  text: original.text,
+  url: original.url,
+  curation: "approved" as const,
+  evidenceKind: "original_text" as const,
+  speaker: "not_applicable" as const,
+  publishedAt: null,
+  retrievedAt: null,
+  truncated: false,
+};
+const directOptions = { directCandidates: [directReference] };
+it("offers candidates as one durable reservation and continues the same job exactly once", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  expect(queued).toMatchObject({ selection: "candidates", stage: "complete", references: [] });
+  const before = (
+    await client.query<{ state: QuestionResearchState; activity_id: string }>(
+      "select state,activity_id from artist_research_jobs where id=$1",
+      [queued.jobId],
+    )
+  ).rows[0];
+  expect(before.state).toMatchObject({
+    directAttempted: true,
+    selection: "candidates",
+    references: [directReference],
+  });
+  expect(before.state.request).toEqual(request);
+  const results = await Promise.all([
+    continueQuestionResearch(artist, queued.jobId, { kind: "service" }),
+    continueQuestionResearch(artist, queued.jobId, { kind: "service" }),
+  ]);
+  for (const result of results)
+    expect(result).toMatchObject({
+      jobId: queued.jobId,
+      selection: "research",
+      stage: "checking_saved",
+      references: [],
+    });
+  const after = (
+    await client.query<{ state: QuestionResearchState; activity_id: string; status: string }>(
+      "select state,activity_id,status from artist_research_jobs where id=$1",
+      [queued.jobId],
+    )
+  ).rows[0];
+  expect(after.status).toBe("pending");
+  expect(after.activity_id).toBe(before.activity_id);
+  expect(after.state).toMatchObject({
+    directAttempted: true,
+    selection: "research",
+    step: "saved",
+    createdAt: before.state.createdAt,
+    key: before.state.key,
+    modelCalls: 0,
+    providerCalls: 0,
+  });
+  expect((await client.query("select count(*)::int n from artist_research_jobs")).rows[0]).toEqual({
+    n: 1,
+  });
+  expect(
+    (await client.query("select count(*)::int n from artist_activity_events")).rows[0],
+  ).toEqual({ n: 1 });
+});
+it("does not let legacy callers reuse candidate-only selections", async () => {
+  const candidate = await queueQuestionResearch(
+    artist,
+    { kind: "service" },
+    request,
+    directOptions,
+  );
+  const reused = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  expect(reused).toMatchObject({ jobId: candidate.jobId, reused: true, selection: "candidates" });
+  const normal = await queueQuestionResearch(artist, { kind: "service" }, request);
+  expect(normal.jobId).not.toBe(candidate.jobId);
+  expect(normal.stage).toBe("checking_saved");
+  expect(normal).not.toHaveProperty("selection");
+  await expect(
+    continueQuestionResearch(artist, candidate.jobId, { kind: "service" }),
+  ).rejects.toMatchObject({ status: 429, code: "research_busy" });
+  expect(
+    (await client.query("select status from artist_research_jobs where id=$1", [candidate.jobId]))
+      .rows[0],
+  ).toEqual({ status: "done" });
+});
+it("uses ordinary saved research for an empty candidate selection without offering another direct attempt", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, {
+    directCandidates: [],
+  });
+  expect(queued).toMatchObject({ selection: "research", stage: "checking_saved" });
+  expect(
+    (
+      await client.query(
+        "select state->'directAttempted' as attempted from artist_research_jobs where id=$1",
+        [queued.jobId],
+      )
+    ).rows[0],
+  ).toEqual({ attempted: true });
+  expect(await continueQuestionResearch(artist, queued.jobId, { kind: "service" })).toMatchObject({
+    stage: "checking_saved",
+    jobId: queued.jobId,
+  });
+});
+it("preserves the saved-only lane and budget when continuing candidates", async () => {
+  for (let i = 0; i < 5; i++) {
+    await queueQuestionResearch(
+      artist,
+      { kind: "service" },
+      { ...request, topic: `earlier question ${i}` },
+    );
+    await client.exec(
+      "update artist_research_jobs set status='done',state=jsonb_set(state,'{stage}','\"unresolved\"')",
+    );
+  }
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  expect(queued).toMatchObject({ outsideResearchReason: "quota", selection: "candidates" });
+  const result = await continueQuestionResearch(artist, queued.jobId, { kind: "service" });
+  expect(result).toMatchObject({
+    outsideResearchReason: "quota",
+    selection: "research",
+    jobId: queued.jobId,
+  });
+  expect(
+    (
+      await client.query(
+        "select count(*)::int n from artist_research_jobs where state->'savedOnly'='true'::jsonb",
+      )
+    ).rows[0],
+  ).toEqual({ n: 1 });
+});
+it("does not continue an expired candidate or reset its lifetime", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  await client.query(
+    "update artist_research_jobs set state=jsonb_set(state,'{createdAt}',to_jsonb((now()-interval '16 minutes')::text)) where id=$1",
+    [queued.jobId],
+  );
+  await expect(
+    continueQuestionResearch(artist, queued.jobId, { kind: "service" }),
+  ).rejects.toMatchObject({ status: 410, code: "research_expired" });
+  expect(
+    (
+      await client.query(
+        "select status,state->>'selection' selection from artist_research_jobs where id=$1",
+        [queued.jobId],
+      )
+    ).rows[0],
+  ).toEqual({ status: "done", selection: "candidates" });
+  const fresh = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  expect(fresh.jobId).not.toBe(queued.jobId);
+  expect(fresh.reused).toBe(false);
+});
+it("duplicate continuation preserves the worker's progress and charged counters", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  await continueQuestionResearch(artist, queued.jobId, { kind: "service" });
+  await client.query(
+    'update artist_research_jobs set status=\'running\',state=state || \'{"stage":"searching","step":"search","modelCalls":2,"providerCalls":1,"inputTokens":200,"outputTokens":30}\'::jsonb where id=$1',
+    [queued.jobId],
+  );
+  const before = (
+    await client.query("select state,status,updated_at from artist_research_jobs where id=$1", [
+      queued.jobId,
+    ])
+  ).rows[0];
+  expect(await continueQuestionResearch(artist, queued.jobId, { kind: "service" })).toMatchObject({
+    stage: "searching",
+    jobId: queued.jobId,
+    selection: "research",
+  });
+  expect(
+    (
+      await client.query("select state,status,updated_at from artist_research_jobs where id=$1", [
+        queued.jobId,
+      ])
+    ).rows[0],
+  ).toEqual(before);
+});
+it("refuses continuation across an ownership change or from an artist credential", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
+  await expect(
+    continueQuestionResearch(artist, queued.jobId, { kind: "artist", userId: user }),
+  ).rejects.toMatchObject({ status: 403 });
+  await client.exec("update artist_claims set status='rejected'");
+  await expect(
+    continueQuestionResearch(artist, queued.jobId, { kind: "service" }),
+  ).rejects.toMatchObject({ status: 409, code: "research_cancelled" });
+});
+it("refuses to reset a normal research job through candidate continuation", async () => {
+  const queued = await queueQuestionResearch(artist, { kind: "service" }, request);
+  await expect(
+    continueQuestionResearch(artist, queued.jobId, { kind: "service" }),
+  ).rejects.toMatchObject({ status: 409, code: "invalid_transition" });
+  await expect(
+    queueQuestionResearch(artist, { kind: "artist", userId: user }, request, directOptions),
+  ).rejects.toMatchObject({ status: 403 });
 });

@@ -81,6 +81,10 @@ export type DiscoveryOriginal = {
 };
 export type QuestionResearchState = {
   version: 1;
+  /** Candidate readiness does not assert that the question is answered. */
+  selection?: "candidates" | "research";
+  /** Server-only marker; continuation never offers another direct attempt. */
+  directAttempted?: true;
   /** Server-admitted saved-evidence lane; never allowed to collect externally. */
   savedOnly?: boolean;
   request: ResearchRequest;
