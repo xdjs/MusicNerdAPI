@@ -12,11 +12,11 @@ vi.mock("@/lib/onboarding/runAutoBuild", () => ({ runAutoBuild: m.autoBuild }));
 const { handleOpenTurn } = await import("@/lib/onboarding/handleOpenTurn");
 
 beforeEach(() => {
-  m.reuse.mockReset().mockResolvedValue(false);
   m.emitStep.mockReset().mockImplementation(emitStepMock());
   m.autoBuild.mockReset().mockImplementation(async function* () {
     yield { kind: "complete" };
   });
+  m.reuse.mockReset().mockResolvedValue(false);
 });
 
 describe("handleOpenTurn", () => {
@@ -24,6 +24,14 @@ describe("handleOpenTurn", () => {
     const ctx = turnContext("profiles");
     expect(await collect(handleOpenTurn(ctx))).toEqual([{ kind: "complete" }]);
     expect(m.autoBuild).toHaveBeenCalledWith("a1", ctx.ownership);
+  });
+
+  it("builds the page even when directory discovery is saved: no profiles card on arrival", async () => {
+    m.reuse.mockResolvedValue(true);
+    const ctx = turnContext("profiles");
+    expect(await collect(handleOpenTurn(ctx))).toEqual([{ kind: "complete" }]);
+    expect(m.autoBuild).toHaveBeenCalledWith("a1", ctx.ownership);
+    expect(m.emitStep).not.toHaveBeenCalled();
   });
 
   it("resumes anywhere else with the step's card", async () => {
@@ -40,12 +48,4 @@ describe("handleOpenTurn", () => {
       { kind: "complete" },
     ]);
   });
-});
-
-it("opens saved profiles without repeating any profile or source discovery", async () => {
-  m.reuse.mockResolvedValue(true);
-  const events = await collect(handleOpenTurn(turnContext("profiles")));
-  expect(m.autoBuild).not.toHaveBeenCalled();
-  expect(m.emitStep).toHaveBeenCalledWith("a1", "profiles");
-  expect(events.at(-1)).toMatchObject({ kind: "step", step: "profiles" });
 });

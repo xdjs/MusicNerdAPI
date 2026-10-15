@@ -69,7 +69,7 @@ beforeEach(() => {
 });
 
 describe("autoBuildSources", () => {
-  it("streams saved sources, reports adopted links, preserves pending sources for explicit review", async () => {
+  it("streams saved sources, reports adopted links, approves everything pending and confirms the vault", async () => {
     const guessed = profile("instagram", "guess", { provisional: true });
     const { events, result } = await run(["instagram"], new Map([["instagram", guessed]]));
     expect(m.search).toHaveBeenCalledWith("a1", {
@@ -92,7 +92,10 @@ describe("autoBuildSources", () => {
       (events[2] as { profiles: { siteName: string }[] }).profiles.map(p => p.siteName),
     ).toEqual(["instagram", "bandcamp"]);
     expect(events[3]).toMatchObject({ kind: "choices", platform: "instagram", chosen: "real" });
-    expect(m.status).not.toHaveBeenCalled();
+    expect(m.status.mock.calls).toEqual([
+      ["p1", "approved"],
+      ["p2", "approved"],
+    ]);
     expect(events[4]).toEqual({
       kind: "sources",
       sources: [{ title: "Old", url: "https://old.com", ogImage: "i" }],
@@ -103,7 +106,7 @@ describe("autoBuildSources", () => {
       done: true,
       group: "source-search",
     });
-    expect(m.confirm).not.toHaveBeenCalled();
+    expect(m.confirm).toHaveBeenCalledWith("a1", "vault");
     expect(result.citable).toBe(1);
   });
 
@@ -112,8 +115,8 @@ describe("autoBuildSources", () => {
     m.search.mockRejectedValueOnce(new Error("tavily"));
     m.status.mockRejectedValueOnce(new Error("pool"));
     const { events } = await run();
-    expect(m.status).not.toHaveBeenCalled();
-    expect(m.confirm).not.toHaveBeenCalled();
+    expect(m.status).toHaveBeenCalledTimes(2);
+    expect(m.confirm).toHaveBeenCalledWith("a1", "vault");
     expect(events.at(-1)).toMatchObject({ kind: "progress", done: true });
     error.mockRestore();
   });
