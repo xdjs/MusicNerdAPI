@@ -1,3 +1,4 @@
+import { ResearchQuotaError } from "./ResearchQuotaError";
 import { NoObjectGeneratedError } from "ai";
 import { isDeepStrictEqual } from "node:util";
 import { webSearch } from "@/lib/search/webSearch";
@@ -40,8 +41,9 @@ export async function runQuestionResearch(
     waiting: true,
     progress: "Slice no longer owns this question research",
   };
-  const finish = async () => {
-    if (!(await checkpointQuestionResearch(job, state))) return stale;
+  const finish = async (reserveOutside = false) => {
+    if (!(await checkpointQuestionResearch(job, state, true, undefined, reserveOutside)))
+      return stale;
     const done = ["complete", "unresolved", "failed", "cancelled"].includes(state.stage);
     return {
       done,
@@ -165,8 +167,8 @@ export async function runQuestionResearch(
           state.candidates = [{ url: plan.targetUrl, title: "" }];
           state.nextCandidate = 0;
         }
-        // Return after publishing the transition; provider execution is a later slice.
-        return await finish();
+        // Reserve outside capacity exactly once with this transition, before provider execution.
+        return await finish(state.budgetVersion === 2);
       }
       case "search": {
         if (plan.provider !== "web") throw new Error("Research route changed");
@@ -355,6 +357,19 @@ export async function runQuestionResearch(
       }
     }
   } catch (error) {
+    if (error instanceof ResearchQuotaError) {
+      state.savedOnly = true;
+      state.outsideQuota = error.quota;
+      state.step = "saved";
+      state.stage = "unresolved";
+      delete state.plan;
+      delete state.candidates;
+      delete state.nextCandidate;
+      state.limitations.push(
+        "Saved sources did not establish this answer. Outside research is temporarily at capacity; no provider was started.",
+      );
+      return finish();
+    }
     if (error instanceof OwnershipChangedError) throw error;
     if (
       NoObjectGeneratedError.isInstance(error) &&
@@ -377,6 +392,13 @@ export async function runQuestionResearch(
     state.stage = "failed";
     state.errorCode = "research_unavailable";
     state.failure = getResearchFailureDiagnostic(error, state.step);
+    if (state.budgetVersion === 2 && !state.outsideReservedAt) {
+      // A rejected/failed reservation must not persist an unreserved external stage.
+      state.step = "saved";
+      delete state.plan;
+      delete state.candidates;
+      delete state.nextCandidate;
+    }
     return finish();
   }
 }

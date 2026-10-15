@@ -61,6 +61,15 @@ export async function getQuestionResearchStatus(
     jobId,
     ...(state.selection ? { selection: state.selection } : {}),
     ...(state.savedOnly ? { outsideResearchReason: "quota" as const } : {}),
+    ...(state.outsideQuota
+      ? {
+          ...state.outsideQuota,
+          retryAfterSeconds: Math.max(
+            0,
+            Math.ceil((Date.parse(state.outsideQuota.resetAt) - Date.now()) / 1000),
+          ),
+        }
+      : {}),
     stage,
     provider: state.plan?.provider ?? null,
     message: researchStatusMessage(stage, state.plan?.provider ?? null),

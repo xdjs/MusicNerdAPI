@@ -46,6 +46,9 @@ export const researchOutputSchemas = {
     limitations: z.array(z.string()).max(30),
     reused: z.boolean().optional(),
     outsideResearchReason: z.literal("quota").optional(),
+    quotaScope: z.enum(["saved_global", "outside_artist", "outside_global"]).optional(),
+    retryAfterSeconds: z.number().int().nonnegative().optional(),
+    resetAt: z.iso.datetime().optional(),
   }),
   read: z.object({
     status: z.literal("ok"),

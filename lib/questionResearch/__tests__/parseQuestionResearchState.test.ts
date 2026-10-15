@@ -53,3 +53,24 @@ it("keeps candidate readiness separate from model-assessed research and rejects 
     parseQuestionResearchState({ ...candidate, selection: "research", stage: "checking_saved" }),
   ).toMatchObject({ selection: "research" });
 });
+
+it("requires a valid outside reservation for every new-budget external stage", () => {
+  const initial = { ...state, modelCalls: 0, savedOnly: undefined, budgetVersion: 2 };
+  expect(parseQuestionResearchState(initial).budgetVersion).toBe(2);
+  for (const patch of [
+    { step: "search" },
+    { providerCalls: 1 },
+    { inFlight: "social_start" },
+    { outsideReservedAt: "bad" },
+    { budgetVersion: 3 },
+    { outsideReservedAt: "2026-10-15T12:00:00Z", savedOnly: true },
+  ])
+    expect(() => parseQuestionResearchState({ ...initial, ...patch })).toThrow();
+  expect(
+    parseQuestionResearchState({
+      ...initial,
+      step: "search",
+      outsideReservedAt: "2026-10-15T12:00:00Z",
+    }),
+  ).toMatchObject({ budgetVersion: 2 });
+});

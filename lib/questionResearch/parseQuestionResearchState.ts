@@ -20,6 +20,25 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
   const s = value as QuestionResearchState;
   if (
     s.version !== 1 ||
+    (s.budgetVersion !== undefined && s.budgetVersion !== 2) ||
+    (s.outsideReservedAt !== undefined &&
+      (s.budgetVersion !== 2 ||
+        typeof s.outsideReservedAt !== "string" ||
+        !Number.isFinite(Date.parse(s.outsideReservedAt)) ||
+        s.savedOnly === true)) ||
+    (s.budgetVersion === 2 &&
+      !s.outsideReservedAt &&
+      ((s.step !== undefined && s.step !== "saved") ||
+        s.providerCalls > 0 ||
+        (s.inFlight !== undefined && s.inFlight !== "model"))) ||
+    (s.outsideQuota !== undefined &&
+      (s.budgetVersion !== 2 ||
+        !s.savedOnly ||
+        !["outside_artist", "outside_global"].includes(s.outsideQuota.quotaScope) ||
+        !Number.isInteger(s.outsideQuota.retryAfterSeconds) ||
+        s.outsideQuota.retryAfterSeconds < 0 ||
+        s.outsideQuota.retryAfterSeconds > 86400 ||
+        !Number.isFinite(Date.parse(s.outsideQuota.resetAt)))) ||
     (s.selection !== undefined && !["candidates", "research"].includes(s.selection)) ||
     (s.directAttempted !== undefined && s.directAttempted !== true) ||
     (s.selection !== undefined) !== (s.directAttempted === true) ||
@@ -28,6 +47,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
         s.modelCalls !== 0 ||
         s.providerCalls !== 0 ||
         s.plan !== undefined ||
+        s.outsideReservedAt !== undefined ||
         s.inFlight !== undefined)) ||
     (s.exploration !== undefined && !explorationSchema.safeParse(s.exploration).success) ||
     (s.outputRetries !== undefined &&

@@ -1,3 +1,4 @@
+import { ResearchQuotaError } from "./ResearchQuotaError";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -26,10 +27,24 @@ export async function withResearchRequest(
         ? error
         : new KnowledgeError("research_unavailable", 503, "Research is temporarily unavailable");
     return NextResponse.json(
-      { status: "error", error: e.message, code: e.code },
+      {
+        status: "error",
+        error: e.message,
+        code: e.code,
+        ...(e instanceof ResearchQuotaError ? e.quota : {}),
+      },
       {
         status: e.status,
-        headers: { ...headers, ...(e.status === 429 ? { "Retry-After": "60" } : {}) },
+        headers: {
+          ...headers,
+          ...(e.status === 429
+            ? {
+                "Retry-After": String(
+                  e instanceof ResearchQuotaError ? e.quota.retryAfterSeconds : 60,
+                ),
+              }
+            : {}),
+        },
       },
     );
   }

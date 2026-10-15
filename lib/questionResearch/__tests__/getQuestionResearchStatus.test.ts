@@ -101,3 +101,37 @@ it("marks unassessed candidates explicitly and still removes revoked or changed 
   });
   expect(m.originals).not.toHaveBeenCalled();
 });
+
+it("reports elapsed reset time as zero without extending the blocked job", async () => {
+  const resetAt = new Date(Date.now() - 1000).toISOString();
+  m.execute.mockResolvedValue([
+    {
+      status: "done",
+      updated_at: new Date().toISOString(),
+      state: {
+        version: 1,
+        budgetVersion: 2,
+        savedOnly: true,
+        outsideQuota: { quotaScope: "outside_artist", retryAfterSeconds: 123, resetAt },
+        key: "key",
+        expectedClaimId: null,
+        request: { topic: "known original", evidenceNeed: "reporting", freshness: "stored" },
+        stage: "unresolved",
+        createdAt: new Date().toISOString(),
+        references: [],
+        limitations: [],
+        modelCalls: 1,
+        providerCalls: 0,
+        inputTokens: 1,
+        outputTokens: 1,
+      },
+    },
+  ]);
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    stage: "unresolved",
+    outsideResearchReason: "quota",
+    quotaScope: "outside_artist",
+    resetAt,
+    retryAfterSeconds: 0,
+  });
+});

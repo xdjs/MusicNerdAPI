@@ -207,39 +207,25 @@ it("does not replace an existing profile during Link approval", async () => {
   ).rejects.toMatchObject({ status: 409, code: "link_conflict" });
   expect((await client.query("select x from artists")).rows[0]).toEqual({ x: "existing" });
 });
-it("enforces the per-artist rolling budget across completed different requests", async () => {
-  for (let i = 0; i < 5; i++) {
-    await queueQuestionResearch(
+it("keeps one global saved admission per question without an artist cap", async () => {
+  for (let i = 0; i < 11; i++) {
+    const queued = await queueQuestionResearch(
       artist,
       { kind: "service" },
       { ...request, topic: `record ${i} credits` },
     );
+    expect(queued).not.toHaveProperty("outsideResearchReason");
     await client.exec(
       "update artist_research_jobs set status='done',state=jsonb_set(state,'{stage}','\"unresolved\"')",
     );
   }
-  for (let i = 0; i < 5; i++) {
-    const saved = await queueQuestionResearch(
-      artist,
-      { kind: "service" },
-      { ...request, topic: `saved-only record ${i} credits` },
-    );
-    expect(saved).toMatchObject({ outsideResearchReason: "quota" });
-    await client.exec(
-      "update artist_research_jobs set status='done',state=jsonb_set(state,'{stage}','\"unresolved\"')",
-    );
-  }
-  const budgets = await client.query<{ outside: number; saved: number }>(
-    "select count(*) filter(where state->'savedOnly' is distinct from 'true'::jsonb)::int outside,count(*) filter(where state->'savedOnly'='true'::jsonb)::int saved from artist_research_jobs",
-  );
-  expect(budgets.rows[0]).toEqual({ outside: 5, saved: 5 });
-  await expect(
-    queueQuestionResearch(
-      artist,
-      { kind: "service" },
-      { ...request, topic: "eleventh record credits" },
-    ),
-  ).rejects.toMatchObject({ status: 429, code: "saved_evidence_quota" });
+  expect(
+    (
+      await client.query(
+        "select count(*)::int n from artist_research_jobs where state->>'budgetVersion'='2' and state->>'outsideReservedAt' is null",
+      )
+    ).rows[0],
+  ).toEqual({ n: 11 });
 });
 
 it("preserves a known publication date on approval without making it an event date", async () => {
@@ -435,7 +421,7 @@ it("uses ordinary saved research for an empty candidate selection without offeri
     jobId: queued.jobId,
   });
 });
-it("preserves the saved-only lane and budget when continuing candidates", async () => {
+it("preserves one saved admission and no outside charge when continuing candidates", async () => {
   for (let i = 0; i < 5; i++) {
     await queueQuestionResearch(
       artist,
@@ -447,20 +433,19 @@ it("preserves the saved-only lane and budget when continuing candidates", async 
     );
   }
   const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
-  expect(queued).toMatchObject({ outsideResearchReason: "quota", selection: "candidates" });
+  expect(queued).toMatchObject({ selection: "candidates" });
   const result = await continueQuestionResearch(artist, queued.jobId, { kind: "service" });
   expect(result).toMatchObject({
-    outsideResearchReason: "quota",
     selection: "research",
     jobId: queued.jobId,
   });
   expect(
     (
       await client.query(
-        "select count(*)::int n from artist_research_jobs where state->'savedOnly'='true'::jsonb",
+        "select count(*)::int n from artist_research_jobs where state->>'budgetVersion'='2' and state->>'outsideReservedAt' is null",
       )
     ).rows[0],
-  ).toEqual({ n: 1 });
+  ).toEqual({ n: 6 });
 });
 it("does not continue an expired candidate or reset its lifetime", async () => {
   const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
@@ -487,7 +472,7 @@ it("duplicate continuation preserves the worker's progress and charged counters"
   const queued = await queueQuestionResearch(artist, { kind: "service" }, request, directOptions);
   await continueQuestionResearch(artist, queued.jobId, { kind: "service" });
   await client.query(
-    'update artist_research_jobs set status=\'running\',state=state || \'{"stage":"searching","step":"search","modelCalls":2,"providerCalls":1,"inputTokens":200,"outputTokens":30}\'::jsonb where id=$1',
+    'update artist_research_jobs set status=\'running\',state=state || \'{"stage":"searching","step":"search","modelCalls":2,"providerCalls":1,"outsideReservedAt":"2026-10-15T12:00:00Z","inputTokens":200,"outputTokens":30}\'::jsonb where id=$1',
     [queued.jobId],
   );
   const before = (
