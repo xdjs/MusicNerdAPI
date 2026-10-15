@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { getEligibleResearchOriginals } from "./getEligibleResearchOriginals";
+import { diversifyResearchOriginals } from "./diversifyResearchOriginals";
 import { selectResearchReferences } from "./selectResearchReferences";
 import { researchPlatformForUrl } from "./researchPlatformForUrl";
 import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
@@ -43,9 +44,7 @@ export function createPublicResearchTools(
     groups.set(provider, group);
   }
   // Interleave source families for browsing, while retaining every original and per-provider chronology.
-  const diverse: ResearchOriginal[] = [];
-  for (let index = 0; diverse.length < eligible.length; index++)
-    for (const group of groups.values()) if (group[index]) diverse.push(group[index]);
+  const diverse = diversifyResearchOriginals(chronological);
   const read = new Map<string, ResearchReference>();
   let outcome: Outcome | undefined;
   let toolCalls = 0;
