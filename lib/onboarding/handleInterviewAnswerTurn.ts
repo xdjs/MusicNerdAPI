@@ -29,7 +29,11 @@ export async function* handleInterviewAnswerTurn(
   }
   const answer = turn.answer?.trim() || null;
   // How many were asked before this one: its position, for a non-repeating fallback.
-  const priorAnswers = (await getInterviewAnswers(artistId)) ?? [];
+  const priorAnswers = await getInterviewAnswers(artistId);
+  if (priorAnswers === null) {
+    yield { kind: "error", message: "We couldn't load your saved interview. Please try again." };
+    return;
+  }
   await upsertInterviewAnswer({
     artistId,
     questionKey: turn.questionKey,

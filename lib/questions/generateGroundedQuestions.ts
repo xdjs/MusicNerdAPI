@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { generateArray } from "@/lib/ai/generateArray";
 import { getArtistById } from "@/lib/artists/getArtistById";
-import { withTimeout } from "@/lib/async/withTimeout";
+import { withAbortDeadline } from "@/lib/async/withAbortDeadline";
 import { getSocialCredits } from "@/lib/credits/getSocialCredits";
 import { getSocialPostsOrNull } from "@/lib/instagram/getSocialPostsOrNull";
 import { buildCandidates } from "@/lib/questions/buildCandidates";
@@ -27,8 +27,7 @@ import { deriveSocialSignals } from "@/lib/socialSignals/deriveSocialSignals";
  * fact-checked, cleaned of boilerplate, capped at half about other people and
  * spread across kinds.
  *
- * MusicNerdWeb caches the result in its own process for 15 minutes; this API
- * doesn't, so each call asks the model afresh. The chat asks once per step.
+ * Onboarding persists the resulting plan; this function only prepares a new set.
  *
  * @param artistId - The artist.
  * @param opts - Options.
@@ -37,12 +36,13 @@ import { deriveSocialSignals } from "@/lib/socialSignals/deriveSocialSignals";
  */
 export async function generateGroundedQuestions(
   artistId: string,
-  opts?: { max?: number },
+  opts?: { max?: number; abortSignal?: AbortSignal },
 ): Promise<GroundedQuestion[]> {
   const max = Math.max(0, opts?.max ?? DEFAULT_MAX_QUESTIONS);
   if (!artistId || max === 0) return [];
 
   try {
+    opts?.abortSignal?.throwIfAborted();
     const artist = await getArtistById(artistId);
     if (!artist) return [];
     const artistName = artist.name ?? "the artist";
@@ -70,25 +70,33 @@ export async function generateGroundedQuestions(
       authoredBy,
       material,
     }));
-    const response = await withTimeout(
-      generateArray({
-        prompt: `SIGNALS:\n${JSON.stringify(promptPayload, null, 2)}\n\nChoose at most ${draftTarget} of the most interesting, distinct signals and write one question each, BEST FIRST. Fewer than ${draftTarget} is fine — even zero — if the rest don't clear the bar.`,
-        instructions: questionSystemInstruction(artistName),
-        // Stability comes from persisting the asked questions; 0.2 only flattened the writing.
-        temperature: 0.8,
-        element: z.object({
-          signalId: z.string().optional(),
-          question: z.string().optional(),
-          rationale: z.string().optional(),
+    opts?.abortSignal?.throwIfAborted();
+    const response = await withAbortDeadline(
+      abortSignal =>
+        generateArray({
+          abortSignal,
+          maxRetries: 0,
+          maxOutputTokens: 1800,
+          thinkingBudget: 0,
+          prompt: `SIGNALS:\n${JSON.stringify(promptPayload, null, 2)}\n\nChoose at most ${draftTarget} of the most interesting, distinct signals and write one question each, BEST FIRST. Fewer than ${draftTarget} is fine — even zero — if the rest don't clear the bar.`,
+          instructions: questionSystemInstruction(artistName),
+          // Stability comes from persisting the asked questions; 0.2 only flattened the writing.
+          temperature: 0.8,
+          element: z.object({
+            // Unconstrained IDs could expand into repeated source text until timeout.
+            signalId: z.enum(candidates.map(c => c.signalId) as [string, ...string[]]),
+            question: z.string(),
+            rationale: z.string(),
+          }),
         }),
-      }),
       GENERATION_TIMEOUT_MS,
-      "questionGenerator timeout",
+      opts?.abortSignal,
     );
 
     const drafted = selectDrafts(resolveAnswers(response.output, byId), draftTarget);
     const demoted = new Map(drafted.filter(d => d.demotedFor).map(d => [d.key, d.demotedFor!]));
-    const verified = await keepOnlySupported(drafted, artistName);
+    opts?.abortSignal?.throwIfAborted();
+    const verified = await keepOnlySupported(drafted, artistName, opts?.abortSignal);
     // Clean before flagged: this split, not the draft order, is what ranks them.
     const clean = verified.filter(q => !demoted.has(q.key));
     const flagged = verified.filter(q => demoted.has(q.key));

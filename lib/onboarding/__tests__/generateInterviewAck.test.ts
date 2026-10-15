@@ -16,6 +16,8 @@ describe("generateInterviewAck", () => {
     expect(generateText).toHaveBeenCalledWith({
       prompt: expect.stringContaining('The artist was asked: "Who mixed it?"'),
       temperature: 0.7,
+      abortSignal: expect.any(AbortSignal),
+      maxRetries: 0,
       thinkingBudget: 0,
     });
   });

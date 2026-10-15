@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateArray } from "@/lib/ai/generateArray";
-import { withTimeout } from "@/lib/async/withTimeout";
+import { withAbortDeadline } from "@/lib/async/withAbortDeadline";
 import { VERIFIER_INSTRUCTION, VERIFIER_TIMEOUT_MS } from "@/lib/questions/const";
 import type { DraftedQuestion, GroundedQuestion } from "@/lib/questions/types";
 
@@ -19,6 +19,7 @@ import type { DraftedQuestion, GroundedQuestion } from "@/lib/questions/types";
 export async function keepOnlySupported(
   drafted: DraftedQuestion[],
   artistName: string,
+  parentSignal?: AbortSignal,
 ): Promise<GroundedQuestion[]> {
   if (drafted.length === 0) return [];
   const payload = drafted
@@ -30,22 +31,26 @@ export async function keepOnlySupported(
 
   let verdicts: { i?: unknown; ok?: unknown; contentSpecific?: unknown; problem?: unknown }[];
   try {
-    const res = await withTimeout(
-      generateArray({
-        prompt: `The artist is "${artistName}".\n\n${payload}`,
-        instructions: VERIFIER_INSTRUCTION,
-        temperature: 0,
-        element: z.object({
-          i: z.number().optional(),
-          ok: z.boolean().optional(),
-          contentSpecific: z.boolean().optional(),
-          problem: z.string().optional(),
+    const res = await withAbortDeadline(
+      abortSignal =>
+        generateArray({
+          abortSignal,
+          maxRetries: 0,
+          prompt: `The artist is "${artistName}".\n\n${payload}`,
+          instructions: VERIFIER_INSTRUCTION,
+          temperature: 0,
+          element: z.object({
+            i: z.number().optional(),
+            ok: z.boolean().optional(),
+            contentSpecific: z.boolean().optional(),
+            problem: z.string().optional(),
+            support: z.string().optional(),
+          }),
+          // A judgement task: with thinking off it rejected supported questions.
+          thinkingBudget: 512,
         }),
-        // A judgement task: with thinking off it rejected supported questions.
-        thinkingBudget: 512,
-      }),
       VERIFIER_TIMEOUT_MS,
-      "verifier timeout",
+      parentSignal,
     );
     verdicts = res.output;
   } catch (e) {

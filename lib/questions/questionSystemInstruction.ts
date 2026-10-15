@@ -66,5 +66,5 @@ Rules:
 - One sentence. Plain spoken language, never clinical, never creepy, never over-familiar, and never flattering ("powerful", "amazing", "clearly struck a nerve").
 - Use ONLY signalIds from the list you were given.
 
-Return STRICT JSON ONLY — an array of objects: [{ "signalId": string, "question": string, "rationale": string }]. "signalId" is exactly one id, echoed exactly. "rationale" is one short internal phrase (not shown to the artist) noting why it's worth asking. Return [] if nothing in the signals is worth asking about. No markdown fences, no commentary, JSON only.`;
+Return STRICT JSON ONLY in the supplied response schema: { "elements": [{ "signalId": string, "question": string, "rationale": string }] }. "signalId" is exactly one id, echoed exactly. "rationale" is one short internal phrase (not shown to the artist) noting why it's worth asking. Return { "elements": [] } if nothing in the signals is worth asking about. No markdown fences, no commentary, JSON only.`;
 }

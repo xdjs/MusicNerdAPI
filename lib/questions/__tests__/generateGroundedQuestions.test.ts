@@ -132,6 +132,23 @@ describe("generateGroundedQuestions", () => {
     ]);
   });
 
+  it("constrains model output to supplied source IDs so it cannot expand an ID into source text", async () => {
+    await generateGroundedQuestions("a1");
+    const call = m.generateArray.mock.calls.find(c => !isVerifier(c[0]))![0];
+    const signalId = signalsIn(call)[0].signalId;
+    expect(
+      call.element.safeParse({ signalId, question: "What changed?", rationale: "Specific source" })
+        .success,
+    ).toBe(true);
+    expect(
+      call.element.safeParse({
+        signalId: `${signalId}_invented_source_text`,
+        question: "What changed?",
+      }).success,
+    ).toBe(false);
+    expect(call.maxOutputTokens).toBe(1800);
+  });
+
   it("drops an answer whose signalId we never supplied, and duplicates after the first", async () => {
     reply([
       {
@@ -322,4 +339,33 @@ describe("generateGroundedQuestions", () => {
     await generateGroundedQuestions("a1", { max: 3 });
     expect(m.generateArray.mock.calls.filter(c => !isVerifier(c[0]))).toHaveLength(2);
   });
+});
+
+it("passes cancellation through drafting and verification without hidden model retries", async () => {
+  const controller = new AbortController();
+  reply([
+    {
+      signalId: "collab_dameatlas",
+      question: "You released a track together — how did that start?",
+      rationale: "collaboration",
+    },
+  ]);
+  await generateGroundedQuestions("a1", { abortSignal: controller.signal });
+  expect(m.generateArray).toHaveBeenCalledTimes(2);
+  for (const [call] of m.generateArray.mock.calls) {
+    expect(call.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(call.maxRetries).toBe(0);
+  }
+});
+
+it("never verifies or returns drafts after the preparation was cancelled", async () => {
+  const controller = new AbortController();
+  m.generateArray.mockImplementation(async () => {
+    controller.abort();
+    return { output: [{ signalId: "collab_dameatlas", question: "What happened?" }] };
+  });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  expect(await generateGroundedQuestions("a1", { abortSignal: controller.signal })).toEqual([]);
+  expect(m.generateArray).toHaveBeenCalledTimes(1);
+  log.mockRestore();
 });

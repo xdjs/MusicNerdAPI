@@ -12,7 +12,10 @@ describe("questionSystemInstruction", () => {
     expect(text).toContain(
       "you must NEVER say or imply that Pete Rango wrote, said, or posted that caption/material",
     );
-    expect(text).toContain('[{ "signalId": string, "question": string, "rationale": string }]');
+    expect(text).toContain(
+      '{ "elements": [{ "signalId": string, "question": string, "rationale": string }] }',
+    );
+    expect(text).toContain('Return { "elements": [] }');
     expect(text).not.toContain("${");
   });
 });
