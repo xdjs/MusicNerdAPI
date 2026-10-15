@@ -1,5 +1,5 @@
 import { getInterviewAnswers } from "@/lib/lore/getInterviewAnswers";
-import { buildInterviewQuestions } from "@/lib/onboarding/buildInterviewQuestions";
+import { getOnboardingInterviewPlan } from "@/lib/onboarding/getOnboardingInterviewPlan";
 import { confirmOnboardingStep } from "@/lib/onboarding/confirmOnboardingStep";
 import { INTERVIEW_QUESTION_CAP } from "@/lib/onboarding/const";
 import { emitPublishStep } from "@/lib/onboarding/emitPublishStep";
@@ -15,13 +15,18 @@ import type { InterviewQuestionCandidate, TurnEvent } from "@/lib/onboarding/typ
  * @returns The step's events.
  */
 export async function* emitInterviewStep(artistId: string): AsyncGenerator<TurnEvent> {
-  const asked = new Set(((await getInterviewAnswers(artistId)) ?? []).map(a => a.questionKey));
+  const history = await getInterviewAnswers(artistId);
+  if (history === null) {
+    yield { kind: "error", message: "We couldn't load your saved interview. Please try again." };
+    return;
+  }
+  const asked = new Set(history.map(a => a.questionKey));
   let questions: InterviewQuestionCandidate[] = [];
   if (asked.size < INTERVIEW_QUESTION_CAP) {
-    // Reading their posts can take ~12 s of real work: narrated, not dead air.
-    yield { kind: "progress", label: "Reading your posts", done: false };
-    questions = await buildInterviewQuestions(artistId);
-    yield { kind: "progress", label: "Reading your posts", done: true };
+    // The same private plan survives skips, reloads and new server instances.
+    yield { kind: "progress", label: "Preparing your questions…", done: false };
+    questions = await getOnboardingInterviewPlan(artistId, [...asked]);
+    yield { kind: "progress", label: "Preparing your questions…", done: true };
   }
   const next = questions.find(q => !asked.has(q.key));
   if (!next) {

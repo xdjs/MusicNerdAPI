@@ -148,6 +148,11 @@ vi.mock("@/lib/lore/generateAboutFromDoc", () => ({
 vi.mock("@/lib/lore/synthesizeFallbackAbout", () => ({
   synthesizeFallbackAbout: m.synthesizeFallbackAbout,
 }));
+// Persistence is exercised in the plan integration suite; parity uses the real builder.
+vi.mock("@/lib/onboarding/getOnboardingInterviewPlan", async () => ({
+  getOnboardingInterviewPlan: (await import("@/lib/onboarding/buildInterviewQuestions"))
+    .buildInterviewQuestions,
+}));
 vi.mock("@/lib/questions/generateGroundedQuestions", () => ({
   generateGroundedQuestions: m.generateGroundedQuestions,
 }));
@@ -1801,13 +1806,11 @@ describe("runOnboardingTurn", () => {
       total: 3,
       sourceUrls: ["https://www.instagram.com/p/ABC123/"],
     });
-    // NO excludeKeys on this path, and the exact call shape matters: the
-    // exclusion set is part of the cache key, and this runs on every chat
-    // turn. Passing it would make turns 2 and 3 of one sitting miss the
-    // cache and re-pick their questions at temperature 0.8 — the
-    // interviewer changing its mind mid-conversation. Rotation belongs to
-    // getInterviewInvite, which knows about sittings.
-    expect(generateGroundedQuestions).toHaveBeenCalledWith("a1", { max: 3 });
+    // Build one complete set; the claim-scoped plan keeps it stable across turns.
+    expect(generateGroundedQuestions).toHaveBeenCalledWith(
+      "a1",
+      expect.objectContaining({ max: 3, abortSignal: expect.any(AbortSignal) }),
+    );
   });
 
   it("interview step falls back to the static bank when generation returns []", async () => {

@@ -59,4 +59,4 @@ SHOW YOUR WORKING, because it is what keeps you honest:
 
 For KIND recent or lore, also judge contentSpecific independently of factual accuracy. Set contentSpecific true ONLY if the question engages with a concrete detail from the source body and asks a relevant follow-up. A title, sharing date, platform, or generic "what should someone notice / what would you add" is NOT content-specific, even if factually true. Set false for those. Fewer good questions is preferable to padding. For other kinds this field is optional.
 
-Return STRICT JSON ONLY: [{ "i": number, "ok": boolean, "contentSpecific": boolean, "problem": string, "support": string }]. "i" is the question's index as given. No markdown.`;
+Return STRICT JSON ONLY in the supplied response schema: { "elements": [{ "i": number, "ok": boolean, "contentSpecific": boolean, "problem": string, "support": string }] }. "i" is the question's index as given. No markdown.`;

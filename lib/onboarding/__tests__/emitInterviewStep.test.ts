@@ -8,8 +8,8 @@ const m = vi.hoisted(() => ({
   publish: vi.fn(),
 }));
 vi.mock("@/lib/lore/getInterviewAnswers", () => ({ getInterviewAnswers: m.answers }));
-vi.mock("@/lib/onboarding/buildInterviewQuestions", () => ({
-  buildInterviewQuestions: m.questions,
+vi.mock("@/lib/onboarding/getOnboardingInterviewPlan", () => ({
+  getOnboardingInterviewPlan: m.questions,
 }));
 vi.mock("@/lib/onboarding/confirmOnboardingStep", () => ({ confirmOnboardingStep: m.confirm }));
 vi.mock("@/lib/onboarding/emitPublishStep", () => ({ emitPublishStep: m.publish }));
@@ -31,8 +31,8 @@ describe("emitInterviewStep", () => {
     m.answers.mockResolvedValueOnce([{ questionKey: "a" }]);
     const events = await collect(emitInterviewStep("a1"));
     expect(events).toEqual([
-      { kind: "progress", label: "Reading your posts", done: false },
-      { kind: "progress", label: "Reading your posts", done: true },
+      { kind: "progress", label: "Preparing your questions…", done: false },
+      { kind: "progress", label: "Preparing your questions…", done: true },
       { kind: "chat", text: "Q b" },
       {
         kind: "step",
@@ -54,10 +54,13 @@ describe("emitInterviewStep", () => {
     expect(events).toEqual([{ kind: "chat", text: "publish" }]);
   });
 
-  it("also moves on when every offered question has been asked", async () => {
+  it("does not generate or confirm completion when saved history cannot be read", async () => {
     m.answers.mockResolvedValueOnce(null);
-    m.questions.mockResolvedValueOnce([]);
-    await collect(emitInterviewStep("a1"));
-    expect(m.confirm).toHaveBeenCalledWith("a1", "interview");
+    const events = await collect(emitInterviewStep("a1"));
+    expect(m.questions).not.toHaveBeenCalled();
+    expect(m.confirm).not.toHaveBeenCalled();
+    expect(events).toEqual([
+      { kind: "error", message: "We couldn't load your saved interview. Please try again." },
+    ]);
   });
 });

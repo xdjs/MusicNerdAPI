@@ -1,5 +1,5 @@
 import { generateText } from "@/lib/ai/generateText";
-import { withTimeout } from "@/lib/async/withTimeout";
+import { withAbortDeadline } from "@/lib/async/withAbortDeadline";
 import { ACK_FALLBACKS, ACK_TIMEOUT_MS } from "@/lib/onboarding/const";
 import { containsMemoryOrApologyLanguage } from "@/lib/onboarding/containsMemoryOrApologyLanguage";
 import { interviewAckPrompt } from "@/lib/onboarding/interviewAckPrompt";
@@ -21,15 +21,17 @@ export async function generateInterviewAck(
 ): Promise<string> {
   const fallback = ACK_FALLBACKS[questionIndex % ACK_FALLBACKS.length];
   try {
-    const response = await withTimeout(
-      generateText({
-        prompt: interviewAckPrompt(question, answer),
-        temperature: 0.7,
-        // Thinking burns ~1.5 s on a one-line reply, enough to lose the race.
-        thinkingBudget: 0,
-      }),
+    const response = await withAbortDeadline(
+      abortSignal =>
+        generateText({
+          abortSignal,
+          maxRetries: 0,
+          prompt: interviewAckPrompt(question, answer),
+          temperature: 0.7,
+          // Thinking burns ~1.5 s on a one-line reply, enough to lose the race.
+          thinkingBudget: 0,
+        }),
       ACK_TIMEOUT_MS,
-      "ack timeout",
     );
     const text = response.text?.trim();
     if (!text || containsMemoryOrApologyLanguage(text)) return fallback;

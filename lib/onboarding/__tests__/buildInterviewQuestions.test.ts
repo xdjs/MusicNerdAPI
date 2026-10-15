@@ -37,8 +37,11 @@ describe("buildInterviewQuestions", () => {
         sourceUrls: [],
       },
     ]);
-    expect(wait).toHaveBeenCalledWith("a1", 8_000);
-    expect(grounded).toHaveBeenCalledWith("a1", { max: 3 });
+    expect(wait).not.toHaveBeenCalled();
+    expect(grounded).toHaveBeenCalledWith(
+      "a1",
+      expect.objectContaining({ max: 3, abortSignal: expect.any(AbortSignal) }),
+    );
   });
 
   it("asks the static questions when there are no posts or generation fails", async () => {
@@ -53,4 +56,24 @@ describe("buildInterviewQuestions", () => {
     expect(await buildInterviewQuestions("a1")).toHaveLength(3);
     error.mockRestore();
   });
+});
+
+it("excludes answered/skipped questions before filling remaining slots", async () => {
+  grounded.mockResolvedValue([{ key: "social_done", question: "Already asked?", sourceUrls: [] }]);
+  expect(
+    (await buildInterviewQuestions("a1", ["social_done", "sound_in_own_words"])).map(q => q.key),
+  ).toEqual(["offline_fact"]);
+});
+it("bounds the entire preparation and aborts the underlying request", async () => {
+  vi.useFakeTimers();
+  let signal!: AbortSignal;
+  grounded.mockImplementation((_id, opts) => {
+    signal = opts.abortSignal;
+    return new Promise(() => {});
+  });
+  const pending = buildInterviewQuestions("a1");
+  await vi.advanceTimersByTimeAsync(15000);
+  expect(await pending).toHaveLength(3);
+  expect(signal.aborted).toBe(true);
+  vi.useRealTimers();
 });

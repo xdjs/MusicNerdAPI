@@ -85,3 +85,20 @@ describe("handleInterviewAnswerTurn", () => {
     expect(m.upsert).not.toHaveBeenCalled();
   });
 });
+
+it("keeps the submitted answer unsaved and retryable if history could not be loaded", async () => {
+  m.answers.mockResolvedValue(null);
+  const events = await collect(
+    handleInterviewAnswerTurn(turnContext("interview"), {
+      type: "interview_answer",
+      questionKey: "offline_fact",
+      answer: "My words",
+    }),
+  );
+  expect(m.upsert).not.toHaveBeenCalled();
+  expect(m.ack).not.toHaveBeenCalled();
+  expect(m.emitStep).not.toHaveBeenCalled();
+  expect(events).toEqual([
+    { kind: "error", message: "We couldn't load your saved interview. Please try again." },
+  ]);
+});
