@@ -4,6 +4,7 @@ import { waitAtMost } from "@/lib/async/waitAtMost";
 import { yieldWhileRunning } from "@/lib/async/yieldWhileRunning";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import { adoptedProfiles } from "@/lib/onboarding/adoptedProfiles";
+import { confirmOnboardingStep } from "@/lib/onboarding/confirmOnboardingStep";
 import { VAULT_DISCOVERY_BUDGET_MS, VAULT_SEARCH_GROUP } from "@/lib/onboarding/const";
 import { secondAccountChoices } from "@/lib/onboarding/secondAccountChoices";
 import { toSourceView } from "@/lib/onboarding/toSourceView";
@@ -11,13 +12,15 @@ import type { TurnEvent } from "@/lib/onboarding/types";
 import { isCitableSource } from "@/lib/sources/isCitableSource";
 import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
 import { searchAndPopulateVault } from "@/lib/vault/searchAndPopulateVault";
+import { updateVaultSourceStatus } from "@/lib/vault/updateVaultSourceStatus";
 import { pluralize } from "@/lib/text/pluralize";
 
 /**
  * Auto-build stage 2: search the web for sources, bounded at 45 s, streaming
  * each as it's saved. Then report the links the search adopted, ask about a
- * guessed account it replaced. Pending sources remain pending until the artist
- * explicitly reviews them; readable text alone is not publication consent.
+ * guessed account it replaced, and approve everything pending. Approval is safe:
+ * only machine-verified text makes a source citable, so a namesake stays an
+ * uncitable lead the artist can remove.
  *
  * @param artistId - The artist.
  * @param provisionalSiteNames - Columns stage 1 filled with a guess.
@@ -67,6 +70,13 @@ export async function* autoBuildSources(
   }
 
   const pending = await getVaultSourcesByStatus(artistId, "pending");
+  for (const source of pending) {
+    try {
+      await updateVaultSourceStatus(source.id, "approved");
+    } catch (e) {
+      console.error("[onboarding] auto-approve failed:", source.id, e);
+    }
+  }
   const citable = pending.filter(isCitableSource).length;
   // Everything on the page now, including what claim approval's own search saved.
   const onPage = await getVaultSourcesByStatus(artistId, "approved");
@@ -80,5 +90,6 @@ export async function* autoBuildSources(
     done: true,
     group: VAULT_SEARCH_GROUP,
   };
+  await confirmOnboardingStep(artistId, "vault");
   return { citable };
 }
