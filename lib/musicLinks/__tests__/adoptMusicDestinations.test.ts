@@ -26,6 +26,8 @@ it("does not suppress a distinct case-sensitive catalog ID behind a rejected URL
 });
 it.each([
   "https://music.apple.com/artist/someone-else/999",
+  "https://www.google.com/sorry/index",
+  "https://accounts.google.com/ServiceLogin",
   "http://127.0.0.1/private",
   "https://example.com/grimes",
 ])(

@@ -37,3 +37,32 @@ describe("readCandidates", () => {
     expect(read[0].page).toEqual(goodPage);
   });
 });
+
+it("drops the observed YouTube-to-Google challenge instead of retaining the artist snippet", async () => {
+  fetchPageContent.mockResolvedValueOnce({
+    ...goodPage,
+    resolvedUrl:
+      "https://www.google.com/sorry/index?continue=https://www.youtube.com/watch?v=fixture",
+    title: "Sorry...",
+    extractedText: "Our systems have detected unusual traffic from your computer network.",
+  });
+  const candidate = {
+    ...hit("https://www.youtube.com/watch?v=fixture", "Svaneborg Kardyb live"),
+    snippet: "An artist performance",
+    type: "video" as const,
+  };
+  expect(await readCandidates([candidate])).toEqual([]);
+});
+
+it("retains original discovery provenance on a legitimate article redirect", async () => {
+  const original = hit("https://magazine.example/old-interview");
+  const url = "https://magazine.example/new-interview";
+  fetchPageContent.mockResolvedValueOnce({ ...goodPage, resolvedUrl: url });
+  expect(await readCandidates([original])).toEqual([
+    {
+      result: { ...original, url },
+      page: { ...goodPage, resolvedUrl: url },
+      discoveredUrl: original.url,
+    },
+  ]);
+});
