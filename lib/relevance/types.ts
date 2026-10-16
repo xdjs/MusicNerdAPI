@@ -1,4 +1,4 @@
-/** The judge's answer for one page. `undecided` means it wasn't judged; the caller falls back to the name check. */
+/** The judge's answer for one page. `undecided` means identity could not be established; the caller retains an unverified lead. */
 export type RelevanceVerdict = "about-artist" | "lists-artist" | "not-about-artist" | "undecided";
 
 /** One fetched page to judge. */
@@ -20,4 +20,9 @@ export type ArtistAnchor = {
 };
 
 /** One row of the judge's reply, before validation. */
-export type RelevanceRow = { i?: unknown; v?: unknown };
+export type RelevanceRow = {
+  i?: unknown;
+  v?: unknown;
+  identity?: unknown;
+  evidence?: { anchor?: unknown; quote?: unknown }[];
+};

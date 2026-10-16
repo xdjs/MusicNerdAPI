@@ -1,3 +1,4 @@
+import { identityAnchors } from "@/lib/relevance/identityAnchors";
 import type { ArtistAnchor } from "@/lib/relevance/types";
 
 /**
@@ -12,5 +13,12 @@ export function anchorBlock(anchor: ArtistAnchor): string {
     lines.push(`VERIFIED RELEASES: ${anchor.catalog.slice(0, 12).join(", ")}`);
   if (anchor.identifiers?.length)
     lines.push(`CONFIRMED ACCOUNTS: ${anchor.identifiers.slice(0, 12).join(", ")}`);
+  lines.push(
+    `DISTINGUISHING FACTS:\n${
+      identityAnchors(anchor)
+        .map(a => `${a.id}: ${a.label}`)
+        .join("\n") || "NONE — identity must remain unresolved"
+    }`,
+  );
   return lines.join("\n");
 }

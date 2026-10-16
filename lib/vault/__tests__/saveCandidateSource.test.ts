@@ -48,11 +48,16 @@ describe("saveCandidateSource", () => {
 
   it("stores a verified page with the page's own content", async () => {
     const run = searchRun();
-    await save(run, "https://example.com/a", {
-      ...goodPage,
-      publishedAt: "2019-01-10",
-      ogImage: "i",
-    });
+    await save(
+      run,
+      "https://example.com/a",
+      {
+        ...goodPage,
+        publishedAt: "2019-01-10",
+        ogImage: "i",
+      },
+      "about-artist",
+    );
     expect(insertVaultSource).toHaveBeenCalledWith(
       expect.objectContaining({
         artistId: "a1",
@@ -99,7 +104,7 @@ describe("saveCandidateSource", () => {
     expect(run.counts.dropped).toBe(3);
   });
 
-  it("demotes a namesake to a lead unless the judge affirmed it or it's their own domain", async () => {
+  it("demotes a namesake to a lead unless the judge affirmed it", async () => {
     const RAPPER = "Dave talks about his song Black and growing up in south London. ".repeat(20);
     const page = {
       title: "Dave",
@@ -150,3 +155,26 @@ it("uses website for the verified artist homepage and data for Discogs releases"
   await save(searchRun(), "https://www.discogs.com/master/123-record", goodPage, "about-artist");
   expect(insertVaultSource).toHaveBeenLastCalledWith(expect.objectContaining({ type: "data" }));
 });
+
+it.each(["undecided", undefined] as const)(
+  "retains no verified text for unresolved namesakes (%s)",
+  async verdict => {
+    const body = "Jamie Duffy performed with Acumen Nation in Chicago. ".repeat(20);
+    const run = searchRun({ artistName: "Jamie Duffy" });
+    await saveCandidateSource(
+      run,
+      {
+        result: hit("https://example.com/chicago", "Jamie Duffy interview"),
+        page: { title: "Jamie Duffy interview", status: 200, extractedText: body, fullText: body },
+      },
+      verdict,
+    );
+    expect(insertVaultSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "pending",
+        extractedText: null,
+        identityAssessed: false,
+      }),
+    );
+  },
+);

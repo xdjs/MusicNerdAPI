@@ -1,4 +1,4 @@
-import { EXCERPT_CHARS } from "@/lib/relevance/const";
+import { relevanceExcerpt } from "@/lib/relevance/relevanceExcerpt";
 import { mentionDensity } from "@/lib/relevance/mentionDensity";
 import type { ArtistAnchor, RelevanceCandidate } from "@/lib/relevance/types";
 import { sourceTier } from "@/lib/sources/sourceTier";
@@ -19,5 +19,5 @@ export function relevancePage(c: RelevanceCandidate, i: number, anchor: ArtistAn
     ? `MENTIONS: names the artist in ${density.hits} of ${density.total} paragraphs`
     : `MENTIONS: unknown (no paragraph structure)`;
   const tier = `TIER: ${sourceTier(c.url, null, { ownDomain: c.ownDomain })}`;
-  return `--- PAGE ${i} ---\nTITLE: ${c.title ?? "(none)"}\n${tier}\n${mentions}\n${(c.text ?? "").slice(0, EXCERPT_CHARS)}`;
+  return `--- PAGE ${i} ---\nTITLE: ${c.title ?? "(none)"}\n${tier}\n${mentions}\n${relevanceExcerpt(c.text ?? "", anchor)}`;
 }

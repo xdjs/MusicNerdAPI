@@ -6,7 +6,7 @@ import type { ReadCandidate } from "@/lib/vault/types";
 /**
  * Asks the relevance judge about every page we read, once for the batch. The
  * judge never rejects on failure: an unavailable judge leaves everything
- * `undecided` and the name check decides, as before the judge existed.
+ * `undecided` and only unverified leads can be retained.
  *
  * @param anchor - What we know about the artist.
  * @param read - The pages, with the search hits they came from.

@@ -1,0 +1,334 @@
+{
+  "date": "2026-10-16",
+  "baseline": "118bb2c3115d30c0be6d4c8156ab57c5ee566780",
+  "model": "google/gemini-2.5-flash",
+  "anchors": {
+    "Beyoncé": ["Cowboy Carter", "Renaissance", "Lemonade"],
+    "Aphex Twin": [
+      "Selected Ambient Works",
+      "Richard D. James",
+      "Come to Daddy",
+      "Windowlicker",
+      "Syro",
+      "I Care Because You Do"
+    ],
+    "Japanese Breakfast": [
+      "Psychopomp",
+      "Jubilee",
+      "Soft Sounds from Another Planet",
+      "For Melancholy Brunettes"
+    ],
+    "Nilüfer Yanya": ["My Method Actor", "Painless", "Miss Universe"],
+    "Hana Vu": ["Public Storage", "Romanticism", "How Many Times Have You Driven By"],
+    "The Ellis Court": ["What More", "This Boy"],
+    "Wednesday": ["Rat Saw God", "Bleeds", "Twin Plagues"]
+  },
+  "fixtures": [
+    {
+      "id": 16,
+      "artist": "Beyoncé",
+      "url": "https://medium.com/the-riff/renaissance-by-beyonce-album-review-a97fb234ef19",
+      "readable": false,
+      "label": "editorial",
+      "baseline": "undecided",
+      "candidate": "undecided"
+    },
+    {
+      "id": 5,
+      "artist": "Beyoncé",
+      "url": "https://www.revolt.tv/article/beyonce-makes-it-clear-that-she-always-mixed-genres-in-music",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 15,
+      "artist": "Beyoncé",
+      "url": "https://randomjpop.blogspot.com/2023/01/album-review-beyonce-renaissance.html",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 17,
+      "artist": "Beyoncé",
+      "url": "https://pitchfork.com/reviews/albums/beyonce-renaissance",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 6,
+      "artist": "Beyoncé",
+      "url": "https://www.elle.com/uk/life-and-culture/a30151094/beyonce-elleuk-january-2020",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 7,
+      "artist": "Beyoncé",
+      "url": "https://www.gq.com/story/beyonce-knowles-carter-october-2024-cover-interview",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 40,
+      "artist": "Aphex Twin",
+      "url": "https://www.furious.com/perfect/aphextwin.html",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 35,
+      "artist": "Aphex Twin",
+      "url": "https://www.indexmagazine.com/interviews-aphex-twin",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 38,
+      "artist": "Aphex Twin",
+      "url": "https://www.clashmusic.com/features/aphex-twin-interview",
+      "readable": false,
+      "label": "editorial",
+      "baseline": "undecided",
+      "candidate": "undecided"
+    },
+    {
+      "id": 39,
+      "artist": "Aphex Twin",
+      "url": "https://www.dazeddigital.com/music/article/37384/1/weirdcore-aphex-twin-mia-visuals-interview",
+      "readable": true,
+      "label": "contribution",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 42,
+      "artist": "Aphex Twin",
+      "url": "https://chaoscontrol.com/aphex-twin-2",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "undecided"
+    },
+    {
+      "id": 77,
+      "artist": "Japanese Breakfast",
+      "url": "https://www.interviewmagazine.com/music/michelle-zauner-is-japanese-breakfast-but-at-what-cost",
+      "readable": false,
+      "label": "editorial",
+      "baseline": "undecided",
+      "candidate": "undecided"
+    },
+    {
+      "id": 78,
+      "artist": "Japanese Breakfast",
+      "url": "https://en.wikipedia.org/wiki/Japanese_Breakfast",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 80,
+      "artist": "Japanese Breakfast",
+      "url": "https://www.rollingstone.com/music/music-features/japanese-breakfast-jubilee-interview-1168141",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 81,
+      "artist": "Japanese Breakfast",
+      "url": "https://www.monsterchildren.com/articles/jbrekkie-vivid",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 79,
+      "artist": "Japanese Breakfast",
+      "url": "https://ktswblog.net/2016/09/21/michelle-zauner-of-japanese-breakfast-love-loss-and-music",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 76,
+      "artist": "Japanese Breakfast",
+      "url": "https://www.npr.org/2025/03/21/nx-s1-5251281/japanese-breakfast-michelle-zauner-new-album-melancholy-brunettes-sad-women",
+      "readable": false,
+      "label": "editorial",
+      "baseline": "undecided",
+      "candidate": "undecided"
+    },
+    {
+      "id": 112,
+      "artist": "Nilüfer Yanya",
+      "url": "https://toneglow.substack.com/p/tone-glow-157-nilufer-yanya",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 110,
+      "artist": "Nilüfer Yanya",
+      "url": "https://www.beforethechorus.com/post/ep-109-nil%C3%BCfer-yanya-on-my-method-actor-whether-art-has-to-be-authentic-to-be-valid-listenin",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 111,
+      "artist": "Nilüfer Yanya",
+      "url": "https://the-talks.com/interview/nilufer-yanya",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 108,
+      "artist": "Nilüfer Yanya",
+      "url": "https://www.powmag.net/p/nilufer-yanya-interview-my-method-actor",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 139,
+      "artist": "Hana Vu",
+      "url": "https://www.afterglowatx.com/blog/2018/12/11/interview-hana-vu-and-how-many-times-have-you-driven-by",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 142,
+      "artist": "Hana Vu",
+      "url": "https://nobells.blog/on-hana-vus-romanticism",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 144,
+      "artist": "Hana Vu",
+      "url": "https://beatsperminute.com/interview-hana-vu-digs-into-the-process-and-lyricism-of-her-new-album-public-storage",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 145,
+      "artist": "Hana Vu",
+      "url": "https://www.thelunacollective.co/journal/qa-hana-vu",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 147,
+      "artist": "Hana Vu",
+      "url": "https://www.dazeddigital.com/music/article/62535/1/hana-vu-is-the-artist-making-sad-music-romanticism-interview",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 141,
+      "artist": "Hana Vu",
+      "url": "https://www.teenvogue.com/story/existential-rocker-hana-vu-new-album-romanticism-interview",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 219,
+      "artist": "The Ellis Court",
+      "url": "https://theelliscourt.com/whats-the-ellis-court-2",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 244,
+      "artist": "Wednesday",
+      "url": "https://savingcountrymusic.com/album-review-wednesdays-bleeds",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 245,
+      "artist": "Wednesday",
+      "url": "https://marihuglin.substack.com/p/album-review-bleeds-wednesday",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 236,
+      "artist": "Wednesday",
+      "url": "https://thecreativeindependent.com/people/musician-karly-hartzman-on-removing-the-pressure-from-your-process",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 238,
+      "artist": "Wednesday",
+      "url": "https://www.elienis.com/karly-hartzman-wednesday-heavier-yep-definitely-regrets-interview",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 240,
+      "artist": "Wednesday",
+      "url": "https://blog.roughtrade.com/10-minutes-with-wednesday",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    },
+    {
+      "id": 241,
+      "artist": "Wednesday",
+      "url": "https://www.pbs.org/video/wednesday-podcast-interview-49oqom",
+      "readable": true,
+      "label": "editorial",
+      "baseline": "about-artist",
+      "candidate": "about-artist"
+    }
+  ]
+}
