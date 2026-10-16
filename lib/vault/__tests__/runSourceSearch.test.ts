@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   getArtistById: vi.fn(),
   adoptFromMusicBrainz: vi.fn(),
   searchCandidates: vi.fn(),
+  discoverMissingYouTubeChannel: vi.fn(async () => []),
   readExistingUrls: vi.fn(),
   resolveCandidateUrls: vi.fn(async (r: unknown[]) => r),
   filterCandidates: vi.fn((_run: unknown, r: unknown[]) => r),
@@ -31,6 +32,7 @@ vi.mock("@/lib/vault/adoptFromMusicBrainz", () => ({
 }));
 for (const name of [
   "searchCandidates",
+  "discoverMissingYouTubeChannel",
   "readExistingUrls",
   "resolveCandidateUrls",
   "filterCandidates",

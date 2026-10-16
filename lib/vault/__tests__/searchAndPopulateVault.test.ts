@@ -141,6 +141,60 @@ describe("searchAndPopulateVault", () => {
   });
 
   // ---- Retrieval ---------------------------------------------------------
+  it("does not stop on a MusicBrainz Topic channel and only queries again after failed account verification", async () => {
+    const topic = "https://youtube.com/channel/UCtopic";
+    const reviewer = "https://youtube.com/@reviewer";
+    const official = "https://youtube.com/@grimes";
+    mockMusicBrainz.mockResolvedValue({ matchedBy: "identifier", urls: [topic], homepage: null });
+    mockPreview.mockImplementation(async url => ({
+      title: url === topic ? "Grimes - Topic - YouTube" : "",
+      imageUrl: null,
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === topic
+        ? { siteName: "youtubechannel", id: "UCtopic" }
+        : url === reviewer || url === official
+          ? { siteName: "youtube", id: new URL(url).pathname.slice(2) }
+          : undefined,
+    );
+    mockWebSearch.mockImplementation(async (query, options) => {
+      if (query === "Grimes official YouTube channel" && options.maxResults === 10)
+        return [hit(topic), hit(reviewer)];
+      if (query === '"Grimes" YouTube') return [hit(official)];
+      return [];
+    });
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title:
+        url === topic
+          ? "Grimes - Topic - YouTube"
+          : url === official
+            ? "Grimes - YouTube"
+            : "Review channel - YouTube",
+      snippet: "",
+      extractedText: null,
+      fullText: null,
+    }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1", { requireComplete: true });
+    expect(mockSetLink).toHaveBeenCalledWith("a1", "youtube", "grimes");
+    expect(mockSetLink.mock.calls.some(([, , id]) => id === "UCtopic" || id === "reviewer")).toBe(
+      false,
+    );
+    const targeted = mockWebSearch.mock.calls.filter(([query]) => query.includes("YouTube"));
+    expect(targeted.map(([query]) => query)).toEqual([
+      "Grimes official YouTube channel",
+      '"Grimes" YouTube',
+    ]);
+    const firstVerifyRead = mockFetchPage.mock.calls.findIndex(([url]) => url === reviewer);
+    const secondQuery = mockWebSearch.mock.calls.findIndex(
+      ([query]) => query === '"Grimes" YouTube',
+    );
+    expect(mockFetchPage.mock.invocationCallOrder[firstVerifyRead]).toBeLessThan(
+      mockWebSearch.mock.invocationCallOrder[secondQuery],
+    );
+  });
+
   it("retrieves a missing official YouTube channel and rejects a reviewer's account through normal verification", async () => {
     const channel = "https://www.youtube.com/channel/UCh7KEjrvinFL2zZc_lz4LwQ";
     const reviewer = "https://www.youtube.com/@higherplainmusic8235";
@@ -272,7 +326,7 @@ describe("searchAndPopulateVault", () => {
     await searchAndPopulateVault("a1");
 
     const queries = mockWebSearch.mock.calls
-      .filter(([, options]) => !options?.includeDomains)
+      .filter(([query]) => !query.includes("YouTube"))
       .map(c => c[0]);
     expect(queries).toHaveLength(5);
     // The fifth asks a credits database. None of the editorial queries would

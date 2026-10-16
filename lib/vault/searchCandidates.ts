@@ -3,7 +3,6 @@ import { webSearch } from "@/lib/search/webSearch";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 import { TAVILY_RESULTS_PER_QUERY } from "@/lib/vault/const";
-import { searchMissingYouTubeChannels } from "@/lib/vault/searchMissingYouTubeChannels";
 import { sourceSearchQueries } from "@/lib/vault/sourceSearchQueries";
 import type { DiscoveryResult, SearchRun } from "@/lib/vault/types";
 
@@ -11,10 +10,8 @@ import type { DiscoveryResult, SearchRun } from "@/lib/vault/types";
  * Runs the source search's queries and dedupes what comes back. A homepage
  * MusicBrainz named goes in first, so it survives the dedupe: it's the hub
  * that lists the artist's real accounts, and search doesn't always return it.
- * When both YouTube slots lack a non-provisional answer, one bounded domain
- * search adds real channel candidates before broad results. They still pass
- * the normal fetched-page and account checks; a search hit is never adopted
- * here. Each result is typed by its URL, which can't be invented.
+ * Each result is typed by its URL, which cannot be invented. Missing-channel
+ * fallback is separate and runs only after these sources have been verified.
  *
  * @param run - The run, for the name and whether it must complete.
  * @param homepage - The homepage MusicBrainz named, or null.
@@ -25,7 +22,6 @@ export async function searchCandidates(
   homepage: string | null,
 ): Promise<DiscoveryResult[]> {
   const perQuery = await Promise.all([
-    searchMissingYouTubeChannels(run),
     ...sourceSearchQueries(run.artistName).map(q =>
       webSearch(q, {
         maxResults: TAVILY_RESULTS_PER_QUERY,

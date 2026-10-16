@@ -85,6 +85,8 @@ export type SearchRun = {
   /** Article links harvested from index pages, followed after the main pass. */
   indexLinks: Set<string>;
   accountCandidates: AccountCandidate[];
+  /** Account identities already checked; shares the ten-check cap across discovery rounds. */
+  checkedAccountCandidates?: Set<string>;
   hubCandidates: HubCandidate[];
   counts: { skipped: number; dropped: number; rejectedSkips: number };
   /** Columns still holding a discovery guess; a write that lands removes its column. */

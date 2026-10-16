@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   contradicts: vi.fn(async (_artistId: string, _site: string, _handle: string) => false),
   ambiguous: vi.fn(async (_artistId: string, _name: string) => false),
   pageNamesArtist: vi.fn(async (_url: string, _name: string) => true),
+  preview: vi.fn(),
   writeArtistLink: vi.fn(
     async (
       _a: string,
@@ -32,6 +33,7 @@ vi.mock("@/lib/identity/nameIsAmbiguousInDirectory", () => ({
   nameIsAmbiguousInDirectory: m.ambiguous,
 }));
 vi.mock("@/lib/vault/pageNamesArtist", () => ({ pageNamesArtist: m.pageNamesArtist }));
+vi.mock("@/lib/pages/fetchLinkPreview", () => ({ fetchLinkPreview: m.preview }));
 vi.mock("@/lib/vault/writeArtistLink", () => ({ writeArtistLink: m.writeArtistLink }));
 const { adoptFromMusicBrainz } = await import("@/lib/vault/adoptFromMusicBrainz");
 
@@ -52,6 +54,51 @@ beforeEach(() => {
 });
 
 describe("adoptFromMusicBrainz", () => {
+  it.each([null, "", "Pete Rango - Topic - YouTube"])(
+    "does not adopt unreadable or Topic YouTube relations (%s)",
+    async title => {
+      m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+        matchedBy: "identifier",
+        urls: ["https://youtube.com/channel/UCcandidate"],
+        homepage: null,
+      });
+      m.extractArtistId.mockResolvedValueOnce({ siteName: "youtubechannel", id: "UCcandidate" });
+      m.preview.mockResolvedValueOnce({ title, imageUrl: null });
+      await adoptFromMusicBrainz("a1", "Pete Rango", {});
+      expect(m.writeArtistLink).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves either confirmed YouTube slot without looking up another MusicBrainz YouTube relation", async () => {
+    m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+      matchedBy: "identifier",
+      urls: ["https://youtube.com/channel/UCcandidate"],
+      homepage: null,
+    });
+    m.extractArtistId.mockResolvedValueOnce({ siteName: "youtubechannel", id: "UCcandidate" });
+    await adoptFromMusicBrainz("a1", "Pete Rango", { youtube: "confirmed" });
+    expect(m.preview).not.toHaveBeenCalled();
+    expect(m.writeArtistLink).not.toHaveBeenCalled();
+  });
+
+  it("retains a genuine artist YouTube relation with a usable non-Topic page title", async () => {
+    m.fetchMusicBrainzLinks.mockResolvedValueOnce({
+      matchedBy: "identifier",
+      urls: ["https://youtube.com/channel/UCcandidate"],
+      homepage: null,
+    });
+    m.extractArtistId.mockResolvedValueOnce({ siteName: "youtubechannel", id: "UCcandidate" });
+    m.preview.mockResolvedValueOnce({ title: "Pete Rango - YouTube", imageUrl: null });
+    await adoptFromMusicBrainz("a1", "Pete Rango", {});
+    expect(m.writeArtistLink).toHaveBeenCalledWith(
+      "a1",
+      "youtubechannel",
+      "UCcandidate",
+      undefined,
+      {},
+    );
+  });
+
   it("adopts account and reference links from an identifier match without a page check", async () => {
     m.fetchMusicBrainzLinks.mockResolvedValueOnce({
       matchedBy: "identifier",

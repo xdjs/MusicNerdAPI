@@ -40,12 +40,33 @@ const run = (accountCandidates: ReturnType<typeof cand>[]) =>
 beforeEach(() => {
   for (const f of [h.ambiguous, h.belongs, h.contradicts]) f.mockReset().mockResolvedValue(false);
   h.writeArtistLink.mockClear();
+  h.confirms.mockReset().mockImplementation(async c => c.title || null);
   h.getArtistById
     .mockReset()
     .mockResolvedValue({ id: "a1", name: "Pete Rango", instagram: null, x: null });
 });
 
 describe("verifyAccountCandidates", () => {
+  it("shares the ten-check cap across passes and does not retry previously checked accounts", async () => {
+    h.confirms.mockReset().mockResolvedValue(null);
+    const r = run(Array.from({ length: 7 }, (_, i) => cand("youtubechannel", `UC${i}`, "")));
+    await verifyAccountCandidates(r);
+    r.accountCandidates.push(
+      ...Array.from({ length: 7 }, (_, i) => cand("youtubechannel", `UC${i + 7}`, "")),
+    );
+    await verifyAccountCandidates(r);
+    expect(h.confirms).toHaveBeenCalledTimes(10);
+    expect(
+      h.confirms.mock.calls.map(([candidate]) => (candidate as ReturnType<typeof cand>).id),
+    ).toEqual(Array.from({ length: 10 }, (_, i) => `UC${i}`));
+    h.confirms.mockReset().mockImplementation(async c => c.title || null);
+  });
+
+  it("records a successful verified write in the shared artist snapshot for later discovery stages", async () => {
+    const r = run([cand("youtubechannel", "UCverified")]);
+    await verifyAccountCandidates(r);
+    expect(r.artist.youtubechannel).toBe("UCverified");
+  });
   it("writes a confirmed account, once per platform, and counts its handle as verified", async () => {
     const r = run([
       cand("instagram", "p3t3rango"),

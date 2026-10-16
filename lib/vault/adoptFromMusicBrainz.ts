@@ -14,11 +14,14 @@ import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { pageNamesArtist } from "@/lib/vault/pageNamesArtist";
 import { outOfBudget } from "@/lib/vault/outOfBudget";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
+import { fetchLinkPreview } from "@/lib/pages/fetchLinkPreview";
+import { isYouTubeTopicAccount } from "@/lib/vault/isYouTubeTopicAccount";
 
 /**
  * Takes the artist's links from MusicBrainz before inferring any from search.
- * An identifier match is adopted as is; an exact-name match gets the same page
- * check a search result would, and nothing for a name the directory shares.
+ * Identifier matches retain their curated identity evidence; YouTube also needs
+ * a readable non-Topic page title. An exact-name match gets the same page check
+ * a search result would, and nothing for a name the directory shares.
  * Every candidate still clears the reserved-handle and identity guards.
  *
  * @param artistId - The artist.
@@ -63,12 +66,27 @@ export async function adoptFromMusicBrainz(
       const id = String(match.id);
       if (isReservedHandle(match.siteName, id)) continue;
       if (holdsAnswerFor(artist, match.siteName, provisional)) continue;
+      const isYouTube = ["youtube", "youtubechannel"].includes(match.siteName);
+      if (
+        isYouTube &&
+        ["youtube", "youtubechannel"].some(site => holdsAnswerFor(artist, site, provisional))
+      )
+        continue;
       if (await handleBelongsToAnotherArtist(artistId, match.siteName, id)) continue;
       if (await contradictsScrapedPosts(artistId, match.siteName, id)) {
         console.log(
           `[vaultWebSearch] MusicBrainz lists ${match.siteName}=${id}, but their own posts are authored by a different handle — ignoring`,
         );
         continue;
+      }
+      if (isYouTube) {
+        const page = await fetchLinkPreview(stripQuery(url)).catch(() => null);
+        if (!page?.title?.trim() || isYouTubeTopicAccount(match.siteName, page.title)) {
+          console.log(
+            "[vaultWebSearch] MusicBrainz YouTube relation has no usable non-Topic page title, not adopting",
+          );
+          continue;
+        }
       }
       if (found.matchedBy === "exact-name") {
         // A name match is the same claim a search result makes; a shared name settles nothing.

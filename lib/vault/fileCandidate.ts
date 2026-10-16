@@ -6,6 +6,7 @@ import { accountMatchFor } from "@/lib/vault/accountMatchFor";
 import { adoptJudgedAccount } from "@/lib/vault/adoptJudgedAccount";
 import { ACCOUNT_PLATFORMS } from "@/lib/vault/const";
 import { saveCandidateSource } from "@/lib/vault/saveCandidateSource";
+import { isYouTubeTopicAccount } from "@/lib/vault/isYouTubeTopicAccount";
 import type { ReadCandidate, SearchRun } from "@/lib/vault/types";
 
 /**
@@ -50,6 +51,10 @@ export async function fileCandidate(
   const { match, isAccountUrl } = release
     ? { match: undefined, isAccountUrl: false }
     : await accountMatchFor(result.url);
+  if (match && isYouTubeTopicAccount(match.siteName, page.title)) {
+    run.counts.skipped++;
+    return;
+  }
   if (isAccountUrl && match && (await adoptJudgedAccount(run, match, result.url, verdict))) {
     run.counts.skipped++;
     return;
