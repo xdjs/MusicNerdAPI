@@ -34,3 +34,9 @@ A successful directory `source_search` stores a version-1 completion checkpoint 
 Reuse shows saved profiles and pending sources for explicit artist review; it never approves sources or publishes an About. The separate private-draft reuse rules still require every cited original to be approved and unchanged. Explicit profile discovery/research refresh remains available.
 
 Social collection has separate durable progress. Directory social/caption jobs keep their original authority through child jobs and stop after any claim begins. At claim confirmation, replacement claim-scoped jobs retain the paid run/dataset, cursor, and bounded retry state; old workers cannot regain permission or revive retired jobs. A changed/disconnected Instagram handle cannot import an old run. An unknown provider-start outcome is retained for inspection instead of blindly starting another paid run; definite rejected starts may retry within the existing attempt limit. Pre-claim caption completion does not create public Lore. These checks make no claim that all social providers finished when web discovery did.
+
+### Research search identity (#1551, #1548)
+
+Tavily requests containing a complete, nonempty double-quoted phrase enable `exact_match`. Unquoted names and platform discovery queries retain the existing provider defaults, allowing alias discovery. Search remains basic, with the same result limits and six-second deadline. Exact matching improves phrase precision; it does not establish artist identity or replace source relevance checks.
+
+Source deduplication retains case-sensitive YouTube video IDs across watch, short, embed and live URLs and ignores tracking parameters. Distinct interviews remain separate candidates. This changes candidate selection only; existing verification, authorization and pending-source storage rules still apply. No public endpoint contract or database schema changes.

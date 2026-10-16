@@ -39,6 +39,32 @@ describe("normalizeLoreDiscoveryUrl", () => {
     );
   });
 
+  it("preserves distinct case-sensitive YouTube video IDs, ignoring tracking", () => {
+    const first = "https://www.youtube.com/watch?v=sCN628VWkEI";
+    expect(normalizeLoreDiscoveryUrl(first)).not.toBe(
+      normalizeLoreDiscoveryUrl("https://www.youtube.com/watch?v=0mGUk6WEUu4"),
+    );
+    expect(normalizeLoreDiscoveryUrl(first)).not.toBe(
+      normalizeLoreDiscoveryUrl(first.replace("sCN", "scn")),
+    );
+    expect(normalizeLoreDiscoveryUrl(first + "&t=30&si=tracking")).toBe(
+      normalizeLoreDiscoveryUrl(first),
+    );
+  });
+
+  it.each([
+    "https://youtu.be/sCN628VWkEI?si=share",
+    "https://m.youtube.com/watch?v=sCN628VWkEI&t=20",
+    "https://youtube.com/shorts/sCN628VWkEI",
+    "https://youtube.com/embed/sCN628VWkEI",
+    "https://youtube.com/live/sCN628VWkEI",
+  ])("dedupes alternate video URLs without folding video ID case: %s", url => {
+    expect(normalizeLoreDiscoveryUrl(url)).toBe("youtube.com/watch?v=sCN628VWkEI");
+    expect(normalizeLoreDiscoveryUrl(url.replace("sCN", "scn"))).not.toBe(
+      normalizeLoreDiscoveryUrl(url),
+    );
+  });
+
   it("falls back to string cleanup for an unparseable URL", () => {
     expect(normalizeLoreDiscoveryUrl("HTTP://www.Odd Url/")).toBe("odd url");
   });
