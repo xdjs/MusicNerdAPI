@@ -1,3 +1,4 @@
+import { prepareSocialRefresh } from "@/lib/socialRefresh/prepareSocialRefresh";
 import { withoutAt } from "@/lib/artists/withoutAt";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { collectInstagramScrape } from "@/lib/instagram/collectInstagramScrape";
@@ -6,7 +7,6 @@ import {
   LATEST_COLLECT_RESERVE_MS,
   LATEST_MAX_CHARGE_USD,
   LATEST_POST_LIMIT,
-  LATEST_WINDOW_MS,
 } from "@/lib/latest/const";
 import { latestRefreshStore } from "@/lib/latest/latestRefreshStore";
 import type { LatestRefreshState, SourceResult } from "@/lib/latest/types";
@@ -31,12 +31,22 @@ export async function refreshLatestInstagram(
   if (!process.env.APIFY_API_TOKEN) return { status: "failed" };
   if (!state.runId) {
     if (state.providerStarted) return { status: "failed" };
+    state.scan ??= await prepareSocialRefresh(job, "instagram", handle, 30);
+    if (state.scan.needsReview) {
+      state.instagramFailure = {
+        phase: "collection",
+        reason: "Social continuity needs review",
+        at: new Date().toISOString(),
+      };
+      return { status: "failed" };
+    }
+    if (state.scan.skip) return { status: "checked", checkedAt: state.scan.checkedAt };
     state.providerStarted = true;
     await latestRefreshStore(job, state);
     const run = await startInstagramScrape(handle, {
       limit: LATEST_POST_LIMIT,
       maxTotalChargeUsd: LATEST_MAX_CHARGE_USD,
-      onlyPostsNewerThan: new Date(Date.now() - LATEST_WINDOW_MS).toISOString(),
+      onlyPostsNewerThan: state.scan.after,
     });
     if (run.status !== "started") return { status: "failed" };
     state.runId = run.runId;
@@ -57,7 +67,10 @@ export async function refreshLatestInstagram(
       if (run.retryable) throw new Error(run.reason);
       return { status: "failed" };
     }
-    if (run.status === "ready") state.datasetId = run.datasetId;
+    if (run.status === "ready") {
+      state.datasetId = run.datasetId;
+      if (state.scan && run.limitReached) state.scan.providerLimited = true;
+    }
     // Yield even when ready: persist progress, release the lease and reset
     // consecutive failures in one write. Resetting while still running would
     // hide repeated platform kills between this poll and the lease handoff.
@@ -66,6 +79,9 @@ export async function refreshLatestInstagram(
   if (deadline - Date.now() < LATEST_COLLECT_RESERVE_MS) return { status: "pending" };
   const stored = await collectInstagramScrape(job.artistId, handle, state.datasetId, job.id, 0, {
     latestOnly: true,
+    ...(state.scan
+      ? { refresh: { scan: state.scan, runId: state.runId!, limit: LATEST_POST_LIMIT } }
+      : {}),
   });
   if (!stored) {
     const reason = "Instagram collection unavailable";

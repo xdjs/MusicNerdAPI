@@ -8,23 +8,14 @@ import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
 import type { SocialTask } from "@/lib/social/types";
 
 /** Snapshots connected profiles and missing reel context after Instagram collection. A read failure throws. */
-export async function planSocialResearch(artistId: string, force: boolean): Promise<SocialTask[]> {
+export async function planSocialResearch(artistId: string, _force: boolean): Promise<SocialTask[]> {
   const artist = await getArtistById(artistId);
   if (!artist) throw new Error("could not read social profiles");
   const tasks: SocialTask[] = [];
   for (const source of ["tiktok", "x"] as const) {
     const handle = socialProfileHandle(artist[source], source);
     if (!handle) continue;
-    const existing = force
-      ? []
-      : await db
-          .select({ id: artistSocialPosts.id })
-          .from(artistSocialPosts)
-          .where(
-            and(eq(artistSocialPosts.artistId, artistId), eq(artistSocialPosts.platform, source)),
-          )
-          .limit(1);
-    if (!existing.length) tasks.push({ source, handle });
+    tasks.push({ source, handle });
   }
   const rows = await db.query.artistSocialPosts.findMany({
     where: and(

@@ -81,3 +81,40 @@ it("does not expose exception URLs or credentials", async () => {
   fetchMock.mockRejectedValueOnce(new Error("https://api.apify.com/?token=secret"));
   expect(JSON.stringify(await checkInstagramScrape("run"))).not.toContain("secret");
 });
+it("keeps successful but budget-limited runs from claiming account coverage", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json({
+      data: {
+        status: "SUCCEEDED",
+        defaultDatasetId: "ds",
+        statusMessage: "Maximum charge limit reached",
+      },
+    }),
+  );
+  expect(await checkInstagramScrape("run")).toMatchObject({ status: "ready", limitReached: true });
+  fetchMock.mockResolvedValueOnce(
+    json({
+      data: {
+        status: "SUCCEEDED",
+        defaultDatasetId: "ds",
+        usageTotalUsd: 0.5,
+        options: { maxTotalChargeUsd: 0.5 },
+      },
+    }),
+  );
+  expect(await checkInstagramScrape("run")).toMatchObject({ limitReached: true });
+});
+
+it("does not assume a charged run below its cap exhausted the account", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json({
+      data: {
+        status: "SUCCEEDED",
+        defaultDatasetId: "ds",
+        usageTotalUsd: 0.49,
+        options: { maxTotalChargeUsd: 0.5 },
+      },
+    }),
+  );
+  expect(await checkInstagramScrape("run")).toMatchObject({ status: "ready", limitReached: true });
+});

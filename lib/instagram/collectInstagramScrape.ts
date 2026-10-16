@@ -1,3 +1,6 @@
+import { storeSocialRefresh } from "@/lib/socialRefresh/storeSocialRefresh";
+import { socialTaskIsConnected } from "@/lib/social/socialTaskIsConnected";
+import type { SocialScan } from "@/lib/socialRefresh/types";
 import {
   APIFY_DATASET_TIMEOUT_MS,
   APIFY_DATASETS_URL,
@@ -36,7 +39,7 @@ export async function collectInstagramScrape(
   datasetId: string,
   jobId: string,
   cursor = 0,
-  opts?: { latestOnly?: boolean },
+  opts?: { latestOnly?: boolean; refresh?: { scan: SocialScan; runId: string; limit: number } },
 ): Promise<IngestResult | null> {
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return null;
@@ -48,12 +51,16 @@ export async function collectInstagramScrape(
       return null;
     }
     const items = await res.json();
-    if (!Array.isArray(items)) return null;
+    if (!Array.isArray(items) || items.some(item => item && typeof item === "object" && item.error))
+      return null;
 
     const artistName = await getArtistNameById(artistId);
     const mapped = items
       .map(item => mapApifyPost(item, artistId, handle, artistName))
       .filter((r): r is SocialPostInsert => r !== null);
+    // An account scan must not turn unknown rows into an empty successful check.
+    // Fail before thumbnail work; retries keep the same paid dataset.
+    if (opts?.refresh && mapped.length !== items.length) return null;
     const rows = opts?.latestOnly ? selectLatestPosts(mapped) : mapped.slice(0, MAX_SCRAPE_LIMIT);
     const batch = rows.slice(cursor, cursor + THUMBNAILS_PER_SLICE);
     const scope: ThumbnailUploadScope = { jobId, attemptedPaths: new Set() };
@@ -62,7 +69,41 @@ export async function collectInstagramScrape(
     const prepared = await retainMappedThumbnails(batch, scope);
     let result: IngestResult;
     try {
-      result = await withResearchJobWrite(artistId, jobId, tx => upsertMappedRows(prepared, tx));
+      result = await withResearchJobWrite(artistId, jobId, async tx => {
+        if (
+          opts?.refresh &&
+          !(await socialTaskIsConnected(artistId, { source: "reels", handle }, tx))
+        )
+          throw new OwnershipChangedError();
+        const result = await upsertMappedRows(prepared, tx);
+        if (opts?.refresh && cursor + batch.length >= rows.length)
+          await storeSocialRefresh(tx, {
+            artistId,
+            platform: "instagram",
+            handle,
+            ...opts.refresh,
+            itemCount: items.length,
+            payloadRecognized: mapped.length === items.length,
+            allMapped:
+              mapped.length === items.length &&
+              mapped.length <= opts.refresh.limit &&
+              mapped.every(row => row.isOwnPost),
+            posts: mapped
+              .filter(
+                row =>
+                  rows.some(stored => stored.platformPostId === row.platformPostId) ||
+                  opts.refresh?.scan.reference?.anchors.some(
+                    anchor => anchor.id === row.platformPostId,
+                  ),
+              )
+              .map(row => ({
+                id: row.platformPostId,
+                postedAt: row.postedAt ?? "",
+                pinned: (row.raw as Record<string, unknown> | null)?.isPinned === true,
+              })),
+          });
+        return result;
+      });
     } catch (error) {
       // Every upload has settled. Revocation may already have purged the
       // artist's folder, so remove this job's late uploads explicitly.
