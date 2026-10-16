@@ -1,19 +1,15 @@
 import { adoptMappedMusicDestinations } from "@/lib/musicLinks/adoptMappedMusicDestinations";
-import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { adoptFromHubs } from "@/lib/vault/adoptFromHubs";
 import { adoptFromMusicBrainz } from "@/lib/vault/adoptFromMusicBrainz";
 import { buildArtistAnchor } from "@/lib/vault/buildArtistAnchor";
-import { fileCandidate } from "@/lib/vault/fileCandidate";
-import { filterCandidates } from "@/lib/vault/filterCandidates";
 import { followIndexLinks } from "@/lib/vault/followIndexLinks";
-import { judgeCandidates } from "@/lib/vault/judgeCandidates";
 import { outOfBudget } from "@/lib/vault/outOfBudget";
 import { propagateRunHandles } from "@/lib/vault/propagateRunHandles";
-import { readCandidates } from "@/lib/vault/readCandidates";
 import { readExistingUrls } from "@/lib/vault/readExistingUrls";
-import { resolveCandidateUrls } from "@/lib/vault/resolveCandidateUrls";
 import { searchCandidates } from "@/lib/vault/searchCandidates";
+import { processDiscoveryCandidates } from "@/lib/vault/processDiscoveryCandidates";
+import { discoverMissingYouTubeChannel } from "@/lib/vault/discoverMissingYouTubeChannel";
 import type { SearchRun, SourceSearchOptions, VaultSource } from "@/lib/vault/types";
 import { verifyAccountCandidates } from "@/lib/vault/verifyAccountCandidates";
 
@@ -26,8 +22,9 @@ import { verifyAccountCandidates } from "@/lib/vault/verifyAccountCandidates";
  * never writes behind the caller.
  *
  * Phases: MusicBrainz, search, intake filter, read, judge, file each page,
- * verify account pages, adopt from the artist's own pages, propagate verified
- * handles, follow index links.
+ * verify account pages, adopt from the artist's own pages, try bounded missing
+ * YouTube queries with verification between rounds, propagate verified handles,
+ * follow index links.
  *
  * @param artistId - The artist.
  * @param opts - The deadline, and whether a failure must throw (a durable job) or return what it has.
@@ -77,29 +74,14 @@ export async function runSourceSearch(
     const results = await searchCandidates(run, fromMusicBrainz.homepage);
     if (results.length === 0) {
       console.log(`[vaultWebSearch] Web search returned nothing for "${artistName}"`);
-      return run.saved;
     }
-    const candidates = filterCandidates(run, await resolveCandidateUrls(results), rejectedUrls);
-
-    if (outOfBudget(run, "page verification")) return run.saved;
-    const read = (await readCandidates(candidates)).filter(
-      candidate =>
-        !candidate.discoveredUrl ||
-        normalizeLoreDiscoveryUrl(candidate.discoveredUrl) ===
-          normalizeLoreDiscoveryUrl(candidate.result.url) ||
-        filterCandidates(run, [candidate.result], rejectedUrls).length > 0,
-    );
     const anchor = await buildArtistAnchor(run.artist, artistName);
-    if (outOfBudget(run, "relevance judging")) return run.saved;
-    const relevance = await judgeCandidates(anchor, read);
-
-    for (const candidate of read) {
-      if (outOfBudget(run, "candidate filing")) break;
-      if ((await fileCandidate(run, candidate, relevance.get(candidate.result.url))) === "stop")
-        break;
-    }
+    await processDiscoveryCandidates(run, results, rejectedUrls, anchor);
     await verifyAccountCandidates(run);
     await adoptFromHubs(run);
+    const extraSources = await discoverMissingYouTubeChannel(run, rejectedUrls, anchor);
+    await processDiscoveryCandidates(run, extraSources, rejectedUrls, anchor);
+    await verifyAccountCandidates(run);
     await propagateRunHandles(run, fromMusicBrainz.authoritative);
     await followIndexLinks(run, anchor);
 

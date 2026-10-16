@@ -30,6 +30,30 @@ const file = (
   );
 
 describe("fileCandidate", () => {
+  it("keeps relevant publisher coverage as a source without treating it as an account", async () => {
+    const run = searchRun({ artistName: "Svaneborg Kardyb" });
+    const url = "https://higherplainmusic.com/2025/04/11/svaneborg-kardyb-superkilen-review/";
+    await file(
+      run,
+      url,
+      {
+        title: "Svaneborg Kardyb – Superkilen Review",
+        outboundLinks: [
+          "https://svaneborgkardyb.bandcamp.com/album/superkilen",
+          "https://youtube.com/@higherplainmusic8235",
+        ],
+      },
+      "about-artist",
+    );
+    expect(saveCandidateSource).toHaveBeenCalledWith(
+      run,
+      expect.objectContaining({ result: expect.objectContaining({ url }) }),
+      "about-artist",
+    );
+    expect(adoptJudgedAccount).not.toHaveBeenCalled();
+    expect(run.accountCandidates).toEqual([]);
+  });
+
   it("does not use an unreadable homepage as an account or outbound-link authority", async () => {
     const run = searchRun();
     await fileCandidate(

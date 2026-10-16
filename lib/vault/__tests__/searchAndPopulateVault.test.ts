@@ -141,6 +141,106 @@ describe("searchAndPopulateVault", () => {
   });
 
   // ---- Retrieval ---------------------------------------------------------
+  it("does not stop on a MusicBrainz Topic channel and only queries again after failed account verification", async () => {
+    const topic = "https://youtube.com/channel/UCtopic";
+    const reviewer = "https://youtube.com/@reviewer";
+    const official = "https://youtube.com/@grimes";
+    mockMusicBrainz.mockResolvedValue({ matchedBy: "identifier", urls: [topic], homepage: null });
+    mockPreview.mockImplementation(async url => ({
+      title: url === topic ? "Grimes - Topic - YouTube" : "",
+      imageUrl: null,
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === topic
+        ? { siteName: "youtubechannel", id: "UCtopic" }
+        : url === reviewer || url === official
+          ? { siteName: "youtube", id: new URL(url).pathname.slice(2) }
+          : undefined,
+    );
+    mockWebSearch.mockImplementation(async (query, options) => {
+      if (query === "Grimes official YouTube channel" && options.maxResults === 10)
+        return [hit(topic), hit(reviewer)];
+      if (query === '"Grimes" YouTube') return [hit(official)];
+      return [];
+    });
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title:
+        url === topic
+          ? "Grimes - Topic - YouTube"
+          : url === official
+            ? "Grimes - YouTube"
+            : "Review channel - YouTube",
+      snippet: "",
+      extractedText: null,
+      fullText: null,
+    }));
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1", { requireComplete: true });
+    expect(mockSetLink).toHaveBeenCalledWith("a1", "youtube", "grimes");
+    expect(mockSetLink.mock.calls.some(([, , id]) => id === "UCtopic" || id === "reviewer")).toBe(
+      false,
+    );
+    const targeted = mockWebSearch.mock.calls.filter(([query]) => query.includes("YouTube"));
+    expect(targeted.map(([query]) => query)).toEqual([
+      "Grimes official YouTube channel",
+      '"Grimes" YouTube',
+    ]);
+    const firstVerifyRead = mockFetchPage.mock.calls.findIndex(([url]) => url === reviewer);
+    const secondQuery = mockWebSearch.mock.calls.findIndex(
+      ([query]) => query === '"Grimes" YouTube',
+    );
+    expect(mockFetchPage.mock.invocationCallOrder[firstVerifyRead]).toBeLessThan(
+      mockWebSearch.mock.invocationCallOrder[secondQuery],
+    );
+  });
+
+  it("retrieves a missing official YouTube channel and rejects a reviewer's account through normal verification", async () => {
+    const channel = "https://www.youtube.com/channel/UCh7KEjrvinFL2zZc_lz4LwQ";
+    const reviewer = "https://www.youtube.com/@higherplainmusic8235";
+    mockGetArtist.mockResolvedValue({
+      id: "a1",
+      name: "Svaneborg Kardyb",
+      bandcamp: "svaneborgkardyb",
+    });
+    mockWebSearch.mockImplementation(async (_query, options) =>
+      options?.includeDomains
+        ? [hit(reviewer, "Higher Plain Music"), hit(channel, "Svaneborg Kardyb")]
+        : [],
+    );
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: url === channel ? "Svaneborg Kardyb - YouTube" : "Higher Plain Music - YouTube",
+      snippet:
+        url === channel ? "Official Artist Channel" : "Album reviews, including Svaneborg Kardyb",
+      extractedText: null,
+      fullText: null,
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === channel
+        ? {
+            siteName: "youtubechannel",
+            cardPlatformName: "YouTube",
+            id: "UCh7KEjrvinFL2zZc_lz4LwQ",
+          }
+        : url === reviewer
+          ? { siteName: "youtube", cardPlatformName: "YouTube", id: "higherplainmusic8235" }
+          : undefined,
+    );
+    mockJudge.mockResolvedValue(
+      new Map([
+        [channel, "undecided"],
+        [reviewer, "not-about-artist"],
+      ]),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1", { requireComplete: true });
+    expect(mockFetchPage).toHaveBeenCalledWith(channel, expect.any(Object));
+    expect(mockFetchPage).toHaveBeenCalledWith(reviewer, expect.any(Object));
+    expect(mockSetLink).toHaveBeenCalledWith("a1", "youtubechannel", "UCh7KEjrvinFL2zZc_lz4LwQ");
+    expect(mockSetLink.mock.calls.some(([, , id]) => id === "higherplainmusic8235")).toBe(false);
+  });
+
   it("propagates provider failures for durable searches, retaining best-effort interactive search", async () => {
     mockWebSearch.mockRejectedValue(new Error("provider unavailable"));
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
@@ -225,7 +325,9 @@ describe("searchAndPopulateVault", () => {
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
     await searchAndPopulateVault("a1");
 
-    const queries = mockWebSearch.mock.calls.map(c => c[0]);
+    const queries = mockWebSearch.mock.calls
+      .filter(([query]) => !query.includes("YouTube"))
+      .map(c => c[0]);
     expect(queries).toHaveLength(5);
     // The fifth asks a credits database. None of the editorial queries would
     // ever return one, and for a producer or engineer that is where most of
@@ -1071,12 +1173,42 @@ describe("searchAndPopulateVault", () => {
           new Map(candidates.map((candidate: Cand) => [candidate.url, "about-artist"])),
       );
     });
-    // An artist's own site is the only first-party statement of their handles,
-    // and it lives entirely in href attributes — so the text extractor strips it
-    // and the same-host `links` rule excludes it. Sherwinn Brice's Instagram is
-    // `dupesdidit`, published on dupes.rocks; profile discovery guessed `dupes`
-    // from his name and missed it. No name-derived slug reaches `dupesdidit`.
-    const OWN_SITE = "https://www.dupes.rocks";
+    it("retains Higher Plain Music coverage without adopting its publisher's YouTube", async () => {
+      const review = "https://higherplainmusic.com/2025/04/11/svaneborg-kardyb-superkilen-review/";
+      mockGetArtist.mockResolvedValue({
+        id: "a1",
+        name: "Svaneborg Kardyb",
+        bandcamp: "svaneborgkardyb",
+        youtube: null,
+      });
+      mockGetAllLinks.mockResolvedValue([]);
+      mockWebSearch.mockResolvedValue([hit(review, "Svaneborg Kardyb – Superkilen Review")]);
+      mockFetchPage.mockResolvedValue({
+        ...goodPage,
+        title: "Svaneborg Kardyb – Superkilen Review",
+        extractedText: "A review of Svaneborg Kardyb's Superkilen album. ".repeat(20),
+        fullText: "A review of Svaneborg Kardyb's Superkilen album. ".repeat(20),
+        outboundLinks: [
+          "https://svaneborgkardyb.bandcamp.com/album/superkilen",
+          "https://www.youtube.com/@higherplainmusic8235",
+        ],
+      });
+      mockExtract.mockImplementation(async url =>
+        String(url).includes("youtube.com/@higherplainmusic8235")
+          ? { siteName: "youtube", cardPlatformName: "YouTube", id: "higherplainmusic8235" }
+          : undefined,
+      );
+      const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+      await searchAndPopulateVault("a1");
+      expect(mockSetLink).not.toHaveBeenCalled();
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ url: review, status: "pending" }),
+      );
+    });
+    // The existing own-domain heuristic recognizes this synthetic fixture's
+    // full artist-name domain. An alias domain with only outbound known-account
+    // links is insufficient authority; see the negative cases below.
+    const OWN_SITE = "https://sherwinndupesbrice.com";
     const OUTBOUND = [
       "https://dupes.bandcamp.com/album/convergence",
       "https://www.instagram.com/dupesdidit",
@@ -1092,9 +1224,7 @@ describe("searchAndPopulateVault", () => {
       return undefined;
     };
 
-    it("adopts them when the page links to an id we already hold", async () => {
-      // bandcamp=dupes is already confirmed for this artist, so a page linking
-      // to it is his hub. That is identity through a matched ID, never a name.
+    it("adopts them from an affirmed domain accepted by the existing own-domain check", async () => {
       mockGetArtist.mockResolvedValue({
         id: "a1",
         name: "Sherwinn Dupes Brice",
@@ -1223,11 +1353,7 @@ describe("searchAndPopulateVault", () => {
       );
     });
 
-    it("corroborates against an @-prefixed stored handle", async () => {
-      // isKnownProfileUrl in the same file already strips a leading "@", as do
-      // profileDiscovery, socialIngest and socialSignals. A stored
-      // "@dupes" comparing unequal to a resolved "dupes" would silently
-      // disable this whole feature for that artist, with no error anywhere.
+    it("does not let an outbound @-prefixed saved account authorize an unverified alias domain", async () => {
       mockGetArtist.mockResolvedValue({
         id: "a1",
         name: "Sherwinn Dupes Brice",
@@ -1239,13 +1365,14 @@ describe("searchAndPopulateVault", () => {
         soundcloud: null,
         facebook: null,
       });
-      mockWebSearch.mockResolvedValue([hit(OWN_SITE, "Dupes")]);
+      mockWebSearch.mockResolvedValue([hit("https://www.dupes.rocks", "Dupes")]);
       mockFetchPage.mockResolvedValue({ ...goodPage, outboundLinks: OUTBOUND });
       mockExtract.mockImplementation(resolve);
       const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
       await searchAndPopulateVault("a1");
 
-      expect(mockSetLink.mock.calls.map(c => `${c[1]}=${c[2]}`)).toContain("instagram=dupesdidit");
+      expect(mockSetLink).not.toHaveBeenCalled();
+      expect(mockInsert).toHaveBeenCalled();
     });
 
     it("adopts NEITHER when the page names two handles for one platform", async () => {
@@ -1290,14 +1417,10 @@ describe("searchAndPopulateVault", () => {
       expect(adopted).not.toContain("instagram=hislabelrecords");
     });
 
-    it("adopts even when the corroborator only arrives partway through the run", async () => {
-      // The realistic start. An artist arrives from a claim holding the DSP ids
-      // MusicNerd creates them with — spotify and deezer — and nothing else.
-      // Sherwinn Brice's site corroborates through his BANDCAMP, and his
-      // bandcamp is itself only picked up later in the same run, from a
-      // different page. Adopting inline meant deciding whose a page was before
-      // the run had finished learning who the artist is, so nothing was
-      // adopted at all and he finished with no socials.
+    it("adopts a newly affirmed account page's own links after that account is saved mid-run", async () => {
+      // The post-loop hub pass sees the Bandcamp identity saved while filing
+      // that same account page. It does not grant authority to another site
+      // merely because that site links Bandcamp.
       const live: Record<string, unknown> = {
         id: "a1",
         name: "Sherwinn Dupes Brice",
@@ -1318,14 +1441,11 @@ describe("searchAndPopulateVault", () => {
         return {};
       });
 
-      mockWebSearch.mockResolvedValue([
-        hit("https://dupes.bandcamp.com/", "Sherwinn Dupes Brice"),
-        hit(OWN_SITE, "Dupes"),
-      ]);
-      mockFetchPage.mockImplementation(async url => ({
+      mockWebSearch.mockResolvedValue([hit("https://dupes.bandcamp.com/", "Sherwinn Dupes Brice")]);
+      mockFetchPage.mockResolvedValue({
         ...goodPage,
-        outboundLinks: String(url).includes("dupes.rocks") ? OUTBOUND : [],
-      }));
+        outboundLinks: OUTBOUND,
+      });
       // The bandcamp page is judged as the artist's, which is what routes it
       // into links mid-loop and makes it available as a corroborator after.
       mockJudge.mockImplementation(
