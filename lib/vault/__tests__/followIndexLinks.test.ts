@@ -59,6 +59,8 @@ describe("followIndexLinks", () => {
     expect(h.insertVaultSource).not.toHaveBeenCalled();
   });
   it.each([
+    "https://www.google.com/sorry/index",
+    "https://accounts.google.com/ServiceLogin",
     "http://127.0.0.1/private",
     "https://user:password@example.com/",
     "https://www.viberate.com/artist/grimes",
