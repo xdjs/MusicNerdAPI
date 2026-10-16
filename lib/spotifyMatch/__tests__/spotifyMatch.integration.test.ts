@@ -1,5 +1,5 @@
 /** Opt-in synthetic local PostgreSQL only. MUSICNERD_MATCH_TEST_PORT=55442 pnpm test spotifyMatch.integration */
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -14,7 +14,9 @@ import { attachSpotifyMatch } from "../attachSpotifyMatch";
 import { clearArtistLinkColumn } from "@/lib/artistLinks/clearArtistLinkColumn";
 import { writeArtistLinkColumn } from "@/lib/artistLinks/writeArtistLinkColumn";
 import { recordSpotifyCooldown } from "@/lib/spotify/recordSpotifyCooldown";
+import { spotifyCooldownKey } from "@/lib/spotify/spotifyCooldownKey";
 import { checkSpotifyCooldown } from "@/lib/spotify/checkSpotifyCooldown";
+import { advanceResearch } from "@/lib/research/advanceResearch";
 import { claimResearchJob } from "@/lib/research/claimResearchJob";
 const shared = vi.hoisted(() => ({ database: null as unknown }));
 vi.mock("@/lib/db/db", () => ({
@@ -85,6 +87,10 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
       await admin.unsafe(`drop database if exists ${dbname}`);
       await admin.end();
     }
+    vi.unstubAllEnvs();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
   async function fixture() {
@@ -227,6 +233,112 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
     expect(claimed?.id).toBe(job.id);
     expect(claimed?.attempts).toBe(5);
   });
+  it("resumes real worker checkpoints after a provider 429 and attaches only after two distinct ISRCs", async () => {
+    vi.stubEnv("SPOTIFY_WEB_CLIENT_ID", "local-worker-fixture");
+    vi.stubEnv("SPOTIFY_WEB_CLIENT_SECRET", "synthetic-secret");
+    const { job } = await fixture();
+    await client`update artist_research_jobs set status='pending' where id=${job.id}`;
+    const spotifyId = "GGGGGGGGGGGGGGGGGGGGGG";
+    const isrcs = ["USAAA2600001", "USAAA2600002"];
+    let limited = false;
+    const requests: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        requests.push(url.href);
+        if (url.hostname === "api.deezer.com" && url.pathname.endsWith("/top"))
+          return Response.json({ data: [{ id: 11 }, { id: 22 }] });
+        if (url.hostname === "api.deezer.com" && url.pathname === "/track/11")
+          return Response.json({ id: 11, isrc: isrcs[0] });
+        if (url.hostname === "api.deezer.com" && url.pathname === "/track/22")
+          return Response.json({ id: 22, isrc: isrcs[1] });
+        if (url.hostname === "accounts.spotify.com")
+          return Response.json({ access_token: "synthetic-token" });
+        if (url.hostname === "api.spotify.com" && url.pathname === "/v1/search") {
+          if (!limited) {
+            limited = true;
+            return new Response(null, { status: 429, headers: { "Retry-After": "2" } });
+          }
+          return Response.json({
+            tracks: {
+              items: [
+                {
+                  external_ids: { isrc: url.searchParams.get("q")?.slice(5) },
+                  artists: [{ id: spotifyId, name: "The Ellis Court" }],
+                },
+              ],
+            },
+          });
+        }
+        throw new Error(`Unexpected synthetic request: ${url.href}`);
+      }),
+    );
+    const advance = () =>
+      advanceResearch({ budgetMs: 20000, kinds: ["spotify_match"], artistId: job.artistId });
+    const read = async () =>
+      (await client`select status,attempts,state from artist_research_jobs where id=${job.id}`)[0];
+    for (const cursor of [0, 1, 2]) {
+      expect(await advance()).toMatchObject({ ran: true, done: false });
+      expect((await read()).state.trackCursor).toBe(cursor);
+    }
+    expect((await read()).state.isrcs).toEqual(isrcs);
+    expect(await advance()).toMatchObject({ ran: true, done: false, waiting: true });
+    const deferred = await read();
+    expect(deferred).toMatchObject({ status: "pending", attempts: 1 });
+    expect(deferred.state.matches).toEqual([]);
+    expect(deferred.state.nextAttemptAtMs).toBeGreaterThan(Date.now());
+    const [cooldown] =
+      await client`select extract(epoch from blocked_until)*1000 as until from provider_request_cooldowns where blocked_until>now()`;
+    expect(Number(cooldown.until)).toBe(deferred.state.nextAttemptAtMs);
+    const count = requests.length;
+    expect(await advance()).toEqual({ ran: false });
+    expect(requests).toHaveLength(count);
+    // A different eligible job observes the same app-wide delay without calling either provider.
+    const other = await fixture();
+    await client`update artist_research_jobs set status='pending' where id=${other.job.id}`;
+    expect(
+      await advanceResearch({
+        budgetMs: 20000,
+        kinds: ["spotify_match"],
+        artistId: other.job.artistId,
+      }),
+    ).toMatchObject({ waiting: true });
+    expect(requests).toHaveLength(count);
+    const [otherSaved] =
+      await client`select attempts from artist_research_jobs where id=${other.job.id}`;
+    expect(otherSaved.attempts).toBe(0);
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, deferred.state.nextAttemptAtMs - Date.now()) + 30),
+    );
+    expect(await advance()).toMatchObject({ ran: true, done: false });
+    expect((await read()).state.matches).toHaveLength(1);
+    expect(
+      (await client`select spotify from artists where id=${job.artistId}`)[0].spotify,
+    ).toBeNull();
+    expect(await advance()).toMatchObject({ ran: true, done: false });
+    expect((await read()).state.matches.map((match: { isrc: string }) => match.isrc)).toEqual(
+      isrcs,
+    );
+    const beforeAttach = requests.length;
+    expect(await advance()).toMatchObject({ ran: true, done: true });
+    expect(requests).toHaveLength(beforeAttach);
+    expect(await read()).toMatchObject({
+      status: "done",
+      attempts: 1,
+      state: { outcome: "matched" },
+    });
+    expect((await client`select spotify,bio from artists where id=${job.artistId}`)[0]).toEqual({
+      spotify: spotifyId,
+      bio: "Private artist words unchanged",
+    });
+    expect(requests.filter(url => url.includes("api.deezer.com"))).toHaveLength(3);
+    expect(
+      requests
+        .filter(url => url.includes("/v1/search"))
+        .map(url => new URL(url).searchParams.get("q")),
+    ).toEqual([`isrc:${isrcs[0]}`, `isrc:${isrcs[0]}`, `isrc:${isrcs[1]}`]);
+  });
   it("does not let concurrent shorter Retry-After replies shorten the shared deadline", async () => {
     vi.stubEnv("SPOTIFY_WEB_CLIENT_ID", "local-shared-fixture");
     const start = Date.now();
@@ -236,7 +348,7 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
       recordSpotifyCooldown("120"),
     ]);
     const [row] =
-      await client`select extract(epoch from blocked_until)*1000 as until from provider_request_cooldowns`;
+      await client`select extract(epoch from blocked_until)*1000 as until from provider_request_cooldowns where provider_key=${spotifyCooldownKey()}`;
     expect(Number(row.until)).toBeGreaterThanOrEqual(start + 3600000);
     await expect(checkSpotifyCooldown()).rejects.toMatchObject({ status: 429, requested: false });
     await client`update provider_request_cooldowns set blocked_until=now()-interval '1 second'`;
