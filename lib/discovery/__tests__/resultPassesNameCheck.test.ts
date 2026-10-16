@@ -63,6 +63,36 @@ describe("resultPassesNameCheck", () => {
     ).toBe(true);
   });
 
+  it.each(["BLACKDAVE MK2", "BLACKDAVE MK2 - X", "BLACKDAVE MK2 - X  ", "𝐁𝐋𝐀𝐂𝐊𝐃𝐀𝐕𝐄 𝐌𝐊𝟐"])(
+    "accepts the reproduced Black Dave profile title: %s",
+    async title => {
+      extractArtistId.mockResolvedValueOnce({ siteName: "x", id: "blackdave" });
+      expect(
+        await resultPassesNameCheck(r("https://x.com/BlackDave", title), "x", "Black Dave MK2"),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    ["x", "peterango", "Peter Lyrøholm (@peterango) - X", "Pete Rango"],
+    ["x", "blackdave", "BLACKDAVE MK2 X", "Black Dave MK2"],
+    ["x", "blackdave", "BLACKDAVE MK2 - X fan archive", "Black Dave MK2"],
+    ["instagram", "blackdave", "BLACKDAVE MK2 - X", "Black Dave MK2"],
+    ["x", "someoneelse", "BLACKDAVE MK2 - X", "Black Dave MK2"],
+  ] as const)(
+    "does not loosen identity checks for %s/%s: %s",
+    async (platform, handle, title, name) => {
+      extractArtistId.mockResolvedValueOnce({ siteName: platform, id: handle });
+      expect(
+        await resultPassesNameCheck(
+          r(`https://${platform === "x" ? "x.com" : "instagram.com"}/${handle}`, title),
+          platform,
+          name,
+        ),
+      ).toBe(false);
+    },
+  );
+
   it("is false when extractArtistId throws", async () => {
     extractArtistId.mockRejectedValueOnce(new Error("db"));
     expect(await resultPassesNameCheck(r("https://x.com/pete"), "x", "Pete")).toBe(false);

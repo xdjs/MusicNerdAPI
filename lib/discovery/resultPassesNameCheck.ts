@@ -13,6 +13,8 @@ import { foldName } from "@/lib/text/foldName";
  * Does a tier-4 search result earn a place as a candidate? It must look like
  * a profile URL, resolve to the platform searched, and its handle must echo
  * the name. A title naming someone else fails it; no usable title doesn't.
+ * X profile titles may end in the platform label " - X"; remove only that
+ * trailing label on X results before testing the residual artist name.
  * The snippet is never used: prose can contain a common-word artist name.
  *
  * @param result - The search hit.
@@ -36,7 +38,9 @@ export async function resultPassesNameCheck(
   }
   if (!extracted?.siteName || !extracted?.id || extracted.siteName !== platform) return false;
   if (!handleEchoesArtistName(extracted.id, artistName)) return false;
-  const residual = result.title ? stripHandleAndBoilerplate(result.title, extracted.id) : "";
+  const residual = result.title
+    ? stripHandleAndBoilerplate(result.title, extracted.id, platform)
+    : "";
   if (foldName(residual) && !titleMatchesArtist(residual, artistName)) return false;
   return true;
 }
