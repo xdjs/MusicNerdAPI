@@ -5,7 +5,12 @@ import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts"
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { ambiguousPlatforms } from "@/lib/vault/ambiguousPlatforms";
-import { ACCOUNT_PLATFORMS, HANDLE_STEM_MIN, REFERENCE_PLATFORMS } from "@/lib/vault/const";
+import {
+  ACCOUNT_PLATFORMS,
+  HANDLE_STEM_MIN,
+  OPAQUE_ACCOUNT_PLATFORMS,
+  REFERENCE_PLATFORMS,
+} from "@/lib/vault/const";
 import { findCorroborator } from "@/lib/vault/findCorroborator";
 import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
 import { isArtistOwnDomain } from "@/lib/vault/isArtistOwnDomain";
@@ -20,8 +25,8 @@ import { outOfBudget } from "@/lib/vault/outOfBudget";
  * account, or pass the existing own-domain and affirmative relevance checks
  * (and their name isn't shared). Outbound links to known accounts do not prove
  * ownership of a review or other third-party page. When some handles resemble
- * the artist and others don't, only the resembling ones are kept; a page naming two handles for one
- * platform adopts neither. Propagation is left to the caller, once per run.
+ * the artist and others don't, only the resembling ones and provider-assigned
+ * opaque IDs are kept; a page naming two handles for one platform adopts neither. Propagation is left to the caller, once per run.
  * The same authority applies to social accounts and catalog sources. Missing
  * or rejected referring pages cannot supply either branch; provisional accounts
  * cannot establish authority.
@@ -86,7 +91,14 @@ export async function adoptHandlesFromOwnPage(
   const adoptedHandles = new Set<string>();
   for (const r of accountHandles) {
     if (run && outOfBudget(run, "own-page handle verification")) break;
-    if (anyResembles && sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN) {
+    // Provider-assigned IDs cannot resemble the artist name. Only an
+    // affirmed own domain or saved owned account can supply that exception;
+    // third-party corroboration alone still cannot bypass the mixed-handle guard.
+    if (
+      anyResembles &&
+      sharedPrefix(r.id, artistName) < HANDLE_STEM_MIN &&
+      !(ownedPage && OPAQUE_ACCOUNT_PLATFORMS.has(r.siteName))
+    ) {
       console.log(
         `[vaultWebSearch] Page mixes "${artistName}" accounts with ${r.siteName}=${r.id}; keeping only theirs`,
       );

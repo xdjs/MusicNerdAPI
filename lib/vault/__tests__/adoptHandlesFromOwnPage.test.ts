@@ -34,6 +34,9 @@ const { adoptHandlesFromOwnPage } = await import("@/lib/vault/adoptHandlesFromOw
 beforeEach(() => {
   vi.clearAllMocks();
   m.resolve.mockReset().mockResolvedValue([]);
+  m.belongs.mockReset().mockResolvedValue(false);
+  m.contradicts.mockReset().mockResolvedValue(false);
+  m.ambiguous.mockReset().mockResolvedValue(false);
   m.catalog.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
@@ -271,6 +274,91 @@ describe("adoptHandlesFromOwnPage", () => {
       (await adoptHandlesFromOwnPage("a1", ["l"], { name: "Pete Rango" }, "Pete Rango", page))
         .adopted,
     ).toBe(0);
+  });
+
+  it.each(["spotify", "deezer", "youtubechannel"])(
+    "keeps an opaque %s identity from the artist's own hub alongside matching social handles",
+    async siteName => {
+      m.resolve.mockResolvedValueOnce([
+        { siteName: "instagram", id: "theelliscourt" },
+        { siteName, id: "258229712" },
+      ]);
+      const result = await adoptHandlesFromOwnPage(
+        "a1",
+        ["l"],
+        { name: "The Ellis Court", instagram: "theelliscourt" },
+        "The Ellis Court",
+        { url: "https://theelliscourt.com", aboutArtist: true },
+        undefined,
+        searchRun(),
+      );
+      expect(m.writeArtistLink.mock.calls.map(c => [c[1], c[2]])).toEqual([
+        [siteName, "258229712"],
+      ]);
+      expect(result.adopted).toBe(1);
+    },
+  );
+
+  it("keeps an opaque Spotify ID from a saved hosted profile alongside matching social handles", async () => {
+    m.resolve
+      .mockResolvedValueOnce([
+        { siteName: "instagram", id: "theelliscourt" },
+        { siteName: "spotify", id: "opaque-spotify-id" },
+      ])
+      .mockResolvedValueOnce([{ siteName: "bandcamp", id: "theelliscourt" }]);
+    const result = await adoptHandlesFromOwnPage(
+      "a1",
+      ["outbound"],
+      { name: "The Ellis Court", bandcamp: "theelliscourt", instagram: "theelliscourt" },
+      "The Ellis Court",
+      { url: "https://theelliscourt.bandcamp.com", aboutArtist: true },
+    );
+    expect(result.adopted).toBe(1);
+    expect(m.writeArtistLink.mock.calls.map(c => [c[1], c[2]])).toEqual([
+      ["spotify", "opaque-spotify-id"],
+    ]);
+  });
+
+  it("does not use a third-party article's outbound public link as authority for an opaque ID", async () => {
+    m.resolve
+      .mockResolvedValueOnce([
+        { siteName: "instagram", id: "theelliscourt" },
+        { siteName: "spotify", id: "258229712" },
+      ])
+      .mockResolvedValueOnce([]);
+    const result = await adoptHandlesFromOwnPage(
+      "a1",
+      ["l"],
+      { name: "The Ellis Court", instagram: "theelliscourt" },
+      "The Ellis Court",
+      { url: "https://magazine.example/the-ellis-court", aboutArtist: true },
+      undefined,
+      searchRun(),
+    );
+    expect(result.adopted).toBe(0);
+    expect(m.writeArtistLink).not.toHaveBeenCalled();
+  });
+
+  it("keeps conflict, ambiguity and previously saved ID guards for opaque account links", async () => {
+    m.resolve.mockResolvedValueOnce([
+      { siteName: "instagram", id: "theelliscourt" },
+      { siteName: "spotify", id: "first-id" },
+      { siteName: "spotify", id: "second-id" },
+      { siteName: "deezer", id: "258229712" },
+      { siteName: "youtubechannel", id: "UCexisting" },
+    ]);
+    m.belongs.mockImplementationOnce(async () => true);
+    const result = await adoptHandlesFromOwnPage(
+      "a1",
+      ["l"],
+      { name: "The Ellis Court", instagram: "theelliscourt", youtubechannel: "UCsaved" },
+      "The Ellis Court",
+      { url: "https://theelliscourt.com", aboutArtist: true },
+      undefined,
+      searchRun(),
+    );
+    expect(result.adopted).toBe(0);
+    expect(m.writeArtistLink).not.toHaveBeenCalled();
   });
 
   it("keeps only the handles that resemble the artist when a page mixes them with others", async () => {
