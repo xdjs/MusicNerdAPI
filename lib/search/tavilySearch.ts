@@ -29,8 +29,6 @@ export async function tavilySearch(
       query,
       include_domains: opts.includeDomains,
       max_results: opts.maxResults,
-      // Quotation marks alone do not enforce a phrase in Tavily.
-      ...(/"[^"\s][^"]*"/.test(query) ? { exact_match: true } : {}),
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch(() => null);

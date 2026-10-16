@@ -31,22 +31,6 @@ describe("tavilySearch", () => {
     });
   });
 
-  it.each([
-    ['"Jamie Duffy" music review', true],
-    ['"Beyoncé" artist profile', true],
-    ["Jamie Duffy music artist", false],
-    ['Jamie "Duffy', false],
-    ['"" music review', false],
-  ])("enforces only complete nonempty phrases: %s", async (query, exact) => {
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ results: [] }) }));
-    vi.stubGlobal("fetch", fetchMock);
-    await tavilySearch(query, opts, "k");
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(init.body as string);
-    expect(body.exact_match).toBe(exact ? true : undefined);
-    expect(body.search_depth).toBeUndefined();
-  });
-
   it("maps title/url/content to title/url/snippet, dropping rows without a url", async () => {
     vi.stubGlobal(
       "fetch",
