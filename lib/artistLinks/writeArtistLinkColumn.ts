@@ -3,6 +3,7 @@ import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictErr
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
 import type { ArtistLinkExecutor } from "@/lib/artistLinks/types";
 import { artistIdMappings, artists } from "@/lib/db/schema";
+import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit";
 
 /**
  * Sets one link column. A spotify or deezer id must not already be another
@@ -62,5 +63,7 @@ export async function writeArtistLinkColumn(
   await database.execute(
     sql`UPDATE artists SET ${sql.identifier(columnName)} = ${value} WHERE id = ${artistId}`,
   );
+  if ((columnName === "spotify" || columnName === "deezer") && oldValue !== value)
+    await cancelSpotifyMatchForIdentityEdit(database, artistId);
   return { oldValue, artistName: artist.name ?? null };
 }

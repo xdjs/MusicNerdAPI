@@ -1,4 +1,5 @@
 import type { SpotifyHeaders } from "@/lib/spotify/types";
+import { fetchSpotifyResponse } from "./fetchSpotifyResponse";
 
 /**
  * One Spotify Web API GET.
@@ -11,7 +12,7 @@ export async function readSpotifyJson(
   url: string,
   headers: SpotifyHeaders,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(url, { headers: headers.headers });
+  const res = await fetchSpotifyResponse(url, { headers: headers.headers });
   if (!res.ok) throw new Error(`Spotify returned ${res.status}`);
   return res.json();
 }

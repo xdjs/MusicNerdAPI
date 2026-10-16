@@ -66,6 +66,7 @@ describe("writeArtistLinkColumn", () => {
   it("writes a spotify id that is free or already this artist's", async () => {
     const d = database({ directOwner: { id: "a1" }, artistMapping: { platformId: "S1" } });
     await writeArtistLinkColumn(d as never, "a1", "spotify", "S1");
-    expect(d.execute).toHaveBeenCalledTimes(1);
+    expect(d.execute).toHaveBeenCalledTimes(2);
+    expect(renderSql(d.execute.mock.calls[1][0]).text).toContain("kind='spotify_match'");
   });
 });

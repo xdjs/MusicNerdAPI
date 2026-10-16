@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
+vi.mock("@/lib/spotify/checkSpotifyCooldown", () => ({
+  checkSpotifyCooldown: vi.fn(async () => undefined),
+}));
 
 const fetchMock = vi.fn();
 

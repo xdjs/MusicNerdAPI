@@ -1,4 +1,5 @@
 import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
+import { fetchSpotifyResponse } from "@/lib/spotify/fetchSpotifyResponse";
 import { latestProviderAccount } from "./latestProviderAccount";
 import { normalizeLatestProviderItems } from "./normalizeLatestProviderItems";
 import type { LatestProvider } from "./types";
@@ -20,7 +21,12 @@ export async function fetchLatestProviderItems(provider: LatestProvider, account
         : provider === "deezer"
           ? `https://api.deezer.com/artist/${accountId}/albums?limit=50`
           : `https://api.inprocess.world/api/timeline?artist=${encodeURIComponent(accountId)}&limit=12`;
-    const response = await fetch(url, { headers, signal, redirect: "error", cache: "no-store" });
+    const response = await (provider === "spotify" ? fetchSpotifyResponse : fetch)(url, {
+      headers,
+      signal,
+      redirect: "error",
+      cache: "no-store",
+    });
     status = response.status;
     if (!response.ok)
       throw Object.assign(new Error("Latest provider unavailable"), { latestCode: "http_error" });

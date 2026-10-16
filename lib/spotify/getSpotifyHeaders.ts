@@ -1,9 +1,8 @@
 import type { SpotifyHeaders } from "@/lib/spotify/types";
+import { fetchSpotifyResponse } from "./fetchSpotifyResponse";
 
 /**
- * Spotify client-credentials headers. Fetched fresh on every call: the only
- * caller is a Lore rebuild, which makes one catalog request, so a cache would
- * save nothing.
+ * Spotify client-credentials headers, bounded and subject to the shared app cooldown.
  *
  * @returns Bearer headers for the Spotify Web API.
  */
@@ -15,7 +14,7 @@ export async function getSpotifyHeaders(): Promise<SpotifyHeaders> {
       latestCode: "missing_credentials",
     });
 
-  const res = await fetch("https://accounts.spotify.com/api/token", {
+  const res = await fetchSpotifyResponse("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

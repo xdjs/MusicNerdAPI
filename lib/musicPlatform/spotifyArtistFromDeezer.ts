@@ -1,7 +1,7 @@
 import { ISRC_FETCH_TIMEOUT_MS } from "@/lib/musicPlatform/const";
 import { isrcsFromDeezer } from "@/lib/musicPlatform/isrcsFromDeezer";
 import type { IsrcSpotifyMatch } from "@/lib/musicPlatform/types";
-import { fetchJson } from "@/lib/networking/fetchJson";
+import { fetchSpotifyResponse } from "@/lib/spotify/fetchSpotifyResponse";
 import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
 import { foldName } from "@/lib/text/foldName";
 
@@ -30,10 +30,15 @@ export async function spotifyArtistFromDeezer(
     const counts = new Map<string, { n: number; name: string }>();
     await Promise.all(
       isrcs.map(async isrc => {
-        const found = await fetchJson(
+        const response = await fetchSpotifyResponse(
           `https://api.spotify.com/v1/search?q=${encodeURIComponent(`isrc:${isrc}`)}&type=track&limit=1`,
-          { headers: { Authorization: headers.Authorization }, timeoutMs: ISRC_FETCH_TIMEOUT_MS },
+          {
+            headers: { Authorization: headers.Authorization },
+            signal: AbortSignal.timeout(ISRC_FETCH_TIMEOUT_MS),
+          },
         );
+        if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
+        const found = await response.json();
         const track = ((found?.tracks as { items?: unknown[] } | undefined)?.items ?? [])[0] as
           { artists?: { id?: string; name?: string }[] } | undefined;
         for (const a of track?.artists ?? []) {
