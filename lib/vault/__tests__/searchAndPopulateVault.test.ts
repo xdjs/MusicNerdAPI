@@ -141,6 +141,52 @@ describe("searchAndPopulateVault", () => {
   });
 
   // ---- Retrieval ---------------------------------------------------------
+  it("retrieves a missing official YouTube channel and rejects a reviewer's account through normal verification", async () => {
+    const channel = "https://www.youtube.com/channel/UCh7KEjrvinFL2zZc_lz4LwQ";
+    const reviewer = "https://www.youtube.com/@higherplainmusic8235";
+    mockGetArtist.mockResolvedValue({
+      id: "a1",
+      name: "Svaneborg Kardyb",
+      bandcamp: "svaneborgkardyb",
+    });
+    mockWebSearch.mockImplementation(async (_query, options) =>
+      options?.includeDomains
+        ? [hit(reviewer, "Higher Plain Music"), hit(channel, "Svaneborg Kardyb")]
+        : [],
+    );
+    mockFetchPage.mockImplementation(async url => ({
+      ...goodPage,
+      title: url === channel ? "Svaneborg Kardyb - YouTube" : "Higher Plain Music - YouTube",
+      snippet:
+        url === channel ? "Official Artist Channel" : "Album reviews, including Svaneborg Kardyb",
+      extractedText: null,
+      fullText: null,
+    }));
+    mockExtract.mockImplementation(async url =>
+      url === channel
+        ? {
+            siteName: "youtubechannel",
+            cardPlatformName: "YouTube",
+            id: "UCh7KEjrvinFL2zZc_lz4LwQ",
+          }
+        : url === reviewer
+          ? { siteName: "youtube", cardPlatformName: "YouTube", id: "higherplainmusic8235" }
+          : undefined,
+    );
+    mockJudge.mockResolvedValue(
+      new Map([
+        [channel, "undecided"],
+        [reviewer, "not-about-artist"],
+      ]),
+    );
+    const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
+    await searchAndPopulateVault("a1", { requireComplete: true });
+    expect(mockFetchPage).toHaveBeenCalledWith(channel, expect.any(Object));
+    expect(mockFetchPage).toHaveBeenCalledWith(reviewer, expect.any(Object));
+    expect(mockSetLink).toHaveBeenCalledWith("a1", "youtubechannel", "UCh7KEjrvinFL2zZc_lz4LwQ");
+    expect(mockSetLink.mock.calls.some(([, , id]) => id === "higherplainmusic8235")).toBe(false);
+  });
+
   it("propagates provider failures for durable searches, retaining best-effort interactive search", async () => {
     mockWebSearch.mockRejectedValue(new Error("provider unavailable"));
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
@@ -225,7 +271,9 @@ describe("searchAndPopulateVault", () => {
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
     await searchAndPopulateVault("a1");
 
-    const queries = mockWebSearch.mock.calls.map(c => c[0]);
+    const queries = mockWebSearch.mock.calls
+      .filter(([, options]) => !options?.includeDomains)
+      .map(c => c[0]);
     expect(queries).toHaveLength(5);
     // The fifth asks a credits database. None of the editorial queries would
     // ever return one, and for a producer or engineer that is where most of
