@@ -3,7 +3,7 @@ import { webSearch } from "@/lib/search/webSearch";
 import { inferTypeFromUrl } from "@/lib/sources/inferTypeFromUrl";
 import { normalizeLoreDiscoveryUrl } from "@/lib/sources/normalizeLoreDiscoveryUrl";
 import { TAVILY_RESULTS_PER_QUERY } from "@/lib/vault/const";
-import { holdsAnswerFor } from "@/lib/vault/holdsAnswerFor";
+import { searchMissingYouTubeChannels } from "@/lib/vault/searchMissingYouTubeChannels";
 import { sourceSearchQueries } from "@/lib/vault/sourceSearchQueries";
 import type { DiscoveryResult, SearchRun } from "@/lib/vault/types";
 
@@ -24,19 +24,8 @@ export async function searchCandidates(
   run: SearchRun,
   homepage: string | null,
 ): Promise<DiscoveryResult[]> {
-  const missingYouTube = !["youtube", "youtubechannel"].some(site =>
-    holdsAnswerFor(run.artist, site, run.provisional),
-  );
   const perQuery = await Promise.all([
-    ...(missingYouTube
-      ? [
-          webSearch(`"${run.artistName}" official YouTube channel`, {
-            includeDomains: ["youtube.com"],
-            maxResults: TAVILY_RESULTS_PER_QUERY,
-            ...(run.requireComplete ? { throwOnError: true } : {}),
-          }),
-        ]
-      : []),
+    searchMissingYouTubeChannels(run),
     ...sourceSearchQueries(run.artistName).map(q =>
       webSearch(q, {
         maxResults: TAVILY_RESULTS_PER_QUERY,

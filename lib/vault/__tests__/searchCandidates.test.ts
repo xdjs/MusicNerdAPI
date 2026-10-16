@@ -41,8 +41,8 @@ describe("searchCandidates", () => {
       "https://svaneborgkardyb.com/",
     );
     expect(webSearch).toHaveBeenCalledTimes(6);
-    expect(webSearch).toHaveBeenCalledWith('"Svaneborg Kardyb" official YouTube channel', {
-      includeDomains: ["youtube.com"],
+    expect(webSearch).toHaveBeenCalledWith("Svaneborg Kardyb official YouTube channel", {
+      includeDomains: ["youtube.com/@", "youtube.com/channel/"],
       maxResults: 5,
       throwOnError: true,
     });
