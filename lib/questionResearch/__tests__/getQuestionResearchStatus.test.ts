@@ -58,3 +58,80 @@ it.each(["complete", "unresolved"])(
     });
   },
 );
+it("marks unassessed candidates explicitly and still removes revoked or changed evidence", async () => {
+  m.execute.mockResolvedValue([
+    {
+      status: "done",
+      updated_at: new Date().toISOString(),
+      state: {
+        version: 1,
+        selection: "candidates",
+        directAttempted: true,
+        key: "key",
+        expectedClaimId: null,
+        request: { topic: "known original", evidenceNeed: "reporting", freshness: "stored" },
+        stage: "complete",
+        createdAt: new Date().toISOString(),
+        references: [ref],
+        limitations: [],
+        modelCalls: 0,
+        providerCalls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+    },
+  ]);
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    selection: "candidates",
+    stage: "complete",
+    references: [ref],
+  });
+  m.originals.mockResolvedValue([{ ...ref, text: "Changed" }]);
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    selection: "candidates",
+    stage: "unresolved",
+    references: [],
+  });
+  m.claim.mockResolvedValue({ id: "new-claim" });
+  m.originals.mockClear();
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    selection: "candidates",
+    stage: "cancelled",
+    references: [],
+  });
+  expect(m.originals).not.toHaveBeenCalled();
+});
+
+it("reports elapsed reset time as zero without extending the blocked job", async () => {
+  const resetAt = new Date(Date.now() - 1000).toISOString();
+  m.execute.mockResolvedValue([
+    {
+      status: "done",
+      updated_at: new Date().toISOString(),
+      state: {
+        version: 1,
+        budgetVersion: 2,
+        savedOnly: true,
+        outsideQuota: { quotaScope: "outside_artist", retryAfterSeconds: 123, resetAt },
+        key: "key",
+        expectedClaimId: null,
+        request: { topic: "known original", evidenceNeed: "reporting", freshness: "stored" },
+        stage: "unresolved",
+        createdAt: new Date().toISOString(),
+        references: [],
+        limitations: [],
+        modelCalls: 1,
+        providerCalls: 0,
+        inputTokens: 1,
+        outputTokens: 1,
+      },
+    },
+  ]);
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    stage: "unresolved",
+    outsideResearchReason: "quota",
+    quotaScope: "outside_artist",
+    resetAt,
+    retryAfterSeconds: 0,
+  });
+});

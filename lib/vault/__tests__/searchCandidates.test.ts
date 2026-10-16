@@ -10,12 +10,19 @@ beforeEach(() => {
 });
 
 describe("searchCandidates", () => {
-  it("runs the five queries, five results each, and asks a durable run to throw on failure", async () => {
-    await searchCandidates(searchRun({ requireComplete: true }), null);
+  it("keeps five broad queries when a YouTube account is already saved", async () => {
+    const artist = { name: "Grimes", youtube: "grimes" };
+    await searchCandidates(searchRun({ artist, requireComplete: true }), null);
     expect(webSearch).toHaveBeenCalledTimes(5);
     expect(webSearch).toHaveBeenCalledWith("Grimes", { maxResults: 5, throwOnError: true });
-    await searchCandidates(searchRun(), null);
+    await searchCandidates(searchRun({ artist }), null);
     expect(webSearch).toHaveBeenLastCalledWith('"Grimes" discogs credits', { maxResults: 5 });
+  });
+
+  it("leaves missing-channel queries to the phase after broad source verification", async () => {
+    await searchCandidates(searchRun({ artist: { name: "Grimes" }, requireComplete: true }), null);
+    expect(webSearch).toHaveBeenCalledTimes(5);
+    expect(webSearch.mock.calls.some(([query]) => query.includes("YouTube"))).toBe(false);
   });
 
   it("dedupes across queries by normalized URL, drops untitled hits and types each by its URL", async () => {

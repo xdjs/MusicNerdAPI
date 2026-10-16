@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
   activity: vi.fn(),
   transaction: vi.fn(),
+  budget: vi.fn(),
 }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: mocks.transaction } }));
 vi.mock("@/lib/db/lockArtistRow", () => ({ lockArtistRow: mocks.lock }));
@@ -15,6 +16,9 @@ vi.mock("@/lib/knowledge/authorizeArtistKnowledge", () => ({
 }));
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim: mocks.claim }));
 vi.mock("@/lib/activity/recordArtistActivity", () => ({ recordArtistActivity: mocks.activity }));
+vi.mock("@/lib/questionResearch/getQuestionResearchBudget", () => ({
+  getQuestionResearchBudget: mocks.budget,
+}));
 const request = {
   topic: "Album credits",
   evidenceNeed: "credits" as const,
@@ -24,6 +28,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.transaction.mockImplementation(fn => fn({ execute: mocks.execute }));
   mocks.claim.mockResolvedValue(null);
+  mocks.budget.mockResolvedValue({ saved: null, outside: null });
   mocks.activity.mockResolvedValue("event");
 });
 it("reserves quotas and persists queued acknowledgement without provider work", async () => {
@@ -32,7 +37,6 @@ it("reserves quotas and persists queued acknowledgement without provider work", 
     .mockResolvedValueOnce([{ id: "artist" }])
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ global: 0, artist: 0, saved_global: 0, saved_artist: 0 }])
     .mockResolvedValueOnce([{ id: "job", updated_at: new Date().toISOString() }]);
   const result = await queueQuestionResearch("artist", { kind: "service" }, request);
   expect(result).toMatchObject({
@@ -59,13 +63,17 @@ it("rejects a different request while the artist already has active work", async
   );
   expect(mocks.activity).not.toHaveBeenCalled();
 });
-it("fails closed when both outside and saved-evidence global quotas are exhausted", async () => {
+it("fails closed when the shared saved-admission quota is exhausted", async () => {
   mocks.execute
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ id: "artist" }])
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ global: 100, artist: 0, saved_global: 100, saved_artist: 0 }]);
+    .mockResolvedValueOnce([]);
+  mocks.budget.mockResolvedValue({
+    saved: { quotaScope: "saved_global", resetAt: "2026-10-16T12:00:00Z", retryAfterSeconds: 3600 },
+    outside: null,
+  });
   await expect(queueQuestionResearch("artist", { kind: "service" }, request)).rejects.toMatchObject(
     { status: 429, code: "saved_evidence_quota" },
   );
@@ -79,14 +87,14 @@ it("rechecks current private authorization in the locked transaction", async () 
   ).rejects.toThrow("claim revoked");
   expect(mocks.activity).not.toHaveBeenCalled();
 });
-it("admits saved-only research at exhausted outside quota without raising that quota", async () => {
+it("admits saved-source research without reserving outside capacity", async () => {
   mocks.execute
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ id: "artist" }])
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ global: 100, artist: 5, saved_global: 0, saved_artist: 0 }])
     .mockResolvedValueOnce([{ id: "job", updated_at: new Date().toISOString() }]);
   const result = await queueQuestionResearch("artist", { kind: "service" }, request);
-  expect(result).toMatchObject({ stage: "checking_saved", outsideResearchReason: "quota" });
+  expect(result).toMatchObject({ stage: "checking_saved" });
+  expect(result).not.toHaveProperty("outsideResearchReason");
 });

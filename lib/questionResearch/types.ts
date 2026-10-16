@@ -79,8 +79,21 @@ export type DiscoveryOriginal = {
     limitations: string[];
   };
 };
+export type ResearchQuota = {
+  quotaScope: "saved_global" | "outside_artist" | "outside_global";
+  retryAfterSeconds: number;
+  resetAt: string;
+};
 export type QuestionResearchState = {
+  /** Separate saved admission and external reservation; absent on legacy jobs. */
+  budgetVersion?: 2;
+  outsideReservedAt?: string;
+  outsideQuota?: ResearchQuota;
   version: 1;
+  /** Candidate readiness does not assert that the question is answered. */
+  selection?: "candidates" | "research";
+  /** Server-only marker; continuation never offers another direct attempt. */
+  directAttempted?: true;
   /** Server-admitted saved-evidence lane; never allowed to collect externally. */
   savedOnly?: boolean;
   request: ResearchRequest;
@@ -131,7 +144,6 @@ export type ResearchAuth = { kind: "service" } | { kind: "artist"; userId: strin
 export const QUESTION_RESEARCH_LIFETIME_MS = 15 * 60_000;
 export const QUESTION_RESEARCH_DAILY_ARTIST = 5;
 export const QUESTION_RESEARCH_DAILY_GLOBAL = 100;
-export const SAVED_EVIDENCE_DAILY_ARTIST = 5;
 export const SAVED_EVIDENCE_DAILY_GLOBAL = 100;
 export const QUESTION_RESEARCH_CACHE_MS = 30 * 60_000;
 export const SAVED_RESEARCH_MODEL_STEPS = 5;

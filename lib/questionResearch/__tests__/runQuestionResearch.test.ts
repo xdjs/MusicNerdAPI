@@ -1,3 +1,5 @@
+import { ResearchQuotaError } from "../ResearchQuotaError";
+import { parseQuestionResearchState } from "../parseQuestionResearchState";
 import { NoObjectGeneratedError } from "ai";
 import { it, expect, vi, beforeEach } from "vitest";
 import { runQuestionResearch } from "@/lib/questionResearch/runQuestionResearch";
@@ -523,4 +525,70 @@ it("does not pass revoked partial evidence back into a model", async () => {
   await runQuestionResearch(j, Date.now() + 50000);
   expect(m.assess).not.toHaveBeenCalled();
   expect(j.state).toMatchObject({ stage: "unresolved", references: [] });
+});
+
+it("requests a separate outside reservation only after saved evidence is insufficient", async () => {
+  const j = job({ ...initial(), budgetVersion: 2 });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.checkpoint).toHaveBeenLastCalledWith(
+    j,
+    expect.objectContaining({ step: "search" }),
+    true,
+    undefined,
+    true,
+  );
+  expect(m.search).not.toHaveBeenCalled();
+});
+it("keeps saved answers out of the outside budget", async () => {
+  const j = job({ ...initial(), budgetVersion: 2 });
+  m.assess.mockResolvedValue({ sufficient: true, references: [], inputTokens: 0, outputTokens: 0 });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(m.checkpoint.mock.calls.every(call => call[4] !== true)).toBe(true);
+  expect(j.state).toMatchObject({ stage: "complete", providerCalls: 0 });
+});
+it("stops honestly without a provider when the outside reservation is exhausted", async () => {
+  const j = job({ ...initial(), budgetVersion: 2 });
+  const quota = {
+    quotaScope: "outside_artist" as const,
+    resetAt: "2026-10-16T12:00:00Z",
+    retryAfterSeconds: 123,
+  };
+  m.checkpoint.mockImplementation(async (_j, _s, _release, _write, reserveOutside) => {
+    if (reserveOutside) throw new ResearchQuotaError(quota);
+    _j.state = _s;
+    return true;
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "unresolved",
+    step: "saved",
+    savedOnly: true,
+    outsideQuota: quota,
+    providerCalls: 0,
+  });
+  expect(j.state.plan).toBeUndefined();
+  expect(j.state.outsideReservedAt).toBeUndefined();
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
+  expect(m.fetch).not.toHaveBeenCalled();
+});
+
+it("leaves a readable failed job when outside reservation cannot be checked", async () => {
+  const j = job({ ...initial(), budgetVersion: 2 });
+  m.checkpoint.mockImplementation(async (_j, _s, _release, _write, reserveOutside) => {
+    if (reserveOutside) throw new Error("Research budget unavailable");
+    _j.state = _s;
+    return true;
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "failed",
+    errorCode: "research_unavailable",
+    step: "saved",
+  });
+  expect(() => parseQuestionResearchState(j.state)).not.toThrow();
+  expect(j.state.outsideReservedAt).toBeUndefined();
+  expect(j.state.plan).toBeUndefined();
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
 });
