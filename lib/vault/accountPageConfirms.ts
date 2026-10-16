@@ -3,6 +3,7 @@ import { fetchLinkPreview } from "@/lib/pages/fetchLinkPreview";
 import { stripQuery } from "@/lib/sources/stripQuery";
 import { HANDLE_STEM_MIN } from "@/lib/vault/const";
 import { sharedPrefix } from "@/lib/vault/sharedPrefix";
+import { isYouTubeTopicAccount } from "@/lib/vault/isYouTubeTopicAccount";
 import type { AccountCandidate } from "@/lib/vault/types";
 
 /**
@@ -25,6 +26,7 @@ export async function accountPageConfirms(
     const preview = await fetchLinkPreview(stripQuery(cand.url)).catch(() => null);
     title = preview?.title ?? "";
   }
+  if (isYouTubeTopicAccount(cand.siteName, title)) return null;
   const identity = `${title} ${cand.description}`.trim();
   if (!identity) return null;
   if (titleMatchesArtist(title, artistName)) return identity;

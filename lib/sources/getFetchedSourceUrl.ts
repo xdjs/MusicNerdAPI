@@ -1,3 +1,4 @@
+import { isSourceAccessGateUrl } from "@/lib/sources/isSourceAccessGateUrl";
 import { isUnsafeUrl } from "@/lib/pages/isUnsafeUrl";
 import type { PageContent } from "@/lib/pages/types";
 import { canonicalizeLoreUrl } from "@/lib/sources/canonicalizeLoreUrl";
@@ -9,6 +10,7 @@ export function getFetchedSourceUrl(originalUrl: string, page: PageContent): str
   const url = page.resolvedUrl ?? originalUrl;
   if (
     !canonicalizeLoreUrl(url) ||
+    isSourceAccessGateUrl(url) ||
     isUnsafeUrl(url) ||
     isBlockedSourceHost(url) ||
     isExcludedLoreDiscoveryUrl(url)

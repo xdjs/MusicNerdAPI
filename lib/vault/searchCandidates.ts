@@ -10,7 +10,8 @@ import type { DiscoveryResult, SearchRun } from "@/lib/vault/types";
  * Runs the source search's queries and dedupes what comes back. A homepage
  * MusicBrainz named goes in first, so it survives the dedupe: it's the hub
  * that lists the artist's real accounts, and search doesn't always return it.
- * Each result is typed by its URL, which can't be invented.
+ * Each result is typed by its URL, which cannot be invented. Missing-channel
+ * fallback is separate and runs only after these sources have been verified.
  *
  * @param run - The run, for the name and whether it must complete.
  * @param homepage - The homepage MusicBrainz named, or null.
@@ -20,14 +21,14 @@ export async function searchCandidates(
   run: SearchRun,
   homepage: string | null,
 ): Promise<DiscoveryResult[]> {
-  const perQuery = await Promise.all(
-    sourceSearchQueries(run.artistName).map(q =>
+  const perQuery = await Promise.all([
+    ...sourceSearchQueries(run.artistName).map(q =>
       webSearch(q, {
         maxResults: TAVILY_RESULTS_PER_QUERY,
         ...(run.requireComplete ? { throwOnError: true } : {}),
       }),
     ),
-  );
+  ]);
   const seeded = homepage ? [{ url: homepage, title: run.artistName, snippet: "" }] : [];
   if (homepage) {
     console.log(

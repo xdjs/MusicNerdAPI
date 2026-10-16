@@ -3,8 +3,9 @@ import { CASE_SENSITIVE_ACCOUNT_IDS } from "@/lib/vault/const";
 import type { ResolvedHandle } from "@/lib/vault/types";
 
 /**
- * A link on the page to an id we already hold for the artist, which makes the
- * page theirs: identity through a matched (platform, id), never a name.
+ * A resolved link matching an id we already hold for the artist: identity
+ * through a matched (platform, id), never a name. An outbound match does not
+ * establish ownership of the referring page; callers must check that separately.
  * Normalized on both sides, since stored values may carry a leading "@".
  * A discovery guess never corroborates: a namesake's account would vouch for
  * the namesake's page.

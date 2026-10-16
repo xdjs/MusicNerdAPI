@@ -25,3 +25,52 @@ it("allows only one recorded structured-output retry within the saved-only model
     parseQuestionResearchState({ ...state, outputRetries: 1, providerCalls: 1 }),
   ).toThrow();
 });
+it("keeps candidate readiness separate from model-assessed research and rejects malformed markers", () => {
+  const candidate = {
+    ...state,
+    modelCalls: 0,
+    stage: "complete",
+    selection: "candidates",
+    directAttempted: true,
+  };
+  expect(parseQuestionResearchState(candidate)).toMatchObject({
+    selection: "candidates",
+    directAttempted: true,
+  });
+  for (const patch of [
+    { selection: "sufficient" },
+    { directAttempted: false },
+    { directAttempted: undefined },
+    { selection: undefined },
+    { stage: "checking_saved" },
+    { modelCalls: 1 },
+    { providerCalls: 1 },
+    { plan: { provider: null, stage: "unresolved", reason: "missing" } },
+    { inFlight: "model" },
+  ])
+    expect(() => parseQuestionResearchState({ ...candidate, ...patch })).toThrow();
+  expect(
+    parseQuestionResearchState({ ...candidate, selection: "research", stage: "checking_saved" }),
+  ).toMatchObject({ selection: "research" });
+});
+
+it("requires a valid outside reservation for every new-budget external stage", () => {
+  const initial = { ...state, modelCalls: 0, savedOnly: undefined, budgetVersion: 2 };
+  expect(parseQuestionResearchState(initial).budgetVersion).toBe(2);
+  for (const patch of [
+    { step: "search" },
+    { providerCalls: 1 },
+    { inFlight: "social_start" },
+    { outsideReservedAt: "bad" },
+    { budgetVersion: 3 },
+    { outsideReservedAt: "2026-10-15T12:00:00Z", savedOnly: true },
+  ])
+    expect(() => parseQuestionResearchState({ ...initial, ...patch })).toThrow();
+  expect(
+    parseQuestionResearchState({
+      ...initial,
+      step: "search",
+      outsideReservedAt: "2026-10-15T12:00:00Z",
+    }),
+  ).toMatchObject({ budgetVersion: 2 });
+});

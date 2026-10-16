@@ -16,12 +16,28 @@ beforeEach(() => {
 });
 
 describe("adoptFromHubs", () => {
-  it("re-reads the artist, examines each distinct link set once and collects verified handles", async () => {
+  it("does not let a rejected publisher suppress an owned page with the same outbound links", async () => {
+    const official = "https://svaneborgkardyb.bandcamp.com";
+    const links = ["https://youtube.com/@svaneborgkardyb"];
+    adoptHandlesFromOwnPage.mockImplementation(async (_id, _links, _artist, _name, page) =>
+      page.url === official
+        ? { adopted: 1, handles: new Set(["svaneborgkardyb"]) }
+        : { adopted: 0, handles: new Set() },
+    );
+    const run = searchRun({
+      hubCandidates: [hub("https://publisher.example/review", links), hub(official, links)],
+    });
+    await adoptFromHubs(run);
+    expect([...run.verifiedHandles]).toEqual(["svaneborgkardyb"]);
+    expect(adoptHandlesFromOwnPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-reads the artist, deduplicates repeated page/link sets and collects verified handles", async () => {
     adoptHandlesFromOwnPage.mockResolvedValueOnce({ adopted: 1, handles: new Set(["dupesdidit"]) });
     const run = searchRun({
       hubCandidates: [
         hub("https://a.com", ["x", "y"]),
-        hub("https://b.com", ["y", "x"]),
+        hub("https://a.com", ["y", "x"]),
         hub("https://c.com", ["z"], false),
       ],
     });

@@ -16,6 +16,24 @@ beforeEach(() => {
 });
 
 describe("accountPageConfirms", () => {
+  it("rejects a fetched Topic title but not an official channel whose description mentions a topic", async () => {
+    const youtube = {
+      ...cand("grimes", "Grimes - Topic - YouTube"),
+      siteName: "youtube",
+      url: "https://youtube.com/@grimes",
+    };
+    expect(await accountPageConfirms(youtube, "Grimes")).toBeNull();
+    expect(
+      await accountPageConfirms(
+        {
+          ...youtube,
+          title: "Grimes - YouTube",
+          description: "Official channel. Today's topic: production.",
+        },
+        "Grimes",
+      ),
+    ).toContain("Official channel");
+  });
   it("confirms on the title alone, however unlike the name the handle is", async () => {
     expect(
       await accountPageConfirms(

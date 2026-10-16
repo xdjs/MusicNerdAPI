@@ -1,3 +1,5 @@
+import { getQuestionResearchBudget } from "./getQuestionResearchBudget";
+import { ResearchQuotaError } from "./ResearchQuotaError";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
@@ -9,22 +11,23 @@ import { researchRequestKey } from "@/lib/questionResearch/researchRequestKey";
 import { researchStatusMessage } from "@/lib/questionResearch/researchStatusMessage";
 import { validateQuestionResearchBody } from "@/lib/questionResearch/validateQuestionResearchBody";
 import {
-  QUESTION_RESEARCH_DAILY_ARTIST,
-  QUESTION_RESEARCH_DAILY_GLOBAL,
   QUESTION_RESEARCH_CACHE_MS,
-  SAVED_EVIDENCE_DAILY_ARTIST,
-  SAVED_EVIDENCE_DAILY_GLOBAL,
+  QUESTION_RESEARCH_LIFETIME_MS,
   type ResearchRequest,
   type ResearchAuth,
   type QuestionResearchState,
+  type ResearchReference,
 } from "@/lib/questionResearch/types";
 
-/** Reserve a durable global/artist budget and acknowledge without starting provider work. */
+/** Reserve global saved-question admission; outside capacity is reserved only at collection transition. */
 export async function queueQuestionResearch(
   artistId: string,
   auth: ResearchAuth,
   input: ResearchRequest,
+  options?: { directCandidates: ResearchReference[] },
 ) {
+  if (options && auth.kind !== "service")
+    throw new KnowledgeError("forbidden", 403, "Direct evidence requires a service credential");
   const request = validateQuestionResearchBody(input),
     key = researchRequestKey(request);
   return db.transaction(async tx => {
@@ -46,18 +49,32 @@ export async function queueQuestionResearch(
     }>(sql`select id,status,state,updated_at from artist_research_jobs
       where artist_id=${artistId}::uuid and kind='question_research'
         and state->>'key'=${key}
+        and (${options !== undefined} or state->>'selection' is distinct from 'candidates')
+        and (state->>'selection' is distinct from 'candidates' or
+          (state->>'createdAt')::timestamptz>now()-${`${QUESTION_RESEARCH_LIFETIME_MS} milliseconds`}::interval)
         and state->>'expectedClaimId' is not distinct from ${claim?.id ?? null}::text
         and (status in ('pending','running') or
           (status='done' and updated_at>now()-${`${QUESTION_RESEARCH_CACHE_MS} milliseconds`}::interval
             and (state->>'stage'='complete' or
-              (state->>'stage'='unresolved' and updated_at>now()-interval '5 minutes'))))
+              (state->>'stage'='unresolved' and updated_at>now()-interval '5 minutes'
+                and (state->'outsideQuota' is null or (state->'outsideQuota'->>'resetAt')::timestamptz>now())))))
       order by created_at desc limit 1`);
     if (reusable)
       return {
         status: "ok" as const,
         jobId: reusable.id,
         reused: true,
+        ...(reusable.state.selection ? { selection: reusable.state.selection } : {}),
         ...(reusable.state.savedOnly ? { outsideResearchReason: "quota" as const } : {}),
+        ...(reusable.state.outsideQuota
+          ? {
+              ...reusable.state.outsideQuota,
+              retryAfterSeconds: Math.max(
+                0,
+                Math.ceil((Date.parse(reusable.state.outsideQuota.resetAt) - Date.now()) / 1000),
+              ),
+            }
+          : {}),
         stage: reusable.state.stage,
         message: researchStatusMessage(reusable.state.stage, reusable.state.plan?.provider ?? null),
         provider: reusable.state.plan?.provider ?? null,
@@ -74,46 +91,24 @@ export async function queueQuestionResearch(
         429,
         "Another question is being researched for this artist; resume it or try later",
       );
-    const [usage] = await tx.execute<{
-      global: number;
-      artist: number;
-      saved_global: number;
-      saved_artist: number;
-    }>(sql`select
-      count(*) filter(where state->'savedOnly' is distinct from 'true'::jsonb)::int as global,
-      count(*) filter(where artist_id=${artistId}::uuid and state->'savedOnly' is distinct from 'true'::jsonb)::int as artist,
-      count(*) filter(where state->'savedOnly'='true'::jsonb)::int as saved_global,
-      count(*) filter(where artist_id=${artistId}::uuid and state->'savedOnly'='true'::jsonb)::int as saved_artist
-      from artist_research_jobs where kind='question_research' and created_at>now()-interval '24 hours'`);
-    if (
-      !usage ||
-      ![usage.global, usage.artist, usage.saved_global, usage.saved_artist].every(
-        v => Number.isInteger(Number(v)) && Number(v) >= 0,
-      )
-    )
-      throw new Error("Research budget unavailable");
-    const savedOnly =
-      Number(usage.global) >= QUESTION_RESEARCH_DAILY_GLOBAL ||
-      Number(usage.artist) >= QUESTION_RESEARCH_DAILY_ARTIST;
-    if (
-      savedOnly &&
-      (Number(usage.saved_global) >= SAVED_EVIDENCE_DAILY_GLOBAL ||
-        Number(usage.saved_artist) >= SAVED_EVIDENCE_DAILY_ARTIST)
-    )
-      throw new KnowledgeError(
-        "saved_evidence_quota",
-        429,
-        "Saved-evidence answer limit reached; try again later",
-      );
+    const budget = await getQuestionResearchBudget(tx, artistId);
+    if (budget.saved) throw new ResearchQuotaError(budget.saved);
+    const hasCandidates = Boolean(options?.directCandidates.length);
     const state: QuestionResearchState = {
       version: 1,
-      ...(savedOnly ? { savedOnly: true } : {}),
+      budgetVersion: 2,
+      ...(options
+        ? {
+            selection: hasCandidates ? ("candidates" as const) : ("research" as const),
+            directAttempted: true as const,
+          }
+        : {}),
       request,
       key,
       expectedClaimId: claim?.id ?? null,
-      stage: "checking_saved",
+      stage: hasCandidates ? "complete" : "checking_saved",
       createdAt: new Date().toISOString(),
-      references: [],
+      references: options?.directCandidates ?? [],
       limitations: [],
       modelCalls: 0,
       providerCalls: 0,
@@ -130,14 +125,14 @@ export async function queueQuestionResearch(
       tx,
     );
     const [job] = await tx.execute<{ id: string; updated_at: string }>(
-      sql`insert into artist_research_jobs(artist_id,kind,state,activity_id) values(${artistId}::uuid,'question_research',${JSON.stringify(state)}::jsonb,${activityId}::uuid) returning id,updated_at`,
+      sql`insert into artist_research_jobs(artist_id,kind,state,activity_id,status) values(${artistId}::uuid,'question_research',${JSON.stringify(state)}::jsonb,${activityId}::uuid,${hasCandidates ? "done" : "pending"}) returning id,updated_at`,
     );
     if (!job) throw new Error("Research acknowledgement was not persisted");
     return {
       status: "ok" as const,
       jobId: job.id,
       reused: false,
-      ...(savedOnly ? { outsideResearchReason: "quota" as const } : {}),
+      ...(state.selection ? { selection: state.selection } : {}),
       stage: state.stage,
       message: researchStatusMessage(state.stage, null),
       provider: null,

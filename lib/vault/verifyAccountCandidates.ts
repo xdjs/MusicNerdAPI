@@ -33,17 +33,20 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
     }
     const current = await getArtistById(run.artistId).catch(() => undefined);
     const done = new Set<string>();
-    for (const cand of rankAccountCandidates(run.accountCandidates, run.artistName).slice(
-      0,
-      MAX_ACCOUNT_CHECKS,
-    )) {
+    const checked = (run.checkedAccountCandidates ??= new Set());
+    for (const cand of rankAccountCandidates(run.accountCandidates, run.artistName)) {
       if (outOfBudget(run, "account verification")) return;
       if (done.has(cand.siteName)) continue;
+      const key = `${cand.siteName}:${cand.id}`;
+      if (checked.has(key)) continue;
+      if (checked.size >= MAX_ACCOUNT_CHECKS) break;
       if (
-        current &&
-        holdsAnswerFor(current as Record<string, unknown>, cand.siteName, run.provisional)
+        holdsAnswerFor(run.artist, cand.siteName, run.provisional) ||
+        (current &&
+          holdsAnswerFor(current as Record<string, unknown>, cand.siteName, run.provisional))
       )
         continue;
+      checked.add(key);
       if (await handleBelongsToAnotherArtist(run.artistId, cand.siteName, cand.id)) {
         console.log(
           `[vaultWebSearch] ${cand.siteName}=${cand.id} is already another artist's, ignoring`,
@@ -67,6 +70,7 @@ export async function verifyAccountCandidates(run: SearchRun): Promise<void> {
           run.provisional,
           current as Record<string, unknown> | undefined,
         );
+        run.artist[cand.siteName] = cand.id;
         console.log(
           `[vaultWebSearch] Search found ${cand.siteName}=${cand.id}, page confirms it: "${identity.slice(0, 60)}"`,
         );
