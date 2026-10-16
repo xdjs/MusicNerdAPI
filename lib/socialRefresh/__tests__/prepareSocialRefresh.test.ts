@@ -2,10 +2,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { beforeAll, beforeEach, afterAll, it, expect, vi } from "vitest";
 import type { WriteDb } from "@/lib/db/db";
-const guard = vi.hoisted(() => ({ write: vi.fn() }));
-vi.mock("@/lib/research/withResearchJobWrite", () => ({ withResearchJobWrite: guard.write }));
 import { prepareSocialRefresh } from "../prepareSocialRefresh";
 import { storeSocialRefresh } from "../storeSocialRefresh";
+const guard = vi.hoisted(() => ({ write: vi.fn() }));
+vi.mock("@/lib/research/withResearchJobWrite", () => ({ withResearchJobWrite: guard.write }));
 const pg = new PGlite();
 const orm = drizzle(pg);
 const writer = {
