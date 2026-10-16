@@ -1,4 +1,4 @@
-import { readSocialRefresh } from "@/lib/socialRefresh/readSocialRefresh";
+import { prepareSocialRefresh } from "@/lib/socialRefresh/prepareSocialRefresh";
 import { withoutAt } from "@/lib/artists/withoutAt";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { collectInstagramScrape } from "@/lib/instagram/collectInstagramScrape";
@@ -31,7 +31,15 @@ export async function refreshLatestInstagram(
   if (!process.env.APIFY_API_TOKEN) return { status: "failed" };
   if (!state.runId) {
     if (state.providerStarted) return { status: "failed" };
-    state.scan ??= await readSocialRefresh(job.artistId, "instagram", handle, 30);
+    state.scan ??= await prepareSocialRefresh(job, "instagram", handle, 30);
+    if (state.scan.needsReview) {
+      state.instagramFailure = {
+        phase: "collection",
+        reason: "Social continuity needs review",
+        at: new Date().toISOString(),
+      };
+      return { status: "failed" };
+    }
     if (state.scan.skip) return { status: "checked", checkedAt: state.scan.checkedAt };
     state.providerStarted = true;
     await latestRefreshStore(job, state);

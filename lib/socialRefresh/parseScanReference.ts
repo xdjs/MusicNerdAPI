@@ -14,6 +14,13 @@ export function parseScanReference(value: unknown): ScanReference | undefined {
     )
   )
     return;
+  if (
+    row.recoveryAttemptedAt !== undefined &&
+    (typeof row.recoveryAttemptedAt !== "string" ||
+      !Number.isFinite(Date.parse(row.recoveryAttemptedAt)) ||
+      row.gapSince === null)
+  )
+    return;
   const anchors = [];
   for (const value of row.anchors) {
     if (!value || typeof value !== "object") return;
@@ -29,5 +36,12 @@ export function parseScanReference(value: unknown): ScanReference | undefined {
     anchors.push({ id: anchor.id, postedAt: anchor.postedAt });
   }
   if (new Set(anchors.map(a => a.id)).size !== anchors.length) return;
-  return { anchors, observedAt: row.observedAt, gapSince: row.gapSince as string | null };
+  return {
+    anchors,
+    observedAt: row.observedAt,
+    gapSince: row.gapSince as string | null,
+    ...(typeof row.recoveryAttemptedAt === "string"
+      ? { recoveryAttemptedAt: row.recoveryAttemptedAt }
+      : {}),
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-vi.mock("@/lib/socialRefresh/readSocialRefresh", () => ({ readSocialRefresh: m.refresh }));
+vi.mock("@/lib/socialRefresh/prepareSocialRefresh", () => ({ prepareSocialRefresh: m.refresh }));
 vi.mock("@/lib/social/persistSocialResearch", () => ({ persistSocialResearch: m.persist }));
 
 const m = vi.hoisted(() => ({
@@ -209,7 +209,7 @@ describe("runIngest", () => {
       done: true,
     });
     expect(m.checkInstagramScrape).not.toHaveBeenCalled();
-    expect(m.instagramHandleFor).toHaveBeenCalledTimes(1);
+    expect(m.instagramHandleFor).not.toHaveBeenCalled();
     expect(m.completeResearchJob).toHaveBeenCalledWith("job-1");
     expect(m.enqueueResearchJob).toHaveBeenCalledWith("artist-1", "caption_extract", {
       parentJobId: "job-1",
@@ -268,15 +268,22 @@ it("rechecks after provider start and never writes stale directory progress", as
   m.guard
     .mockResolvedValueOnce(undefined)
     .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce(undefined)
     .mockRejectedValueOnce(new Error("ownership changed"));
   m.startInstagramScrape.mockResolvedValue({ status: "started", runId: "paid" });
   await expect(runIngest(job({ directoryActivityId: "event" }), later())).rejects.toThrow(
     "ownership changed",
   );
-  expect(m.scopedSave).toHaveBeenCalledWith(
-    expect.anything(),
-    expect.objectContaining({ instagramStartRequested: true, instagramHandle: "biorritmo" }),
+  expect(m.persist).toHaveBeenCalledWith(
+    expect.objectContaining({
+      state: expect.objectContaining({
+        instagramStartRequested: true,
+        instagramHandle: "biorritmo",
+      }),
+    }),
+    false,
   );
+  expect(m.startInstagramScrape).toHaveBeenCalledOnce();
   expect(m.saveJobProgress).not.toHaveBeenCalled();
 });
 it("a definite provider rejection clears the start marker for a later bounded retry", async () => {

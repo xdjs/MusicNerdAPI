@@ -4,6 +4,7 @@ export type SocialScan = {
   scope?: "latest" | "profile";
   after?: string;
   skip?: boolean;
+  needsReview?: boolean;
   checkedAt?: string;
   providerLimited?: boolean;
   reference?: ScanReference;
@@ -14,5 +15,10 @@ export type RefreshCheckpoint = {
   reference?: ScanReference;
 };
 export type ScanAnchor = { id: string; postedAt: string };
-export type ScanReference = { anchors: ScanAnchor[]; observedAt: string; gapSince: string | null };
+export type ScanReference = {
+  anchors: ScanAnchor[];
+  observedAt: string;
+  gapSince: string | null;
+  recoveryAttemptedAt?: string;
+};
 export type ScanPost = ScanAnchor & { pinned?: boolean };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-vi.mock("@/lib/socialRefresh/readSocialRefresh", () => ({ readSocialRefresh: m.refresh }));
+vi.mock("@/lib/socialRefresh/prepareSocialRefresh", () => ({ prepareSocialRefresh: m.refresh }));
 
 const m = vi.hoisted(() => ({
   refresh: vi.fn(),

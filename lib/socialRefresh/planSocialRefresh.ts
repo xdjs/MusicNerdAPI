@@ -10,6 +10,13 @@ export function planSocialRefresh(
     value && Number.isFinite(Date.parse(value)) && Date.parse(value) <= time
       ? Date.parse(value)
       : null;
+  if (checkpoint?.reference?.gapSince && checkpoint.reference.recoveryAttemptedAt)
+    return {
+      startedAt: now.toISOString(),
+      skip: true,
+      needsReview: true,
+      reference: checkpoint.reference,
+    };
   const checked = checkpoint && valid(checkpoint.checkedAt);
   if (checked && time - checked < 15 * 60_000)
     return { startedAt: now.toISOString(), skip: true, checkedAt: new Date(checked).toISOString() };

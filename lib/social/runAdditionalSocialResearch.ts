@@ -1,5 +1,5 @@
 import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
-import { readSocialRefresh } from "@/lib/socialRefresh/readSocialRefresh";
+import { prepareSocialRefresh } from "@/lib/socialRefresh/prepareSocialRefresh";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
 import { persistSocialResearch } from "@/lib/social/persistSocialResearch";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
@@ -55,9 +55,10 @@ export async function runAdditionalSocialResearch(
       failure = "apify start outcome unknown; inspect provider before retrying";
     else {
       if (task.source !== "reels")
-        task.scan ??= await readSocialRefresh(job.artistId, task.source, task.handle);
+        task.scan ??= await prepareSocialRefresh(job, task.source, task.handle);
       if (task.scan?.skip) {
-        task.status = "checked";
+        task.status = task.scan.needsReview ? "failed" : "checked";
+        if (task.scan.needsReview) task.failure = "Social continuity needs review";
         task.stored = 0;
         state.index++;
         await persistSocialResearch(job, state.index < state.tasks.length);

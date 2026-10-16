@@ -52,3 +52,20 @@ it("keeps saved anchors within the next query even after a quiet month", () => {
   expect(result.after).toBe("2026-07-30T00:00:00.000Z");
   expect(result.reference).toEqual(reference);
 });
+
+it("stops automatic starts after a recovery reservation while retaining the gap", () => {
+  const result = planSocialRefresh(
+    {
+      coveredThrough: null,
+      checkedAt: "2026-10-10T00:00:00Z",
+      reference: {
+        anchors: [{ id: "missing", postedAt: "2026-10-09T00:00:00Z" }],
+        observedAt: "2026-10-10T00:00:00Z",
+        gapSince: "2026-10-10T00:00:00Z",
+        recoveryAttemptedAt: "2026-10-11T00:00:00Z",
+      },
+    },
+    new Date("2026-10-12T00:00:00Z"),
+  );
+  expect(result).toMatchObject({ skip: true, needsReview: true });
+});

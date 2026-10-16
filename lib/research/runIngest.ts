@@ -1,5 +1,5 @@
 import { assertSocialJobActive } from "@/lib/research/assertSocialJobActive";
-import { readSocialRefresh } from "@/lib/socialRefresh/readSocialRefresh";
+import { prepareSocialRefresh } from "@/lib/socialRefresh/prepareSocialRefresh";
 import { persistSocialResearch } from "@/lib/social/persistSocialResearch";
 import type { SocialScan } from "@/lib/socialRefresh/types";
 import { normalizeHandle } from "@/lib/instagram/normalizeHandle";
@@ -76,13 +76,14 @@ export async function runIngest(job: ResearchJob, deadline: number): Promise<Sli
     if (job.state.instagramStartRequested === true) {
       if ("directoryActivityId" in job.state || "resumedFromDirectoryJobId" in job.state)
         throw new Error("Instagram start outcome unknown; inspect provider before retrying");
-      await failSocialJob(
-        job,
-        "Apify start outcome unknown; inspect existing run before retrying",
-      );
+      await failSocialJob(job, "Apify start outcome unknown; inspect existing run before retrying");
       return { done: false, progress: "Instagram start requires inspection" };
     }
-    const scan = await readSocialRefresh(job.artistId, "instagram", handle);
+    const scan = await prepareSocialRefresh(job, "instagram", handle);
+    if (scan.needsReview) {
+      job.state = { ...job.state, instagramRefreshNeedsReview: true };
+      return finishSocialIngest(job, deadline, "Instagram continuity needs review");
+    }
     if (scan.skip) return finishSocialIngest(job, deadline, "Reusing recent Instagram check");
     job.state = {
       ...job.state,
