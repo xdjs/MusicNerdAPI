@@ -175,3 +175,12 @@ it("keeps approved research captions distinct from spoken transcripts", () => {
     speaker: "unverified",
   });
 });
+
+it("excludes historical pending text even when it is readable and names the artist", () => {
+  const snapshot = normalizeArtistKnowledge({
+    ...rawKnowledge,
+    vault: [{ ...vault, status: "pending", extractedText: "Namesake interview. ".repeat(100) }],
+  });
+  expect(snapshot.sources).toEqual([]);
+  expect(snapshot.coverage.eligibleSources).toBe(0);
+});

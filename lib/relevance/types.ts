@@ -1,4 +1,4 @@
-/** The judge's answer for one page. `undecided` means it wasn't judged; the caller falls back to the name check. */
+/** The judge's answer for one page. `undecided` means identity could not be established; the caller retains an unverified lead. */
 export type RelevanceVerdict = "about-artist" | "lists-artist" | "not-about-artist" | "undecided";
 
 /** One fetched page to judge. */
@@ -15,9 +15,18 @@ export type ArtistAnchor = {
   name: string;
   /** Real release and track names from their verified catalog. */
   catalog?: string[];
+  /** Catalog facts retrieved from the held provider ID, with original URLs. */
+  catalogSources?: { title: string; url: string }[];
+  /** Structured current/former group credits from the held Discogs artist ID. */
+  groups?: { name: string; sourceUrl: string }[];
   /** Confirmed accounts, e.g. "instagram: p3t3rango". */
   identifiers?: string[];
 };
 
 /** One row of the judge's reply, before validation. */
-export type RelevanceRow = { i?: unknown; v?: unknown };
+export type RelevanceRow = {
+  i?: unknown;
+  v?: unknown;
+  identity?: unknown;
+  evidence?: { anchor?: unknown; quote?: unknown }[];
+};

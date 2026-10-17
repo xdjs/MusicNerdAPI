@@ -1,0 +1,392 @@
+{
+  "method": "Read-only production row as mnweb; actual buildArtistAnchor with live Deezer. Stored source texts reused; two corroborated Bandcamp pages fetched with Firecrawl. Live model, three orders. Filing replay intercepts inserts and disables account adoption; not a durable-job run.",
+  "anchor": {
+    "name": "St. Catherine's",
+    "catalog": ["a nothing / a void", ".1", "Self-Help, pg. 63", "Poem (1956)", "(76, 32, 0, 16)"],
+    "identifiers": [
+      "deezer: 165924737",
+      "x: stcatherines",
+      "soundcloud: stcatherines",
+      "bandcamp: stcatherines",
+      "facebook: stcatherines"
+    ],
+    "catalogSources": [
+      {
+        "title": "a nothing / a void",
+        "url": "https://www.deezer.com/album/839988032"
+      },
+      {
+        "title": ".1",
+        "url": "https://www.deezer.com/album/325239167"
+      },
+      {
+        "title": "Self-Help, pg. 63",
+        "url": "https://www.deezer.com/album/839988002"
+      },
+      {
+        "title": "Poem (1956)",
+        "url": "https://www.deezer.com/album/839987992"
+      },
+      {
+        "title": "(76, 32, 0, 16)",
+        "url": "https://www.deezer.com/album/411700167"
+      }
+    ]
+  },
+  "runs": [
+    {
+      "i": 0,
+      "usage": [
+        {
+          "inputTokens": 2009,
+          "inputTokenDetails": {
+            "noCacheTokens": 2009,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 129,
+          "outputTokenDetails": {
+            "textTokens": 129,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2138
+        }
+      ],
+      "verdicts": [
+        [
+          "https://headlinerhub.com/qsc-aspiring-interview-st-catherine%E2%80%99s-child-on-channelling-grief-into-her-debut-album-%E2%80%98this-might-affect-you%E2%80%99.html",
+          "undecided"
+        ],
+        ["https://www.bettermusicofficial.com/betterstories/st-catherines-child", "undecided"],
+        ["https://www.songcityfestival.com/st-catherines-child/", "undecided"],
+        [
+          "https://atwoodmagazine.com/scns-st-catherines-child-negative-space-song-music-video-premiere/",
+          "undecided"
+        ],
+        ["https://bluesbunny.com/Reviews/ReviewID/3329/xmps/11123", "undecided"],
+        ["https://libguides.stkate.edu/digitalcollections", "undecided"],
+        ["https://www.catholic.org/saints/saint.php?saint_id=111", "undecided"],
+        ["https://www.st.catherines.org/", "undecided"],
+        ["https://en.wikipedia.org/wiki/St._Catharines", "undecided"],
+        ["https://www.stkate.edu/", "undecided"],
+        ["https://www.destinationontario.com/en-ca/cities-towns/st-catharines", "undecided"],
+        ["https://lovestc.ca/", "undecided"],
+        ["https://www.discogs.com/master/748336-Robin-Gibb-50-St-Catherines-Drive", "undecided"],
+        ["https://stcatherineschild.net/", "undecided"],
+        ["https://stcatherines.bandcamp.com", "about-artist"],
+        ["https://stcatherines.bandcamp.com/album/a-nothing-a-void-lp", "about-artist"]
+      ]
+    },
+    {
+      "i": 1,
+      "usage": [
+        {
+          "inputTokens": 2009,
+          "inputTokenDetails": {
+            "noCacheTokens": 2009,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 319,
+          "outputTokenDetails": {
+            "textTokens": 319,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2328
+        }
+      ],
+      "verdicts": [
+        ["https://stcatherines.bandcamp.com/album/a-nothing-a-void-lp", "lists-artist"],
+        ["https://stcatherines.bandcamp.com", "undecided"],
+        ["https://stcatherineschild.net/", "undecided"],
+        ["https://www.discogs.com/master/748336-Robin-Gibb-50-St-Catherines-Drive", "undecided"],
+        ["https://lovestc.ca/", "undecided"],
+        ["https://www.destinationontario.com/en-ca/cities-towns/st-catharines", "undecided"],
+        ["https://www.stkate.edu/", "undecided"],
+        ["https://en.wikipedia.org/wiki/St._Catharines", "undecided"],
+        ["https://www.st.catherines.org/", "undecided"],
+        ["https://www.catholic.org/saints/saint.php?saint_id=111", "undecided"],
+        ["https://libguides.stkate.edu/digitalcollections", "undecided"],
+        ["https://bluesbunny.com/Reviews/ReviewID/3329/xmps/11123", "undecided"],
+        [
+          "https://atwoodmagazine.com/scns-st-catherines-child-negative-space-song-music-video-premiere/",
+          "undecided"
+        ],
+        ["https://www.songcityfestival.com/st-catherines-child/", "undecided"],
+        ["https://www.bettermusicofficial.com/betterstories/st-catherines-child", "undecided"],
+        [
+          "https://headlinerhub.com/qsc-aspiring-interview-st-catherine%E2%80%99s-child-on-channelling-grief-into-her-debut-album-%E2%80%98this-might-affect-you%E2%80%99.html",
+          "undecided"
+        ]
+      ]
+    },
+    {
+      "i": 2,
+      "usage": [
+        {
+          "inputTokens": 2009,
+          "inputTokenDetails": {
+            "noCacheTokens": 2009,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 158,
+          "outputTokenDetails": {
+            "textTokens": 158,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2167
+        }
+      ],
+      "verdicts": [
+        [
+          "https://headlinerhub.com/qsc-aspiring-interview-st-catherine%E2%80%99s-child-on-channelling-grief-into-her-debut-album-%E2%80%98this-might-affect-you%E2%80%99.html",
+          "undecided"
+        ],
+        ["https://www.bettermusicofficial.com/betterstories/st-catherines-child", "undecided"],
+        ["https://www.songcityfestival.com/st-catherines-child/", "undecided"],
+        [
+          "https://atwoodmagazine.com/scns-st-catherines-child-negative-space-song-music-video-premiere/",
+          "undecided"
+        ],
+        ["https://bluesbunny.com/Reviews/ReviewID/3329/xmps/11123", "undecided"],
+        ["https://libguides.stkate.edu/digitalcollections", "undecided"],
+        ["https://www.catholic.org/saints/saint.php?saint_id=111", "undecided"],
+        ["https://www.st.catherines.org/", "undecided"],
+        ["https://en.wikipedia.org/wiki/St._Catharines", "undecided"],
+        ["https://www.stkate.edu/", "undecided"],
+        ["https://www.destinationontario.com/en-ca/cities-towns/st-catharines", "undecided"],
+        ["https://lovestc.ca/", "undecided"],
+        ["https://www.discogs.com/master/748336-Robin-Gibb-50-St-Catherines-Drive", "undecided"],
+        ["https://stcatherineschild.net/", "undecided"],
+        ["https://stcatherines.bandcamp.com", "lists-artist"],
+        ["https://stcatherines.bandcamp.com/album/a-nothing-a-void-lp", "lists-artist"]
+      ]
+    }
+  ],
+  "historical": [
+    {
+      "url": "https://headlinerhub.com/qsc-aspiring-interview-st-catherine%E2%80%99s-child-on-channelling-grief-into-her-debut-album-%E2%80%98this-might-affect-you%E2%80%99.html",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    },
+    {
+      "url": "https://www.bettermusicofficial.com/betterstories/st-catherines-child",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    },
+    {
+      "url": "https://www.songcityfestival.com/st-catherines-child/",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    },
+    {
+      "url": "https://atwoodmagazine.com/scns-st-catherines-child-negative-space-song-music-video-premiere/",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    },
+    {
+      "url": "https://bluesbunny.com/Reviews/ReviewID/3329/xmps/11123",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    },
+    {
+      "url": "https://libguides.stkate.edu/digitalcollections",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://www.catholic.org/saints/saint.php?saint_id=111",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://www.st.catherines.org/",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/St._Catharines",
+      "status": "pending",
+      "hasText": false,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://www.stkate.edu/",
+      "status": "pending",
+      "hasText": false,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://www.destinationontario.com/en-ca/cities-towns/st-catharines",
+      "status": "pending",
+      "hasText": false,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://lovestc.ca/",
+      "status": "pending",
+      "hasText": false,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://www.discogs.com/master/748336-Robin-Gibb-50-St-Catherines-Drive",
+      "status": "pending",
+      "hasText": false,
+      "recommendedDisposition": "Reject as unrelated; no mutation performed"
+    },
+    {
+      "url": "https://stcatherineschild.net/",
+      "status": "pending",
+      "hasText": true,
+      "recommendedDisposition": "Keep unverified pending identity review"
+    }
+  ],
+  "filingReplay": [
+    {
+      "url": "https://headlinerhub.com/qsc-aspiring-interview-st-catherine%E2%80%99s-child-on-channelling-grief-into-her-debut-album-%E2%80%98this-might-affect-you%E2%80%99.html",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://www.bettermusicofficial.com/betterstories/st-catherines-child",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://www.songcityfestival.com/st-catherines-child/",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://atwoodmagazine.com/scns-st-catherines-child-negative-space-song-music-video-premiere/",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://bluesbunny.com/Reviews/ReviewID/3329/xmps/11123",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "review",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://libguides.stkate.edu/digitalcollections",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://www.catholic.org/saints/saint.php?saint_id=111",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://www.st.catherines.org/",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/St._Catharines",
+      "dropped": 1,
+      "saved": []
+    },
+    {
+      "url": "https://www.stkate.edu/",
+      "dropped": 1,
+      "saved": []
+    },
+    {
+      "url": "https://www.destinationontario.com/en-ca/cities-towns/st-catharines",
+      "dropped": 1,
+      "saved": []
+    },
+    {
+      "url": "https://lovestc.ca/",
+      "dropped": 1,
+      "saved": []
+    },
+    {
+      "url": "https://www.discogs.com/master/748336-Robin-Gibb-50-St-Catherines-Drive",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "data",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "url": "https://stcatherineschild.net/",
+      "dropped": 0,
+      "saved": [
+        {
+          "type": "article",
+          "identityAssessed": false,
+          "textChars": 0,
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

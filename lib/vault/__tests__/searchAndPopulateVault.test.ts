@@ -659,6 +659,7 @@ describe("searchAndPopulateVault", () => {
   // Nothing becomes a source until we have fetched it ourselves.
 
   it("verifies a candidate BEFORE storing it, and keeps the page's own content", async () => {
+    mockJudge.mockResolvedValue(new Map([["https://example.com/a", "about-artist"]]));
     mockWebSearch.mockResolvedValue([hit("https://example.com/a")]);
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
     await searchAndPopulateVault("a1");
@@ -1077,11 +1078,8 @@ describe("searchAndPopulateVault", () => {
     expect(row.extractedText).toBeNull(); // demoted to an unverified lead
   });
 
-  it("verifies the artist's OWN domain even when the page never spells the full name", async () => {
-    // Regression I introduced with requireFullName: peterango.com reads fine and
-    // is unambiguously his, but renders the two words apart so a full-name text
-    // match fails. Measured on the real site — strict said lead, loose said
-    // verified. A hostname that IS the artist's name outranks body text.
+  it("does not verify a name-shaped domain without identity evidence", async () => {
+    // A matching hostname alone does not distinguish namesakes.
     const SITE = "RANGO. Producer, artist, and builder. Selected work below. ".repeat(20);
     mockGetArtist.mockResolvedValue({
       id: "a1",
@@ -1105,10 +1103,11 @@ describe("searchAndPopulateVault", () => {
 
     const { searchAndPopulateVault } = await import("@/lib/vault/searchAndPopulateVault");
     await searchAndPopulateVault("a1");
-    expect(mockInsert.mock.calls[0][0].extractedText).toBe(SITE);
+    expect(mockInsert.mock.calls[0][0].extractedText).toBeNull();
+    expect(mockInsert.mock.calls[0][0].identityAssessed).toBe(false);
   });
 
-  it("does not extend that exemption to a third-party domain", async () => {
+  it("keeps third-party pages without identity evidence unverified", async () => {
     // The namesake gate must still hold everywhere else.
     const RAPPER = "Dave talks about his song Black and growing up in south London. ".repeat(20);
     mockGetArtist.mockResolvedValue({
@@ -1136,7 +1135,7 @@ describe("searchAndPopulateVault", () => {
     expect(mockInsert.mock.calls[0][0].extractedText).toBeNull();
   });
 
-  it("still verifies a page that names the artist in full", async () => {
+  it("does not verify a page from the full name alone", async () => {
     const REAL = "Black Dave released a new project this week in Charleston. ".repeat(20);
     mockGetArtist.mockResolvedValue({
       id: "a1",
@@ -1162,7 +1161,8 @@ describe("searchAndPopulateVault", () => {
     await searchAndPopulateVault("a1");
 
     const row = mockInsert.mock.calls[0][0];
-    expect(row.extractedText).toBe(REAL);
+    expect(row.extractedText).toBeNull();
+    expect(row.identityAssessed).toBe(false);
   });
 
   describe("adopting handles from the artist's own page", () => {

@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@/lib/socialRefresh/prepareSocialRefresh", () => ({ prepareSocialRefresh: m.refresh }));
 
-const m = vi.hoisted(() => ({ start: vi.fn(), check: vi.fn(), collect: vi.fn(), store: vi.fn() }));
+const m = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  start: vi.fn(),
+  check: vi.fn(),
+  collect: vi.fn(),
+  store: vi.fn(),
+}));
 vi.mock("@/lib/instagram/startInstagramScrape", () => ({ startInstagramScrape: m.start }));
 vi.mock("@/lib/instagram/checkInstagramScrape", () => ({ checkInstagramScrape: m.check }));
 vi.mock("@/lib/instagram/collectInstagramScrape", () => ({ collectInstagramScrape: m.collect }));
@@ -27,6 +34,7 @@ const later = () => Date.now() + 55_000;
 beforeEach(() => {
   Object.values(m).forEach(f => f.mockReset());
   m.store.mockResolvedValue(undefined);
+  m.refresh.mockResolvedValue({ startedAt: "2026-10-12T12:00:00Z", after: "2026-10-10T12:00:00Z" });
   process.env.APIFY_API_TOKEN = "t";
 });
 
@@ -76,6 +84,7 @@ describe("refreshLatestInstagram", () => {
     expect(res.status).toBe("checked");
     expect(m.collect).toHaveBeenCalledWith("artist-1", "handle", "ds-1", "job-1", 0, {
       latestOnly: true,
+      reportProviderErrors: true,
     });
   });
 
@@ -158,4 +167,71 @@ it("yields a newly discovered dataset before collection so recovery and lease re
   expect(j.state.datasetId).toBe("saved-dataset");
   expect(m.store).not.toHaveBeenCalled();
   expect(m.collect).not.toHaveBeenCalled();
+});
+
+it("does not pay again during the recent-check cooldown", async () => {
+  m.refresh.mockResolvedValue({
+    startedAt: "2026-10-12T12:00:00Z",
+    skip: true,
+    checkedAt: "2026-10-12T11:55:00Z",
+  });
+  expect(await refreshLatestInstagram(job(), later())).toEqual({
+    status: "checked",
+    checkedAt: "2026-10-12T11:55:00Z",
+  });
+  expect(m.start).not.toHaveBeenCalled();
+});
+it("stores the immutable boundary before starting", async () => {
+  m.start.mockResolvedValue({ status: "started", runId: "paid" });
+  const j = job();
+  await refreshLatestInstagram(j, later());
+  expect(j.state.scan).toMatchObject({ after: "2026-10-10T12:00:00Z" });
+  expect(m.start).toHaveBeenCalledWith(
+    "handle",
+    expect.objectContaining({ onlyPostsNewerThan: "2026-10-10T12:00:00Z" }),
+  );
+});
+
+it("imports old posts when the initial checkpoint has no date boundary", async () => {
+  m.refresh.mockResolvedValue({ startedAt: "2026-10-17T00:00:00Z", scope: "latest" });
+  m.start.mockResolvedValue({ status: "started", runId: "initial" });
+  const j = job();
+  await refreshLatestInstagram(j, later());
+  expect(m.start).toHaveBeenCalledWith(
+    "handle",
+    expect.objectContaining({ onlyPostsNewerThan: undefined }),
+  );
+});
+
+it("reserves only one unfiltered verification for an ambiguous filtered result", async () => {
+  m.collect.mockResolvedValue({
+    ingested: 0,
+    ownPosts: 0,
+    collabPosts: 0,
+    providerError: "no_items",
+  });
+  const j = job({
+    runId: "filtered",
+    datasetId: "empty",
+    scan: { startedAt: "2026-10-17T00:00:00Z", after: "2026-09-17T00:00:00Z", scope: "latest" },
+  });
+  expect(await refreshLatestInstagram(j, later())).toMatchObject({ status: "pending" });
+  expect(j.state).toMatchObject({
+    instagramVerification: { originalRunId: "filtered", after: "2026-09-17T00:00:00Z" },
+  });
+  m.start.mockResolvedValue({ status: "started", runId: "verify" });
+  await refreshLatestInstagram(j, later());
+  expect(m.start).toHaveBeenCalledTimes(1);
+  expect(m.start).toHaveBeenCalledWith(
+    "handle",
+    expect.objectContaining({ onlyPostsNewerThan: undefined }),
+  );
+  Object.assign(j.state, { datasetId: "still-empty" });
+  expect(await refreshLatestInstagram(j, later())).toMatchObject({ status: "failed" });
+  expect(j.state).toMatchObject({
+    instagramFailure: {
+      reason: "Instagram returned no readable posts; access or empty account could not be verified",
+    },
+  });
+  expect(m.start).toHaveBeenCalledTimes(1);
 });

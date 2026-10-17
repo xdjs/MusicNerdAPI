@@ -1,5 +1,7 @@
 # Music Nerd API
 
+Read the [API documentation](https://docs.musicnerd.net). The API landing page also links there; API endpoints and authentication are unchanged.
+
 The API behind [Music Nerd](https://www.musicnerd.xyz). Next.js 16, API routes only.
 
 - **Contributing:** [`AGENTS.md`](AGENTS.md) covers layout, conventions and commands.
@@ -38,3 +40,13 @@ Social collection has separate durable progress. Directory social/caption jobs k
 ### Research source identity (#1548)
 
 Source deduplication retains case-sensitive YouTube video IDs across watch, short, mobile, embed and live URLs, ignoring tracking parameters. Distinct interviews remain separate candidates. Existing verification, authorization and pending-source storage rules still apply. No public endpoint contract or database schema changes.
+
+### Evidence-backed research identity (#1551)
+
+Source relevance separates artist identity from coverage. Positive decisions must identify a distinguishing existing catalog/account anchor and quote supporting text from the excerpt actually sent to the judge. Artist-name matches alone, missing evidence, malformed responses and conflicting duplicate judgments remain unresolved. Pages lacking any supplied fact stay unresolved without a model call; remaining pages compete for the existing judgment budget. Excerpts retain introductory context and expose a bounded passage containing a known anchor when it falls below the initial excerpt.
+
+Unresolved, unreadable, failed and over-limit candidates can only remain unverified leads under the existing source-eligibility rules, with no extracted source text; name matching cannot promote them to verified sources. The existing 12-page/20-second budget, provider/model, search queries and downstream approval/authorization rules remain unchanged. No generated biography or search snippet becomes a verified identity fact. Stored provider IDs supply catalog, account and structured group-credit anchors; generated biographies never supply identity facts.
+
+[Live identity benchmark and rollout limits](docs/benchmarks/source-identity-2026-10-16.md).
+
+Identity inputs now fall back to the held Deezer artist's bounded catalog when Spotify yields no catalog. Release URLs accompany those facts. For an already-held Discogs artist ID, structured current/former group credits are fetched with an eight-second deadline, a two-MiB response ceiling, ID/name validation and no redirects. Each group retains its provider URL; search-result biographies do not supply facts. Group evidence still requires a genuine source passage connecting the article's subject to that credit. Missing IDs, unavailable providers and mismatched identity responses add no facts. This does not assign Discogs IDs to existing artists, relabel namesakes, approve sources or reset completed research jobs.

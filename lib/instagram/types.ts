@@ -20,6 +20,10 @@ export interface SocialPostInsert {
 }
 
 export interface IngestResult {
+  /** Only requested by Latest; never interpreted as a successful ingestion. */
+  providerError?: "no_items" | "provider_error";
+  newestPostAt?: string;
+  noNewPosts?: boolean;
   ingested: number;
   ownPosts: number;
   collabPosts: number;
@@ -30,7 +34,7 @@ export interface IngestResult {
 export type ApifyRunState =
   | { status: "started"; runId: string }
   | { status: "running"; runId: string }
-  | { status: "ready"; runId: string; datasetId: string }
+  | { status: "ready"; runId: string; datasetId: string; limitReached?: boolean }
   | { status: "failed"; reason: string; retryable?: boolean; startRejected?: true };
 
 /** Paths a job tried to upload, so a revoked job can remove its own late uploads. */

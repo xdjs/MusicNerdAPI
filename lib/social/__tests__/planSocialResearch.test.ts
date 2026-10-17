@@ -20,11 +20,11 @@ describe("social research plan", () => {
       { source: "tiktok", handle: "artist" },
       { source: "x", handle: "artist" },
     ]);
-    expect(m.limit).toHaveBeenCalledTimes(2);
+    expect(m.limit).not.toHaveBeenCalled();
   });
-  it("skips stored platforms unless forced and never re-transcribes saved audio", async () => {
+  it("does not mistake saved single posts for account coverage", async () => {
     m.limit.mockResolvedValue([{ id: "stored" }]);
-    expect(await planSocialResearch("a", false)).toEqual([]);
+    expect(await planSocialResearch("a", false)).toHaveLength(2);
     expect(await planSocialResearch("a", true)).toHaveLength(2);
   });
   it("does not enrich old Instagram identities after the artist switches accounts", async () => {

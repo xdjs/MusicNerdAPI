@@ -1,3 +1,4 @@
+import { storeSocialRefresh } from "@/lib/socialRefresh/storeSocialRefresh";
 import { APIFY_DATASET_TIMEOUT_MS, APIFY_DATASETS_URL } from "@/lib/instagram/const";
 import { upsertSocialPost } from "@/lib/instagram/upsertSocialPost";
 import { withResearchJobWrite } from "@/lib/research/withResearchJobWrite";
@@ -31,17 +32,38 @@ export async function collectSocialScrape(
       if (!(await socialTaskIsConnected(artistId, task, writer)))
         throw new Error("social profile changed during collection");
       let stored = 0;
+      let mapped = 0;
+      const posts: { id: string; postedAt: string; pinned: boolean }[] = [];
       for (const item of items.slice(0, SOCIAL_POST_LIMIT)) {
         if (task.source === "reels") {
           if (await storeReelTranscript(item, artistId, task, writer)) stored++;
         } else {
           const row = mapSocialPost(item, artistId, task.source, task.handle);
           if (row) {
+            mapped++;
+            posts.push({
+              id: row.platformPostId,
+              postedAt: row.postedAt!,
+              pinned: (row.raw as Record<string, unknown> | null)?.isPinned === true,
+            });
             await upsertSocialPost(row, writer);
             stored++;
           }
         }
       }
+      if (task.source !== "reels" && task.scan && task.runId)
+        await storeSocialRefresh(writer, {
+          artistId,
+          platform: task.source,
+          handle: task.handle,
+          scan: task.scan,
+          runId: task.runId,
+          itemCount: items.length,
+          limit: SOCIAL_POST_LIMIT,
+          payloadRecognized: mapped === items.length,
+          allMapped: mapped === items.length,
+          posts,
+        });
       return stored;
     });
   } catch (error) {
