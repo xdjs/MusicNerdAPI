@@ -131,3 +131,13 @@ it("does not use a source rejected during generation", async () => {
   await expect(runDirectoryPreparation(job, Date.now() + 50_000)).rejects.toThrow("changed");
   expect((await client.query("select * from artist_directory_preparations")).rows).toHaveLength(0);
 });
+
+it("excludes readable historical pending text without an exact identity assessment", async () => {
+  await client.exec("delete from artist_source_assessments");
+  const { loadDirectoryMaterial } = await import("../loadDirectoryMaterial");
+  const material = await loadDirectoryMaterial(store as never, artist, event);
+  expect(material.manifest).toEqual([]);
+  expect((await client.query("select extracted_text from artist_vault_sources")).rows[0]).toEqual({
+    extracted_text: "Readable original. ".repeat(20),
+  });
+});

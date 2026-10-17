@@ -78,3 +78,17 @@ The actual filing path replay for the original 14 candidates dropped four unread
 Historical disposition: the six St. Catherine's Child pages remain unverified unless an identity connection is established; the seven institution/place/saint pages and Robin Gibb release should be rejected as unrelated through the existing review flow. No review action was performed. All 14 remain pending, including nine with previously stored text. [Per-source dispositions, live verdicts, provider anchors and filing replay](source-identity-stc-2026-10-16.json) contain no copied article bodies.
 
 Remaining gaps are explicit: historical review is not done; the unrelated-page judge outcome is unresolved rather than a confident negative; Bandcamp identity success does not prove stable substantive-coverage classification; two valid Aphex interviews lack usable supplied evidence; and Chicago still has native-reader 403 and real-record setup limitations. No artist creation, database reset, cleanup, merge or release was added.
+
+## Downstream boundary audit — 2026-10-16
+
+Read-only production checks as `mnweb` found St. Catherine's has zero approved vault sources, source assessments, prepared drafts, Lore docs, confirmed research candidates and research-evidence records, and no About text. Its nine historical pending texts therefore do not enter the audited generation paths.
+
+- Lore loads only approved, citable vault sources (`gatherDocMaterial`).
+- Artist knowledge loads approved vault rows and independently filters status during normalization.
+- Private directory preparation requires an unchanged identity-assessment snapshot; readable pending text alone is insufficient.
+- Public-question vault evidence requires approval and a claim; its separate candidate store requires confirmed identity and current evidence revision. Neither store has eligible material for this artist.
+- Current Web main generates About from stored Lore and returns `LORE_REQUIRED` when absent. The old pending-source synthesis fallback in the dirty local Web checkout is stale and was not changed. The legacy Ask fallback also selects approved vault sources.
+
+Added regression tests for readable historical pending text exclusion in knowledge normalization and directory material loading. All 2,814 tests passed (9 skipped), along with type-check, lint, formatting and build. Tests exercise the SQL boundary in PGlite and the normalizer; they are not a live end-user answer-generation run. No confirmed downstream bypass was found, so no production behavior was changed during this audit.
+
+The Chicago 403 findings refer to ReGen Magazine articles, not Instagram. No evidence links them to a 30-day social-fetch window or the separate June case. Historical source-review actions remain undone; the existing approval/assessment gates isolate them, so bulk cleanup is not a prerequisite for this preventive fix. This audit does not establish the correctness of every previously approved source or generated document elsewhere in the directory.
