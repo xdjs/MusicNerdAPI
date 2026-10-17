@@ -31,7 +31,9 @@ export async function queueInterviewPreparationInTransaction(
       state.sessionId === sessionId &&
       state.bankComplete &&
       state.bank?.some(item => item.status === "available") &&
-      (state.memorySnapshotId !== scope.memorySnapshotId || state.ordinal !== scope.ordinal)
+      (state.memorySnapshotId !== scope.memorySnapshotId ||
+        state.ordinal !== scope.ordinal ||
+        ["failed", "stale"].includes(state.stage))
     ) {
       state.ordinal = scope.ordinal;
       state.memorySnapshotId = scope.memorySnapshotId;
@@ -50,6 +52,7 @@ export async function queueInterviewPreparationInTransaction(
           status: "pending" as const,
           readyCount: 0,
           totalCount: state.totalCount,
+          phase: "checking" as const,
         },
       };
     }

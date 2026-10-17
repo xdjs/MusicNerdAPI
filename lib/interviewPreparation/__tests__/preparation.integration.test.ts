@@ -222,3 +222,30 @@ it("retains a complete bank across answer save and consumes concurrently only on
     totalCount: 3,
   });
 });
+
+it("retries failed eligibility against the retained bank without replacing the job", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  await client.query(
+    "update artist_research_jobs set status='failed',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({
+        stage: "failed",
+        bankComplete: true,
+        bank: [{ status: "available", candidate: input }],
+        totalCount: 3,
+      }),
+      queued.preparation.jobId,
+    ],
+  );
+  const retried = await queue(session!.id);
+  expect(retried.preparation).toMatchObject({
+    jobId: queued.preparation.jobId,
+    status: "pending",
+    phase: "checking",
+  });
+  expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
+    { n: 1 },
+  ]);
+});
