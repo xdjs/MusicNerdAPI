@@ -2,6 +2,8 @@ const stages = [
   "memory",
   "question_index",
   "research",
+  "context_draft",
+  "bank_preparation",
   "draft",
   "check",
   "memory_recheck",

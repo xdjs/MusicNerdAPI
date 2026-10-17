@@ -3,6 +3,14 @@ export type StageCache = Record<string, unknown>;
 export type PreparedCandidate = Awaited<ReturnType<typeof generateApiInterviewQuestion>>;
 export type PreparationState = {
   version: 1;
+  totalCount?: number;
+  bank?: Array<{
+    candidate: PreparedCandidate;
+    status: "available" | "offered" | "invalid";
+    ordinal?: number;
+    answerId?: string;
+  }>;
+  bankComplete?: boolean;
   claimId: string;
   userId: string;
   sessionId: string;

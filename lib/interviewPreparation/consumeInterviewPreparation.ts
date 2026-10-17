@@ -20,6 +20,9 @@ export async function consumeInterviewPreparation(
     if (!job)
       throw new KnowledgeError("preparation_not_ready", 409, "The next question is not ready yet.");
     const state = parsePreparationState(job.state);
+    const offered = scope.session.questions.find(q => q.state === "offered");
+    if (offered && scope.claimId === state.claimId)
+      return { status: "ok" as const, question: offered };
     if (state.stage === "consumed") {
       const existing = scope.session.questions.find(q => q.ordinal === state.ordinal);
       if (existing) return { status: "ok" as const, question: existing };
@@ -35,16 +38,23 @@ export async function consumeInterviewPreparation(
         409,
         "Your interview changed. Prepare a fresh question.",
       );
-    if (state.stage !== "ready" || !state.candidate)
+    const item = state.bank?.find(item => item.status === "available");
+    const candidate = item?.candidate ?? (!state.bank ? state.candidate : undefined);
+    if (state.stage !== "ready" || !candidate)
       throw new KnowledgeError("preparation_not_ready", 409, "The next question is not ready yet.");
     const result = await saveInterviewOfferInTransaction(tx, artistId, userId, sessionId, {
       ordinal: state.ordinal,
-      question: state.candidate.question,
-      references: state.candidate.references,
+      question: candidate.question,
+      references: candidate.references,
       memorySnapshotId: state.memorySnapshotId,
     });
+    if (item) {
+      item.status = "offered";
+      item.ordinal = state.ordinal;
+    }
+    state.stage = "consumed";
     await tx.execute(
-      sql`update artist_research_jobs set state=jsonb_set(state,'{stage}','"consumed"'),updated_at=clock_timestamp() where id=${job.id}::uuid`,
+      sql`update artist_research_jobs set state=${JSON.stringify(state)}::jsonb,updated_at=clock_timestamp() where id=${job.id}::uuid`,
     );
     return result;
   });

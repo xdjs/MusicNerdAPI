@@ -55,6 +55,12 @@ export async function getInterviewPreparation(artistId: string, userId: string, 
         status: "ok" as const,
         preparation: {
           jobId: job.id,
+          readyCount:
+            status === "ready"
+              ? (state.bank?.filter(item => item.status === "available").length ?? 1)
+              : 0,
+          totalCount: state.totalCount ?? 1,
+          phase: state.bankComplete ? ("checking" as const) : ("preparing" as const),
           status,
           ...(state.errorCode ? { errorCode: state.errorCode } : {}),
         },

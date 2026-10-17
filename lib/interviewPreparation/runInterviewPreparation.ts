@@ -1,3 +1,5 @@
+import { getInterviewFailureDiagnostic } from "./getInterviewFailureDiagnostic";
+import { getInterviewModelOutputDiagnostic } from "./getInterviewModelOutputDiagnostic";
 import { db } from "@/lib/db/db";
 import { NoObjectGeneratedError } from "ai";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
@@ -6,6 +8,8 @@ import { readPreparationScope } from "./readPreparationScope";
 import { parsePreparationState } from "./parsePreparationState";
 import { checkpointPreparationJob } from "./checkpointPreparationJob";
 import { generateApiInterviewQuestion } from "./generateApiInterviewQuestion";
+import { generateInterviewQuestionBank } from "./generateInterviewQuestionBank";
+import { revalidateInterviewBank } from "./revalidateInterviewBank";
 import { InterviewStageComplete } from "./InterviewStageComplete";
 /** Advance one durable model stage, preserving completed stages and fencing stale workers. */
 export async function runInterviewPreparation(
@@ -51,17 +55,34 @@ export async function runInterviewPreparation(
       state.inFlight = true;
       if (!(await checkpointPreparationJob(job, state, false))) return stale;
       try {
-        state.candidate = await generateApiInterviewQuestion(
-          { artistId: job.artistId, userId: state.userId },
-          state.sitting,
-          AbortSignal.timeout(Math.max(1, deadline - Date.now() - 1500)),
-          undefined,
-          undefined,
-          undefined,
-          state.cache,
-          invocation,
-        );
-        if (state.candidate.diagnostics)
+        const config = { artistId: job.artistId, userId: state.userId };
+        const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now() - 1500));
+        if (state.bankComplete && state.bank) {
+          await revalidateInterviewBank(config, state, signal);
+        } else if (state.totalCount) {
+          const candidates = await generateInterviewQuestionBank(
+            config,
+            state.sitting,
+            state.totalCount,
+            signal,
+            state.cache,
+            invocation,
+          );
+          state.bank = candidates.map(candidate => ({ candidate, status: "available" }));
+          state.bankComplete = true;
+        } else {
+          state.candidate = await generateApiInterviewQuestion(
+            config,
+            state.sitting,
+            signal,
+            undefined,
+            undefined,
+            undefined,
+            state.cache,
+            invocation,
+          );
+        }
+        if (state.candidate?.diagnostics)
           state.candidate.diagnostics.elapsedMs = Date.now() - Date.parse(state.createdAt);
         state.stage = "ready";
         state.inFlight = false;
@@ -76,6 +97,14 @@ export async function runInterviewPreparation(
       if (deadline - Date.now() < 12000) return finish(true);
     }
   } catch (error) {
+    console.error("interview_bank_failed", {
+      ...getInterviewFailureDiagnostic(
+        error,
+        "bank_preparation",
+        Date.now() - Date.parse(state.createdAt),
+      ),
+      ...getInterviewModelOutputDiagnostic(error),
+    });
     state.inFlight = false;
     state.stage =
       error instanceof KnowledgeError && [401, 403, 409].includes(error.status)

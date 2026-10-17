@@ -5,6 +5,19 @@ export function parsePreparationState(value: unknown): PreparationState {
   return z
     .object({
       version: z.literal(1),
+      totalCount: z.number().int().min(1).max(3).optional(),
+      bank: z
+        .array(
+          z.object({
+            candidate: z.unknown(),
+            status: z.enum(["available", "offered", "invalid"]),
+            ordinal: z.number().int().min(1).max(3).optional(),
+            answerId: z.uuid().optional(),
+          }),
+        )
+        .max(3)
+        .optional(),
+      bankComplete: z.boolean().optional(),
       claimId: z.uuid(),
       userId: z.uuid(),
       sessionId: z.uuid(),

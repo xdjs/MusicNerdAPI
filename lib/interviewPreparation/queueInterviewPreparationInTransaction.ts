@@ -29,6 +29,34 @@ export async function queueInterviewPreparationInTransaction(
       state.claimId === scope.claimId &&
       state.userId === userId &&
       state.sessionId === sessionId &&
+      state.bankComplete &&
+      state.bank?.some(item => item.status === "available") &&
+      (state.memorySnapshotId !== scope.memorySnapshotId || state.ordinal !== scope.ordinal)
+    ) {
+      state.ordinal = scope.ordinal;
+      state.memorySnapshotId = scope.memorySnapshotId;
+      state.stage = "preparing";
+      state.cache = {};
+      state.inFlight = false;
+      state.createdAt = new Date().toISOString();
+      delete state.errorCode;
+      await tx.execute(
+        sql`update artist_research_jobs set status='pending',state=${JSON.stringify(state)}::jsonb,claimed_at=null,attempts=0,updated_at=clock_timestamp() where id=${job.id}::uuid`,
+      );
+      return {
+        status: "ok" as const,
+        preparation: {
+          jobId: job.id,
+          status: "pending" as const,
+          readyCount: 0,
+          totalCount: state.totalCount,
+        },
+      };
+    }
+    if (
+      state.claimId === scope.claimId &&
+      state.userId === userId &&
+      state.sessionId === sessionId &&
       state.ordinal === scope.ordinal &&
       state.memorySnapshotId === scope.memorySnapshotId &&
       ["pending", "running", "done"].includes(job.status) &&
@@ -38,6 +66,12 @@ export async function queueInterviewPreparationInTransaction(
         status: "ok" as const,
         preparation: {
           jobId: job.id,
+          readyCount:
+            state.stage === "ready"
+              ? (state.bank?.filter(item => item.status === "available").length ?? 1)
+              : 0,
+          totalCount: state.totalCount ?? 1,
+          phase: state.bankComplete ? ("checking" as const) : ("preparing" as const),
           status:
             state.stage === "ready"
               ? ("ready" as const)
@@ -52,6 +86,7 @@ export async function queueInterviewPreparationInTransaction(
   );
   const state: PreparationState = {
     version: 1,
+    totalCount: 4 - scope.ordinal,
     claimId: scope.claimId,
     userId,
     sessionId,

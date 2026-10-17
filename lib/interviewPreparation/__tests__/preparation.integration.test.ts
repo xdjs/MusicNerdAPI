@@ -174,3 +174,51 @@ it("will not prepare for a finished sitting", async () => {
   );
   await expect(queue(session!.id)).rejects.toMatchObject({ status: 409 });
 });
+it("retains a complete bank across answer save and consumes concurrently only once", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  const bank = [0, 1, 2].map(index => ({
+    status: "available",
+    candidate: {
+      ...input,
+      question: `What distinct creative choice number ${index + 1} surprised you?`,
+    },
+  }));
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({ stage: "ready", bankComplete: true, bank, totalCount: 3 }),
+      queued.preparation.jobId,
+    ],
+  );
+  expect((await getInterviewPreparation(artist, user, session!.id)).preparation).toMatchObject({
+    status: "ready",
+    readyCount: 3,
+    totalCount: 3,
+  });
+  const [a, b] = await Promise.all([
+    consumeInterviewPreparation(artist, user, session!.id),
+    consumeInterviewPreparation(artist, user, session!.id),
+  ]);
+  expect(a.question.id).toBe(b.question.id);
+  await saveInterviewAnswer(artist, user, a.question.id, {
+    expectedRevision: a.question.revision,
+    answer: "My exact new experience.",
+  });
+  const rows = await client.query<{
+    state: { bank: Array<{ status: string }>; ordinal: number; stage: string };
+  }>("select state from artist_research_jobs");
+  expect(rows.rows).toHaveLength(1);
+  expect(rows.rows[0].state).toMatchObject({ ordinal: 2, stage: "preparing" });
+  expect(rows.rows[0].state.bank.map(item => item.status)).toEqual([
+    "offered",
+    "available",
+    "available",
+  ]);
+  expect((await getInterviewPreparation(artist, user, session!.id)).preparation).toMatchObject({
+    status: "pending",
+    readyCount: 0,
+    totalCount: 3,
+  });
+});
