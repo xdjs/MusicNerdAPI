@@ -36,6 +36,16 @@ describe("searchCandidates", () => {
     expect(results[0]).toHaveProperty("type");
   });
 
+  it("retains distinct interviews across queries while collapsing tracking variants", async () => {
+    webSearch.mockResolvedValue([
+      { url: "https://www.youtube.com/watch?v=sCN628VWkEI", title: "Interview one" },
+      { url: "https://www.youtube.com/watch?v=0mGUk6WEUu4", title: "Interview two" },
+      { url: "https://www.youtube.com/watch?v=sCN628VWkEI&t=10", title: "One again" },
+    ]);
+    const results = await searchCandidates(searchRun(), null);
+    expect(results.map(r => r.title)).toEqual(["Interview one", "Interview two"]);
+  });
+
   it("seeds the MusicBrainz homepage first, so it survives the dedupe", async () => {
     webSearch.mockResolvedValue([
       { url: "https://grimes.com", title: "Search copy", snippet: "x" },

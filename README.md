@@ -37,6 +37,10 @@ Reuse shows saved profiles and pending sources for explicit artist review; it ne
 
 Social collection has separate durable progress. Directory social/caption jobs keep their original authority through child jobs and stop after any claim begins. At claim confirmation, replacement claim-scoped jobs retain the paid run/dataset, cursor, and bounded retry state; old workers cannot regain permission or revive retired jobs. A changed/disconnected Instagram handle cannot import an old run. An unknown provider-start outcome is retained for inspection instead of blindly starting another paid run; definite rejected starts may retry within the existing attempt limit. Pre-claim caption completion does not create public Lore. These checks make no claim that all social providers finished when web discovery did.
 
+### Research source identity (#1548)
+
+Source deduplication retains case-sensitive YouTube video IDs across watch, short, mobile, embed and live URLs, ignoring tracking parameters. Distinct interviews remain separate candidates. Existing verification, authorization and pending-source storage rules still apply. No public endpoint contract or database schema changes.
+
 ### Evidence-backed research identity (#1551)
 
 Source relevance separates artist identity from coverage. Positive decisions must identify a distinguishing existing catalog/account anchor and quote supporting text from the excerpt actually sent to the judge. Artist-name matches alone, missing evidence, malformed responses and conflicting duplicate judgments remain unresolved. Pages lacking any supplied fact stay unresolved without a model call; remaining pages compete for the existing judgment budget. Excerpts retain introductory context and expose a bounded passage containing a known anchor when it falls below the initial excerpt.
