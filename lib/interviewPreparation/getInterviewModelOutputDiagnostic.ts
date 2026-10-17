@@ -12,6 +12,13 @@ export function getInterviewModelOutputDiagnostic(error: unknown) {
     "unknown",
   ]);
   const allowedFields = new Set([
+    "candidates",
+    "references",
+    "evidenceId",
+    "revision",
+    "sourceId",
+    "entryId",
+    "quote",
     "premiseAudit",
     "coverage",
     "question",
