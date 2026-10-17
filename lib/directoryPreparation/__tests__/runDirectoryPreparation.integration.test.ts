@@ -174,3 +174,33 @@ it("does not commit when the saved artist account changes during generation", as
   await expect(runDirectoryPreparation(job, Date.now() + 50_000)).rejects.toThrow("changed");
   expect((await client.query("select * from artist_directory_preparations")).rows).toHaveLength(0);
 });
+
+it.each([false, true])(
+  "preserves an admin correction made before/during preparation (during=%s)",
+  async during => {
+    await runDirectoryPreparation(job, Date.now() + 50_000);
+    await client.exec(
+      "update artist_research_jobs set status='running',updated_at='2026-10-12T00:00:00Z'",
+    );
+    const edit = () =>
+      client.exec(
+        `update artist_directory_preparations set public_about=public_about || '{"bio":"Admin corrected About.","editedByAdmin":true}'::jsonb,updated_at=now()`,
+      );
+    if (!during) await edit();
+    m.generate.mockImplementation(async () => {
+      if (during) await edit();
+      return { status: "ready", document: "Replacement[1]", about: "Replacement[1]" };
+    });
+    await runDirectoryPreparation(job, Date.now() + 50_000);
+    expect(
+      (
+        await client.query(
+          "select public_about->>'bio' as bio,about from artist_directory_preparations",
+        )
+      ).rows,
+    ).toEqual([{ bio: "Admin corrected About.", about: "Private About[1]." }]);
+    expect((await client.query("select status from artist_research_jobs")).rows).toEqual([
+      { status: "done" },
+    ]);
+  },
+);

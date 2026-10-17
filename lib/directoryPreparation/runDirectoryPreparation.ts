@@ -56,7 +56,8 @@ export async function runDirectoryPreparation(
           throw new Error("Private preparation inputs changed");
         await tx.execute(sql`insert into artist_directory_preparations(artist_id,activity_id,job_id,status,document,about,starting_bio,manifest,public_about)
     values(${job.artistId}::uuid,${job.activityId}::uuid,${job.id}::uuid,${draft.status},${draft.document},${draft.about},${material.startingBio},${JSON.stringify(material.manifest)}::jsonb,${publicAbout ? JSON.stringify(publicAbout) : null}::jsonb)
-    on conflict(artist_id) do update set activity_id=excluded.activity_id,job_id=excluded.job_id,status=excluded.status,document=excluded.document,about=excluded.about,starting_bio=excluded.starting_bio,manifest=excluded.manifest,public_about=excluded.public_about,updated_at=now()`);
+    on conflict(artist_id) do update set activity_id=excluded.activity_id,job_id=excluded.job_id,status=excluded.status,document=excluded.document,about=excluded.about,starting_bio=excluded.starting_bio,manifest=excluded.manifest,public_about=excluded.public_about,updated_at=now()
+    where artist_directory_preparations.public_about->>'editedByAdmin' is distinct from 'true'`);
         await tx.execute(
           sql`update artist_research_jobs set status='done',claimed_at=null,last_error=null,updated_at=now() where id=${job.id}::uuid`,
         );
