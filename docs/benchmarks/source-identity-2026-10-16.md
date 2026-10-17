@@ -56,3 +56,25 @@ Authenticated staging admin inspection found no supported creation flow for a Di
 Full local suite after the provider extension: 2,812 passed, 9 skipped; type-check, lint, formatting and production build passed. Local Node is 23; CI validates Node 24. This implementation adds bounded provider reads (up to eight seconds for Discogs), so the earlier model-only latency and token comparison does not measure total new job latency or provider cost.
 
 The post-extension seven-artist live rerun retained 27/29 readable direct-coverage pages, versus 28/29 in the earlier candidate run and 29/29 in the baseline. Aphex Twin retained 1/3 direct pages on this run; the other six artists retained all 26/26. Its collaborator-focused article still passed. All seven model calls completed without provider errors. This additional lost Aphex result is a recall limitation and demonstrates run-to-run variability; the earlier 28/29 is not a guarantee. Exact new verdicts and usage are included under `providerExtensionHeldout` in the JSON manifest.
+
+## Scope correction and follow-up — 2026-10-16
+
+Pete confirmed that artist creation stays unchanged. Expanding add-by-link support is not part of #52 and is not a prerequisite for reviewing this research-accuracy change. The absence of a verified Chicago record still limits the Chicago end-to-end claim, but it does not justify a special creation flow to make a benchmark pass.
+
+### Aphex evidence audit
+
+Inspected the saved source bodies and captured raw live-model decisions. The Furious interview mentions Richard D. James as the artist's real name, but the fixture supplied that string as a release fact. The diagnostic accepted that real-name passage as catalog evidence. This is a fixture-quality problem; the earlier 28/29 acceptance rate must not be presented as entirely well-supported catalog verification. The Chaos Control interview has none of the supplied catalog facts.
+
+A separate corrected run excluded the mislabeled `Richard D. James` fact rather than substituting an unverified alias. Both interviews stayed unresolved. The other Aphex direct article and collaborator article retained actual release evidence and passed. This leaves direct retention at 1/3 for Aphex, or 27/29 when combined with the unchanged six-artist results from the previous run; that combined number is not a new seven-artist run. No production validation was relaxed to improve the score. Verified alias evidence could address this later, but is not implemented or claimed here.
+
+### St. Catherine's actual-record acceptance
+
+Read the production record and its 14 pending sources in a read-only transaction as `mnweb`. Live Deezer ID `165924737` supplied five release titles; three distinguishing titles also occur on the saved Bandcamp account `stcatherines`. Bare numeric/very short titles and name-equivalent handles do not become distinguishing facts. Other saved social handles were not independently verified or used to establish this result.
+
+Across three runs with stored candidates plus the Bandcamp catalog and release page, none of the 14 questionable candidates was affirmed (0/42). The corroborated Bandcamp release passed identity evidence in all three runs: once as substantive coverage and twice as a listing. Catalog-page evidence validation passed in two of these three runs; the remaining run supplied non-verbatim quotes and stayed unresolved. In the earlier catalog-only control, it passed as a listing 3/3. Coverage variability remains: this is not proof of consistent press-source retention or public Lore generation.
+
+The actual filing path replay for the original 14 candidates dropped four unreadable unrelated URLs and would retain ten text-free, identity-unassessed pending leads. Zero would retain verified text. Inserts were intercepted; account adoption and directory ambiguity were substituted. This is prevention evidence, not historical cleanup or a fresh durable-job acceptance pass.
+
+Historical disposition: the six St. Catherine's Child pages remain unverified unless an identity connection is established; the seven institution/place/saint pages and Robin Gibb release should be rejected as unrelated through the existing review flow. No review action was performed. All 14 remain pending, including nine with previously stored text. [Per-source dispositions, live verdicts, provider anchors and filing replay](source-identity-stc-2026-10-16.json) contain no copied article bodies.
+
+Remaining gaps are explicit: historical review is not done; the unrelated-page judge outcome is unresolved rather than a confident negative; Bandcamp identity success does not prove stable substantive-coverage classification; two valid Aphex interviews lack usable supplied evidence; and Chicago still has native-reader 403 and real-record setup limitations. No artist creation, database reset, cleanup, merge or release was added.
