@@ -1,2 +1,2 @@
-/** Where the landing page sends readers for docs. The repo until the docs site exists. */
-export const DOCS_BASE_URL = "https://github.com/xdjs/MusicNerdAPI";
+/** Public documentation linked from the API landing page. */
+export const DOCS_BASE_URL = "https://docs.musicnerd.net";
