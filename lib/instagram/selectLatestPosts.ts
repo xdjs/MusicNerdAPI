@@ -2,10 +2,11 @@ import { LATEST_POST_LIMIT, LATEST_WINDOW_MS } from "@/lib/latest/const";
 import type { SocialPostInsert } from "@/lib/instagram/types";
 
 /**
- * The posts an Update Latest check stores: the artist's own, from the last
- * thirty days, at most nine.
+ * Select at most nine dated own posts. Latest's bounded account scans may
+ * retain older results; legacy callers keep their thirty-day filter.
  *
  * @param rows - Mapped posts, newest first as Apify returns them.
+ * @param includeOlder - Keep older dated posts from a bounded account scan.
  * @returns The posts to store.
  */
 export function selectLatestPosts(
