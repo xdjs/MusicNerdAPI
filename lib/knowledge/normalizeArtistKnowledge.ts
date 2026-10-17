@@ -243,7 +243,7 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
         a.entryId.localeCompare(b.entryId),
     )[0];
   const jobs: KnowledgeJob[] = raw.jobs
-    .filter(row => row.artistId === raw.artist.id)
+    .filter(row => row.artistId === raw.artist.id && row.kind !== "interview_prepare")
     .map(row => {
       if (
         ![
