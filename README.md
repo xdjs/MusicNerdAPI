@@ -27,7 +27,7 @@ Web atomically writes a `directory_add` activity and a `source_search` job with 
 
 ### Private directory drafts (migration 0047)
 
-An affirmative identity verdict and readable original produce a private exact-snapshot assessment, never source approval. A separate durable preparation job synthesizes only unchanged assessed originals and stores its document/About in `artist_directory_preparations`, never `artists.bio` or `artist_docs`. Model work runs outside locks; commit rechecks creation authority, the job lease, the starting bio and every source snapshot. Claimants may reuse a draft only after explicitly approving its entire unchanged manifest and only if no newer interview/correction material would be omitted; all publication still uses the existing explicit publish action and edit/pin fences.
+An affirmative identity verdict and readable original produce a private exact-snapshot assessment, never source approval. A separate durable preparation job synthesizes only unchanged assessed originals and stores its document/About in `artist_directory_preparations`, never `artists.bio` or `artist_docs`. Model work runs outside locks; commit rechecks creation authority, the job lease, the starting bio and every source snapshot. Claimants may reuse a draft only after explicitly approving its entire unchanged manifest and only if no newer interview/correction material would be omitted; claimant publication still uses the existing explicit publish action and edit/pin fences. The separate public directory projection is described below.
 
 ### Directory discovery at claim handoff
 
@@ -50,3 +50,11 @@ Unresolved, unreadable, failed and over-limit candidates can only remain unverif
 [Live identity benchmark and rollout limits](docs/benchmarks/source-identity-2026-10-16.md).
 
 Identity inputs now fall back to the held Deezer artist's bounded catalog when Spotify yields no catalog. Release URLs accompany those facts. For an already-held Discogs artist ID, structured current/former group credits are fetched with an eight-second deadline, a two-MiB response ceiling, ID/name validation and no redirects. Each group retains its provider URL; search-result biographies do not supply facts. Group evidence still requires a genuine source passage connecting the article's subject to that credit. Missing IDs, unavailable providers and mismatched identity responses add no facts. This does not assign Discogs IDs to existing artists, relabel namesakes, approve sources or reset completed research jobs.
+
+### Source-attributed directory About (#1558)
+
+New preparation jobs also save a versioned `public_about` envelope, separate from the private draft and the artist's published bio. Web migration **0054** must be applied before deploying this worker. Web revalidates creation lineage, claim state, identity and unchanged assessed originals before displaying it; old private drafts are not automatically public. No profile read starts research.
+
+An exact, bounded biography passage from an identity-assessed platform profile matching a saved artist account is preferred. A similar artist/domain name is not ownership proof; custom-domain websites without ownership evidence use the researched fallback. For researched About, displayed sources are the union of validated citations in the research document and its About summary, so summarization cannot drop attribution for upstream evidence. The About must itself carry valid citations. Unknown source references or unsafe source URLs withhold the public projection. Public output contains only prose and source attribution, never the private document or original text.
+
+Admin corrections to directory About carry `public_about.editedByAdmin: true`. Directory preparation preserves the entire corrected preparation on conflict, including during overlapping generation, while finishing its job. Web read-time eligibility still withdraws invalid source/identity evidence; automatic preparation never clears this human-edit protection. See MusicNerdWeb#1569.
