@@ -1,0 +1,120 @@
+import { getInterviewFailureDiagnostic } from "./getInterviewFailureDiagnostic";
+import { getInterviewModelOutputDiagnostic } from "./getInterviewModelOutputDiagnostic";
+import { db } from "@/lib/db/db";
+import { NoObjectGeneratedError } from "ai";
+import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
+import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
+import { readPreparationScope } from "./readPreparationScope";
+import { parsePreparationState } from "./parsePreparationState";
+import { checkpointPreparationJob } from "./checkpointPreparationJob";
+import { generateApiInterviewQuestion } from "./generateApiInterviewQuestion";
+import { generateInterviewQuestionBank } from "./generateInterviewQuestionBank";
+import { revalidateInterviewBank } from "./revalidateInterviewBank";
+import { InterviewStageComplete } from "./InterviewStageComplete";
+/** Advance one durable model stage, preserving completed stages and fencing stale workers. */
+export async function runInterviewPreparation(
+  job: ResearchJob,
+  deadline: number,
+): Promise<SliceOutcome> {
+  const state = parsePreparationState(job.state);
+  const stale = { done: false, waiting: true, progress: "Preparation lease changed" };
+  const finish = async (waiting = false) =>
+    (await checkpointPreparationJob(job, state, true))
+      ? {
+          done: state.stage !== "preparing",
+          waiting: state.stage === "preparing" && waiting,
+          progress: state.stage,
+        }
+      : stale;
+  try {
+    const scope = await db.transaction(tx =>
+      readPreparationScope(tx, job.artistId, state.userId, state.sessionId),
+    );
+    if (
+      scope.claimId !== state.claimId ||
+      scope.ordinal !== state.ordinal ||
+      scope.memorySnapshotId !== state.memorySnapshotId ||
+      scope.session.questions.some(q => q.state === "offered")
+    ) {
+      state.stage = "stale";
+      return finish();
+    }
+    if (state.inFlight) {
+      state.stage = "failed";
+      state.errorCode = "external_outcome_unknown";
+      return finish();
+    }
+    if (Date.now() - Date.parse(state.createdAt) > 30 * 60 * 1000) {
+      state.stage = "failed";
+      state.errorCode = "preparation_failed";
+      return finish();
+    }
+    if (deadline - Date.now() < 12000) return finish(true);
+    const invocation = {};
+    while (true) {
+      state.inFlight = true;
+      if (!(await checkpointPreparationJob(job, state, false))) return stale;
+      try {
+        const config = { artistId: job.artistId, userId: state.userId };
+        const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now() - 1500));
+        if (state.bankComplete && state.bank) {
+          await revalidateInterviewBank(config, state, signal);
+        } else if (state.totalCount) {
+          const candidates = await generateInterviewQuestionBank(
+            config,
+            state.sitting,
+            state.totalCount,
+            signal,
+            state.cache,
+            invocation,
+          );
+          state.bank = candidates.map(candidate => ({ candidate, status: "available" }));
+          state.bankComplete = true;
+        } else {
+          state.candidate = await generateApiInterviewQuestion(
+            config,
+            state.sitting,
+            signal,
+            undefined,
+            undefined,
+            undefined,
+            state.cache,
+            invocation,
+          );
+        }
+        if (state.candidate?.diagnostics)
+          state.candidate.diagnostics.elapsedMs = Date.now() - Date.parse(state.createdAt);
+        state.stage = "ready";
+        state.inFlight = false;
+        return finish();
+      } catch (error) {
+        if (!(error instanceof InterviewStageComplete)) throw error;
+      }
+      state.inFlight = false;
+      // Persist completed paid work before continuing within the same request.
+      // Retain the lease so a browser polling cadence cannot add gaps between stages.
+      if (!(await checkpointPreparationJob(job, state, false))) return stale;
+      if (deadline - Date.now() < 12000) return finish(true);
+    }
+  } catch (error) {
+    console.error("interview_bank_failed", {
+      ...getInterviewFailureDiagnostic(
+        error,
+        "bank_preparation",
+        Date.now() - Date.parse(state.createdAt),
+      ),
+      ...getInterviewModelOutputDiagnostic(error),
+    });
+    state.inFlight = false;
+    state.stage =
+      error instanceof KnowledgeError && [401, 403, 409].includes(error.status)
+        ? "stale"
+        : "failed";
+    state.errorCode = NoObjectGeneratedError.isInstance(error)
+      ? "model_output_invalid"
+      : error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
+        ? "timeout_or_cancelled"
+        : "preparation_failed";
+    return finish();
+  }
+}

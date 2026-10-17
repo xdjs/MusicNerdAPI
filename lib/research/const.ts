@@ -7,6 +7,7 @@ import type { JobKind } from "@/lib/research/types";
  * (xdjs/MusicNerdWeb#1365).
  */
 export const PORTED_JOB_KINDS: JobKind[] = [
+  "interview_prepare",
   "social_ingest",
   "caption_extract",
   "lore_refresh",

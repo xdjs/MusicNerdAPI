@@ -1,4 +1,5 @@
 export type JobKind =
+  | "interview_prepare"
   | "social_ingest"
   | "caption_extract"
   | "lore_refresh"
