@@ -5,6 +5,12 @@ export type LatestSource = "instagram" | "inprocess" | "spotify" | "deezer" | "i
 export type SourceResult = {
   status: "pending" | "checked" | "failed" | "disconnected";
   checkedAt?: string;
+  detail?:
+    | "posts_imported"
+    | "older_posts_found"
+    | "no_new_posts"
+    | "instagram_unavailable"
+    | "verifying_empty_window";
 };
 
 /** A `latest_refresh` job's state, as MusicNerdWeb's Update Latest request writes it. */
@@ -18,6 +24,14 @@ export type LatestRefreshState = {
   sources: Record<LatestSource, SourceResult>;
   /** Private diagnostic, excluded from the editor response. */
   instagramFailure?: { phase: "status" | "collection"; reason: string; at: string };
+  /** Private audit of the single permitted unfiltered verification. */
+  instagramVerification?: { originalRunId: string; originalDatasetId: string; after: string };
+  instagramObservation?: {
+    outcome: "posts_imported" | "older_posts_found" | "no_new_posts";
+    checkedAt: string;
+    after?: string;
+    newestPostAt?: string;
+  };
   scan?: SocialScan;
   providerStarted?: boolean;
   runId?: string;

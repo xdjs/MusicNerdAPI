@@ -20,6 +20,10 @@ export interface SocialPostInsert {
 }
 
 export interface IngestResult {
+  /** Only requested by Latest; never interpreted as a successful ingestion. */
+  providerError?: "no_items" | "provider_error";
+  newestPostAt?: string;
+  noNewPosts?: boolean;
   ingested: number;
   ownPosts: number;
   collabPosts: number;

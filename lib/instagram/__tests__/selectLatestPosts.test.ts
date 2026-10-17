@@ -26,3 +26,16 @@ describe("selectLatestPosts", () => {
     expect(selectLatestPosts(rows)).toHaveLength(9);
   });
 });
+it("keeps dated older own posts when the caller has requested a bounded initial import", () => {
+  expect(
+    selectLatestPosts(
+      [
+        post(true, 45, "older"),
+        post(false, 45, "foreign"),
+        post(true, null, "undated"),
+        post(true, -1, "future"),
+      ],
+      true,
+    ).map(p => p.platformPostId),
+  ).toEqual(["older"]);
+});

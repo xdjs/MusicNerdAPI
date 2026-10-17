@@ -25,7 +25,11 @@ export async function readSocialRefresh(
   if (row?.reference && JSON.stringify(row.reference) !== "{}" && !reference)
     throw new Error("Invalid saved social scan reference");
   return {
-    ...planSocialRefresh(row ? { ...row, reference } : null, new Date(), lookbackDays),
+    ...planSocialRefresh(
+      row ? { ...row, reference } : null,
+      new Date(),
+      platform === "instagram" && scope === "latest" && !row ? undefined : lookbackDays,
+    ),
     scope,
   };
 }
