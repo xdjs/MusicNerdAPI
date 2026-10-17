@@ -8,9 +8,19 @@ import type { SocialPostInsert } from "@/lib/instagram/types";
  * @param rows - Mapped posts, newest first as Apify returns them.
  * @returns The posts to store.
  */
-export function selectLatestPosts(rows: SocialPostInsert[]): SocialPostInsert[] {
+export function selectLatestPosts(
+  rows: SocialPostInsert[],
+  includeOlder = false,
+): SocialPostInsert[] {
   const since = Date.now() - LATEST_WINDOW_MS;
   return rows
-    .filter(row => row.isOwnPost && row.postedAt && Date.parse(String(row.postedAt)) >= since)
+    .filter(
+      row =>
+        row.isOwnPost &&
+        row.postedAt &&
+        Number.isFinite(Date.parse(String(row.postedAt))) &&
+        Date.parse(String(row.postedAt)) <= Date.now() &&
+        (includeOlder || Date.parse(String(row.postedAt)) >= since),
+    )
     .slice(0, LATEST_POST_LIMIT);
 }

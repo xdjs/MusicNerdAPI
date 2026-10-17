@@ -1,3 +1,4 @@
+import { resolveLatestInstagramResult } from "@/lib/latest/resolveLatestInstagramResult";
 import { prepareSocialRefresh } from "@/lib/socialRefresh/prepareSocialRefresh";
 import { withoutAt } from "@/lib/artists/withoutAt";
 import { checkInstagramScrape } from "@/lib/instagram/checkInstagramScrape";
@@ -79,6 +80,7 @@ export async function refreshLatestInstagram(
   if (deadline - Date.now() < LATEST_COLLECT_RESERVE_MS) return { status: "pending" };
   const stored = await collectInstagramScrape(job.artistId, handle, state.datasetId, job.id, 0, {
     latestOnly: true,
+    reportProviderErrors: true,
     ...(state.scan
       ? { refresh: { scan: state.scan, runId: state.runId!, limit: LATEST_POST_LIMIT } }
       : {}),
@@ -89,5 +91,5 @@ export async function refreshLatestInstagram(
     await latestRefreshStore(job, state);
     throw new Error(reason);
   }
-  return { status: "checked", checkedAt: new Date().toISOString() };
+  return resolveLatestInstagramResult(job, stored);
 }

@@ -84,6 +84,7 @@ describe("refreshLatestInstagram", () => {
     expect(res.status).toBe("checked");
     expect(m.collect).toHaveBeenCalledWith("artist-1", "handle", "ds-1", "job-1", 0, {
       latestOnly: true,
+      reportProviderErrors: true,
     });
   });
 
@@ -189,4 +190,48 @@ it("stores the immutable boundary before starting", async () => {
     "handle",
     expect.objectContaining({ onlyPostsNewerThan: "2026-10-10T12:00:00Z" }),
   );
+});
+
+it("imports old posts when the initial checkpoint has no date boundary", async () => {
+  m.refresh.mockResolvedValue({ startedAt: "2026-10-17T00:00:00Z", scope: "latest" });
+  m.start.mockResolvedValue({ status: "started", runId: "initial" });
+  const j = job();
+  await refreshLatestInstagram(j, later());
+  expect(m.start).toHaveBeenCalledWith(
+    "handle",
+    expect.objectContaining({ onlyPostsNewerThan: undefined }),
+  );
+});
+
+it("reserves only one unfiltered verification for an ambiguous filtered result", async () => {
+  m.collect.mockResolvedValue({
+    ingested: 0,
+    ownPosts: 0,
+    collabPosts: 0,
+    providerError: "no_items",
+  });
+  const j = job({
+    runId: "filtered",
+    datasetId: "empty",
+    scan: { startedAt: "2026-10-17T00:00:00Z", after: "2026-09-17T00:00:00Z", scope: "latest" },
+  });
+  expect(await refreshLatestInstagram(j, later())).toMatchObject({ status: "pending" });
+  expect(j.state).toMatchObject({
+    instagramVerification: { originalRunId: "filtered", after: "2026-09-17T00:00:00Z" },
+  });
+  m.start.mockResolvedValue({ status: "started", runId: "verify" });
+  await refreshLatestInstagram(j, later());
+  expect(m.start).toHaveBeenCalledTimes(1);
+  expect(m.start).toHaveBeenCalledWith(
+    "handle",
+    expect.objectContaining({ onlyPostsNewerThan: undefined }),
+  );
+  Object.assign(j.state, { datasetId: "still-empty" });
+  expect(await refreshLatestInstagram(j, later())).toMatchObject({ status: "failed" });
+  expect(j.state).toMatchObject({
+    instagramFailure: {
+      reason: "Instagram returned no readable posts; access or empty account could not be verified",
+    },
+  });
+  expect(m.start).toHaveBeenCalledTimes(1);
 });

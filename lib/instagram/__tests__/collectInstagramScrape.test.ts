@@ -283,3 +283,37 @@ it("rejects an unrecognized account-scan row before thumbnail work or a success 
   expect(checkpoint).not.toHaveBeenCalled();
   expect(written).toEqual([]);
 });
+
+it("reports ambiguous no_items without writing a false successful checkpoint", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => [{ error: "no_items" }] })),
+  );
+  expect(
+    await collectInstagramScrape(artist, "artist", "ds", "job", 0, {
+      latestOnly: true,
+      reportProviderErrors: true,
+    }),
+  ).toMatchObject({ providerError: "no_items", ingested: 0 });
+  expect(checkpoint).not.toHaveBeenCalled();
+  expect(written).toHaveLength(0);
+});
+it("stores old own posts in a bounded first Latest import with their real dates", async () => {
+  const old = "2023-03-25T12:26:30.000Z";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => [{ ...feed(1)[0], timestamp: old }] })),
+  );
+  const result = await collectInstagramScrape(artist, "artist", "ds", "job", 0, {
+    latestOnly: true,
+    reportProviderErrors: true,
+    refresh: {
+      runId: "run",
+      limit: 9,
+      scan: { startedAt: new Date().toISOString(), scope: "latest" },
+    },
+  });
+  expect(result).toMatchObject({ ingested: 1, newestPostAt: old, noNewPosts: false });
+  expect(written[0].postedAt).toBe(old);
+  expect(checkpoint).toHaveBeenCalledTimes(1);
+});

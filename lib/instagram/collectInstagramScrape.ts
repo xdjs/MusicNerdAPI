@@ -1,3 +1,4 @@
+import { describeInstagramCollection } from "./describeInstagramCollection";
 import { storeSocialRefresh } from "@/lib/socialRefresh/storeSocialRefresh";
 import { socialTaskIsConnected } from "@/lib/social/socialTaskIsConnected";
 import type { SocialScan } from "@/lib/socialRefresh/types";
@@ -39,7 +40,11 @@ export async function collectInstagramScrape(
   datasetId: string,
   jobId: string,
   cursor = 0,
-  opts?: { latestOnly?: boolean; refresh?: { scan: SocialScan; runId: string; limit: number } },
+  opts?: {
+    reportProviderErrors?: boolean;
+    latestOnly?: boolean;
+    refresh?: { scan: SocialScan; runId: string; limit: number };
+  },
 ): Promise<IngestResult | null> {
   const token = process.env.APIFY_API_TOKEN ?? "";
   if (!token) return null;
@@ -51,8 +56,20 @@ export async function collectInstagramScrape(
       return null;
     }
     const items = await res.json();
-    if (!Array.isArray(items) || items.some(item => item && typeof item === "object" && item.error))
-      return null;
+    if (!Array.isArray(items)) return null;
+    if (items.some(item => item && typeof item === "object" && item.error)) {
+      if (!opts?.reportProviderErrors) return null;
+      return {
+        ingested: 0,
+        ownPosts: 0,
+        collabPosts: 0,
+        providerError:
+          items.length === 1 && items[0]?.error === "no_items" ? "no_items" : "provider_error",
+      };
+    }
+    // An empty unfiltered payload cannot establish public account access.
+    if (!items.length && opts?.reportProviderErrors)
+      return { ingested: 0, ownPosts: 0, collabPosts: 0, providerError: "no_items" };
 
     const artistName = await getArtistNameById(artistId);
     const mapped = items
@@ -61,7 +78,9 @@ export async function collectInstagramScrape(
     // An account scan must not turn unknown rows into an empty successful check.
     // Fail before thumbnail work; retries keep the same paid dataset.
     if (opts?.refresh && mapped.length !== items.length) return null;
-    const rows = opts?.latestOnly ? selectLatestPosts(mapped) : mapped.slice(0, MAX_SCRAPE_LIMIT);
+    const rows = opts?.latestOnly
+      ? selectLatestPosts(mapped, !!opts.reportProviderErrors)
+      : mapped.slice(0, MAX_SCRAPE_LIMIT);
     const batch = rows.slice(cursor, cursor + THUMBNAILS_PER_SLICE);
     const scope: ThumbnailUploadScope = { jobId, attemptedPaths: new Set() };
     // Reject an already revoked job before creating any storage objects.
@@ -112,6 +131,8 @@ export async function collectInstagramScrape(
       }
       throw error;
     }
+    if (opts?.reportProviderErrors)
+      Object.assign(result, describeInstagramCollection(mapped, opts.refresh?.scan));
     const next = cursor + batch.length;
     return next < rows.length ? { ...result, nextCursor: next } : result;
   } catch (e) {
