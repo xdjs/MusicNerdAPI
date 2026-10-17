@@ -59,11 +59,14 @@ it("fails closed after interrupted paid work rather than silently repeating it",
   expect(generate).not.toHaveBeenCalled();
   expect(checkpoint.mock.calls[0][1].errorCode).toBe("external_outcome_unknown");
 });
-it("checkpoints a completed stage and releases its lease for the next tick", async () => {
-  generate.mockRejectedValue(new InterviewStageComplete());
+it("checkpoints and immediately advances the next stage without a polling gap", async () => {
+  generate
+    .mockRejectedValueOnce(new InterviewStageComplete())
+    .mockResolvedValue({ question: "Checked?" });
   const result = await runInterviewPreparation(job(), Date.now() + 50000);
-  expect(result).toMatchObject({ done: false, waiting: false });
-  expect(checkpoint).toHaveBeenCalledTimes(2);
+  expect(result).toMatchObject({ done: true, waiting: false });
+  expect(generate).toHaveBeenCalledTimes(2);
+  expect(checkpoint).toHaveBeenCalledTimes(4);
   expect(checkpoint.mock.calls[1][1].inFlight).toBe(false);
 });
 it("never generates after losing its lease", async () => {

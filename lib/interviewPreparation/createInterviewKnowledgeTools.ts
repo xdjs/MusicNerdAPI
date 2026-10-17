@@ -1,9 +1,13 @@
+import type { KnowledgeSnapshot } from "@/lib/knowledge/types";
 import { tool } from "ai";
 import { knowledgeInputSchemas } from "@/lib/knowledge/knowledgeSchemas";
 import type { KnowledgeResults, KnowledgeToolConfig } from "@/lib/interviewPreparation/types";
 import { fetchArtistKnowledge } from "./fetchArtistKnowledge";
 /** Artist-scoped read-only tools. Only reopened originals become citable evidence. */
-export function createInterviewKnowledgeTools(config: KnowledgeToolConfig) {
+export function createInterviewKnowledgeTools(
+  config: KnowledgeToolConfig,
+  savedSnapshot?: KnowledgeSnapshot,
+) {
   const bound = config;
   const originals: KnowledgeResults["read"][] = [];
   const history: KnowledgeResults["history"][] = [];
@@ -15,7 +19,7 @@ export function createInterviewKnowledgeTools(config: KnowledgeToolConfig) {
   ): Promise<KnowledgeResults[K]> {
     if (diagnostics.calls >= 10) throw new Error("Interview API call budget exhausted");
     diagnostics.calls++;
-    const result = await fetchArtistKnowledge(bound, operation, input, signal);
+    const result = await fetchArtistKnowledge(bound, operation, input, signal, savedSnapshot);
     const size = JSON.stringify(result).length;
     if (diagnostics.returnedChars + size > 48000)
       throw new Error("Interview original-context budget exhausted");

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import {
   artistVaultSources,
@@ -28,7 +28,7 @@ export async function loadArtistKnowledge(artistId: string, userId: string) {
       from artist_interview_answers where artist_id = ${artistId}
       union all select count(*)::int, coalesce(sum(char_length(claim) + char_length(coalesce(correction,''))),0)::bigint
       from artist_doc_corrections where artist_id = ${artistId}
-      union all select count(*)::int, 0::bigint from artist_research_jobs where artist_id = ${artistId}
+      union all select count(*)::int, 0::bigint from artist_research_jobs where artist_id = ${artistId} and kind <> 'interview_prepare'
       union all select count(*)::int, coalesce(sum(char_length(coalesce(lore_summary->>'text',''))),0)::bigint
       from artist_docs where artist_id = ${artistId}
     `);
@@ -101,7 +101,12 @@ export async function loadArtistKnowledge(artistId: string, userId: string) {
           updatedAt: artistResearchJobs.updatedAt,
         })
         .from(artistResearchJobs)
-        .where(eq(artistResearchJobs.artistId, artistId))
+        .where(
+          and(
+            eq(artistResearchJobs.artistId, artistId),
+            ne(artistResearchJobs.kind, "interview_prepare"),
+          ),
+        )
         .limit(MAX_KNOWLEDGE_ROWS + 1);
       const docQuery = tx
         .select({

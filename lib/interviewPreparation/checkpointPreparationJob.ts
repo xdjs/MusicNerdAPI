@@ -13,7 +13,7 @@ export async function checkpointPreparationJob(
     await lockArtistRow(tx, job.artistId);
     const terminal = ["ready", "failed", "stale"].includes(state.stage);
     const [saved] = await tx.execute<{ updated_at: string }>(
-      sql`update artist_research_jobs set state=${JSON.stringify(state)}::jsonb,status=${terminal ? (state.stage === "ready" ? "done" : "failed") : release ? "pending" : "running"},claimed_at=${terminal || release ? sql`null` : sql`now()`},updated_at=clock_timestamp(),last_error=${state.errorCode ?? null} where id=${job.id}::uuid and artist_id=${job.artistId}::uuid and kind='interview_prepare' and status='running' and updated_at is not distinct from ${job.updatedAt}::timestamptz returning updated_at::text`,
+      sql`update artist_research_jobs set state=${JSON.stringify(state)}::jsonb,status=${terminal ? (state.stage === "ready" ? "done" : "failed") : release ? "pending" : "running"},claimed_at=${terminal || release ? sql`null` : sql`now()`},attempts=${release && !state.inFlight ? sql`0` : sql`attempts`},updated_at=clock_timestamp(),last_error=${state.errorCode ?? null} where id=${job.id}::uuid and artist_id=${job.artistId}::uuid and kind='interview_prepare' and status='running' and updated_at is not distinct from ${job.updatedAt}::timestamptz returning updated_at::text`,
     );
     if (saved) job.updatedAt = saved.updated_at;
     return !!saved;

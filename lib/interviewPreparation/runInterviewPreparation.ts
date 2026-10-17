@@ -46,26 +46,35 @@ export async function runInterviewPreparation(
       return finish();
     }
     if (deadline - Date.now() < 12000) return finish(true);
-    state.inFlight = true;
-    if (!(await checkpointPreparationJob(job, state, false))) return stale;
-    try {
-      state.candidate = await generateApiInterviewQuestion(
-        { artistId: job.artistId, userId: state.userId },
-        state.sitting,
-        AbortSignal.timeout(Math.max(1, deadline - Date.now() - 1500)),
-        undefined,
-        undefined,
-        undefined,
-        state.cache,
-      );
-      if (state.candidate.diagnostics)
-        state.candidate.diagnostics.elapsedMs = Date.now() - Date.parse(state.createdAt);
-      state.stage = "ready";
-    } catch (error) {
-      if (!(error instanceof InterviewStageComplete)) throw error;
+    const invocation = {};
+    while (true) {
+      state.inFlight = true;
+      if (!(await checkpointPreparationJob(job, state, false))) return stale;
+      try {
+        state.candidate = await generateApiInterviewQuestion(
+          { artistId: job.artistId, userId: state.userId },
+          state.sitting,
+          AbortSignal.timeout(Math.max(1, deadline - Date.now() - 1500)),
+          undefined,
+          undefined,
+          undefined,
+          state.cache,
+          invocation,
+        );
+        if (state.candidate.diagnostics)
+          state.candidate.diagnostics.elapsedMs = Date.now() - Date.parse(state.createdAt);
+        state.stage = "ready";
+        state.inFlight = false;
+        return finish();
+      } catch (error) {
+        if (!(error instanceof InterviewStageComplete)) throw error;
+      }
+      state.inFlight = false;
+      // Persist completed paid work before continuing within the same request.
+      // Retain the lease so a browser polling cadence cannot add gaps between stages.
+      if (!(await checkpointPreparationJob(job, state, false))) return stale;
+      if (deadline - Date.now() < 12000) return finish(true);
     }
-    state.inFlight = false;
-    return finish();
   } catch (error) {
     state.inFlight = false;
     state.stage =

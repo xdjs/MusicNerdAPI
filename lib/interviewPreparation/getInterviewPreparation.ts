@@ -1,3 +1,4 @@
+import { readInterviewSessionState } from "@/lib/interviewSessions/readInterviewSessionState";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { authorizeInterviewPreparation } from "./authorizeInterviewPreparation";
@@ -8,7 +9,7 @@ import { parsePreparationState } from "./parsePreparationState";
 export async function getInterviewPreparation(artistId: string, userId: string, sessionId: string) {
   return db.transaction(
     async tx => {
-      await authorizeInterviewPreparation(tx, artistId, userId);
+      const claimId = await authorizeInterviewPreparation(tx, artistId, userId);
       const [job] = await tx.execute<{ id: string; status: string; state: unknown }>(
         sql`select id,status,state from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${sessionId} and state->>'userId'=${userId} order by created_at desc limit 1`,
       );
@@ -16,14 +17,27 @@ export async function getInterviewPreparation(artistId: string, userId: string, 
       const state = parsePreparationState(job.state);
       if (state.stage === "consumed")
         return { status: "ok" as const, preparation: { status: "idle" as const } };
-      let stale = state.stage === "stale";
+      const { session } = await readInterviewSessionState(tx, artistId, sessionId);
+      let stale =
+        state.stage === "stale" ||
+        claimId !== state.claimId ||
+        !session ||
+        session.state !== "active" ||
+        session.questions.length + 1 !== state.ordinal ||
+        session.questions.some(q => q.state === "offered");
       try {
-        const scope = await readPreparationScope(tx, artistId, userId, sessionId);
+        // Pending work revalidates memory before running. Only a ready candidate
+        // needs a full memory read on poll; consume checks it again under lock.
+        const scope =
+          state.stage === "ready"
+            ? await readPreparationScope(tx, artistId, userId, sessionId)
+            : null;
         stale ||=
-          scope.claimId !== state.claimId ||
-          scope.ordinal !== state.ordinal ||
-          scope.memorySnapshotId !== state.memorySnapshotId ||
-          scope.session.questions.some(q => q.state === "offered");
+          !!scope &&
+          (scope.claimId !== state.claimId ||
+            scope.ordinal !== state.ordinal ||
+            scope.memorySnapshotId !== state.memorySnapshotId ||
+            scope.session.questions.some(q => q.state === "offered"));
       } catch (error) {
         if (error instanceof KnowledgeError && error.code === "preparation_stale") stale = true;
         else throw error;

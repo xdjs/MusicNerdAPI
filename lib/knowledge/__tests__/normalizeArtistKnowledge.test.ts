@@ -184,3 +184,19 @@ it("excludes historical pending text even when it is readable and names the arti
   expect(snapshot.sources).toEqual([]);
   expect(snapshot.coverage.eligibleSources).toBe(0);
 });
+
+it("omits private interview preparation from shared research status", () => {
+  const privateJob = {
+    id: "job",
+    artistId: rawKnowledge.artist.id,
+    kind: "interview_prepare",
+    status: "done",
+    cursor: 0,
+    total: null,
+    updatedAt: "2026-10-17T00:00:00Z",
+    state: { candidate: { question: "PRIVATE QUESTION" }, cache: { answer: "PRIVATE ANSWER" } },
+  };
+  const result = normalizeArtistKnowledge({ ...rawKnowledge, jobs: [privateJob] });
+  expect(result.jobs).toEqual([]);
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");
+});
