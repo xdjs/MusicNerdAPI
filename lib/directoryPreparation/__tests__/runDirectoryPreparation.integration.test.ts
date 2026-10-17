@@ -33,7 +33,7 @@ const job = {
 };
 beforeAll(async () => {
   await client.exec(
-    `create table artists(id uuid,added_by uuid,name text,bio text);create table artist_activity_events(id uuid,artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text);create table artist_claims(artist_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,file_path text,extracted_text text,origin text,activity_id uuid,url text default 'https://example.com/interview',updated_at timestamptz default '2026-10-12T00:00:00Z');create table artist_source_assessments(source_id uuid primary key,artist_id uuid,activity_id uuid,snapshot jsonb,assessed_at timestamptz);create table artist_directory_preparations(artist_id uuid primary key,activity_id uuid,job_id uuid,status text,document text,about text,starting_bio text,manifest jsonb,updated_at timestamptz default now());create table artist_research_jobs(id uuid,status text,updated_at timestamptz,attempts integer,claimed_at timestamptz,last_error text);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.extracted_text)$$;`,
+    `create table artists(id uuid,added_by uuid,name text,bio text);create table artist_activity_events(id uuid,artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text);create table artist_claims(artist_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,file_path text,extracted_text text,origin text,activity_id uuid,url text default 'https://example.com/interview',updated_at timestamptz default '2026-10-12T00:00:00Z');create table artist_source_assessments(source_id uuid primary key,artist_id uuid,activity_id uuid,snapshot jsonb,assessed_at timestamptz);create table artist_directory_preparations(artist_id uuid primary key,activity_id uuid,job_id uuid,status text,document text,about text,starting_bio text,manifest jsonb,public_about jsonb,updated_at timestamptz default now());create table artist_research_jobs(id uuid,status text,updated_at timestamptz,attempts integer,claimed_at timestamptz,last_error text);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.extracted_text)$$;`,
   );
 });
 afterAll(() => client.close());
@@ -57,8 +57,21 @@ it("stores private material while leaving public bio and source curation unchang
     { status: "pending" },
   ]);
   expect(
-    (await client.query("select status,about from artist_directory_preparations")).rows,
-  ).toEqual([{ status: "ready", about: "Private About[1]." }]);
+    (await client.query("select status,about,public_about from artist_directory_preparations"))
+      .rows,
+  ).toEqual([
+    {
+      status: "ready",
+      about: "Private About[1].",
+      public_about: {
+        version: 1,
+        identity: { name: "Example", accounts: {} },
+        bio: "Private About.",
+        kind: "researched",
+        sources: [{ id: source, url: "https://example.com/interview", label: "Interview" }],
+      },
+    },
+  ]);
 });
 it("rejects originals changed while the model was working", async () => {
   m.generate.mockImplementation(async () => {
@@ -140,4 +153,24 @@ it("excludes readable historical pending text without an exact identity assessme
   expect((await client.query("select extracted_text from artist_vault_sources")).rows[0]).toEqual({
     extracted_text: "Readable original. ".repeat(20),
   });
+});
+it("clears the public projection when current evidence becomes insufficient", async () => {
+  await runDirectoryPreparation(job, Date.now() + 50_000);
+  await client.exec(
+    `update artist_research_jobs set status='running',updated_at='2026-10-12T00:00:00Z';delete from artist_source_assessments`,
+  );
+  m.generate.mockResolvedValue({ status: "insufficient", document: null, about: null });
+  await runDirectoryPreparation(job, Date.now() + 50_000);
+  expect(
+    (await client.query("select public_about from artist_directory_preparations")).rows,
+  ).toEqual([{ public_about: null }]);
+});
+it("does not commit when the saved artist account changes during generation", async () => {
+  await client.exec("alter table artists add column if not exists soundcloud text");
+  m.generate.mockImplementation(async () => {
+    await client.exec("update artists set soundcloud='new-account'");
+    return { status: "ready", document: "Old[1]", about: "Old[1]" };
+  });
+  await expect(runDirectoryPreparation(job, Date.now() + 50_000)).rejects.toThrow("changed");
+  expect((await client.query("select * from artist_directory_preparations")).rows).toHaveLength(0);
 });

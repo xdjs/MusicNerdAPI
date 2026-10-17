@@ -1,3 +1,5 @@
+import { selectOfficialAbout } from "./selectOfficialAbout";
+import { preparePublicAbout } from "./preparePublicAbout";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -37,6 +39,10 @@ export async function runDirectoryPreparation(
         return loadDirectoryMaterial(tx, job.artistId, job.activityId!);
       });
       const draft = await generateDirectoryDraft(material);
+      const publicAbout =
+        draft.status === "ready"
+          ? ((await selectOfficialAbout(material)) ?? preparePublicAbout(material, draft))
+          : null;
       const committed = await db.transaction(async tx => {
         await lockScopedArtistWrite(tx, job.artistId);
         const lease = rowsOf(
@@ -48,9 +54,9 @@ export async function runDirectoryPreparation(
         const current = await loadDirectoryMaterial(tx, job.artistId, job.activityId!);
         if (JSON.stringify(current) !== JSON.stringify(material))
           throw new Error("Private preparation inputs changed");
-        await tx.execute(sql`insert into artist_directory_preparations(artist_id,activity_id,job_id,status,document,about,starting_bio,manifest)
-    values(${job.artistId}::uuid,${job.activityId}::uuid,${job.id}::uuid,${draft.status},${draft.document},${draft.about},${material.startingBio},${JSON.stringify(material.manifest)}::jsonb)
-    on conflict(artist_id) do update set activity_id=excluded.activity_id,job_id=excluded.job_id,status=excluded.status,document=excluded.document,about=excluded.about,starting_bio=excluded.starting_bio,manifest=excluded.manifest,updated_at=now()`);
+        await tx.execute(sql`insert into artist_directory_preparations(artist_id,activity_id,job_id,status,document,about,starting_bio,manifest,public_about)
+    values(${job.artistId}::uuid,${job.activityId}::uuid,${job.id}::uuid,${draft.status},${draft.document},${draft.about},${material.startingBio},${JSON.stringify(material.manifest)}::jsonb,${publicAbout ? JSON.stringify(publicAbout) : null}::jsonb)
+    on conflict(artist_id) do update set activity_id=excluded.activity_id,job_id=excluded.job_id,status=excluded.status,document=excluded.document,about=excluded.about,starting_bio=excluded.starting_bio,manifest=excluded.manifest,public_about=excluded.public_about,updated_at=now()`);
         await tx.execute(
           sql`update artist_research_jobs set status='done',claimed_at=null,last_error=null,updated_at=now() where id=${job.id}::uuid`,
         );

@@ -1,3 +1,4 @@
+import { ACCOUNT_PLATFORMS } from "@/lib/vault/const";
 import { sql } from "drizzle-orm";
 import type { TransactionDb } from "@/lib/ownership/types";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -9,8 +10,8 @@ export async function loadDirectoryMaterial(
   activityId: string,
 ): Promise<DirectoryMaterial> {
   const [artist] = rowsOf(
-    await tx.execute(sql`select name,bio from artists where id=${artistId}::uuid`),
-  ) as { name: string | null; bio: string | null }[];
+    await tx.execute(sql`select * from artists where id=${artistId}::uuid`),
+  ) as ({ name: string | null; bio: string | null } & Record<string, unknown>)[];
   if (!artist) throw new Error("Directory artist unavailable");
   const rows = rowsOf(
     await tx.execute(sql`select s.snapshot from artist_source_assessments s
@@ -33,5 +34,10 @@ export async function loadDirectoryMaterial(
     )
   )
     throw new Error("Invalid assessed source snapshot");
-  return { artistName: artist.name ?? "this artist", startingBio: artist.bio, manifest };
+  const accounts = Object.fromEntries(
+    [...ACCOUNT_PLATFORMS].flatMap(key =>
+      typeof artist[key] === "string" && artist[key] ? [[key, artist[key] as string]] : [],
+    ),
+  );
+  return { artistName: artist.name ?? "this artist", startingBio: artist.bio, manifest, accounts };
 }
