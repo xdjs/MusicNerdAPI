@@ -1,3 +1,5 @@
+import { getDiscogsGroupFacts } from "@/lib/discogs/getDiscogsGroupFacts";
+import { fetchLatestProviderItems } from "@/lib/latestProviders/fetchLatestProviderItems";
 import { IDENTITY_ANCHOR_COLUMNS } from "@/lib/artists/const";
 import { artistRowProperty } from "@/lib/artists/artistRowProperty";
 import type { ArtistAnchor } from "@/lib/relevance/types";
@@ -8,7 +10,8 @@ import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
  * What the relevance judge gets besides the name: the real catalog and the
  * confirmed, name-shaped accounts. That's evidence a name match doesn't have,
  * and it's what tells a Chord DAVE amplifier review from Black Dave. A catalog
- * that can't be read is left out; the judge still runs.
+ * that cannot be read falls back to the held Deezer ID. Structured Discogs
+ * group credits retain provider provenance; missing evidence stays unresolved.
  *
  * @param artist - The artist row.
  * @param artistName - The artist's name.
@@ -19,17 +22,40 @@ export async function buildArtistAnchor(
   artistName: string,
 ): Promise<ArtistAnchor & { catalog: string[]; identifiers: string[] }> {
   const spotifyId = typeof artist.spotify === "string" ? artist.spotify : "";
+  const groupsPromise =
+    typeof artist.discogs === "string"
+      ? getDiscogsGroupFacts(artist.discogs, artistName)
+      : Promise.resolve([]);
+  let catalogSources: NonNullable<ArtistAnchor["catalogSources"]> = [];
   let catalog = { releases: [] as string[], topTracks: [] as string[] };
   if (spotifyId) {
     try {
       catalog = await getSpotifyCatalogNames(spotifyId, await getSpotifyHeaders());
     } catch {
-      // No catalog: the judge runs on the name and the accounts.
+      // Try the held Deezer catalog below when Spotify is unavailable.
     }
   }
+  if (!catalog.releases.length && !catalog.topTracks.length && typeof artist.deezer === "string") {
+    try {
+      const items = await fetchLatestProviderItems("deezer", artist.deezer);
+      catalogSources = items
+        .slice(0, 12)
+        .map(({ card }) => ({ title: card.title, url: card.sourceUrl }));
+      catalog.releases = [...new Set(catalogSources.map(item => item.title))];
+    } catch {
+      // A provider failure is missing evidence, never permission to guess.
+    }
+  }
+  const groups = await groupsPromise;
   const identifiers = IDENTITY_ANCHOR_COLUMNS.flatMap(col => {
     const v = artist[artistRowProperty(col)];
     return typeof v === "string" && v ? [`${col}: ${v}`] : [];
   });
-  return { name: artistName, catalog: [...catalog.topTracks, ...catalog.releases], identifiers };
+  return {
+    name: artistName,
+    catalog: [...catalog.topTracks, ...catalog.releases],
+    identifiers,
+    ...(catalogSources.length ? { catalogSources } : {}),
+    ...(groups.length ? { groups } : {}),
+  };
 }

@@ -12,11 +12,9 @@ import type { ReadCandidate, SearchRun } from "@/lib/vault/types";
 import { recordSavedSource } from "@/lib/vault/recordSavedSource";
 
 /**
- * Files a page as a vault source, or drops it. A page must name the artist in
- * full unless it's their own domain or the judge affirmed it, so a namesake
- * article stays an uncitable lead. A page we couldn't read is only as good as
- * its search title, which then has to name the artist in full. The extracted
- * text is stored only for a verified page: it's the verification record.
+ * Files a page as a vault source, or drops it. Only readable pages with an
+ * affirmative identity verdict retain extracted source text. Name matches
+ * may retain an unverified lead, but cannot establish the artist's identity.
  *
  * @param run - The run; saved sources and counts are updated.
  * @param candidate - The search hit and its page.
@@ -69,7 +67,7 @@ export async function saveCandidateSource(
     run.counts.dropped++;
     return;
   }
-  const isVerified = classified === "verified";
+  const isVerified = classified === "verified" && verdict === "about-artist";
   if (result.type === "website" && !isVerified) {
     run.counts.dropped++;
     return;

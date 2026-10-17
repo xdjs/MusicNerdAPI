@@ -8,6 +8,7 @@ import {
   MAX_JUDGED_CANDIDATES,
   RELEVANCE_INSTRUCTION,
 } from "@/lib/relevance/const";
+import { identityAnchors } from "@/lib/relevance/identityAnchors";
 import { relevancePage } from "@/lib/relevance/relevancePage";
 import type {
   ArtistAnchor,
@@ -22,7 +23,7 @@ import type {
  * accounts), which a substring test can't: it can't tell a Chord DAVE
  * amplifier review from Black Dave. Never throws and never rejects on failure:
  * if the model fails or times out, every page stays `undecided` and the
- * caller falls back to the name check.
+ * caller keeps only an unverified lead.
  *
  * @param anchor - What we can prove about the artist.
  * @param candidates - The fetched pages.
@@ -35,9 +36,13 @@ export async function judgeSourceRelevance(
   const verdicts = new Map<string, RelevanceVerdict>();
   for (const c of candidates) verdicts.set(c.url, "undecided");
 
-  // Only pages we could read: guessing from a URL is the failure this removes.
+  const facts = identityAnchors(anchor);
+  if (!facts.length) return verdicts;
+
+  // Missing evidence stays unresolved. Do not let a majority of namesakes
+  // define the target or consume the bounded judgment budget.
   const judgeable = candidates
-    .filter(c => (c.text?.trim().length ?? 0) > 0)
+    .filter(c => facts.some(fact => c.text?.toLowerCase().includes(fact.value.toLowerCase())))
     .slice(0, MAX_JUDGED_CANDIDATES);
   if (judgeable.length === 0) return verdicts;
 
@@ -49,7 +54,12 @@ export async function judgeSourceRelevance(
         prompt: `ARTIST ANCHOR:\n${anchorBlock(anchor)}\n\nPAGES:\n${pages}`,
         instructions: RELEVANCE_INSTRUCTION,
         temperature: 0,
-        element: z.object({ i: z.number().optional(), v: z.string().optional() }),
+        element: z.object({
+          i: z.number(),
+          identity: z.enum(["match", "different", "unresolved"]),
+          v: z.enum(["about", "lists", "no"]),
+          evidence: z.array(z.object({ anchor: z.string(), quote: z.string() })).max(3),
+        }),
         thinkingBudget: 0,
       }),
       JUDGE_TIMEOUT_MS,
@@ -60,6 +70,6 @@ export async function judgeSourceRelevance(
     console.error("[sourceRelevance] judge failed, every candidate stays undecided:", e);
     return verdicts;
   }
-  applyVerdicts(rows, judgeable, verdicts);
+  applyVerdicts(rows, judgeable, verdicts, anchor);
   return verdicts;
 }

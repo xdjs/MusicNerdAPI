@@ -2,9 +2,14 @@ import { describe, it, expect } from "vitest";
 import { applyVerdicts } from "@/lib/relevance/applyVerdicts";
 
 const judged = [
-  { url: "https://a.example", title: null, text: "a" },
-  { url: "https://b.example", title: null, text: "b" },
+  { url: "https://a.example", title: null, text: "The musician made Anticore with Acumen Nation." },
+  { url: "https://b.example", title: null, text: "The musician made Anticore with Acumen Nation." },
 ];
+const anchor = { name: "Jamie Duffy", catalog: ["Anticore"] };
+const match = {
+  identity: "match",
+  evidence: [{ anchor: "C0", quote: "The musician made Anticore with Acumen Nation." }],
+};
 const fresh = () =>
   new Map([
     ["https://a.example", "undecided" as const],
@@ -16,11 +21,12 @@ describe("applyVerdicts", () => {
     const v = fresh();
     applyVerdicts(
       [
-        { i: 0, v: "no" },
-        { i: 1, v: "About" },
+        { i: 0, v: "no", identity: "different" },
+        { i: 1, v: "About", ...match },
       ],
       judged,
       v,
+      anchor,
     );
     expect(v.get("https://a.example")).toBe("not-about-artist");
     expect(v.get("https://b.example")).toBe("about-artist");
@@ -38,6 +44,7 @@ describe("applyVerdicts", () => {
       ],
       judged,
       v,
+      anchor,
     );
     expect([...v.values()]).toEqual(["undecided", "undecided"]);
     expect(v.has("https://invented.example")).toBe(false);
@@ -45,7 +52,7 @@ describe("applyVerdicts", () => {
 
   it("maps lists to lists-artist", () => {
     const v = fresh();
-    applyVerdicts([{ i: 0, v: "lists" }], judged, v);
+    applyVerdicts([{ i: 0, v: "lists", ...match }], judged, v, anchor);
     expect(v.get("https://a.example")).toBe("lists-artist");
   });
 });
