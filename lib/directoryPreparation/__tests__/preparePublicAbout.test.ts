@@ -30,7 +30,7 @@ it("publishes plain prose and only the actual cited sources, never the originals
   expect(
     preparePublicAbout(material, {
       status: "ready",
-      document: "Private [1][2]",
+      document: "Private [2]",
       about: "An electronic artist [2].",
     }),
   ).toEqual({
@@ -74,4 +74,27 @@ it("withholds unsafe cited URLs instead of silently dropping their attribution",
         { status: "ready", document: "[1]", about: "Biography[1]." },
       ),
     ).toBeNull();
+});
+
+it("retains research document sources not repeated by its About summary", () => {
+  const result = preparePublicAbout(material, {
+    status: "ready",
+    document: "Traditional singer[1]. Electronic projects[2].",
+    about: "Traditional singer with electronic projects[2].",
+  });
+  expect(result?.sources).toEqual([
+    { id: "first", url: "https://example.com/interview", label: "Interview" },
+    { id: "second", url: "https://example.org/bio", label: "Biography" },
+  ]);
+  expect(result).not.toHaveProperty("document");
+});
+it("rejects unsupported upstream citations even when the About has a valid citation", () => {
+  expect(
+    preparePublicAbout(material, { status: "ready", document: "Unknown[9].", about: "Artist[1]." }),
+  ).toBeNull();
+});
+it("still requires About citations when the document is cited", () => {
+  expect(
+    preparePublicAbout(material, { status: "ready", document: "Supported[1].", about: "Artist." }),
+  ).toBeNull();
 });

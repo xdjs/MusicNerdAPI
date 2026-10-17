@@ -3,14 +3,16 @@ import { stripCitationMarkers } from "@/lib/lore/stripCitationMarkers";
 import { normalizePublicUrl } from "@/lib/sources/normalizePublicUrl";
 import { isUnsafeUrl } from "@/lib/pages/isUnsafeUrl";
 import type { DirectoryMaterial, DirectoryDraft, PublicAbout } from "./types";
-/** A new public projection contains cited attribution only, never private originals. */
+/** Preserve citation ancestry through document-to-About summarization without exposing private originals. */
 export function preparePublicAbout(
   material: DirectoryMaterial,
   draft: DirectoryDraft,
 ): PublicAbout | null {
   if (draft.status !== "ready" || !draft.about) return null;
-  const ids = [...extractCitedIds(draft.about)];
-  if (!ids.length || ids.some(id => !material.manifest[id - 1])) return null;
+  const aboutIds = extractCitedIds(draft.about);
+  if (!aboutIds.size) return null;
+  const ids = [...new Set([...extractCitedIds(draft.document ?? ""), ...aboutIds])];
+  if (ids.some(id => !material.manifest[id - 1])) return null;
   const sources = ids.map(id => material.manifest[id - 1]);
   if (sources.some(source => !normalizePublicUrl(source.url) || isUnsafeUrl(source.url)))
     return null;
