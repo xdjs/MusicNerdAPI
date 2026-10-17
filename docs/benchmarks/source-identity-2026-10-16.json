@@ -330,5 +330,372 @@
       "baseline": "about-artist",
       "candidate": "about-artist"
     }
+  ],
+  "providerExtensionHeldout": [
+    {
+      "name": "Beyoncé",
+      "arm": "candidate",
+      "ms": 3219.405083,
+      "usage": [
+        {
+          "inputTokens": 2529,
+          "inputTokenDetails": {
+            "noCacheTokens": 2529,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 544,
+          "outputTokenDetails": {
+            "textTokens": 544,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 3073
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 16,
+          "readable": false,
+          "label": "editorial",
+          "verdict": "undecided"
+        },
+        {
+          "id": 5,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 15,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 17,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 6,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 7,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        }
+      ]
+    },
+    {
+      "name": "Aphex Twin",
+      "arm": "candidate",
+      "ms": 2883.0772910000005,
+      "usage": [
+        {
+          "inputTokens": 1962,
+          "inputTokenDetails": {
+            "noCacheTokens": 1962,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 478,
+          "outputTokenDetails": {
+            "textTokens": 478,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2440
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 40,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "undecided"
+        },
+        {
+          "id": 35,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 38,
+          "readable": false,
+          "label": "editorial",
+          "verdict": "undecided"
+        },
+        {
+          "id": 39,
+          "readable": true,
+          "label": "contribution",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 42,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "undecided"
+        }
+      ]
+    },
+    {
+      "name": "Japanese Breakfast",
+      "arm": "candidate",
+      "ms": 3062.796125,
+      "usage": [
+        {
+          "inputTokens": 2215,
+          "inputTokenDetails": {
+            "noCacheTokens": 2215,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 629,
+          "outputTokenDetails": {
+            "textTokens": 629,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2844
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 77,
+          "readable": false,
+          "label": "editorial",
+          "verdict": "undecided"
+        },
+        {
+          "id": 78,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 80,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 81,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 79,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 76,
+          "readable": false,
+          "label": "editorial",
+          "verdict": "undecided"
+        }
+      ]
+    },
+    {
+      "name": "Nilüfer Yanya",
+      "arm": "candidate",
+      "ms": 3552.9395000000004,
+      "usage": [
+        {
+          "inputTokens": 2307,
+          "inputTokenDetails": {
+            "noCacheTokens": 2307,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 571,
+          "outputTokenDetails": {
+            "textTokens": 571,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 2878
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 112,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 110,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 111,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 108,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        }
+      ]
+    },
+    {
+      "name": "Hana Vu",
+      "arm": "candidate",
+      "ms": 2411.254417,
+      "usage": [
+        {
+          "inputTokens": 2990,
+          "inputTokenDetails": {
+            "noCacheTokens": 2990,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 535,
+          "outputTokenDetails": {
+            "textTokens": 535,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 3525
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 139,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 142,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 144,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 145,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 147,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 141,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        }
+      ]
+    },
+    {
+      "name": "The Ellis Court",
+      "arm": "candidate",
+      "ms": 1032.5105830000011,
+      "usage": [
+        {
+          "inputTokens": 972,
+          "inputTokenDetails": {
+            "noCacheTokens": 972,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 127,
+          "outputTokenDetails": {
+            "textTokens": 127,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 1099
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 219,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        }
+      ]
+    },
+    {
+      "name": "Wednesday",
+      "arm": "candidate",
+      "ms": 2772.576583000002,
+      "usage": [
+        {
+          "inputTokens": 2988,
+          "inputTokenDetails": {
+            "noCacheTokens": 2988,
+            "cacheReadTokens": 0
+          },
+          "outputTokens": 637,
+          "outputTokenDetails": {
+            "textTokens": 637,
+            "reasoningTokens": 0
+          },
+          "totalTokens": 3625
+        }
+      ],
+      "errors": [],
+      "decisions": [
+        {
+          "id": 244,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 245,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 236,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 238,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 240,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        },
+        {
+          "id": 241,
+          "readable": true,
+          "label": "editorial",
+          "verdict": "about-artist"
+        }
+      ]
+    }
   ]
 }

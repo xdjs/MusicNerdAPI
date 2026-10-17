@@ -12,6 +12,14 @@ export function identityAnchors(
     ...(anchor.catalog ?? [])
       .slice(0, 12)
       .map((value, i) => ({ id: `C${i}`, label: `release: ${value}`, value })),
+    ...(anchor.groups ?? [])
+      .slice(0, 12)
+      .filter(group => /^https:\/\/api\.discogs\.com\/artists\/[1-9]\d*$/.test(group.sourceUrl))
+      .map((group, i) => ({
+        id: `G${i}`,
+        label: `current/former group: ${group.name} (source: ${group.sourceUrl})`,
+        value: group.name,
+      })),
     ...(anchor.identifiers ?? []).slice(0, 12).map((label, i) => ({
       id: `A${i}`,
       label,

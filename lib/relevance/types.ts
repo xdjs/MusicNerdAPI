@@ -15,6 +15,10 @@ export type ArtistAnchor = {
   name: string;
   /** Real release and track names from their verified catalog. */
   catalog?: string[];
+  /** Catalog facts retrieved from the held provider ID, with original URLs. */
+  catalogSources?: { title: string; url: string }[];
+  /** Structured current/former group credits from the held Discogs artist ID. */
+  groups?: { name: string; sourceUrl: string }[];
   /** Confirmed accounts, e.g. "instagram: p3t3rango". */
   identifiers?: string[];
 };

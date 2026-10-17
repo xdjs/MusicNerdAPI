@@ -24,6 +24,23 @@ describe("identity evidence", () => {
       }).map(f => f.id),
     ).toEqual(["C3", "A1"]);
   });
+  it("requires a provider-backed group and a real supporting passage", () => {
+    const context = {
+      name: "Jamie Duffy",
+      catalog: [],
+      groups: [{ name: "Acumen Nation", sourceUrl: "https://api.discogs.com/artists/164081" }],
+    };
+    const row = { ...positive, evidence: [{ anchor: "G0", quote: text }] };
+    const verdicts = new Map<string, RelevanceVerdict>([[page.url, "undecided"]]);
+    applyVerdicts([row], [page], verdicts, context);
+    expect(verdicts.get(page.url)).toBe("about-artist");
+    expect(
+      identityAnchors({
+        ...context,
+        groups: [{ name: "Acumen Nation", sourceUrl: "https://example.com/generated-bio" }],
+      }),
+    ).toEqual([]);
+  });
   it("accepts coverage supported by a real supplied anchor and passage", () => {
     expect(decide([positive])).toBe("about-artist");
     expect(decide([{ ...positive, v: "lists" }])).toBe("lists-artist");

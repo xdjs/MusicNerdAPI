@@ -20,7 +20,7 @@ export const VERDICT_BY_TOKEN: Record<string, RelevanceVerdict> = {
 export const RELEVANCE_INSTRUCTION = `Classify each numbered source for the ONE target artist defined by ARTIST ANCHOR. People share names. Never choose the better-known artist, infer the target from the majority of pages, or override the supplied anchors using remembered biography.
 
 First decide identity independently of article quality:
-- match: this page connects its subject to at least one numbered DISTINGUISHING FACT (C = verified catalog, A = confirmed account). Quote the exact supporting passage from this page's excerpt and give that fact's ID. A shared name, self-titled release, mere incidental mention of another artist's release, or an unrelated link is NOT evidence. The passage must connect the fact to the person covered. If evidence identifies a different person, do not match even if they share a title/handle.
+- match: this page connects its subject to at least one numbered DISTINGUISHING FACT (C = verified catalog, A = confirmed account, G = provider-credited current or former group). Quote the exact supporting passage from this page's excerpt and give that fact's ID. A shared name, self-titled release, mere incidental mention of another artist's release or group, or an unrelated link is NOT evidence. The passage must connect the fact to the person covered. If evidence identifies a different person, do not match even if they share a title/handle.
 - different: the page clearly concerns someone else or contradicts the target identity.
 - unresolved: there is not enough evidence to identify the person. Missing anchors or an absent supporting passage MUST be unresolved. Do not guess. An unrelated release is not automatically a contradiction; unresolved is appropriate.
 

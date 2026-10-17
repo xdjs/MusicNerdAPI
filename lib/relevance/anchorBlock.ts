@@ -13,6 +13,13 @@ export function anchorBlock(anchor: ArtistAnchor): string {
     lines.push(`VERIFIED RELEASES: ${anchor.catalog.slice(0, 12).join(", ")}`);
   if (anchor.identifiers?.length)
     lines.push(`CONFIRMED ACCOUNTS: ${anchor.identifiers.slice(0, 12).join(", ")}`);
+  if (anchor.catalogSources?.length)
+    lines.push(
+      `CATALOG PROVENANCE: ${anchor.catalogSources
+        .slice(0, 12)
+        .map(f => `${f.title} (${f.url})`)
+        .join("; ")}`,
+    );
   lines.push(
     `DISTINGUISHING FACTS:\n${
       identityAnchors(anchor)
