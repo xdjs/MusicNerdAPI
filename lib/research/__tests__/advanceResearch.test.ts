@@ -40,6 +40,7 @@ describe("advanceResearch", () => {
     await advanceResearch({ budgetMs: 50_000, artistId: "artist-1", excludeJobIds: ["x"] });
     expect(claim).toHaveBeenCalledWith({
       kinds: [
+        "interview_prepare",
         "social_ingest",
         "caption_extract",
         "lore_refresh",

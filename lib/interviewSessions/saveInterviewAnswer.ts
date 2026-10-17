@@ -1,3 +1,4 @@
+import { queueInterviewPreparationInTransaction } from "@/lib/interviewPreparation/queueInterviewPreparationInTransaction";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/db";
@@ -20,8 +21,10 @@ export async function saveInterviewAnswer(
   return db.transaction(async tx => {
     await lockArtistRow(tx, artistId);
     await authorizeArtistKnowledge(tx, artistId, userId);
-    const [row] = await tx.execute<QuestionRow & { session_state: string | null }>(
-      sql`select a.*,e.ordinal,e.evidence_references,s.state as session_state from artist_interview_answers a left join artist_interview_question_evidence e on e.answer_id=a.id left join artist_interview_sessions s on s.id=e.session_id where a.artist_id=${artistId}::uuid and a.id=${answerId}::uuid for update of a`,
+    const [row] = await tx.execute<
+      QuestionRow & { session_state: string | null; session_id: string | null }
+    >(
+      sql`select a.*,e.ordinal,e.evidence_references,e.session_id,s.state as session_state from artist_interview_answers a left join artist_interview_question_evidence e on e.answer_id=a.id left join artist_interview_sessions s on s.id=e.session_id where a.artist_id=${artistId}::uuid and a.id=${answerId}::uuid for update of a`,
     );
     if (!row) throw new KnowledgeError("not_found", 404, "Offered question unavailable");
     const current = toInterviewQuestion(row);
@@ -41,6 +44,13 @@ export async function saveInterviewAnswer(
       sql`update artist_interview_answers set answer=${input.answer},source=${input.answer === null ? "skipped" : "interview"},created_at=clock_timestamp() where id=${answerId}::uuid and artist_id=${artistId}::uuid returning *`,
     );
     if (!saved) throw new Error("Answer was not persisted");
+    if (row.session_id && row.ordinal && row.ordinal < 3) {
+      const [optedIn] = await tx.execute<{ id: string }>(
+        sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${row.session_id} and state->>'userId'=${userId} limit 1`,
+      );
+      if (optedIn)
+        await queueInterviewPreparationInTransaction(tx, artistId, userId, row.session_id);
+    }
     return {
       status: "ok" as const,
       question: toInterviewQuestion({
