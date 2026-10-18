@@ -454,3 +454,72 @@ it("stops empty automatic preparation after24h and reclaims the same job only wh
   expect(await bootstrapClaimInterviewPreparation(resumed!)).toBe(true);
   expect((await getInterviewSession(artist, user)).session!.questions).toHaveLength(0);
 });
+
+it("explicit Resume upgrades a legacy offered bank without changing existing offers or answers", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  const bank = [0, 1, 2].map(index => ({
+    status: "available",
+    candidate: { ...input, question: `Legacy distinct question ${index + 1}?` },
+  }));
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({ stage: "ready", bankComplete: false, bank, totalCount: 3 }),
+      queued.preparation.jobId,
+    ],
+  );
+  const original = await consumeInterviewPreparation(artist, user, session!.id);
+  expect(original.questions).toHaveLength(1);
+  await client.query("update artist_research_jobs set state=state || $1::jsonb where id=$2", [
+    JSON.stringify({ bankComplete: true, batchOffered: false }),
+    queued.preparation.jobId,
+  ]);
+  expect((await getInterviewSession(artist, user)).session!.questions).toHaveLength(1);
+  expect((await getInterviewSession(artist, user)).session!.needsPreparedBankResume).toBe(true);
+  const resumed = await consumeInterviewPreparation(artist, user, session!.id);
+  expect(resumed.questions).toHaveLength(3);
+  expect((await getInterviewSession(artist, user)).session!.needsPreparedBankResume).toBe(false);
+  expect(resumed.question).toEqual(original.question);
+  const replay = await consumeInterviewPreparation(artist, user, session!.id);
+  expect(replay.questions).toEqual(resumed.questions);
+  for (const question of resumed.questions)
+    await saveInterviewAnswer(artist, user, question.id, {
+      expectedRevision: question.revision,
+      answer: `Exact response ${question.ordinal}`,
+    });
+  const jobs = await client.query<{ state: { stage: string; batchOffered: boolean } }>(
+    "select state from artist_research_jobs",
+  );
+  expect(jobs.rows).toHaveLength(1);
+  expect(jobs.rows[0].state).toMatchObject({ stage: "consumed", batchOffered: true });
+});
+it("does not upgrade a legacy bank after mandatory memory changes", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  const bank = [0, 1, 2].map(index => ({
+    status: "available",
+    candidate: { ...input, question: `Legacy question ${index + 1}?` },
+  }));
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({ stage: "ready", bankComplete: false, bank, totalCount: 3 }),
+      queued.preparation.jobId,
+    ],
+  );
+  const original = await consumeInterviewPreparation(artist, user, session!.id);
+  await client.query("update artist_research_jobs set state=state || $1::jsonb where id=$2", [
+    JSON.stringify({ bankComplete: true, batchOffered: false }),
+    queued.preparation.jobId,
+  ]);
+  await client.query(
+    "update artist_interview_answers set answer='Changed exact prior answer' where id=$1",
+    [prior],
+  );
+  const resumed = await consumeInterviewPreparation(artist, user, session!.id);
+  expect(resumed.question).toEqual(original.question);
+  expect(resumed.questions).toHaveLength(1);
+});

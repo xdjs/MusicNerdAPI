@@ -27,16 +27,27 @@ export async function consumeInterviewPreparation(
         "Your instructions changed. Finish this sitting before preparing another.",
       );
     const offered = scope.session.questions.find(q => q.state === "offered");
-    if (offered && scope.claimId === state.claimId)
+    // Explicit Resume can upgrade a checked legacy bank without a new model call.
+    // Merely offering its current question does not change mandatory memory.
+    const upgradeLegacyBank =
+      !!offered &&
+      state.bankComplete &&
+      !state.batchOffered &&
+      state.stage === "consumed" &&
+      state.ordinal === offered.ordinal &&
+      scope.claimId === state.claimId &&
+      scope.memorySnapshotId === state.memorySnapshotId &&
+      state.bank?.some(item => item.status === "available");
+    if (offered && scope.claimId === state.claimId && !upgradeLegacyBank)
       return { status: "ok" as const, question: offered, questions: scope.session.questions };
-    if (state.stage === "consumed") {
+    if (state.stage === "consumed" && !upgradeLegacyBank) {
       const existing = scope.session.questions.find(q => q.ordinal === state.ordinal);
       if (existing)
         return { status: "ok" as const, question: existing, questions: scope.session.questions };
     }
     if (
       scope.claimId !== state.claimId ||
-      scope.ordinal !== state.ordinal ||
+      (!upgradeLegacyBank && scope.ordinal !== state.ordinal) ||
       scope.memorySnapshotId !== state.memorySnapshotId ||
       state.stage === "stale"
     )
@@ -47,15 +58,15 @@ export async function consumeInterviewPreparation(
       );
     const item = state.bank?.find(item => item.status === "available");
     const candidate = item?.candidate ?? (!state.bank ? state.candidate : undefined);
-    if (state.stage !== "ready" || !candidate)
+    if ((!upgradeLegacyBank && state.stage !== "ready") || !candidate)
       throw new KnowledgeError("preparation_not_ready", 409, "The next question is not ready yet.");
     const questions = [...scope.session.questions];
     const candidates =
       state.bankComplete && state.bank
         ? state.bank.filter(item => item.status === "available")
-        : [{ candidate, status: "available" as const }];
+        : [item ?? { candidate, status: "available" as const }];
     for (const [index, entry] of candidates.entries()) {
-      const ordinal = state.ordinal + index;
+      const ordinal = (upgradeLegacyBank ? scope.ordinal : state.ordinal) + index;
       if (ordinal > 3)
         throw new KnowledgeError("preparation_stale", 409, "Interview bank exceeds this sitting.");
       const result = await saveInterviewOfferInTransaction(

@@ -19,6 +19,12 @@ export async function readInterviewSessionState(
         sql`select a.*,e.ordinal,e.evidence_references from artist_interview_question_evidence e join artist_interview_answers a on a.id=e.answer_id and a.artist_id=e.artist_id where e.session_id=${row.id}::uuid and e.artist_id=${artistId}::uuid order by e.ordinal limit 4`,
       )
     : [];
+  const [preparedBank] =
+    row && row.state === "active" && questions.some(question => question.source === "offered")
+      ? await tx.execute<{ needs_resume: boolean }>(
+          sql`select (state->>'bankComplete'='true' and coalesce(state->>'batchOffered','false')<>'true' and coalesce(state->>'interviewInvalidated','false')<>'true' and state->>'stage'='consumed' and exists(select 1 from jsonb_array_elements(state->'bank') item where item->>'status'='available')) as needs_resume from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${row.id}::text order by created_at desc limit 1`,
+        )
+      : [];
   const legacy = await tx.execute<QuestionRow>(
     sql`select a.* from artist_interview_answers a where a.artist_id=${artistId}::uuid and a.source='offered' and not exists(select 1 from artist_interview_question_evidence e where e.answer_id=a.id) order by a.offered_at,a.id limit 4`,
   );
@@ -36,6 +42,7 @@ export async function readInterviewSessionState(
           sitting: row.sitting,
           state: row.state,
           interviewInvalidated: !!row.interview_invalidated,
+          needsPreparedBankResume: !!preparedBank?.needs_resume,
           createdAt: new Date(row.created_at).toISOString(),
           closedAt: row.closed_at ? new Date(row.closed_at).toISOString() : null,
           questions: questions.map(toInterviewQuestion),
