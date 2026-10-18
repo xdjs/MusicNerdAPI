@@ -174,6 +174,122 @@ it("rolls promotion back if audit recording fails", async () => {
     await client.exec("alter table artist_activity_events drop constraint reject_review");
   }
 });
+
+// PGlite serializes transactions on one connection. These overlapping service
+// invocations verify decision/idempotency outcomes, not independent-connection
+// PostgreSQL lock contention or a deployed HTTP race.
+it("settles overlapping approvals with one promotion, audit and refresh", async () => {
+  const { reference, candidate } = await retained();
+  const results = await Promise.all([
+    reviewResearchDiscovery(artist, user, candidate.id, reference.revision, "approve"),
+    reviewResearchDiscovery(artist, user, candidate.id, reference.revision, "approve"),
+  ]);
+  expect(results.map(result => result.candidate.curation)).toEqual(["approved", "approved"]);
+  expect(
+    (await client.query("select status,extracted_text from artist_vault_sources")).rows,
+  ).toEqual([{ status: "approved", extracted_text: original.text }]);
+  expect(
+    (
+      await client.query(
+        "select action from artist_activity_events where action like 'research_discovery_%'",
+      )
+    ).rows,
+  ).toEqual([{ action: "research_discovery_approve" }]);
+  expect(
+    (await client.query("select kind from artist_research_jobs where kind='lore_refresh'")).rows,
+  ).toEqual([{ kind: "lore_refresh" }]);
+});
+
+it.each([
+  ["approve", "decline"],
+  ["decline", "approve"],
+] as const)("settles overlapping %s/%s reviews without mixed decisions", async (first, second) => {
+  const { reference, candidate } = await retained();
+  const results = await Promise.allSettled([
+    reviewResearchDiscovery(artist, user, candidate.id, reference.revision, first),
+    reviewResearchDiscovery(artist, user, candidate.id, reference.revision, second),
+  ]);
+  const accepted = results.filter(result => result.status === "fulfilled");
+  const rejected = results.filter(result => result.status === "rejected");
+  expect(accepted).toHaveLength(1);
+  expect(rejected).toHaveLength(1);
+  expect(rejected[0].reason).toMatchObject({ status: 409, code: "review_changed" });
+  const curation = accepted[0].value.candidate.curation;
+  const approved = curation === "approved";
+  expect(["approved", "declined"]).toContain(curation);
+  expect(
+    (await client.query("select curation,reviewed_revision from artist_research_candidates")).rows,
+  ).toEqual([{ curation, reviewed_revision: reference.revision }]);
+  expect(
+    (
+      await client.query(
+        "select action from artist_activity_events where action like 'research_discovery_%'",
+      )
+    ).rows,
+  ).toEqual([{ action: approved ? "research_discovery_approve" : "research_discovery_decline" }]);
+  expect((await client.query("select id from artist_vault_sources")).rows).toHaveLength(
+    approved ? 1 : 0,
+  );
+  expect(
+    (await client.query("select id from artist_research_jobs where kind='lore_refresh'")).rows,
+  ).toHaveLength(approved ? 1 : 0);
+});
+
+it("denies the same original after fixture claim revocation without changing retained evidence", async () => {
+  const { reference, candidate } = await retained();
+  const evidenceId = reference.sourceId.split(":")[1];
+  const readAsOwner = () =>
+    readResearchEvidence(
+      artist,
+      { kind: "artist", userId: user },
+      evidenceId,
+      reference.revision,
+      0,
+      4000,
+    );
+  expect((await readAsOwner()).passage).toMatchObject({
+    text: original.text,
+    revision: reference.revision,
+    curation: "pending",
+  });
+  await reviewResearchDiscovery(artist, user, candidate.id, reference.revision, "approve");
+  expect((await readAsOwner()).passage.curation).toBe("approved");
+  expect(
+    (
+      await readResearchEvidence(
+        artist,
+        { kind: "service" },
+        evidenceId,
+        reference.revision,
+        0,
+        4000,
+      )
+    ).passage.text,
+  ).toBe(original.text);
+
+  const retainedState = async () =>
+    (
+      await client.query(`select jsonb_build_object(
+    'candidates',(select jsonb_agg(to_jsonb(c) order by id) from artist_research_candidates c),
+    'evidence',(select jsonb_agg(to_jsonb(e) order by id) from artist_research_evidence e),
+    'vault',(select jsonb_agg(to_jsonb(v) order by id) from artist_vault_sources v),
+    'jobs',(select jsonb_agg(to_jsonb(j) order by id) from artist_research_jobs j),
+    'activity',(select jsonb_agg(to_jsonb(a) order by id) from artist_activity_events a)
+  ) as snapshot`)
+    ).rows;
+  const before = await retainedState();
+  // Local disposable fixture only: never change a live artist's access to test denial.
+  await client.exec("update artist_claims set status='rejected'");
+  await expect(readAsOwner()).rejects.toMatchObject({ status: 403, code: "forbidden" });
+  await expect(
+    readResearchEvidence(artist, { kind: "service" }, evidenceId, reference.revision, 0, 4000),
+  ).rejects.toMatchObject({ status: 404, code: "not_found" });
+  await expect(
+    reviewResearchDiscovery(artist, user, candidate.id, reference.revision, "approve"),
+  ).rejects.toMatchObject({ status: 403, code: "forbidden" });
+  expect(await retainedState()).toEqual(before);
+});
+
 it("blocks review after ownership changes and blocks a declined original from public readers", async () => {
   const { reference, candidate } = await retained();
   await client.exec("update artist_claims set status='rejected'");
