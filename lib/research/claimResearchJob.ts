@@ -44,6 +44,13 @@ export async function claimResearchJob(opts: {
        where id = (
          select candidate.id from artist_research_jobs candidate
           where (candidate.status in ('pending', 'running') or (
+            candidate.status='failed' and candidate.kind='interview_prepare'
+            and candidate.state->>'mode'='claim_preparation'
+            and candidate.last_error in ('claim_preparation_no_readable_originals','claim_preparation_research_not_ready')
+            and not exists(select 1 from artist_research_jobs live where live.artist_id=candidate.artist_id and live.kind='interview_prepare' and live.status in ('pending','running'))
+            and (exists(select 1 from artist_vault_sources source where source.artist_id=candidate.artist_id and source.status='approved' and char_length(coalesce(source.extracted_text,''))>=80)
+              or exists(select 1 from artist_social_posts post where post.artist_id=candidate.artist_id and post.is_own_post=true and char_length(coalesce(post.caption,''))>=80))
+          ) or (
             candidate.status = 'queued' and candidate.kind = 'source_extract'
             and candidate.state->>'version' = '2'
             and not exists (
@@ -53,7 +60,7 @@ export async function claimResearchJob(opts: {
             )
           ))
             and (attempts < ${MAX_ATTEMPTS} or (candidate.kind='spotify_match' and candidate.status='running'))
-            and (candidate.kind<>'spotify_match' or case
+            and (candidate.kind not in ('spotify_match','interview_prepare') or case
               when jsonb_typeof(candidate.state->'nextAttemptAtMs')='number'
               then (candidate.state->>'nextAttemptAtMs')::numeric<=extract(epoch from now())*1000
               else true end)

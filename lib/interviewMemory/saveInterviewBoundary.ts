@@ -27,7 +27,14 @@ export async function saveInterviewBoundary(artistId: string, userId: string, va
           409,
           "This request already saved a different instruction",
         );
-      return { status: "ok" as const, boundary: toInterviewBoundary(previous) };
+      const [stopped] = await tx.execute<{ invalidated: boolean }>(
+        sql`select exists(select 1 from artist_research_jobs j join artist_interview_sessions s on s.id::text=j.state->>'sessionId' where j.artist_id=${artistId}::uuid and j.kind='interview_prepare' and j.state->>'interviewInvalidated'='true' and s.state='active') as invalidated`,
+      );
+      return {
+        status: "ok" as const,
+        boundary: toInterviewBoundary(previous),
+        interviewInvalidated: !!stopped?.invalidated,
+      };
     }
     const [origin] = await tx.execute<{ id: string; sitting: number; question: string }>(
       sql`select id,coalesce(sitting,1) as sitting,question from artist_interview_answers where artist_id=${artistId}::uuid and question_key=${input.questionKey} for share`,
@@ -62,6 +69,13 @@ export async function saveInterviewBoundary(artistId: string, userId: string, va
       sql`insert into artist_interview_boundaries(artist_id,request_id,wording,scope,sitting,origin_answer_id,origin_question_key,origin_question,created_by,activity_id)values(${artistId}::uuid,${input.requestId}::uuid,${input.wording},${input.scope},${origin.sitting},${origin.id}::uuid,${input.questionKey},${origin.question},${userId}::uuid,${activityId}::uuid) returning *`,
     );
     if (!saved) throw new Error("Boundary was not persisted");
-    return { status: "ok" as const, boundary: toInterviewBoundary(saved) };
+    const invalidated = await tx.execute<{ id: string }>(
+      sql`update artist_research_jobs j set state=jsonb_set(state,'{interviewInvalidated}','true'),updated_at=clock_timestamp() where j.artist_id=${artistId}::uuid and j.kind='interview_prepare' and j.state->>'batchOffered'='true' and exists(select 1 from artist_interview_sessions s where s.id::text=j.state->>'sessionId' and s.artist_id=${artistId}::uuid and s.state='active' and (${input.scope}='until_retracted' or s.sitting=${origin.sitting})) returning id`,
+    );
+    return {
+      status: "ok" as const,
+      boundary: toInterviewBoundary(saved),
+      interviewInvalidated: invalidated.length > 0,
+    };
   });
 }

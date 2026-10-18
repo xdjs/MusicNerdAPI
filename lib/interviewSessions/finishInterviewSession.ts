@@ -1,3 +1,4 @@
+import { queueNextInterviewInTransaction } from "@/lib/interviewPreparation/queueNextInterviewInTransaction";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/db";
@@ -26,6 +27,7 @@ export async function finishInterviewSession(artistId: string, userId: string, s
         sql`select id from artist_claims where artist_id=${artistId}::uuid and status='approved' limit 1`,
       );
       await queueLoreRefreshInTransaction(tx, artistId, claim?.id ?? null);
+      await queueNextInterviewInTransaction(tx, artistId, userId, sessionId, state.session.sitting);
     }
     return readInterviewSessionState(tx, artistId, sessionId);
   });
