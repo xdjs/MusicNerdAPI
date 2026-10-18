@@ -23,7 +23,13 @@ export async function queueInterviewPreparationInTransaction(
   const jobs = await tx.execute<{ id: string; status: string; state: unknown }>(
     sql`select id,status,state from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' order by created_at desc limit 10`,
   );
+  let automaticJobId: string | undefined;
   for (const job of jobs) {
+    const raw = job.state as Record<string, unknown>;
+    if (raw?.mode === "claim_preparation") {
+      if (raw.claimId === scope.claimId && raw.userId === userId) automaticJobId ??= job.id;
+      continue;
+    }
     const state = parsePreparationState(job.state);
     if (
       state.claimId === scope.claimId &&
@@ -101,6 +107,21 @@ export async function queueInterviewPreparationInTransaction(
     inFlight: false,
     createdAt: new Date().toISOString(),
   };
+  if (automaticJobId) {
+    await tx.execute(
+      sql`update artist_research_jobs set status='pending',state=${JSON.stringify(state)}::jsonb,attempts=0,claimed_at=null,updated_at=clock_timestamp(),last_error=null where id=${automaticJobId}::uuid`,
+    );
+    return {
+      status: "ok" as const,
+      preparation: {
+        jobId: automaticJobId,
+        status: "pending" as const,
+        readyCount: 0,
+        totalCount: state.totalCount,
+        phase: "preparing" as const,
+      },
+    };
+  }
   const [job] = await tx.execute<{ id: string }>(
     sql`insert into artist_research_jobs(artist_id,kind,status,state) values(${artistId}::uuid,'interview_prepare','pending',${JSON.stringify(state)}::jsonb) returning id`,
   );

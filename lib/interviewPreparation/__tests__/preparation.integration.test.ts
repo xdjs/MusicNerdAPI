@@ -40,6 +40,8 @@ beforeAll(async () => {
   await client.exec(`
 create table artists(id uuid primary key,name text,bio text);
 create table users(id uuid primary key,is_admin boolean);
+create table artist_vault_sources(id uuid primary key default gen_random_uuid(),artist_id uuid,status text,extracted_text text);
+create table artist_social_posts(id uuid primary key default gen_random_uuid(),artist_id uuid,is_own_post boolean,caption text);
 create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text);
 create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
 create table artist_interview_answers(id uuid primary key default gen_random_uuid(),artist_id uuid,question_key text,question text,answer text,source text,sitting int,offered_at timestamptz default now(),created_at timestamptz default now(),unique(artist_id,question_key));
@@ -54,7 +56,7 @@ insert into artists values('${artist}','Artist',null);insert into users values('
 }, 30000);
 beforeEach(async () => {
   await client.exec(
-    `delete from artist_interview_question_evidence;delete from artist_interview_sessions;delete from artist_research_jobs;delete from artist_interview_answers;delete from artist_doc_corrections;delete from artist_interview_boundaries;delete from artist_claims;delete from artist_activity_events;insert into artist_claims values('${requestId}','${artist}','${user}','approved');insert into artist_interview_answers(id,artist_id,question_key,question,answer,source,sitting)values('${prior}','${artist}','first','What shaped the sound?',' I did not intend that sound. 🥁 ','interview',1);`,
+    `delete from artist_vault_sources;delete from artist_social_posts;delete from artist_interview_question_evidence;delete from artist_interview_sessions;delete from artist_research_jobs;delete from artist_interview_answers;delete from artist_doc_corrections;delete from artist_interview_boundaries;delete from artist_claims;delete from artist_activity_events;insert into artist_claims values('${requestId}','${artist}','${user}','approved');insert into artist_interview_answers(id,artist_id,question_key,question,answer,source,sitting)values('${prior}','${artist}','first','What shaped the sound?',' I did not intend that sound. 🥁 ','interview',1);`,
   );
 });
 afterAll(async () => client.close());
@@ -318,5 +320,137 @@ it("rolls back the entire offered bank if any candidate evidence changed", async
   await expect(consumeInterviewPreparation(artist, user, session!.id)).rejects.toMatchObject({
     code: "revision_changed",
   });
+  expect((await getInterviewSession(artist, user)).session!.questions).toHaveLength(0);
+});
+
+async function automaticJob() {
+  const state = {
+    version: 1,
+    mode: "claim_preparation",
+    claimId: requestId,
+    userId: user,
+    createdAt: new Date().toISOString(),
+  };
+  const rows = await client.query<{ id: string; updated_at: string }>(
+    "insert into artist_research_jobs(artist_id,kind,status,state) values($1,'interview_prepare','running',$2::jsonb) returning id,updated_at::text",
+    [artist, JSON.stringify(state)],
+  );
+  return {
+    id: rows.rows[0].id,
+    updatedAt: rows.rows[0].updated_at,
+    artistId: artist,
+    kind: "interview_prepare",
+    status: "running",
+    state,
+    cursor: 0,
+    total: null,
+    attempts: 0,
+    activityId: null,
+  } as import("@/lib/research/types").ResearchJob;
+}
+it("automatically prepares privately only when claim research has readable evidence", async () => {
+  const { bootstrapClaimInterviewPreparation } =
+    await import("../bootstrapClaimInterviewPreparation");
+  const waiting = await automaticJob();
+  expect(await bootstrapClaimInterviewPreparation(waiting)).toBe(false);
+  expect((await getInterviewSession(artist, user)).session).toBeNull();
+  const pending = await client.query<{ state: { nextAttemptAtMs: number } }>(
+    "select state from artist_research_jobs where id=$1",
+    [waiting.id],
+  );
+  expect(pending.rows[0].state.nextAttemptAtMs).toBeGreaterThan(Date.now());
+  await client.query(
+    "insert into artist_social_posts(artist_id,is_own_post,caption)values($1,true,$2)",
+    [
+      artist,
+      "An exact artist-owned caption describing the recording process and the concrete creative choices behind this release.",
+    ],
+  );
+  const lease = await client.query<{ updated_at: string }>(
+    "update artist_research_jobs set status='running',updated_at=clock_timestamp() where id=$1 returning updated_at::text",
+    [waiting.id],
+  );
+  waiting.updatedAt = lease.rows[0].updated_at;
+  expect(await bootstrapClaimInterviewPreparation(waiting)).toBe(true);
+  expect(waiting.state).toMatchObject({
+    stage: "preparing",
+    totalCount: 3,
+    claimId: requestId,
+    userId: user,
+  });
+  const restored = await getInterviewSession(artist, user);
+  expect(restored.session!.questions).toEqual([]);
+  expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
+    { n: 1 },
+  ]);
+});
+it("does not bootstrap a revoked claim", async () => {
+  const { bootstrapClaimInterviewPreparation } =
+    await import("../bootstrapClaimInterviewPreparation");
+  const job = await automaticJob();
+  await client.exec("delete from artist_claims");
+  expect(await bootstrapClaimInterviewPreparation(job)).toBe(false);
+  expect(
+    (await client.query("select count(*)::int n from artist_interview_sessions")).rows,
+  ).toEqual([{ n: 0 }]);
+});
+it("manual preparation adopts the same pending automatic claim job", async () => {
+  const job = await automaticJob();
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const prepared = await queue(session!.id);
+  expect(prepared.preparation.jobId).toBe(job.id);
+  const { bootstrapClaimInterviewPreparation } =
+    await import("../bootstrapClaimInterviewPreparation");
+  expect(await bootstrapClaimInterviewPreparation(job)).toBe(false);
+  expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
+    { n: 1 },
+  ]);
+});
+
+it("prepares with readable artist context despite unrelated ongoing research", async () => {
+  const { bootstrapClaimInterviewPreparation } =
+    await import("../bootstrapClaimInterviewPreparation");
+  const job = await automaticJob();
+  await client.query(
+    "insert into artist_social_posts(artist_id,is_own_post,caption)values($1,true,$2)",
+    [
+      artist,
+      "An exact artist-owned caption describing the recording process and the concrete creative choices behind this release.",
+    ],
+  );
+  await client.query(
+    "insert into artist_research_jobs(artist_id,kind,status,state)values($1,'source_search','pending','{}')",
+    [artist],
+  );
+  expect(await bootstrapClaimInterviewPreparation(job)).toBe(true);
+  expect((await getInterviewSession(artist, user)).session?.questions).toEqual([]);
+});
+it("stops empty automatic preparation after24h and reclaims the same job only when evidence becomes usable", async () => {
+  const { bootstrapClaimInterviewPreparation } =
+    await import("../bootstrapClaimInterviewPreparation");
+  const { claimResearchJob } = await import("@/lib/research/claimResearchJob");
+  const job = await automaticJob();
+  job.state.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  await client.query("update artist_research_jobs set state=$1::jsonb where id=$2", [
+    JSON.stringify(job.state),
+    job.id,
+  ]);
+  expect(await bootstrapClaimInterviewPreparation(job)).toBe(false);
+  expect(job.state.stoppedReason).toBe("claim_preparation_no_readable_originals");
+  expect(await claimResearchJob({ kinds: ["interview_prepare"], artistId: artist })).toBeNull();
+  await client.query(
+    "insert into artist_vault_sources(artist_id,status,extracted_text)values($1,'pending',$2)",
+    [
+      artist,
+      "A readable original describing actual recording methods and the musical choices behind the artist releases.",
+    ],
+  );
+  expect(await claimResearchJob({ kinds: ["interview_prepare"], artistId: artist })).toBeNull();
+  await client.query("update artist_vault_sources set status='approved' where artist_id=$1", [
+    artist,
+  ]);
+  const resumed = await claimResearchJob({ kinds: ["interview_prepare"], artistId: artist });
+  expect(resumed?.id).toBe(job.id);
+  expect(await bootstrapClaimInterviewPreparation(resumed!)).toBe(true);
   expect((await getInterviewSession(artist, user)).session!.questions).toHaveLength(0);
 });

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { authorizeArtistKnowledge } from "@/lib/knowledge/authorizeArtistKnowledge";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import type { TransactionDb } from "@/lib/ownership/types";
-/** Paid preparation is an approved claimant opt-in; admin status alone is insufficient. */
+/** Preparation belongs to the approved claimant; admin status alone is insufficient. */
 export async function authorizeInterviewPreparation(
   tx: TransactionDb,
   artistId: string,

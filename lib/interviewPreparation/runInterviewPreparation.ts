@@ -1,3 +1,4 @@
+import { bootstrapClaimInterviewPreparation } from "./bootstrapClaimInterviewPreparation";
 import { getInterviewFailureDiagnostic } from "./getInterviewFailureDiagnostic";
 import { getInterviewModelOutputDiagnostic } from "./getInterviewModelOutputDiagnostic";
 import { db } from "@/lib/db/db";
@@ -16,6 +17,14 @@ export async function runInterviewPreparation(
   job: ResearchJob,
   deadline: number,
 ): Promise<SliceOutcome> {
+  if (job.state.mode === "claim_preparation" && !(await bootstrapClaimInterviewPreparation(job)))
+    return {
+      done: !!job.state.stoppedReason,
+      waiting: !job.state.stoppedReason,
+      progress: job.state.stoppedReason
+        ? "Private preparation awaits usable artist research"
+        : "Waiting for artist research",
+    };
   const state = parsePreparationState(job.state);
   const stale = { done: false, waiting: true, progress: "Preparation lease changed" };
   const finish = async (waiting = false) =>

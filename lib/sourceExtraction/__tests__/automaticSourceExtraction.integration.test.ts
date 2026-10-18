@@ -67,6 +67,7 @@ beforeAll(async () => {
   await client.exec(`
  create function uuid_generate_v4() returns uuid language sql as 'select gen_random_uuid()';
  create table artists(id uuid primary key);
+ create table artist_social_posts(id uuid primary key,artist_id uuid,is_own_post boolean,caption text);
  create table users(id uuid primary key,is_admin boolean,privy_user_id text);
  create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text,reference_code text,created_at timestamptz,updated_at timestamptz);
  create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
