@@ -9,8 +9,8 @@ export async function readInterviewSessionState(
   artistId: string,
   sessionId?: string,
 ) {
-  const [row] = await tx.execute<SessionRow>(
-    sql`select * from artist_interview_sessions where artist_id=${artistId}::uuid ${sessionId ? sql`and id=${sessionId}::uuid` : sql``} order by sitting desc limit 1`,
+  const [row] = await tx.execute<SessionRow & { interview_invalidated?: boolean }>(
+    sql`select *,exists(select 1 from artist_research_jobs j where j.artist_id=artist_interview_sessions.artist_id and j.kind='interview_prepare' and j.state->>'sessionId'=artist_interview_sessions.id::text and j.state->>'interviewInvalidated'='true') as interview_invalidated from artist_interview_sessions where artist_id=${artistId}::uuid ${sessionId ? sql`and id=${sessionId}::uuid` : sql``} order by sitting desc limit 1`,
   );
   if (sessionId && !row)
     throw new KnowledgeError("not_found", 404, "Interview session unavailable");
@@ -35,6 +35,7 @@ export async function readInterviewSessionState(
           id: row.id,
           sitting: row.sitting,
           state: row.state,
+          interviewInvalidated: !!row.interview_invalidated,
           createdAt: new Date(row.created_at).toISOString(),
           closedAt: row.closed_at ? new Date(row.closed_at).toISOString() : null,
           questions: questions.map(toInterviewQuestion),

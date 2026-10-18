@@ -11,6 +11,8 @@ export type PreparationState = {
     answerId?: string;
   }>;
   bankComplete?: boolean;
+  batchOffered?: boolean;
+  interviewInvalidated?: boolean;
   claimId: string;
   userId: string;
   sessionId: string;

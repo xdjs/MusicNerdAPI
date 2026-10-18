@@ -18,6 +18,8 @@ export function parsePreparationState(value: unknown): PreparationState {
         .max(3)
         .optional(),
       bankComplete: z.boolean().optional(),
+      batchOffered: z.boolean().optional(),
+      interviewInvalidated: z.boolean().optional(),
       claimId: z.uuid(),
       userId: z.uuid(),
       sessionId: z.uuid(),

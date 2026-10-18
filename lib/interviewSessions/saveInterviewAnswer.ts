@@ -30,6 +30,17 @@ export async function saveInterviewAnswer(
     const current = toInterviewQuestion(row);
     if (current.state !== "offered" && current.answer === input.answer)
       return { status: "ok" as const, question: current };
+    if (row.session_id) {
+      const [invalidated] = await tx.execute<{ invalidated: boolean }>(
+        sql`select exists(select 1 from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${row.session_id} and state->>'interviewInvalidated'='true') as invalidated`,
+      );
+      if (invalidated?.invalidated)
+        throw new KnowledgeError(
+          "interview_invalidated",
+          409,
+          "Your instructions changed. Finish this sitting before preparing another.",
+        );
+    }
     if (
       current.state !== "offered" ||
       current.revision !== input.expectedRevision ||
@@ -45,10 +56,10 @@ export async function saveInterviewAnswer(
     );
     if (!saved) throw new Error("Answer was not persisted");
     if (row.session_id && row.ordinal && row.ordinal < 3) {
-      const [optedIn] = await tx.execute<{ id: string }>(
-        sql`select id from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${row.session_id} and state->>'userId'=${userId} limit 1`,
+      const [optedIn] = await tx.execute<{ id: string; batch_offered: boolean }>(
+        sql`select id,coalesce((state->>'batchOffered')::boolean,false) as batch_offered from artist_research_jobs where artist_id=${artistId}::uuid and kind='interview_prepare' and state->>'sessionId'=${row.session_id} and state->>'userId'=${userId} order by created_at desc limit 1`,
       );
-      if (optedIn)
+      if (optedIn && !optedIn.batch_offered)
         await queueInterviewPreparationInTransaction(tx, artistId, userId, row.session_id);
     }
     return {

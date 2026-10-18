@@ -174,7 +174,7 @@ it("will not prepare for a finished sitting", async () => {
   );
   await expect(queue(session!.id)).rejects.toMatchObject({ status: 409 });
 });
-it("retains a complete bank across answer save and consumes concurrently only once", async () => {
+it("offers the complete bank atomically and saves answers without preparation", async () => {
   const { session } = await startInterviewSession(artist, user, { requestId });
   const queued = await queue(session!.id);
   const input = await offerInput(2);
@@ -210,16 +210,14 @@ it("retains a complete bank across answer save and consumes concurrently only on
     state: { bank: Array<{ status: string }>; ordinal: number; stage: string };
   }>("select state from artist_research_jobs");
   expect(rows.rows).toHaveLength(1);
-  expect(rows.rows[0].state).toMatchObject({ ordinal: 2, stage: "preparing" });
+  expect(rows.rows[0].state).toMatchObject({ ordinal: 1, stage: "consumed" });
   expect(rows.rows[0].state.bank.map(item => item.status)).toEqual([
     "offered",
-    "available",
-    "available",
+    "offered",
+    "offered",
   ]);
   expect((await getInterviewPreparation(artist, user, session!.id)).preparation).toMatchObject({
-    status: "pending",
-    readyCount: 0,
-    totalCount: 3,
+    status: "idle",
   });
 });
 
@@ -248,4 +246,77 @@ it("retries failed eligibility against the retained bank without replacing the j
   expect((await client.query("select count(*)::int n from artist_research_jobs")).rows).toEqual([
     { n: 1 },
   ]);
+});
+it("stops a fixed bank after a new boundary while preserving saved answers and idempotent replay", async () => {
+  const { saveInterviewBoundary } = await import("@/lib/interviewMemory/saveInterviewBoundary");
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  const bank = [0, 1, 2].map(index => ({
+    status: "available",
+    candidate: { ...input, question: `Which creative choice ${index} changed your process?` },
+  }));
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({ stage: "ready", bankComplete: true, bank, totalCount: 3 }),
+      queued.preparation.jobId,
+    ],
+  );
+  const offered = await consumeInterviewPreparation(artist, user, session!.id);
+  expect(offered.questions).toHaveLength(3);
+  expect(new Set(offered.questions.map(q => q.offeredAt)).size).toBe(1);
+  const first = offered.questions[0],
+    second = offered.questions[1];
+  await saveInterviewAnswer(artist, user, first.id, {
+    expectedRevision: first.revision,
+    answer: "Keep my exact answer.",
+  });
+  const boundary = await saveInterviewBoundary(artist, user, {
+    requestId: "00000000-0000-4000-8000-000000000099",
+    questionKey: second.questionKey,
+    wording: "Do not ask about collaborations.",
+    scope: "sitting",
+  });
+  expect(boundary.interviewInvalidated).toBe(true);
+  expect((await getInterviewSession(artist, user)).session?.interviewInvalidated).toBe(true);
+  await expect(
+    saveInterviewAnswer(artist, user, second.id, {
+      expectedRevision: second.revision,
+      answer: "Unsaved",
+    }),
+  ).rejects.toMatchObject({ code: "interview_invalidated" });
+  await expect(
+    saveInterviewAnswer(artist, user, first.id, {
+      expectedRevision: first.revision,
+      answer: "Keep my exact answer.",
+    }),
+  ).resolves.toMatchObject({ question: { answer: "Keep my exact answer." } });
+  expect((await getInterviewSession(artist, user)).session!.questions[1].state).toBe("offered");
+});
+it("rolls back the entire offered bank if any candidate evidence changed", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  const input = await offerInput(2);
+  const bank = [
+    { status: "available", candidate: input },
+    {
+      status: "available",
+      candidate: {
+        ...input,
+        references: input.references.map(r => ({ ...r, revision: "0".repeat(64) })),
+      },
+    },
+  ];
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || $1::jsonb where id=$2",
+    [
+      JSON.stringify({ stage: "ready", bankComplete: true, bank, totalCount: 2 }),
+      queued.preparation.jobId,
+    ],
+  );
+  await expect(consumeInterviewPreparation(artist, user, session!.id)).rejects.toMatchObject({
+    code: "revision_changed",
+  });
+  expect((await getInterviewSession(artist, user)).session!.questions).toHaveLength(0);
 });

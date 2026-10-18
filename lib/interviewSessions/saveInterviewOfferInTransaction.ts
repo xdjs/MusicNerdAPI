@@ -18,6 +18,7 @@ export async function saveInterviewOfferInTransaction(
   userId: string,
   sessionId: string,
   body: unknown,
+  batchSnapshotId?: string,
 ) {
   if (!z.uuid().safeParse(sessionId).success)
     throw new KnowledgeError("invalid_input", 400, "Invalid session");
@@ -31,7 +32,7 @@ export async function saveInterviewOfferInTransaction(
   if (
     session.state !== "active" ||
     input.ordinal !== session.questions.length + 1 ||
-    session.questions.some(q => q.state === "offered")
+    (!batchSnapshotId && session.questions.some(q => q.state === "offered"))
   )
     throw new KnowledgeError(
       "session_changed",
@@ -39,8 +40,14 @@ export async function saveInterviewOfferInTransaction(
       "Restore the current interview before asking another question",
     );
   await validateInterviewOfferReferences(tx, artistId, userId, input.references);
-  const memory = await readInterviewMemorySnapshot(tx, artistId, userId, session.sitting);
-  if (pageInterviewMemory(memory, { maxChars: 20000 }).snapshotId !== input.memorySnapshotId)
+  // Only the bank controller supplies this after checking memory under the same artist lock.
+  // Its earlier inserts intentionally change memory while creating this atomic batch.
+  const snapshotId =
+    batchSnapshotId ??
+    pageInterviewMemory(await readInterviewMemorySnapshot(tx, artistId, userId, session.sitting), {
+      maxChars: 20000,
+    }).snapshotId;
+  if (snapshotId !== input.memorySnapshotId)
     throw new KnowledgeError(
       "memory_changed",
       409,
