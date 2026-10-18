@@ -25,3 +25,18 @@ it("keeps biography and transcript originals when recent social posts dominate",
   expect(result.coverage.totalSources).toBeGreaterThan(result.coverage.openedSources);
   expect(load).toHaveBeenCalledWith(artistId, artistId);
 });
+it("expands repeat interview context with distinct saved originals only", async () => {
+  const snapshot = normalizeArtistKnowledge({
+    ...rawKnowledge,
+    social: Array.from({ length: 20 }, (_, i) => ({
+      ...social,
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    })),
+  });
+  const first = await fetchInterviewArtistContext({ artistId, userId: artistId }, snapshot);
+  const ids = new Set(first.originals.map(p => p.passage.source.sourceId));
+  const second = await fetchInterviewArtistContext({ artistId, userId: artistId }, snapshot, ids);
+  expect(second.originals.length).toBeGreaterThan(0);
+  expect(second.originals.every(p => !ids.has(p.passage.source.sourceId))).toBe(true);
+  expect(second.originals.every(p => p.returnedChars <= 2400)).toBe(true);
+});

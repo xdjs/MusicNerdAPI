@@ -49,7 +49,7 @@ create table artist_interview_boundaries(id uuid primary key default gen_random_
 create table artist_interview_sessions(id uuid primary key default gen_random_uuid(),artist_id uuid,request_id uuid,sitting int,state text default 'active',created_by uuid,created_at timestamptz default now(),closed_at timestamptz,unique(artist_id,request_id),unique(artist_id,sitting));
 create unique index one_active_session on artist_interview_sessions(artist_id) where state='active';
 create table artist_interview_question_evidence(answer_id uuid primary key,artist_id uuid,session_id uuid,ordinal int,memory_snapshot_id text,evidence_references jsonb,created_at timestamptz default now(),unique(session_id,ordinal));
-create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text,status text default 'pending',state jsonb,activity_id uuid,attempts int default 0,created_at timestamptz default now(),updated_at timestamptz default now());
+create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text,status text default 'pending',state jsonb,claimed_at timestamptz,last_error text,activity_id uuid,attempts int default 0,created_at timestamptz default now(),updated_at timestamptz default now());
 create unique index one_active_job on artist_research_jobs(artist_id,kind) where status in ('pending','running');
 insert into artists values('${artist}','Artist',null);insert into users values('${user}',false);`);
 }, 30000);
@@ -174,7 +174,7 @@ it("requires a prior answer/skip, bounds offers, and does not infer boundaries f
     ),
   ).toBe(false);
 });
-it("finishes idempotently, queues one durable Lore refresh and permits a fresh sitting", async () => {
+it("finishes idempotently, queues Lore and one private next sitting", async () => {
   const { session } = await startInterviewSession(artist, user, { requestId });
   const { question: q } = await saveInterviewOffer(
     artist,
@@ -188,16 +188,17 @@ it("finishes idempotently, queues one durable Lore refresh and permits a fresh s
   });
   await finishInterviewSession(artist, user, session!.id);
   await finishInterviewSession(artist, user, session!.id);
-  expect((await getInterviewSession(artist, user)).session?.state).toBe("finished");
+  expect((await getInterviewSession(artist, user)).session?.state).toBe("active");
   expect((await client.query("select count(*)::int as n from artist_research_jobs")).rows).toEqual([
-    { n: 1 },
+    { n: 2 },
   ]);
   expect((await startInterviewSession(artist, user, { requestId })).session?.state).toBe(
     "finished",
   );
-  expect((await startInterviewSession(artist, user, { requestId: prior })).session?.sitting).toBe(
-    3,
-  );
+  expect((await getInterviewSession(artist, user)).session?.sitting).toBe(3);
+  await expect(startInterviewSession(artist, user, { requestId: prior })).rejects.toMatchObject({
+    status: 409,
+  });
 });
 it("preserves legacy open questions and allows completion without generation or new sittings", async () => {
   await client.exec(

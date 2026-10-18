@@ -31,6 +31,7 @@ export async function generateApiInterviewQuestion(
   cache: StageCache = {},
   invocation: {
     artistSnapshot?: KnowledgeSnapshot;
+    previouslyCitedSourceIds?: Set<string>;
     memory?: Awaited<ReturnType<typeof fetchMandatoryInterviewMemory>>;
     previousQuestions?: Awaited<ReturnType<typeof fetchInterviewQuestionIndex>>;
   } = {},

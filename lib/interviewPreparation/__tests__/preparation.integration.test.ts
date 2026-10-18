@@ -523,3 +523,64 @@ it("does not upgrade a legacy bank after mandatory memory changes", async () => 
   expect(resumed.question).toEqual(original.question);
   expect(resumed.questions).toHaveLength(1);
 });
+
+it("prewarms one private next sitting on answered Finish but never recursively from untouched Finish", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  await readyCandidate(session!.id, queued.preparation.jobId!);
+  const offered = await consumeInterviewPreparation(artist, user, session!.id);
+  await saveInterviewAnswer(artist, user, offered.question.id, {
+    expectedRevision: offered.question.revision,
+    answer: "Exact finished answer.",
+  });
+  const finished = await finishInterviewSession(artist, user, session!.id);
+  expect(finished.session?.state).toBe("finished");
+  const next = (await getInterviewSession(artist, user)).session!;
+  expect(next.sitting).toBe(session!.sitting + 1);
+  expect(next.questions).toEqual([]);
+  const [before] = (
+    await client.query<{ n: number }>(
+      "select count(*)::int n from artist_research_jobs where kind='interview_prepare'",
+    )
+  ).rows;
+  await finishInterviewSession(artist, user, session!.id);
+  expect((await getInterviewSession(artist, user)).session!.id).toBe(next.id);
+  await finishInterviewSession(artist, user, next.id);
+  expect((await getInterviewSession(artist, user)).session!.id).toBe(next.id);
+  expect(
+    (
+      await client.query<{ n: number }>(
+        "select count(*)::int n from artist_research_jobs where kind='interview_prepare'",
+      )
+    ).rows[0].n,
+  ).toBe(before.n);
+});
+it("does not prewarm another sitting after skip-only Finish", async () => {
+  const { session } = await startInterviewSession(artist, user, { requestId });
+  const queued = await queue(session!.id);
+  await readyCandidate(session!.id, queued.preparation.jobId!);
+  await consumeInterviewPreparation(artist, user, session!.id);
+  await finishInterviewSession(artist, user, session!.id);
+  expect((await getInterviewSession(artist, user)).session!.id).toBe(session!.id);
+  expect(
+    (await client.query("select count(*)::int n from artist_interview_sessions")).rows,
+  ).toEqual([{ n: 1 }]);
+});
+
+it("reports exact claimant bootstrap progress without creating a sitting or exposing raw state", async () => {
+  const job = await automaticJob();
+  const restored = await getInterviewSession(artist, user);
+  expect(restored.session).toBeNull();
+  expect("preparation" in restored && restored.preparation).toEqual({
+    jobId: job.id,
+    status: "running",
+    phase: "preparing",
+    readyCount: 0,
+    totalCount: 3,
+  });
+  expect((await client.query("select id from artist_interview_sessions")).rows).toHaveLength(0);
+  await client.exec(
+    `update artist_research_jobs set state=jsonb_set(state,'{userId}','"00000000-0000-4000-8000-000000000099"')`,
+  );
+  expect("preparation" in (await getInterviewSession(artist, user))).toBe(false);
+});
