@@ -18,45 +18,10 @@ it("adds credit-role vocabulary only for credit requests", () => {
   ).toBeNull();
 });
 
-it("adds comparison vocabulary only when reporting topic compares a musical dimension", () => {
+it("does not add comparison vocabulary for reporting requests", () => {
   expect(
     researchIntentSupplement({
-      topic: "How did the sound evolve?",
-      evidenceNeed: "reporting",
-      freshness: "stored",
-    }),
-  ).toContain("synth");
-  expect(
-    researchIntentSupplement({
-      topic: "Artist; evolution of musical sound since early records",
-      evidenceNeed: "reporting",
-      freshness: "stored",
-    }),
-  ).toContain("synth");
-  expect(
-    researchIntentSupplement({
-      topic: "Artist; changes to their touring and personal life",
-      evidenceNeed: "reporting",
-      freshness: "stored",
-    }),
-  ).toBeNull();
-  expect(
-    researchIntentSupplement({
-      topic: "Artist; record label changes since 2020",
-      evidenceNeed: "reporting",
-      freshness: "stored",
-    }),
-  ).toBeNull();
-  expect(
-    researchIntentSupplement({
-      topic: "Artist; early life and influences",
-      evidenceNeed: "reporting",
-      freshness: "stored",
-    }),
-  ).toBeNull();
-  expect(
-    researchIntentSupplement({
-      topic: "Artist; evolution of sound since early records, excluding the album Nova",
+      topic: "Artist; evolution of sound since early records",
       evidenceNeed: "reporting",
       freshness: "stored",
     }),

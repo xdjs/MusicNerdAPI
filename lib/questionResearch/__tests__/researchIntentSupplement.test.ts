@@ -59,40 +59,6 @@ describe("typed retrieval supplements", () => {
     }
   });
 
-  it("adds one comparison-oriented source for evolution questions without artist or project-name rules", () => {
-    const generic = original(
-      "early-review",
-      "The early records used guitar and drums. The artist explored new music.",
-    );
-    const comparison = original(
-      "later-review",
-      "On a later album, dense synths and winding guitars create an electronic arrangement that contrasts with the earlier work.",
-    );
-
-    const baseline = selectResearchReferences(
-      [generic, comparison],
-      request({
-        topic: "Artist; evolution of musical sound since early records",
-        evidenceNeed: "social_caption",
-        answerScope: "overview",
-      }),
-      "Artist",
-    );
-    expect(baseline.map(item => item.sourceId)).not.toContain("later-review");
-
-    const selected = selectResearchReferences(
-      [generic, comparison],
-      request({
-        topic: "Artist; evolution of musical sound since early records",
-        evidenceNeed: "reporting",
-        answerScope: "overview",
-      }),
-      "Artist",
-    );
-
-    expect(selected.map(item => item.sourceId)).toContain("later-review");
-  });
-
   it("never lets an intent supplement bypass exact URL, platform, exclusion, or spoken-evidence filters", () => {
     const requested = original(
       "eligible-credit",
