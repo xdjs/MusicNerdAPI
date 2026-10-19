@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { createPublicResearchTools } from "../createPublicResearchTools";
-import type { ResearchOriginal, ResearchRequest } from "../types";
+import type { ResearchOriginal, ResearchReference, ResearchRequest } from "../types";
 
 const request: ResearchRequest = {
   topic: "Latest activities",
@@ -59,6 +59,100 @@ it("lets a model search a new term and return only an actually read original", a
     sufficient: true,
     references: [expect.objectContaining({ sourceId: "moment:1" })],
   });
+});
+
+it("keeps repeated navigation searches compact and leaves budget for a later passage", async () => {
+  const text =
+    "Opening context. " +
+    "Archive notes. ".repeat(600) +
+    "Early sound and studio recording notes. " +
+    "Long middle section. ".repeat(500) +
+    "Later record production and sound change. " +
+    "Closing context. ".repeat(200);
+  const secondText =
+    "Another source. " +
+    "Early sound description. ".repeat(80) +
+    "Other context. ".repeat(500) +
+    "Later record production details. " +
+    "Final notes. ".repeat(200);
+  const sources = [
+    original("long:one", "https://artist.example/one", text),
+    original("long:two", "https://artist.example/two", secondText),
+  ];
+  const s = createPublicResearchTools(sources, request, "Artist", []);
+  let returnedChars = 0;
+  const firstSearch = (await s.tools.searchSources.execute!(
+    { query: "early sound studio" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  expect(firstSearch.references.length).toBeGreaterThan(0);
+  expect(firstSearch.references.every(reference => reference.text.length <= 1000)).toBe(true);
+  expect(
+    firstSearch.references.reduce((total, reference) => total + reference.text.length, 0),
+  ).toBeLessThanOrEqual(4000);
+  returnedChars += firstSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(firstSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const readStarts = firstSearch.references.slice(0, 2).map(reference => ({
+    sourceId: reference.sourceId,
+    start: reference.end,
+  }));
+  const initialRead = (await s.tools.readSources.execute!({ sources: readStarts }, context)) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += initialRead.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(initialRead.remainingReadChars).toBe(24000 - returnedChars);
+
+  const repeatedSearch = (await s.tools.searchSources.execute!(
+    { query: "early sound studio" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += repeatedSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(repeatedSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const laterSearch = (await s.tools.searchSources.execute!(
+    { query: "later record production" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += laterSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(laterSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const laterStart = text.indexOf("Later record production and sound change.");
+  const laterRead = (await s.tools.readSources.execute!(
+    { sources: [{ sourceId: "long:one", start: laterStart }] },
+    context,
+  )) as { references: ResearchReference[]; remainingReadChars: number };
+  expect(laterRead.references).toHaveLength(1);
+  expect(laterRead.references[0].start).toBe(laterStart);
+  expect(laterRead.references[0].text).toContain("Later record production and sound change.");
+  expect(text.slice(laterRead.references[0].start, laterRead.references[0].end)).toBe(
+    laterRead.references[0].text,
+  );
+  returnedChars += laterRead.references[0].text.length;
+  expect(laterRead.remainingReadChars).toBe(24000 - returnedChars);
+  expect(laterRead.remainingReadChars).toBeGreaterThan(0);
 });
 
 it("rejects invented and unread IDs, allowing a later valid selection", async () => {

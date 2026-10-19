@@ -26,6 +26,42 @@ it("searches deep originals and retains nearby qualifications", () => {
   expect(r[0].start).toBeGreaterThan(10000);
   expect(original.text.slice(r[0].start, r[0].end)).toBe(r[0].text);
 });
+it("keeps navigator search context compact around deep keyword passages", () => {
+  const compactOriginal = {
+    ...original,
+    text:
+      "x".repeat(15671) +
+      "🎵" +
+      "x".repeat(328) +
+      "DAY 002 production: The proposed drums were not used on the final recording. " +
+      "Later notes. ".repeat(100),
+  };
+  const r = selectResearchReferences(
+    [compactOriginal],
+    { topic: "DAY 002 drums", evidenceNeed: "credits", freshness: "stored" },
+    "Artist",
+    Date.now(),
+    { mode: "navigation-context" },
+  );
+  expect(r.length).toBeGreaterThan(0);
+  expect(r.every(reference => reference.text.length <= 1000)).toBe(true);
+  expect(r.reduce((total, reference) => total + reference.text.length, 0)).toBeLessThanOrEqual(
+    4000,
+  );
+  expect(r.some(reference => reference.start === 15671)).toBe(true);
+  expect(r.some(reference => reference.text.includes("not used on the final recording"))).toBe(
+    true,
+  );
+  expect(r.some(reference => reference.text.includes("🎵"))).toBe(true);
+  for (const reference of r)
+    expect(compactOriginal.text.slice(reference.start, reference.end)).toBe(reference.text);
+  const normalContext = selectResearchReferences(
+    [compactOriginal],
+    { topic: "DAY 002 drums", evidenceNeed: "credits", freshness: "stored" },
+    "Artist",
+  );
+  expect(normalContext.some(reference => reference.text.length > 1000)).toBe(true);
+});
 it("never treats a caption as requested speech", () => {
   expect(
     selectResearchReferences(

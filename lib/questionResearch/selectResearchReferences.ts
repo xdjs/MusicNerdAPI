@@ -16,10 +16,12 @@ export function selectResearchReferences(
   request: ResearchRequest,
   artistName: string,
   now = Date.now(),
+  options: { mode?: "navigation-context" } = {},
 ): ResearchReference[] {
   const dateOf = (o: ResearchOriginal) => o.activityDate ?? o.publishedAt;
   const timeOf = (o: ResearchOriginal) => (dateOf(o) ? latestActivityTime(dateOf(o)!) : NaN);
   const eligible = getEligibleResearchOriginals(originals, request, now);
+  const navigationContext = options.mode === "navigation-context";
   // An overview is a chronological read, not a lexical search for the word "latest".
   // Unknown/future dates cannot establish the newest available activity.
   if (request.retrieval === "latest") {
@@ -33,10 +35,10 @@ export function selectResearchReferences(
     // Broader candidate coverage stays within the existing 12,000-character total budget.
     return candidates
       .sort((a, b) => timeOf(b) - timeOf(a) || a.sourceId.localeCompare(b.sourceId))
-      .slice(0, overview ? 6 : 3)
+      .slice(0, navigationContext ? 4 : overview ? 6 : 3)
       .map(original => ({
         ...original,
-        ...knowledgeWindow(original.text, 0, overview ? 2000 : 4000),
+        ...knowledgeWindow(original.text, 0, navigationContext ? 1000 : overview ? 2000 : 4000),
       }));
   }
   const sources: Evidence[] = eligible.map(o => ({
@@ -98,20 +100,33 @@ export function selectResearchReferences(
       operation: "search",
       query: request.topic,
       limit: 4,
-      maxChars: 6400,
+      maxChars: navigationContext ? 4000 : 6400,
     },
-    { maxPassagesPerSource: 2 },
+    {
+      maxPassageChars: navigationContext ? 1000 : undefined,
+      maxPassagesPerSource: 2,
+    },
   );
   // Explicit source/date constraints identify originals even when the question has no body keywords.
   if (!result.passages.length && (request.targetUrl || request.fromDate || request.toDate)) {
+    let remaining = navigationContext ? 4000 : 12000;
     return [...eligible]
       .sort(
         (a, b) =>
           (Number.isFinite(timeOf(b)) ? timeOf(b) : 0) -
           (Number.isFinite(timeOf(a)) ? timeOf(a) : 0),
       )
-      .slice(0, 3)
-      .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
+      .slice(0, navigationContext ? 4 : 3)
+      .flatMap(original => {
+        if (navigationContext && remaining < 256) return [];
+        const window = knowledgeWindow(
+          original.text,
+          0,
+          Math.min(navigationContext ? 1000 : 4000, remaining),
+        );
+        remaining -= window.text.length;
+        return [{ ...original, ...window }];
+      });
   }
   const supplement = researchIntentSupplement(request);
   const supplementalPassages = supplement
@@ -121,9 +136,12 @@ export function selectResearchReferences(
           operation: "search",
           query: supplement,
           limit: 12,
-          maxChars: 12_000,
+          maxChars: navigationContext ? 4000 : 12_000,
         },
-        { maxPassagesPerSource: 2 },
+        {
+          maxPassageChars: navigationContext ? 1000 : undefined,
+          maxPassagesPerSource: 2,
+        },
       ).passages
     : [];
   const supplemental = supplementalPassages.find(
@@ -134,17 +152,15 @@ export function selectResearchReferences(
   const selectedPassages = supplemental
     ? [...result.passages.slice(0, 3), supplemental]
     : result.passages;
-  let remaining = 12000;
+  let remaining = navigationContext ? 4000 : 12000;
   return selectedPassages.flatMap(p => {
     const original = eligible.find(
       o => o.sourceId === p.source.sourceId && o.revision === p.revision,
     )!;
     if (remaining < 256) return [];
-    const window = knowledgeWindow(
-      original.text,
-      Math.max(0, p.start - 800),
-      Math.min(3200, remaining),
-    );
+    const window = navigationContext
+      ? { start: p.start, end: p.end, text: p.text }
+      : knowledgeWindow(original.text, Math.max(0, p.start - 800), Math.min(3200, remaining));
     remaining -= window.text.length;
     return [{ ...original, ...window }];
   });

@@ -101,64 +101,73 @@ export function createPublicResearchTools(
   const tools = {
     browseSources: tool({
       description:
-        "Browse saved originals. Default order interleaves providers, newest first within each; filter provider for its chronology. Previews are discovery only; read before selecting. Continue with nextOffset.",
+        "Browse saved originals. Default order interleaves providers, newest first within each; filter provider for its chronology. Previews are discovery only; read before selecting. Text returned counts against the 24,000-character budget. Check remainingReadChars before further reads. Continue with nextOffset.",
       inputSchema: z.object({
         offset: z.number().int().min(0).max(5000).default(0),
         provider: z.string().max(200).optional(),
       }),
       execute: async ({ offset, provider }) => {
         const blocked = reserve("browse");
-        if (blocked) return blocked;
+        if (blocked) return { ...blocked, remainingReadChars: Math.max(0, 24000 - readChars) };
         const sources = provider ? chronological.filter(o => providerOf(o) === provider) : diverse;
         const page = sources.slice(offset, offset + 12);
+        const listedSources = page.map(o => {
+          const preview = o.text.slice(0, Math.max(0, Math.min(220, 24000 - readChars)));
+          readChars += preview.length;
+          if (readChars >= 24000 || preview.length < Math.min(220, o.text.length))
+            evidenceBudgetExhausted = true;
+          return {
+            sourceId: o.sourceId,
+            revision: o.revision,
+            provider: providerOf(o),
+            url: o.url,
+            date: o.activityDate ?? o.publishedAt,
+            kind: o.evidenceKind,
+            totalChars: o.text.length,
+            preview,
+          };
+        });
         return {
           total: sources.length,
           nextOffset: offset + page.length < sources.length ? offset + page.length : null,
-          sources: page.map(o => {
-            const preview = o.text.slice(0, Math.max(0, Math.min(220, 24000 - readChars)));
-            readChars += preview.length;
-            if (readChars >= 24000 || preview.length < Math.min(220, o.text.length))
-              evidenceBudgetExhausted = true;
-            return {
-              sourceId: o.sourceId,
-              revision: o.revision,
-              provider: providerOf(o),
-              url: o.url,
-              date: o.activityDate ?? o.publishedAt,
-              kind: o.evidenceKind,
-              totalChars: o.text.length,
-              preview,
-            };
-          }),
+          sources: listedSources,
+          remainingReadChars: Math.max(0, 24000 - readChars),
         };
       },
     }),
     searchSources: tool({
       description:
-        "Search all eligible saved originals using your own terms. Returns read original windows with exact offsets and IDs that can support an answer. Change terms or browse when matches are weak.",
+        "Search all eligible saved originals using your own terms. Returns compact original windows anchored near keyword passages with exact offsets; use readSources for more context. Text returned counts against the 24,000-character budget. Check remainingReadChars and avoid repeating searches that returned the same passages.",
       inputSchema: z.object({ query: z.string().min(1).max(300) }),
       execute: async ({ query }) => {
         const blocked = reserve("search");
-        if (blocked) return blocked;
+        if (blocked) return { ...blocked, remainingReadChars: Math.max(0, 24000 - readChars) };
         if (24000 - readChars < 256) {
           evidenceBudgetExhausted = true;
-          return { error: "evidence_budget_exhausted" };
+          return {
+            error: "evidence_budget_exhausted",
+            remainingReadChars: Math.max(0, 24000 - readChars),
+          };
         }
         const references = selectResearchReferences(
           eligible,
           { ...request, topic: query, retrieval: "relevance", freshness: "stored" },
           artistName,
+          Date.now(),
+          { mode: "navigation-context" },
         );
+        const registeredReferences = register(references);
         return {
           searchedSources: eligible.length,
-          references: register(references),
+          references: registeredReferences,
           exhaustive: false,
+          remainingReadChars: Math.max(0, 24000 - readChars),
         };
       },
     }),
     readSources: tool({
       description:
-        "Read original text for source IDs found by browsing/search. start is an exact UTF-16 offset; use end to continue. Returns up to 4,000 chars per source, 12,000 per call. Only returned read reference IDs can finish evidence selection.",
+        "Read original text for source IDs found by browsing/search. start is an exact UTF-16 offset; use the previous reference end to continue without repeating text. Returns up to 4,000 chars per source, 12,000 per call, within the 24,000-character total text budget. Check remainingReadChars before further reads. Only returned read reference IDs can finish evidence selection.",
       inputSchema: z.object({
         sources: z
           .array(
@@ -169,25 +178,33 @@ export function createPublicResearchTools(
       }),
       execute: async ({ sources }) => {
         const blocked = reserve("read");
-        if (blocked) return blocked;
+        if (blocked) return { ...blocked, remainingReadChars: Math.max(0, 24000 - readChars) };
         if (24000 - readChars < 256) {
           evidenceBudgetExhausted = true;
-          return { error: "evidence_budget_exhausted" };
+          return {
+            error: "evidence_budget_exhausted",
+            remainingReadChars: Math.max(0, 24000 - readChars),
+          };
         }
         const resolved = sources.map(s => ({
           ...s,
           original: eligible.find(o => o.sourceId === s.sourceId),
         }));
         if (resolved.some(s => !s.original || s.start >= s.original.text.length))
-          return { error: "source_unavailable" };
+          return {
+            error: "source_unavailable",
+            remainingReadChars: Math.max(0, 24000 - readChars),
+          };
         const size = Math.min(4000, Math.floor(12000 / sources.length));
+        const registeredReferences = register(
+          resolved.map(s => ({
+            ...s.original!,
+            ...knowledgeWindow(s.original!.text, s.start, size),
+          })),
+        );
         return {
-          references: register(
-            resolved.map(s => ({
-              ...s.original!,
-              ...knowledgeWindow(s.original!.text, s.start, size),
-            })),
-          ),
+          references: registeredReferences,
+          remainingReadChars: Math.max(0, 24000 - readChars),
         };
       },
     }),

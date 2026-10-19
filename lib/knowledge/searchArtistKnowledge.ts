@@ -6,7 +6,7 @@ import type { KnowledgeQuery, KnowledgeResults, KnowledgeSnapshot } from "@/lib/
 export function searchArtistKnowledge(
   snapshot: KnowledgeSnapshot,
   query: Extract<KnowledgeQuery, { operation: "search" }>,
-  options: { maxPassagesPerSource?: number } = {},
+  options: { maxPassageChars?: number; maxPassagesPerSource?: number } = {},
 ): KnowledgeResults["search"] {
   const sources = snapshot.sources.filter(
     source => !query.kind || source.metadata.kind === query.kind,
@@ -164,7 +164,11 @@ export function searchArtistKnowledge(
       omitted = true;
       break;
     }
-    const size = Math.min(candidate.end - candidate.start, query.maxChars - returnedChars);
+    const size = Math.min(
+      candidate.end - candidate.start,
+      query.maxChars - returnedChars,
+      options.maxPassageChars ?? Number.POSITIVE_INFINITY,
+    );
     if (size < 256 && size < candidate.text.length) {
       omitted = true;
       continue;
