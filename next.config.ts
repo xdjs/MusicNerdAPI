@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
   // Build type-checks app code only; see tsconfig.build.json.
@@ -22,4 +23,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// The claim build runs as a durable workflow (lib/claimBuild).
+export default withWorkflow(nextConfig);
