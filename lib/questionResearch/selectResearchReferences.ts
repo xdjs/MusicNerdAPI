@@ -2,6 +2,7 @@ import { getEligibleResearchOriginals } from "./getEligibleResearchOriginals";
 import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
 import { searchArtistKnowledge } from "@/lib/knowledge/searchArtistKnowledge";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
+import { researchIntentSupplement } from "./researchIntentSupplement";
 import type { Evidence, KnowledgeSnapshot } from "@/lib/knowledge/types";
 import type {
   ResearchOriginal,
@@ -112,8 +113,29 @@ export function selectResearchReferences(
       .slice(0, 3)
       .map(original => ({ ...original, ...knowledgeWindow(original.text, 0, 4000) }));
   }
+  const supplement = researchIntentSupplement(request);
+  const supplementalPassages = supplement
+    ? searchArtistKnowledge(
+        snapshot,
+        {
+          operation: "search",
+          query: supplement,
+          limit: 12,
+          maxChars: 12_000,
+        },
+        { maxPassagesPerSource: 2 },
+      ).passages
+    : [];
+  const supplemental = supplementalPassages.find(
+    passage => !result.passages.some(item => item.source.sourceId === passage.source.sourceId),
+  );
+  // Preserve the base ranking while reserving at most one distinct original for
+  // a typed evidence intent that a compressed topic can otherwise miss.
+  const selectedPassages = supplemental
+    ? [...result.passages.slice(0, 3), supplemental]
+    : result.passages;
   let remaining = 12000;
-  return result.passages.flatMap(p => {
+  return selectedPassages.flatMap(p => {
     const original = eligible.find(
       o => o.sourceId === p.source.sourceId && o.revision === p.revision,
     )!;
