@@ -115,6 +115,47 @@ it("routes an authorized cross-record sound comparison through the durable navig
   expect(m.originals).not.toHaveBeenCalled();
   expect(m.select).not.toHaveBeenCalled();
 });
+it("bypasses direct candidate selection for explicit multifacet requests, but keeps the single-facet path", async () => {
+  const twoFacets = {
+    topic: "Marlowe Echo; early records and their sound; later albums and their production",
+    evidenceNeed: "reporting",
+    preferDirectEvidence: true,
+    evidenceFacets: [
+      { id: "f1", intent: "early records and their sound" },
+      { id: "f2", intent: "later albums and their production" },
+    ],
+  };
+  expect(
+    (
+      await postQuestionResearchHandler(
+        new Request("https://api.example", { method: "POST", body: JSON.stringify(twoFacets) }),
+        artist,
+      )
+    ).status,
+  ).toBe(202);
+  expect(m.queue.mock.calls[0][2]).toMatchObject({ evidenceFacets: twoFacets.evidenceFacets });
+  expect(m.originals).not.toHaveBeenCalled();
+  expect(m.select).not.toHaveBeenCalled();
+
+  m.queue.mockClear();
+  m.originals.mockClear();
+  m.select.mockClear();
+  const oneFacet = {
+    ...twoFacets,
+    topic: "Marlowe Echo; sound changed since early records",
+    evidenceFacets: [{ id: "f1", intent: "sound changed since early records" }],
+  };
+  expect(
+    (
+      await postQuestionResearchHandler(
+        new Request("https://api.example", { method: "POST", body: JSON.stringify(oneFacet) }),
+        artist,
+      )
+    ).status,
+  ).toBe(202);
+  expect(m.originals).toHaveBeenCalledOnce();
+  expect(m.select).toHaveBeenCalledOnce();
+});
 it("preserves service authorization before routing cross-record comparisons", async () => {
   m.auth.mockResolvedValue({ kind: "artist", userId: "33333333-3333-4333-8333-333333333333" });
   const response = await postQuestionResearchHandler(

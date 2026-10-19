@@ -74,3 +74,46 @@ it("requires a valid outside reservation for every new-budget external stage", (
     }),
   ).toMatchObject({ budgetVersion: 2 });
 });
+
+it("validates optional facet coverage against the request order and finalized references", () => {
+  const faceted = {
+    ...state,
+    modelCalls: 1,
+    stage: "complete",
+    request: {
+      topic: "Artist; early records; later albums",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      evidenceFacets: [
+        { id: "f1", intent: "early records" },
+        { id: "f2", intent: "later albums" },
+      ],
+    },
+    references: [{ sourceId: "a" }, { sourceId: "b" }],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+  };
+  expect(parseQuestionResearchState(faceted).facetCoverage).toEqual(faceted.facetCoverage);
+  for (const facetCoverage of [
+    [
+      { id: "f2", referenceIndexes: [1] },
+      { id: "f1", referenceIndexes: [0] },
+    ],
+    [
+      { id: "f1", referenceIndexes: [2] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+    [
+      { id: "f1", referenceIndexes: [0, 0] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+    [{ id: "f1", referenceIndexes: [0] }],
+  ])
+    expect(() => parseQuestionResearchState({ ...faceted, facetCoverage })).toThrow();
+  expect(() => parseQuestionResearchState({ ...state, facetCoverage: [] })).toThrow();
+  expect(parseQuestionResearchState({ ...faceted, facetCoverage: undefined }).facetCoverage).toBe(
+    undefined,
+  );
+});

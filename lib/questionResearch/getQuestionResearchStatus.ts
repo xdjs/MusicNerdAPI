@@ -38,7 +38,9 @@ export async function getQuestionResearchStatus(
   const eligible = ["complete", "unresolved"].includes(stage)
     ? await loadPublicResearchOriginals(artistId)
     : [];
-  const references = state.references.flatMap(r => {
+  const referenceIndexMap = new Map<number, number>();
+  let visibleReferenceCount = 0;
+  const references = state.references.flatMap((r, originalIndex) => {
     const current = eligible.find(e => e.sourceId === r.sourceId && e.revision === r.revision);
     if (
       !current ||
@@ -47,8 +49,16 @@ export async function getQuestionResearchStatus(
       current.text.slice(r.start, r.end) !== r.text
     )
       return [];
+    referenceIndexMap.set(originalIndex, visibleReferenceCount++);
     return [{ ...r, curation: current.curation }];
   });
+  const facetCoverage = state.facetCoverage?.flatMap(row => {
+    const remapped = row.referenceIndexes.map(index => referenceIndexMap.get(index));
+    if (remapped.some(index => index === undefined)) return [];
+    return [{ id: row.id, referenceIndexes: remapped as number[] }];
+  });
+  const coverageStillValid =
+    state.facetCoverage === undefined || facetCoverage?.length === state.facetCoverage.length;
   const limitations = [...state.limitations];
   if (stage === "complete" && !references.length) {
     stage = "unresolved";
@@ -75,6 +85,7 @@ export async function getQuestionResearchStatus(
     message: researchStatusMessage(stage, state.plan?.provider ?? null),
     updatedAt: new Date(row.updated_at).toISOString(),
     references,
+    ...(coverageStillValid && facetCoverage ? { facetCoverage } : {}),
     limitations,
   };
 }

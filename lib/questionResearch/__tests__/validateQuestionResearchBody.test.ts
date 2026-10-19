@@ -54,3 +54,54 @@ it("accepts explicit overview scope and rejects unknown scopes without changing 
   expect(validateQuestionResearchBody(base).answerScope).toBeUndefined();
   expect(() => validateQuestionResearchBody({ ...base, answerScope: "everything" })).toThrow();
 });
+
+it("accepts canonical positive evidence facets only when their clauses are protected in topic", () => {
+  const evidenceFacets = [
+    { id: "f1", intent: "early records and their sound" },
+    { id: "f2", intent: "later albums and their production" },
+  ];
+  const topic = `Tom Vek; ${evidenceFacets.map(facet => facet.intent).join("; ")}`;
+  expect(validateQuestionResearchBody({ ...base, topic, evidenceFacets })).toMatchObject({
+    topic,
+    evidenceFacets,
+  });
+  for (const invalid of [
+    [{ id: "f2", intent: "early records" }],
+    [
+      { id: "f1", intent: "early records" },
+      { id: "f1", intent: "later albums" },
+    ],
+    Array.from({ length: 5 }, (_, i) => ({ id: `f${i + 1}`, intent: `period ${i + 1}` })),
+    [{ id: "f1", intent: "release credits" }],
+    [{ id: "f1", intent: "" }],
+  ])
+    expect(() =>
+      validateQuestionResearchBody({ ...base, topic, evidenceFacets: invalid }),
+    ).toThrow();
+});
+it("uses normalized whole-phrase scope matching and rejects duplicate facet intents", () => {
+  expect(
+    validateQuestionResearchBody({
+      ...base,
+      topic: "Artist;   EARLY   RECORDS",
+      evidenceFacets: [{ id: "f1", intent: "early records" }],
+    }).evidenceFacets,
+  ).toEqual([{ id: "f1", intent: "early records" }]);
+  expect(() =>
+    validateQuestionResearchBody({
+      ...base,
+      topic: "Annette production credits",
+      evidenceFacets: [{ id: "f1", intent: "Ann" }],
+    }),
+  ).toThrow();
+  expect(() =>
+    validateQuestionResearchBody({
+      ...base,
+      topic: "Artist; earlier production; EARLIER  production",
+      evidenceFacets: [
+        { id: "f1", intent: "earlier production" },
+        { id: "f2", intent: "EARLIER  production" },
+      ],
+    }),
+  ).toThrow();
+});

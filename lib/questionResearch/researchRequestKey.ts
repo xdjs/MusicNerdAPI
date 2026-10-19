@@ -17,5 +17,13 @@ export function researchRequestKey(request: ResearchRequest): string {
       : []),
     ...(request.retrieval === "latest" ? ["latest"] : []),
     ...(request.answerScope === "overview" ? ["overview-topic-boundaries-v2"] : []),
+    ...(request.evidenceFacets
+      ? [
+          [
+            "positive-evidence-facets-v1",
+            request.evidenceFacets.map(facet => [facet.id, facet.intent.normalize("NFKC")]),
+          ],
+        ]
+      : []),
   ]);
 }

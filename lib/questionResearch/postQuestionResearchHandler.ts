@@ -30,7 +30,10 @@ export async function postQuestionResearchHandler(request: Request, artistId: st
       if (!preferDirectEvidence) return queueQuestionResearch(artistId, auth, routing);
       if (auth.kind !== "service")
         throw new KnowledgeError("forbidden", 403, "Direct evidence requires a service credential");
-      if (isCrossRecordSonicComparison(routing))
+      if (
+        (routing.evidenceFacets?.length ?? 0) > 1 ||
+        (!routing.evidenceFacets && isCrossRecordSonicComparison(routing))
+      )
         return queueQuestionResearch(artistId, auth, routing);
       // Read before the global admission transaction; never hold its quota lock over a corpus read.
       const artist = await loadResearchArtist(artistId);

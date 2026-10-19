@@ -63,6 +63,124 @@ it("lets a model search a new term and return only an actually read original", a
     references: [expect.objectContaining({ sourceId: "moment:1" })],
   });
 });
+it("keeps the legacy finish contract when no evidence facets were requested", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"], facetCoverage: [] }, context);
+  expect(s.outcome()).toMatchObject({ sufficient: true, references: [expect.any(Object)] });
+  expect(s.outcome()).not.toHaveProperty("facetCoverage");
+});
+
+it("maps only assigned, actually read facet references to final reference indexes", async () => {
+  const sources = [
+    original(
+      "period:early",
+      "https://artist.example/early",
+      "The early record used drum machines.",
+    ),
+    original("period:late", "https://artist.example/late", "The later record used live drums."),
+  ];
+  const facetedRequest: ResearchRequest = {
+    ...request,
+    topic: "Artist; early record production; later record production",
+    evidenceFacets: [
+      { id: "f1", intent: "early record production" },
+      { id: "f2", intent: "later record production" },
+    ],
+  };
+  const s = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await s.tools.readSources.execute!(
+    {
+      sources: [
+        { sourceId: "period:early", start: 0 },
+        { sourceId: "period:late", start: 0 },
+      ],
+    },
+    context,
+  );
+  expect(
+    await s.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0", "read:1"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: ["read:1"] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ status: "complete" });
+  expect(s.outcome()).toMatchObject({
+    references: [
+      expect.objectContaining({ sourceId: "period:early" }),
+      expect.objectContaining({ sourceId: "period:late" }),
+    ],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+  });
+});
+
+it("keeps a one-sided comparison explicitly partial and rejects invented/unassigned refs", async () => {
+  const sources = [
+    original(
+      "period:early",
+      "https://artist.example/early",
+      "The early record used drum machines.",
+    ),
+    original("period:late", "https://artist.example/late", "The later record used live drums."),
+  ];
+  const facetedRequest: ResearchRequest = {
+    ...request,
+    topic: "Artist; early record production; later record production",
+    evidenceFacets: [
+      { id: "f1", intent: "early record production" },
+      { id: "f2", intent: "later record production" },
+    ],
+  };
+  const s = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await s.tools.readSources.execute!(
+    { sources: [{ sourceId: "period:early", start: 0 }] },
+    context,
+  );
+  expect(
+    await s.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: [] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ status: "complete" });
+  expect(s.outcome()?.facetCoverage).toEqual([
+    { id: "f1", referenceIndexes: [0] },
+    { id: "f2", referenceIndexes: [] },
+  ]);
+  expect(s.outcome()).toMatchObject({ sufficient: false, finishedEvidence: true });
+
+  const next = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await next.tools.readSources.execute!(
+    { sources: [{ sourceId: "period:early", start: 0 }] },
+    context,
+  );
+  expect(
+    await next.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: ["read:1"] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ error: "invalid_facet_coverage" });
+  expect(next.outcome()).toBeUndefined();
+});
 
 it("reserves two of twelve tool calls for finishing after ten exploration calls", async () => {
   const s = createPublicResearchTools(corpus, request, "Artist", []);

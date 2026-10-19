@@ -11,7 +11,13 @@ export type ResearchRequest = {
   platform?: "instagram" | "tiktok" | "x" | "inprocess" | "spotify" | "deezer";
   fromDate?: string;
   toDate?: string;
+  /** Positive answer requirements; omissions and legacy requests do not imply coverage. */
+  evidenceFacets?: { id: "f1" | "f2" | "f3" | "f4"; intent: string }[];
 };
+export type ResearchFacetCoverage = {
+  id: "f1" | "f2" | "f3" | "f4";
+  referenceIndexes: number[];
+}[];
 export type ResearchArtist = {
   [key: string]: unknown;
   id?: string;
@@ -104,6 +110,8 @@ export type QuestionResearchState = {
   createdAt: string;
   /** Neutral request only; never visitor chat or private interview context. */
   references: ResearchReference[];
+  /** Host-validated coverage over references, omitted when unknown or stale. */
+  facetCoverage?: ResearchFacetCoverage;
   limitations: string[];
   candidates?: { url: string; title: string }[];
   nextCandidate?: number;

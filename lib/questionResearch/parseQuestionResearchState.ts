@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   SAVED_RESEARCH_MODEL_STEPS,
   type QuestionResearchState,
+  type ResearchFacetCoverage,
 } from "@/lib/questionResearch/types";
 const explorationSchema = z.strictObject({
   eligibleSources: z.number().int().min(0).max(5000),
@@ -13,11 +14,44 @@ const explorationSchema = z.strictObject({
   rejectedIdCount: z.number().int().min(0).max(72),
   stopReason: z.enum(["supported", "outside_lookup", "insufficient", "incomplete"]),
 });
+const facetCoverageSchema = z
+  .array(
+    z.strictObject({
+      id: z.enum(["f1", "f2", "f3", "f4"]),
+      referenceIndexes: z.array(z.number().int().min(0).max(5)).max(6),
+    }),
+  )
+  .max(4);
 /** Reject malformed persisted work before it can choose a provider or exceed a saved budget. */
 export function parseQuestionResearchState(value: unknown): QuestionResearchState {
   if (!value || typeof value !== "object" || JSON.stringify(value).length > 400000)
     throw new Error("Invalid research state");
   const s = value as QuestionResearchState;
+  const coverageValid = (coverage: ResearchFacetCoverage | undefined) => {
+    if (coverage === undefined) return true;
+    if (!facetCoverageSchema.safeParse(coverage).success || !Array.isArray(s.references))
+      return false;
+    const facets = s.request?.evidenceFacets;
+    return Boolean(
+      Array.isArray(facets) &&
+      coverage.length === facets.length &&
+      coverage.every((row, rowIndex) => {
+        const indexes = row.referenceIndexes;
+        return (
+          row.id === facets[rowIndex]?.id &&
+          Array.isArray(indexes) &&
+          indexes.length <= 6 &&
+          indexes.every(
+            (index, i) =>
+              Number.isInteger(index) &&
+              index >= 0 &&
+              index < s.references.length &&
+              indexes.indexOf(index) === i,
+          )
+        );
+      }),
+    );
+  };
   if (
     s.version !== 1 ||
     (s.budgetVersion !== undefined && s.budgetVersion !== 2) ||
@@ -50,6 +84,7 @@ export function parseQuestionResearchState(value: unknown): QuestionResearchStat
         s.outsideReservedAt !== undefined ||
         s.inFlight !== undefined)) ||
     (s.exploration !== undefined && !explorationSchema.safeParse(s.exploration).success) ||
+    !coverageValid(s.facetCoverage) ||
     (s.outputRetries !== undefined &&
       (!Number.isInteger(s.outputRetries) ||
         s.outputRetries < 0 ||

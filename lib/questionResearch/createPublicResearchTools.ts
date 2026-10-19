@@ -6,7 +6,13 @@ import { selectResearchReferences } from "./selectResearchReferences";
 import { researchPlatformForUrl } from "./researchPlatformForUrl";
 import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
-import type { ResearchOriginal, ResearchRequest, ResearchReference, ResearchPlan } from "./types";
+import type {
+  ResearchFacetCoverage,
+  ResearchOriginal,
+  ResearchRequest,
+  ResearchReference,
+  ResearchPlan,
+} from "./types";
 
 const reason = z.enum([
   "missing_original",
@@ -19,9 +25,12 @@ const RESERVED_COMPLETION_TOOL_CALLS = 2;
 const MAX_EXPLORATION_TOOL_CALLS = MAX_TOOL_CALLS - RESERVED_COMPLETION_TOOL_CALLS;
 type Outcome = {
   sufficient: boolean;
+  /** Saved evidence selection was explicitly finished; partial facet coverage is terminal too. */
+  finishedEvidence?: true;
   references: ResearchReference[];
   nextLookup: ResearchPlan["provider"];
   limitation: string;
+  facetCoverage?: ResearchFacetCoverage;
 };
 
 /** Read-only tools over an already public snapshot. No private knowledge or provider I/O. */
@@ -56,6 +65,35 @@ export function createPublicResearchTools(
   let evidenceBudgetExhausted = false;
   const calls: string[] = [];
   let rejectedIdCount = 0;
+  const mapFacetCoverage = (
+    referenceIds: string[],
+    requested: { id: string; referenceIds: string[] }[] | undefined,
+  ): ResearchFacetCoverage | null | undefined => {
+    const facets = request.evidenceFacets;
+    if (!facets) return requested === undefined || requested.length === 0 ? undefined : null;
+    if (!requested || requested.length !== facets.length) return null;
+    const selected = new Set(referenceIds);
+    const allAssigned = new Set<string>();
+    for (const [index, facet] of facets.entries()) {
+      const row = requested[index];
+      if (
+        row.id !== facet.id ||
+        new Set(row.referenceIds).size !== row.referenceIds.length ||
+        row.referenceIds.some(id => !selected.has(id))
+      )
+        return null;
+      for (const id of row.referenceIds) {
+        if (!read.has(id)) return null;
+        allAssigned.add(id);
+      }
+    }
+    if (allAssigned.size !== selected.size || [...selected].some(id => !allAssigned.has(id)))
+      return null;
+    return facets.map((facet, index) => ({
+      id: facet.id,
+      referenceIndexes: requested[index]!.referenceIds.map(id => referenceIds.indexOf(id)),
+    }));
+  };
   const remainingToolBudget = () => {
     const remainingToolCalls = Math.max(0, MAX_TOOL_CALLS - toolCalls);
     return {
@@ -229,9 +267,20 @@ export function createPublicResearchTools(
     }),
     finishEvidence: tool({
       description:
-        "Finish with supporting read reference IDs. Select useful, relevant originals with surrounding qualifications. This selects evidence; the answer is drafted and verified separately.",
-      inputSchema: z.object({ referenceIds: z.array(z.string().max(200)).min(1).max(6) }),
-      execute: async ({ referenceIds }) => {
+        "Finish with supporting read reference IDs. Select useful, relevant originals with surrounding qualifications. This selects evidence; the answer is drafted and verified separately. For each requested positive evidence facet, assign the actual read reference IDs that support it; use an empty list when none of the selected references support that facet. A reference may support more than one facet. Do not infer support from a source you did not read.",
+      inputSchema: z.strictObject({
+        referenceIds: z.array(z.string().max(200)).min(1).max(6),
+        facetCoverage: z
+          .array(
+            z.strictObject({
+              id: z.string().max(4),
+              referenceIds: z.array(z.string().max(200)).max(6),
+            }),
+          )
+          .max(4)
+          .optional(),
+      }),
+      execute: async ({ referenceIds, facetCoverage }) => {
         const blocked = reserve("finish", "completion");
         if (blocked) return blocked;
         const ids = [...new Set(referenceIds)];
@@ -244,6 +293,12 @@ export function createPublicResearchTools(
           };
         }
         const references = ids.map(id => read.get(id)!);
+        const mappedCoverage = mapFacetCoverage(ids, facetCoverage);
+        if (mappedCoverage === null)
+          return {
+            error: "invalid_facet_coverage",
+            availableFacetIds: request.evidenceFacets?.map(f => f.id) ?? [],
+          };
         const limit =
           request.answerScope === "overview" && request.evidenceNeed === "reporting" ? 3 : 6;
         if (
@@ -251,7 +306,15 @@ export function createPublicResearchTools(
           references.reduce((sum, r) => sum + r.text.length, 0) > 12000
         )
           return { error: "selection_too_large", maxReferences: limit, maxChars: 12000 };
-        outcome = { sufficient: true, references, nextLookup: null, limitation: "none" };
+        outcome = {
+          sufficient:
+            !mappedCoverage || mappedCoverage.every(row => row.referenceIndexes.length > 0),
+          finishedEvidence: true,
+          references,
+          nextLookup: null,
+          limitation: "none",
+          ...(mappedCoverage ? { facetCoverage: mappedCoverage } : {}),
+        };
         return { status: "complete" };
       },
     }),

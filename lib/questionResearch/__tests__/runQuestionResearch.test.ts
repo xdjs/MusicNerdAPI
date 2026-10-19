@@ -143,6 +143,48 @@ it("finishes from read original evidence without external collection", async () 
   expect(m.search).not.toHaveBeenCalled();
   expect(m.start).not.toHaveBeenCalled();
 });
+it("finishes with selected one-sided facet evidence without treating it as sufficient or starting outside research", async () => {
+  const early = { sourceId: "vault:early", text: "The early record used drum machines." };
+  m.assess.mockResolvedValue({
+    sufficient: false,
+    finishedEvidence: true,
+    references: [early],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [] },
+    ],
+    confirmedIds: [],
+    limitation: "missing_original",
+    inputTokens: 30,
+    outputTokens: 10,
+  });
+  const j = job({
+    ...initial(),
+    request: {
+      topic: "Artist; early record production; later record production",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      evidenceFacets: [
+        { id: "f1", intent: "early record production" },
+        { id: "f2", intent: "later record production" },
+      ],
+    },
+  });
+  expect((await runQuestionResearch(j, Date.now() + 50000)).done).toBe(true);
+  expect(j.state).toMatchObject({
+    stage: "complete",
+    references: [early],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [] },
+    ],
+  });
+  expect(j.state.limitations).toContain(
+    "The selected saved originals support only part of the requested evidence facets.",
+  );
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
+});
 it("treats database failure as failure, never as missing evidence", async () => {
   m.load.mockRejectedValue(new Error("db unavailable"));
   const j = job();
@@ -507,6 +549,60 @@ it("combines still-public partial support with new evidence and preserves the as
     expect.any(Number),
   );
   expect(j.state).toMatchObject({ stage: "complete", references: [saved, discovery] });
+});
+it("retains useful partial facet references after outside assessment without a new research cycle", async () => {
+  const saved = {
+    sourceId: "vault:early",
+    revision: "r",
+    url: "https://artist.example/early",
+    text: "The early record used drum machines.",
+    start: 0,
+    end: 36,
+  };
+  saved.end = saved.text.length;
+  const j = job({
+    ...initial(),
+    step: "assess",
+    stage: "reading",
+    request: {
+      topic: "Artist; early record production; later record production",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+      evidenceFacets: [
+        { id: "f1", intent: "early record production" },
+        { id: "f2", intent: "later record production" },
+      ],
+    },
+    references: [saved],
+  });
+  m.load.mockResolvedValue([saved]);
+  m.select.mockReturnValue([]);
+  m.assess.mockResolvedValue({
+    sufficient: false,
+    references: [saved],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [] },
+    ],
+    confirmedIds: [],
+    limitation: "missing_original",
+    inputTokens: 10,
+    outputTokens: 5,
+  });
+  await runQuestionResearch(j, Date.now() + 50000);
+  expect(j.state).toMatchObject({
+    stage: "complete",
+    references: [saved],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [] },
+    ],
+  });
+  expect(j.state.limitations).toContain(
+    "The selected originals support only part of the requested evidence facets.",
+  );
+  expect(m.search).not.toHaveBeenCalled();
+  expect(m.start).not.toHaveBeenCalled();
 });
 
 it("does not pass revoked partial evidence back into a model", async () => {

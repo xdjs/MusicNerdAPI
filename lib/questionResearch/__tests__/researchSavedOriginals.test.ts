@@ -74,6 +74,82 @@ it("lets the SDK loop browse, read, repair an unread ID and finish while account
   );
 });
 
+it("searches and reads both available facet targets through the real saved-navigation tools", async () => {
+  const early: ResearchOriginal = {
+    ...original,
+    sourceId: "early-record",
+    text: "On my first record I used drum machines and sampled rhythm loops.",
+    url: "https://inprocess.world/post/early",
+  };
+  const later: ResearchOriginal = {
+    ...original,
+    sourceId: "later-album",
+    text: "For the later album, production uses live drums and a room microphone.",
+    url: "https://inprocess.world/post/later",
+  };
+  const modelInstance = new MockLanguageModelV3({
+    doGenerate: [
+      response("searchSources", { query: "first record drum machines" }),
+      response("searchSources", { query: "later album production live drums" }),
+      response("readSources", {
+        sources: [
+          { sourceId: "early-record", start: 0 },
+          { sourceId: "later-album", start: 0 },
+        ],
+      }),
+      response("finishEvidence", {
+        referenceIds: ["read:2", "read:3"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:3"] },
+          { id: "f2", referenceIds: ["read:2"] },
+        ],
+      }),
+    ],
+  });
+  model.current = modelInstance;
+  const request = {
+    topic: "Artist; first record production; later album production",
+    freshness: "stored" as const,
+    evidenceNeed: "reporting" as const,
+    evidenceFacets: [
+      { id: "f1" as const, intent: "first record production" },
+      { id: "f2" as const, intent: "later album production" },
+    ],
+  };
+  const result = await researchSavedOriginals(
+    request,
+    [early, later],
+    { name: "Artist" },
+    [],
+    40000,
+    {
+      reserve: async () => true,
+      checkpoint: async () => true,
+      remainingSteps: 5,
+    },
+  );
+  expect(result).toMatchObject({
+    sufficient: true,
+    references: [
+      expect.objectContaining({ sourceId: "later-album" }),
+      expect.objectContaining({ sourceId: "early-record" }),
+    ],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [1] },
+      { id: "f2", referenceIndexes: [0] },
+    ],
+    trace: { calls: ["search", "search", "read", "finish"] },
+  });
+  expect(modelInstance.doGenerateCalls[0].prompt).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining("prioritize targeted searches and reads for facets"),
+      }),
+    ]),
+  );
+});
+
 it("round-trips the strict navigator trace through the persisted worker state parser", async () => {
   model.current = new MockLanguageModelV3({
     doGenerate: [
