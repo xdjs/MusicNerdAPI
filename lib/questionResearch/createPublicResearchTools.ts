@@ -137,7 +137,7 @@ export function createPublicResearchTools(
     }),
     searchSources: tool({
       description:
-        "Search all eligible saved originals using your own terms. Returns compact original windows anchored near keyword passages with exact offsets; use readSources for more context. Text returned counts against the 24,000-character budget. Check remainingReadChars and avoid repeating searches that returned the same passages.",
+        "Search the body text of all eligible saved originals, not publisher domains or site metadata. For provider-specific exploration, use browseSources with a provider filter from the inventory. Returns compact original windows anchored near keyword passages with exact offsets; use readSources for more context. Text returned counts against the 24,000-character budget. Check remainingReadChars and avoid repeating searches that returned the same passages.",
       inputSchema: z.object({ query: z.string().min(1).max(300) }),
       execute: async ({ query }) => {
         const blocked = reserve("search");

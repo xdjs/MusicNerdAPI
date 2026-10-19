@@ -52,6 +52,9 @@ it("makes quieter providers visible without discarding or hiding the busy accoun
 
 it("lets a model search a new term and return only an actually read original", async () => {
   const s = createPublicResearchTools(corpus, request, "Artist", []);
+  expect(s.tools.searchSources.description).toContain("body text of all eligible saved originals");
+  expect(s.tools.searchSources.description).toContain("not publisher domains");
+  expect(s.tools.searchSources.description).toContain("browseSources with a provider filter");
   const result = await s.tools.searchSources.execute!({ query: "studio recordings" }, context);
   expect(result).toMatchObject({ references: [expect.objectContaining({ sourceId: "moment:1" })] });
   await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context);

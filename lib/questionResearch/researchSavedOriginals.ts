@@ -41,17 +41,27 @@ export async function researchSavedOriginals(
     providerOptions: { google: { thinkingConfig: { thinkingLevel: "low" } } },
     prepareStep: async ({ stepNumber }) => {
       if (!(await budget.reserve())) throw new Error("Research lease lost");
-      if (stepNumber >= maxSteps - 1) {
-        return {
-          activeTools: ["finishEvidence", "requestLookup", "finishUnresolved"],
-          toolChoice: "auto" as const,
-          instructions: [
-            navigatorInstructions,
-            "This is your final allowed navigator step. Do not browse, search, or read. If already-read evidence supports a useful answer or partial answer, select it with finishEvidence using only actual read reference IDs. If the already-read text shows a specific evidence gap and an available lookup can help, request that lookup and retain useful read IDs. If the already-read text shows a specific evidence gap and no available lookup can help, finishUnresolved and name that gap. Do not claim evidence is absent only because the step or time budget is ending. If no action is justified by what you read, leave the result incomplete.",
-          ].join("\n"),
-        };
-      }
-      return {};
+      const isFinalStep = stepNumber >= maxSteps - 1;
+      const explorationStepsRemaining = isFinalStep ? 0 : maxSteps - stepNumber - 1;
+      const modelStepsRemaining = Math.max(0, maxSteps - stepNumber - 1);
+      return {
+        ...(isFinalStep
+          ? {
+              activeTools: ["finishEvidence", "requestLookup", "finishUnresolved"] as const,
+              toolChoice: "auto" as const,
+            }
+          : {}),
+        instructions: [
+          navigatorInstructions,
+          `Navigator step ${stepNumber + 1} of ${maxSteps}. Exploration steps remaining before final selection: ${explorationStepsRemaining}${isFinalStep ? "" : " (including this call)"}. Model steps remaining after this call: ${modelStepsRemaining}.`,
+          "During exploration steps, prioritize targeted reads of known promising sources before final selection; use readSources on sources already found in browse/search results. Search body text with searchSources; use browseSources with a provider filter from the inventory for provider-specific exploration.",
+          ...(isFinalStep
+            ? [
+                "This is your final allowed navigator step. Do not browse, search, or read. If already-read evidence supports a useful answer or partial answer, select it with finishEvidence using only actual read reference IDs. If the already-read text shows a specific evidence gap and an available lookup can help, request that lookup and retain useful read IDs. If the already-read text shows a specific evidence gap and no available lookup can help, finishUnresolved and name that gap. Do not claim evidence is absent only because the step or time budget is ending. If no action is justified by what you read, leave the result incomplete.",
+              ]
+            : []),
+        ].join("\n"),
+      };
     },
     onStepEnd: async event => {
       if (

@@ -119,6 +119,36 @@ it("reserves the final navigator step for selecting already-read evidence", asyn
       }),
     ]),
   );
+  expect(modelInstance.doGenerateCalls[0].prompt).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining(
+          "Navigator step 1 of 5. Exploration steps remaining before final selection: 4 (including this call). Model steps remaining after this call: 4.",
+        ),
+      }),
+    ]),
+  );
+  expect(modelInstance.doGenerateCalls[3].prompt).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining(
+          "Navigator step 4 of 5. Exploration steps remaining before final selection: 1 (including this call). Model steps remaining after this call: 1.",
+        ),
+      }),
+    ]),
+  );
+  expect(modelInstance.doGenerateCalls[4].prompt).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining(
+          "Navigator step 5 of 5. Exploration steps remaining before final selection: 0. Model steps remaining after this call: 0.",
+        ),
+      }),
+    ]),
+  );
 });
 
 it("finalizes on the last of two available navigator steps without a sixth call", async () => {
@@ -153,6 +183,16 @@ it("finalizes on the last of two available navigator steps without a sixth call"
     "requestLookup",
     "finishUnresolved",
   ]);
+  expect(modelInstance.doGenerateCalls[1].prompt).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining(
+          "Navigator step 2 of 2. Exploration steps remaining before final selection: 0. Model steps remaining after this call: 0.",
+        ),
+      }),
+    ]),
+  );
 });
 
 it("reports an incomplete exploration as operational failure, never evidence absence", async () => {
