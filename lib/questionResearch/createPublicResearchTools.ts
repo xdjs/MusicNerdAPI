@@ -14,6 +14,9 @@ const reason = z.enum([
   "unsupported_speech",
   "date_or_edition_uncertain",
 ]);
+const MAX_TOOL_CALLS = 12;
+const RESERVED_COMPLETION_TOOL_CALLS = 2;
+const MAX_EXPLORATION_TOOL_CALLS = MAX_TOOL_CALLS - RESERVED_COMPLETION_TOOL_CALLS;
 type Outcome = {
   sufficient: boolean;
   references: ResearchReference[];
@@ -48,13 +51,29 @@ export function createPublicResearchTools(
   const read = new Map<string, ResearchReference>();
   let outcome: Outcome | undefined;
   let toolCalls = 0;
+  let explorationToolCalls = 0;
   let readChars = 0;
   let evidenceBudgetExhausted = false;
   const calls: string[] = [];
   let rejectedIdCount = 0;
-  const reserve = (name: string) => {
-    if (outcome) return { error: "already_finished" };
-    if (toolCalls >= 12) return { error: "tool_budget_exhausted" };
+  const remainingToolBudget = () => {
+    const remainingToolCalls = Math.max(0, MAX_TOOL_CALLS - toolCalls);
+    return {
+      remainingToolCalls,
+      remainingExplorationCalls: Math.min(
+        remainingToolCalls,
+        Math.max(0, MAX_EXPLORATION_TOOL_CALLS - explorationToolCalls),
+      ),
+      remainingCompletionCalls: remainingToolCalls,
+    };
+  };
+  const reserve = (name: string, phase: "exploration" | "completion" = "exploration") => {
+    if (outcome) return { error: "already_finished", ...remainingToolBudget() };
+    if (phase === "exploration" && explorationToolCalls >= MAX_EXPLORATION_TOOL_CALLS)
+      return { error: "exploration_tool_budget_exhausted", ...remainingToolBudget() };
+    if (toolCalls >= MAX_TOOL_CALLS)
+      return { error: "tool_budget_exhausted", ...remainingToolBudget() };
+    if (phase === "exploration") explorationToolCalls++;
     toolCalls++;
     calls.push(name);
     return null;
@@ -213,12 +232,16 @@ export function createPublicResearchTools(
         "Finish with supporting read reference IDs. Select useful, relevant originals with surrounding qualifications. This selects evidence; the answer is drafted and verified separately.",
       inputSchema: z.object({ referenceIds: z.array(z.string().max(200)).min(1).max(6) }),
       execute: async ({ referenceIds }) => {
-        const blocked = reserve("finish");
+        const blocked = reserve("finish", "completion");
         if (blocked) return blocked;
         const ids = [...new Set(referenceIds)];
         if (ids.some(id => !read.has(id))) {
           rejectedIdCount += ids.filter(id => !read.has(id)).length;
-          return { error: "unread_reference", availableReferenceIds: [...read.keys()] };
+          return {
+            error: "unread_reference",
+            availableReferenceIds: [...read.keys()],
+            ...remainingToolBudget(),
+          };
         }
         const references = ids.map(id => read.get(id)!);
         const limit =
@@ -241,7 +264,7 @@ export function createPublicResearchTools(
         referenceIds: z.array(z.string().max(200)).max(3).optional(),
       }),
       execute: async ({ provider, reason, referenceIds = [] }) => {
-        const blocked = reserve("lookup");
+        const blocked = reserve("lookup", "completion");
         if (blocked) return blocked;
         if (eligible.length && !read.size) return { error: "read_saved_sources_first" };
         if (evidenceBudgetExhausted) return { error: "evidence_budget_exhausted" };
@@ -263,7 +286,7 @@ export function createPublicResearchTools(
         "Finish when inspected saved evidence cannot establish the answer and no available lookup can help. Do not use this for a time, tool or context limit.",
       inputSchema: z.object({ reason }),
       execute: async ({ reason }) => {
-        const blocked = reserve("unresolved");
+        const blocked = reserve("unresolved", "completion");
         if (blocked) return blocked;
         if (eligible.length && !read.size) return { error: "read_saved_sources_first" };
         if (evidenceBudgetExhausted) return { error: "evidence_budget_exhausted" };

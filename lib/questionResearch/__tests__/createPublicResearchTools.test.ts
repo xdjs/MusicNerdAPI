@@ -64,6 +64,66 @@ it("lets a model search a new term and return only an actually read original", a
   });
 });
 
+it("reserves two of twelve tool calls for finishing after ten exploration calls", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  for (let i = 0; i < 9; i++) await s.tools.browseSources.execute!({ offset: 0 }, context);
+
+  expect(await s.tools.searchSources.execute!({ query: "more" }, context)).toMatchObject({
+    error: "exploration_tool_budget_exhausted",
+    remainingToolCalls: 2,
+    remainingExplorationCalls: 0,
+    remainingCompletionCalls: 2,
+  });
+  expect(s.trace().toolCalls).toBe(10);
+  expect(s.trace().readSourceIds).toEqual(["moment:1"]);
+
+  expect(
+    await s.tools.finishEvidence.execute!({ referenceIds: ["invented"] }, context),
+  ).toMatchObject({
+    error: "unread_reference",
+    remainingToolCalls: 1,
+    remainingExplorationCalls: 0,
+    remainingCompletionCalls: 1,
+  });
+  expect(
+    await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context),
+  ).toMatchObject({
+    status: "complete",
+  });
+  expect(s.trace()).toMatchObject({
+    toolCalls: 12,
+    readSourceIds: ["moment:1"],
+    stopReason: "supported",
+  });
+});
+
+it("never reports more remaining exploration calls than the total call budget", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  for (let i = 0; i < 3; i++)
+    await s.tools.finishEvidence.execute!({ referenceIds: [`invented:${i}`] }, context);
+
+  expect(s.trace()).toMatchObject({
+    toolCalls: 3,
+    readChars: 0,
+    calls: ["finish", "finish", "finish"],
+    readSourceIds: [],
+    rejectedIdCount: 3,
+    stopReason: "incomplete",
+  });
+  expect(Object.keys(s.trace()).sort()).toEqual(
+    [
+      "eligibleSources",
+      "toolCalls",
+      "readChars",
+      "calls",
+      "readSourceIds",
+      "rejectedIdCount",
+      "stopReason",
+    ].sort(),
+  );
+});
+
 it("keeps repeated navigation searches compact and leaves budget for a later passage", async () => {
   const text =
     "Opening context. " +
