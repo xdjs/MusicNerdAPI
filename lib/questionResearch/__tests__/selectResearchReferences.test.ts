@@ -62,6 +62,54 @@ it("keeps navigator search context compact around deep keyword passages", () => 
   );
   expect(normalContext.some(reference => reference.text.length > 1000)).toBe(true);
 });
+it("uses distinct supplemental credit evidence within the compact navigation budget", () => {
+  const repeated =
+    "Moonrise collaboration collaborator collaborated produced producer featuring featured feat drums vocals written songwriting credits. ".repeat(
+      60,
+    );
+  const originals: ResearchOriginal[] = [
+    {
+      ...original,
+      sourceId: "vault:a",
+      revision: "a".repeat(64),
+      url: "https://artist.example/a",
+      text: repeated,
+    },
+    {
+      ...original,
+      sourceId: "vault:b",
+      revision: "b".repeat(64),
+      url: "https://artist.example/b",
+      text: repeated,
+    },
+    {
+      ...original,
+      sourceId: "vault:c",
+      revision: "c".repeat(64),
+      url: "https://artist.example/c",
+      text: "On the separate recording, Ada supplied drums. " + "Background context. ".repeat(60),
+    },
+  ];
+  const references = selectResearchReferences(
+    originals,
+    { topic: "Moonrise", evidenceNeed: "credits", freshness: "stored" },
+    "Artist",
+    Date.now(),
+    { mode: "navigation-context" },
+  );
+
+  expect(references.length).toBeLessThanOrEqual(4);
+  expect(references.every(reference => reference.text.length <= 1000)).toBe(true);
+  expect(
+    references.reduce((total, reference) => total + reference.text.length, 0),
+  ).toBeLessThanOrEqual(4000);
+  expect(references.some(reference => reference.sourceId === "vault:c")).toBe(true);
+  for (const reference of references) {
+    const source = originals.find(original => original.sourceId === reference.sourceId)!;
+    expect(source.text.slice(reference.start, reference.end)).toBe(reference.text);
+  }
+});
+
 it("never treats a caption as requested speech", () => {
   expect(
     selectResearchReferences(

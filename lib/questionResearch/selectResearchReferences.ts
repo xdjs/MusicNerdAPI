@@ -136,7 +136,7 @@ export function selectResearchReferences(
           operation: "search",
           query: supplement,
           limit: 12,
-          maxChars: navigationContext ? 4000 : 12_000,
+          maxChars: 12_000,
         },
         {
           maxPassageChars: navigationContext ? 1000 : undefined,
