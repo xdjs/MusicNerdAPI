@@ -13,9 +13,8 @@ vi.mock("@/lib/networking/getCorsHeaders", () => ({
   getCorsHeaders: () => ({ "Access-Control-Allow-Origin": "*" }),
 }));
 
-const { postRemoveArtistDataHandler } = await import(
-  "@/lib/removeArtistData/postRemoveArtistDataHandler"
-);
+const { postRemoveArtistDataHandler } =
+  await import("@/lib/removeArtistData/postRemoveArtistDataHandler");
 
 const artistId = "00000000-0000-0000-0000-000000000001";
 

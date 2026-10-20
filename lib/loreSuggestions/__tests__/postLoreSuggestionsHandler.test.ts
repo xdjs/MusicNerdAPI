@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { postLoreSuggestionsHandler } from "@/lib/loreSuggestions/postLoreSuggestionsHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -16,8 +17,6 @@ vi.mock("@/lib/db/db", () => ({
 vi.mock("@/lib/db/schema", () => ({
   artistVaultSources: { artistId: "artist_id", url: "url" },
 }));
-
-import { postLoreSuggestionsHandler } from "@/lib/loreSuggestions/postLoreSuggestionsHandler";
 
 const artistId = "550e8400-e29b-41d4-a716-446655440000";
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { putArtistBioHandler } from "@/lib/artistBio/putArtistBioHandler";
 
 const mock = vi.hoisted(() => ({
   validate: vi.fn(),
@@ -22,8 +23,6 @@ vi.mock("@/lib/db/db", () => ({
 vi.mock("@/lib/db/schema", () => ({
   artists: { id: "id" },
 }));
-
-import { putArtistBioHandler } from "@/lib/artistBio/putArtistBioHandler";
 
 const artistId = "50f23458-df64-4381-8042-7333e8b64531";
 const userId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";

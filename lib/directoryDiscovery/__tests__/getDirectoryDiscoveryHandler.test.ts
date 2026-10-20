@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { getDirectoryDiscoveryHandler } from "@/lib/directoryDiscovery/getDirectoryDiscoveryHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -7,8 +8,6 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: mock.auth }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
-
-import { getDirectoryDiscoveryHandler } from "@/lib/directoryDiscovery/getDirectoryDiscoveryHandler";
 
 const validId = "550e8400-e29b-41d4-a716-446655440000";
 

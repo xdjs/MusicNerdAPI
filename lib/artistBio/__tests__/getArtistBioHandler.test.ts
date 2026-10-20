@@ -13,6 +13,7 @@ vi.mock("@/lib/artists/getArtistById", () => ({
   getArtistById: mock.getArtist,
 }));
 
+// eslint-disable-next-line import/first
 import { getArtistBioHandler } from "@/lib/artistBio/getArtistBioHandler";
 
 const artistId = "50f23458-df64-4381-8042-7333e8b64531";

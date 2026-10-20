@@ -48,10 +48,7 @@ export async function postRemoveArtistDataHandler(request: Request): Promise<Nex
     columns: { isAdmin: true },
   });
   if (!user?.isAdmin)
-    return NextResponse.json(
-      { status: "error", error: "Unauthorized" },
-      { status: 403, headers },
-    );
+    return NextResponse.json({ status: "error", error: "Unauthorized" }, { status: 403, headers });
 
   try {
     await clearArtistLink(artistId, siteName);

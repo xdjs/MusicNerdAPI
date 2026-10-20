@@ -28,7 +28,10 @@ export async function getArtistBioHandler(request: Request, id: string): Promise
 
     const artist = await getArtistById(id);
     if (!artist) {
-      return NextResponse.json({ status: "error", error: "Artist not found" }, { status: 404, headers });
+      return NextResponse.json(
+        { status: "error", error: "Artist not found" },
+        { status: 404, headers },
+      );
     }
 
     return NextResponse.json({ status: "ok", bio: artist.bio ?? null }, { headers });

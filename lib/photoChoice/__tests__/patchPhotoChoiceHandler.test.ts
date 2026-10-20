@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { patchPhotoChoiceHandler } from "@/lib/photoChoice/patchPhotoChoiceHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -16,8 +17,6 @@ vi.mock("@/lib/auth/canEditArtist", () => ({
 vi.mock("@/lib/db/db", () => ({
   db: { execute: mock.execute },
 }));
-
-import { patchPhotoChoiceHandler } from "@/lib/photoChoice/patchPhotoChoiceHandler";
 
 const artistId = "50f23458-df64-4381-8042-7333e8b64531";
 const userId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
@@ -49,9 +48,7 @@ describe("patchPhotoChoiceHandler", () => {
   });
 
   it("accepts null to clear the image", async () => {
-    const res = await patchPhotoChoiceHandler(
-      patch({ artistId, customImage: null }),
-    );
+    const res = await patchPhotoChoiceHandler(patch({ artistId, customImage: null }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
   });
@@ -60,9 +57,7 @@ describe("patchPhotoChoiceHandler", () => {
     mock.auth.mockResolvedValue(
       NextResponse.json({ status: "error", error: "Not signed in" }, { status: 401 }),
     );
-    const res = await patchPhotoChoiceHandler(
-      patch({ artistId, customImage: null }),
-    );
+    const res = await patchPhotoChoiceHandler(patch({ artistId, customImage: null }));
     expect(res.status).toBe(401);
     expect(mock.execute).not.toHaveBeenCalled();
   });
@@ -73,9 +68,7 @@ describe("patchPhotoChoiceHandler", () => {
   });
 
   it("returns 400 on extra fields (strict)", async () => {
-    const res = await patchPhotoChoiceHandler(
-      patch({ artistId, customImage: null, extra: true }),
-    );
+    const res = await patchPhotoChoiceHandler(patch({ artistId, customImage: null, extra: true }));
     expect(res.status).toBe(400);
   });
 
@@ -91,9 +84,7 @@ describe("patchPhotoChoiceHandler", () => {
 
   it("returns 500 on database error", async () => {
     mock.execute.mockRejectedValue(new Error("db down"));
-    const res = await patchPhotoChoiceHandler(
-      patch({ artistId, customImage: null }),
-    );
+    const res = await patchPhotoChoiceHandler(patch({ artistId, customImage: null }));
     expect(res.status).toBe(500);
   });
 });

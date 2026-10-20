@@ -31,10 +31,7 @@ export async function patchHeaderPositionHandler(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json(
-      { status: "error", error: "Invalid JSON" },
-      { status: 400, headers },
-    );
+    return NextResponse.json({ status: "error", error: "Invalid JSON" }, { status: 400, headers });
   }
 
   const parsed = bodySchema.safeParse(body);

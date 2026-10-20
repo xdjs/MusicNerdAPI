@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { putLinkOrderHandler } from "@/lib/linkOrder/putLinkOrderHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -16,8 +17,6 @@ vi.mock("@/lib/auth/canEditArtist", () => ({
 vi.mock("@/lib/db/db", () => ({
   db: { execute: mock.execute },
 }));
-
-import { putLinkOrderHandler } from "@/lib/linkOrder/putLinkOrderHandler";
 
 const artistId = "50f23458-df64-4381-8042-7333e8b64531";
 const userId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
@@ -52,9 +51,7 @@ describe("putLinkOrderHandler", () => {
     mock.auth.mockResolvedValue(
       NextResponse.json({ status: "error", error: "Not signed in" }, { status: 401 }),
     );
-    const res = await putLinkOrderHandler(
-      put({ artistId, section: "music", order: [] }),
-    );
+    const res = await putLinkOrderHandler(put({ artistId, section: "music", order: [] }));
     expect(res.status).toBe(401);
     expect(mock.execute).not.toHaveBeenCalled();
   });
@@ -74,9 +71,7 @@ describe("putLinkOrderHandler", () => {
 
   it("returns 403 when user cannot edit artist", async () => {
     mock.canEdit.mockResolvedValue(false);
-    const res = await putLinkOrderHandler(
-      put({ artistId, section: "music", order: ["spotify"] }),
-    );
+    const res = await putLinkOrderHandler(put({ artistId, section: "music", order: ["spotify"] }));
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: "Not your artist" });
     expect(mock.execute).not.toHaveBeenCalled();
@@ -84,17 +79,13 @@ describe("putLinkOrderHandler", () => {
 
   it("returns 500 on database error", async () => {
     mock.execute.mockRejectedValue(new Error("db down"));
-    const res = await putLinkOrderHandler(
-      put({ artistId, section: "music", order: [] }),
-    );
+    const res = await putLinkOrderHandler(put({ artistId, section: "music", order: [] }));
     expect(res.status).toBe(500);
   });
 
   it("has CORS headers on error responses", async () => {
     mock.canEdit.mockResolvedValue(false);
-    const res = await putLinkOrderHandler(
-      put({ artistId, section: "music", order: [] }),
-    );
+    const res = await putLinkOrderHandler(put({ artistId, section: "music", order: [] }));
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 });

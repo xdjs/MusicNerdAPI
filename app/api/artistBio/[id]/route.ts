@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * GET /api/artistBio/[id] — returns the artist's bio text.
  *
  * @param request - Authenticated request.
- * @param context - Route context with artist id.
+ * @param context - Route context.
+ * @param context.params - Promise resolving to `{ id }`.
  * @returns 200 with `{ status: "ok", bio }`.
  */
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -19,7 +20,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
  * PUT /api/artistBio/[id] — updates the artist's bio text.
  *
  * @param request - Authenticated request with `{ bio }`.
- * @param context - Route context with artist id.
+ * @param context - Route context.
+ * @param context.params - Promise resolving to `{ id }`.
  * @returns 200 with `{ status: "ok" }`.
  */
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {

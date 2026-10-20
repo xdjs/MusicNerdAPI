@@ -29,7 +29,10 @@ export async function getPhotoChoiceHandler(request: Request): Promise<NextRespo
     }
 
     if (!(await canEditArtist(auth.userId, artistId))) {
-      return NextResponse.json({ status: "error", error: "Not your artist" }, { status: 403, headers });
+      return NextResponse.json(
+        { status: "error", error: "Not your artist" },
+        { status: 403, headers },
+      );
     }
 
     const rows = await db.execute(

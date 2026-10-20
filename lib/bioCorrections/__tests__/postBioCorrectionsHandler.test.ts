@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { postBioCorrectionsHandler } from "@/lib/bioCorrections/postBioCorrectionsHandler";
 
 const mock = vi.hoisted(() => ({
   validate: vi.fn(),
@@ -9,8 +10,6 @@ vi.mock("@/lib/auth/validateArtistEditRequest", () => ({
   validateArtistEditRequest: mock.validate,
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
-
-import { postBioCorrectionsHandler } from "@/lib/bioCorrections/postBioCorrectionsHandler";
 
 describe("postBioCorrectionsHandler", () => {
   beforeEach(() => {

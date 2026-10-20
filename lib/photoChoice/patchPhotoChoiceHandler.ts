@@ -30,7 +30,10 @@ export async function patchPhotoChoiceHandler(request: Request): Promise<NextRes
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json({ status: "error", error: "Invalid JSON" }, { status: 400, headers });
+      return NextResponse.json(
+        { status: "error", error: "Invalid JSON" },
+        { status: 400, headers },
+      );
     }
 
     const parsed = bodySchema.safeParse(body);
@@ -44,7 +47,10 @@ export async function patchPhotoChoiceHandler(request: Request): Promise<NextRes
     const { artistId, customImage } = parsed.data;
 
     if (!(await canEditArtist(auth.userId, artistId))) {
-      return NextResponse.json({ status: "error", error: "Not your artist" }, { status: 403, headers });
+      return NextResponse.json(
+        { status: "error", error: "Not your artist" },
+        { status: 403, headers },
+      );
     }
 
     await db.execute(

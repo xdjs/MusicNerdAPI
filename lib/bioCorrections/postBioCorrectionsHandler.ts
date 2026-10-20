@@ -40,10 +40,7 @@ export async function postBioCorrectionsHandler(request: Request, id: string) {
   try {
     body = JSON.parse(text);
   } catch {
-    return NextResponse.json(
-      { status: "error", error: "Invalid JSON" },
-      { status: 400, headers },
-    );
+    return NextResponse.json({ status: "error", error: "Invalid JSON" }, { status: 400, headers });
   }
 
   const parsed = bodySchema.safeParse(body);

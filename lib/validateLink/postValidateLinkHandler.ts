@@ -18,16 +18,26 @@ const platforms = [
   {
     name: "youtubechannel",
     regex: /^https?:\/\/(www\.)?youtube\.com\/channel\/([^\/?#]+)(?:[\/?#].*)?$/,
-    errorPhrases: ["This page isn't available", "404 Not Found", "Channel does not exist", "has been terminated"],
+    errorPhrases: [
+      "This page isn't available",
+      "404 Not Found",
+      "Channel does not exist",
+      "has been terminated",
+    ],
   },
   {
     name: "soundcloud",
     regex: /^https?:\/\/(www\.)?soundcloud\.com\/[A-Za-z0-9_-]+/,
-    errorPhrases: ["Sorry! We can't find that user.", "We can't find that user.", "We couldn't find that page."],
+    errorPhrases: [
+      "Sorry! We can't find that user.",
+      "We can't find that user.",
+      "We couldn't find that page.",
+    ],
   },
   {
     name: "bandcamp",
-    regex: /^https?:\/\/(?:([A-Za-z0-9_-]+)\.bandcamp\.[^\/]+|(?:www\.)?bandcamp\.com\/[A-Za-z0-9_-]+)/,
+    regex:
+      /^https?:\/\/(?:([A-Za-z0-9_-]+)\.bandcamp\.[^\/]+|(?:www\.)?bandcamp\.com\/[A-Za-z0-9_-]+)/,
     errorPhrases: ["Sorry, that something isn't here.", "404 Not Found"],
   },
   {
@@ -128,7 +138,10 @@ export async function postValidateLinkHandler(request: Request): Promise<NextRes
       const text = await response.text();
       for (const phrase of platform.errorPhrases) {
         if (text.toLowerCase().includes(phrase.toLowerCase()))
-          return NextResponse.json({ valid: false, reason: `${platform.name} error page` }, { headers });
+          return NextResponse.json(
+            { valid: false, reason: `${platform.name} error page` },
+            { headers },
+          );
       }
     }
 

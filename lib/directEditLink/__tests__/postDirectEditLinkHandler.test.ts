@@ -20,9 +20,8 @@ vi.mock("@/lib/networking/getCorsHeaders", () => ({
   getCorsHeaders: () => ({ "Access-Control-Allow-Origin": "*" }),
 }));
 
-const { postDirectEditLinkHandler } = await import(
-  "@/lib/directEditLink/postDirectEditLinkHandler"
-);
+const { postDirectEditLinkHandler } =
+  await import("@/lib/directEditLink/postDirectEditLinkHandler");
 
 const artistId = "00000000-0000-0000-0000-000000000001";
 

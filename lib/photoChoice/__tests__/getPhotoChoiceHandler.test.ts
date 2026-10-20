@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { getPhotoChoiceHandler } from "@/lib/photoChoice/getPhotoChoiceHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -16,8 +17,6 @@ vi.mock("@/lib/auth/canEditArtist", () => ({
 vi.mock("@/lib/db/db", () => ({
   db: { execute: mock.execute },
 }));
-
-import { getPhotoChoiceHandler } from "@/lib/photoChoice/getPhotoChoiceHandler";
 
 const artistId = "50f23458-df64-4381-8042-7333e8b64531";
 const userId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";

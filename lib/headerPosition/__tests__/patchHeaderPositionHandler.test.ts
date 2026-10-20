@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
+import { patchHeaderPositionHandler } from "@/lib/headerPosition/patchHeaderPositionHandler";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -9,8 +10,6 @@ const mock = vi.hoisted(() => ({
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: mock.auth }));
 vi.mock("@/lib/auth/canEditArtist", () => ({ canEditArtist: mock.canEdit }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
-
-import { patchHeaderPositionHandler } from "@/lib/headerPosition/patchHeaderPositionHandler";
 
 const artistId = "550e8400-e29b-41d4-a716-446655440000";
 const validBody = { artistId, imageUrl: "https://example.com/photo.jpg", y: 50 };
