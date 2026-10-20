@@ -69,7 +69,15 @@ export async function applyProfileLinkDecisions(
       continue;
     }
     try {
-      await setArtistLink(artistId, extracted.siteName, extracted.id);
+      if (opts?.verifyIdentity && extracted.siteName === "deezer") {
+        if (!run.deezerWriteEvidence) {
+          outcome.identityBlocked.push(url);
+          continue;
+        }
+        await setArtistLink(artistId, extracted.siteName, extracted.id, run.deezerWriteEvidence);
+      } else {
+        await setArtistLink(artistId, extracted.siteName, extracted.id);
+      }
       outcome.written.push(extracted.siteName);
     } catch (e) {
       console.error(`[onboarding] setArtistLink failed for ${url}:`, e);
