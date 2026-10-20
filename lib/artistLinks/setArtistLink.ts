@@ -1,4 +1,4 @@
-import type { DeezerWriteEvidence } from "@/lib/providerIdentity/types";
+import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { acquireArtistPlatformWriteLocks } from "@/lib/artistLinks/acquireArtistPlatformWriteLocks";
 import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkColumn";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
@@ -26,7 +26,7 @@ export async function setArtistLink(
   artistId: string,
   siteName: string,
   value: string,
-  evidence?: DeezerWriteEvidence,
+  evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const columnName = sanitizeColumnName(siteName);
   assertWritableLinkColumn(columnName);

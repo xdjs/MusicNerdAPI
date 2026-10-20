@@ -1,4 +1,4 @@
-import type { DeezerWriteEvidence } from "@/lib/providerIdentity/types";
+import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { rowsOf } from "@/lib/db/rowsOf";
 import { and, eq, sql } from "drizzle-orm";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
@@ -24,7 +24,7 @@ export async function writeArtistLinkColumn(
   artistId: string,
   columnName: string,
   value: string,
-  evidence?: DeezerWriteEvidence,
+  evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
@@ -65,15 +65,28 @@ export async function writeArtistLinkColumn(
   }
 
   if (evidence) {
-    if (columnName !== "deezer" || value !== evidence.deezerId)
-      throw new ArtistLinkConflictError("Automatic Deezer evidence does not match the write");
+    const isDeezer = "previousDeezerId" in evidence;
+    if (
+      columnName !== (isDeezer ? "deezer" : "spotify") ||
+      value !== (isDeezer ? evidence.deezerId : evidence.spotifyId)
+    )
+      throw new ArtistLinkConflictError("Automatic catalog evidence does not match the write");
     const updated = rowsOf(
-      await database.execute(sql`
-      UPDATE artists SET deezer = ${value}
-      WHERE id = ${artistId} AND spotify = ${evidence.spotifyId}
-        AND deezer IS NOT DISTINCT FROM ${evidence.previousDeezerId}
-      RETURNING id
-    `),
+      await database.execute(
+        isDeezer
+          ? sql`
+        UPDATE artists SET deezer = ${value}
+        WHERE id = ${artistId} AND spotify = ${evidence.spotifyId}
+          AND deezer IS NOT DISTINCT FROM ${evidence.previousDeezerId}
+        RETURNING id
+      `
+          : sql`
+        UPDATE artists SET spotify = ${value}
+        WHERE id = ${artistId} AND deezer = ${evidence.deezerId}
+          AND spotify IS NOT DISTINCT FROM ${evidence.previousSpotifyId}
+        RETURNING id
+      `,
+      ),
     );
     if (updated.length !== 1)
       throw new ArtistLinkConflictError("Catalog identity changed during automatic verification");
