@@ -8,10 +8,11 @@ import {
   artistVaultSources,
 } from "@/lib/db/schema";
 
-/** Link columns the claim build discovers; reset nulls all of them. */
+/** Link columns the claim build discovers; reset nulls all of them.
+ *  Deezer is excluded: it comes from `artist_id_mappings`, not discovery,
+ *  so the build cannot re-find it. */
 const DISCOVERABLE_LINK_COLUMNS = [
   "spotify",
-  "deezer",
   "instagram",
   "tiktok",
   "x",
@@ -43,7 +44,6 @@ export async function resetClaimBuild(artistId: string) {
     const [artist] = await tx
       .select({
         spotify: artists.spotify,
-        deezer: artists.deezer,
         instagram: artists.instagram,
         tiktok: artists.tiktok,
         x: artists.x,
@@ -71,7 +71,6 @@ export async function resetClaimBuild(artistId: string) {
       .update(artists)
       .set({
         spotify: null,
-        deezer: null,
         instagram: null,
         tiktok: null,
         x: null,
