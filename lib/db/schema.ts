@@ -5,6 +5,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   date,
   integer,
@@ -75,6 +76,7 @@ export const artists = pgTable("artists", {
   subvert: text(),
   bluesky: text(),
   inprocess: text(),
+  customImage: text("custom_image"),
 });
 
 export const users = pgTable("users", {
@@ -345,3 +347,51 @@ export const artistLatestProviderSnapshots = pgTable(
   },
   table => [primaryKey({ columns: [table.artistId, table.provider] })],
 );
+
+export const ugcresearch = pgTable("ugcresearch", {
+  id: uuid()
+    .default(sql`uuid_generate_v4()`)
+    .primaryKey()
+    .notNull(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
+  artistUri: text("artist_uri"),
+  accepted: boolean().default(false),
+  ugcUrl: text("ugc_url"),
+  siteName: text("site_name"),
+  siteUsername: text("site_username"),
+  artistId: uuid("artist_id"),
+  dateProcessed: timestamp("date_processed", { mode: "string" }),
+  name: text(),
+  userId: uuid("user_id"),
+  origin: text().default("unknown").notNull(),
+});
+
+export const funfacts = pgTable("funfacts", {
+  id: bigint({ mode: "number" }).generatedByDefaultAsIdentity({
+    name: "funfacts_id_seq",
+    startWith: 1,
+    increment: 1,
+    minValue: 1,
+    maxValue: 9223372036854775807,
+    cache: 1,
+  }),
+  loreDrop: text("lore_drop"),
+  behindTheScenes: text("behind_the_scenes"),
+  recentActivity: text("recent_activity"),
+  surpriseMe: text("surprise_me").notNull(),
+  isActive: boolean("is_active").default(false),
+});
+
+export const artistSelfEdits = pgTable("artist_self_edits", {
+  id: uuid().defaultRandom().primaryKey(),
+  artistId: uuid("artist_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  siteName: text("site_name").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value").notNull(),
+  submittedUrl: text("submitted_url").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+    .default(sql`clock_timestamp()`)
+    .notNull(),
+});
