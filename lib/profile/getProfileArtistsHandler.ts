@@ -57,7 +57,7 @@ export async function getProfileArtistsHandler(request: Request): Promise<NextRe
 
   const total = (totals[0] as { total: number })?.total ?? 0;
   const artists = (
-    rows as Array<{ id: string; name: string | null; custom_image: string | null }>
+    rows as unknown as Array<{ id: string; name: string | null; custom_image: string | null }>
   ).map(a => ({
     artistId: a.id,
     artistName: a.name ?? "Unknown artist",

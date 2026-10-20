@@ -39,7 +39,7 @@ export async function getArtistSummariesHandler(request: Request): Promise<NextR
     WHERE a.id IN (${sql.join(placeholders, sql`, `)})
   `);
 
-  const result = (rows as Array<{ id: string; bio: string | null }>).map(row => ({
+  const result = (rows as unknown as Array<{ id: string; bio: string | null }>).map(row => ({
     id: row.id,
     bio: row.bio && isRealBio(row.bio) ? row.bio : null,
   }));

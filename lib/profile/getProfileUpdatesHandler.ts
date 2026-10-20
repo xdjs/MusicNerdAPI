@@ -64,7 +64,7 @@ export async function getProfileUpdatesHandler(request: Request): Promise<NextRe
   const total = (totalRows[0] as { total: number })?.total ?? 0;
 
   const items: Array<Record<string, unknown>> = [];
-  for (const row of artistRows as Array<{ id: string; name: string | null }>) {
+  for (const row of artistRows as unknown as Array<{ id: string; name: string | null }>) {
     const events = await db.execute(sql`
       SELECT e.id, e.action, e.trigger, e.created_at AS "createdAt",
              v.url, v.title
