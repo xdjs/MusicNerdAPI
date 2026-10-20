@@ -1,3 +1,4 @@
+import { writeArtistLink } from "@/lib/vault/writeArtistLink";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { getTableConfig } from "drizzle-orm/pg-core";
@@ -12,7 +13,10 @@ import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
 // A PGlite adapter runs the real identity gates, scoped authorization, shared
 // writer and cancellation SQL; policies here simulate the mnweb contract.
 vi.mock("@/lib/artists/extractArtistId", () => ({
-  extractArtistId: async () => ({ siteName: "deezer", id: "87797542" }),
+  extractArtistId: async (url: string) =>
+    url.includes("spotify")
+      ? { siteName: "spotify", id: "A".repeat(22) }
+      : { siteName: "deezer", id: "87797542" },
 }));
 vi.mock("@/lib/onboarding/routeLinkToVault", () => ({ routeLinkToVault: vi.fn() }));
 vi.mock("@/lib/db/db", () => ({
@@ -168,3 +172,151 @@ it("rejects pre-reset evidence when reset has cleared the Spotify anchor", async
   ).rejects.toThrow("changed during automatic verification");
   expect((await stored()).deezer).toBeNull();
 });
+
+const spotifyUrl = `https://open.spotify.com/artist/${spotify}`;
+const runSpotify = (automatic = true) =>
+  withArtistOperation(artistId, { userId, expectedClaimId: claimId }, () =>
+    applyProfileLinkDecisions(
+      artistId,
+      [{ url: spotifyUrl }],
+      [],
+      automatic ? { verifyIdentity: true } : undefined,
+    ),
+  );
+async function seedDeezerAnchor() {
+  await database
+    .update(schema.artists)
+    .set({ spotify: null, deezer: "87797542" })
+    .where(eq(schema.artists.id, artistId));
+}
+it("rejects a generic automatic Spotify guess without reciprocal evidence", async () => {
+  await seedDeezerAnchor();
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results: { bindings: [] } }),
+  } as Response);
+  expect((await runSpotify()).identityBlocked).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBeNull();
+  expect((await client.query("SELECT status FROM artist_research_jobs")).rows).toEqual([
+    { status: "pending" },
+  ]);
+});
+it("writes a corroborated automatic Spotify pair", async () => {
+  await seedDeezerAnchor();
+  expect((await runSpotify()).written).toEqual(["spotify"]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect((await stored()).spotify).toBe(spotify);
+});
+it("preserves an existing different Spotify account before automatic verification", async () => {
+  await seedDeezerAnchor();
+  await database.update(schema.artists).set({ spotify: "B".repeat(22) });
+  expect((await runSpotify()).identityBlocked).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBe("B".repeat(22));
+});
+it("rejects Spotify attachment when the Deezer anchor changes during verification", async () => {
+  await seedDeezerAnchor();
+  const response = await fetch("intercepted fixture response");
+  vi.mocked(fetch).mockImplementationOnce(async () => {
+    await database.update(schema.artists).set({ deezer: "1234" });
+    return response;
+  });
+  expect((await runSpotify()).writeRejected).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBeNull();
+});
+it("explicit Spotify confirmation still requires an approved claim", async () => {
+  await seedDeezerAnchor();
+  await database.update(schema.artistClaims).set({ status: "rejected" });
+  expect((await runSpotify(false)).writeRejected).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBeNull();
+});
+it("explicit Spotify confirmation keeps mapping collision guards", async () => {
+  await seedDeezerAnchor();
+  await database.insert(schema.artists).values({ id: otherId, name: "Other" });
+  await database
+    .insert(schema.artistIdMappings)
+    .values({ id: otherId, artistId: otherId, platform: "spotify", platformId: spotify });
+  expect((await runSpotify(false)).writeRejected).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBeNull();
+});
+it("explicit Spotify confirmation can write without an automatic anchor", async () => {
+  await database.update(schema.artists).set({ spotify: null, deezer: null });
+  expect((await runSpotify(false)).written).toEqual(["spotify"]);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each(["spotify", "deezer"])("research adoption cannot bypass %s corroboration", async site => {
+  if (site === "spotify") await seedDeezerAnchor();
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results: { bindings: [] } }),
+  } as Response);
+  const record = { spotify: null, deezer: null };
+  const provisional = new Set([site]);
+  await expect(
+    withArtistOperation(artistId, { userId, expectedClaimId: claimId }, () =>
+      writeArtistLink(
+        artistId,
+        site,
+        site === "spotify" ? spotify : "87797542",
+        provisional,
+        record,
+      ),
+    ),
+  ).rejects.toThrow("Automatic catalog identity not corroborated");
+  expect(record).toEqual({ spotify: null, deezer: null });
+  expect(provisional.has(site)).toBe(true);
+});
+
+it("keeps an intervening Spotify owner choice instead of overwriting it", async () => {
+  await seedDeezerAnchor();
+  const response = await fetch("intercepted fixture response");
+  vi.mocked(fetch).mockImplementationOnce(async () => {
+    await database.update(schema.artists).set({ spotify: "B".repeat(22) });
+    return response;
+  });
+  expect((await runSpotify()).writeRejected).toEqual([spotifyUrl]);
+  expect((await stored()).spotify).toBe("B".repeat(22));
+});
+it.each(["spotify", "deezer"])(
+  "does not bootstrap an automatic %s identity without an anchor",
+  async site => {
+    await database.update(schema.artists).set({ spotify: null, deezer: null });
+    expect((await (site === "spotify" ? runSpotify() : run())).written).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it("reconstructed Rnd1/RNDN candidate stays unconnected when pair evidence conflicts (synthetic anchor)", async () => {
+  // Saved incident supplies Rnd1, RNDN and Deezer 87797542; original write/Spotify evidence is unavailable.
+  await database.update(schema.artists).set({ name: "Rnd1" });
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({
+      results: {
+        bindings: [
+          {
+            item: { value: "https://www.wikidata.org/entity/Q1" },
+            sourceId: { value: "B".repeat(22) },
+            targetId: { value: "87797542" },
+          },
+        ],
+      },
+    }),
+  } as Response);
+  expect((await run()).identityBlocked).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
+});
+it.each(["spotify", "deezer"])(
+  "research %s adoption passes evidence to the real writer",
+  async site => {
+    if (site === "spotify") await seedDeezerAnchor();
+    const record: Record<string, unknown> = {};
+    const provisional = new Set([site]);
+    const value = site === "spotify" ? spotify : "87797542";
+    await withArtistOperation(artistId, { userId, expectedClaimId: claimId }, () =>
+      writeArtistLink(artistId, site, value, provisional, record),
+    );
+    expect(record[site]).toBe(value);
+    expect(provisional.has(site)).toBe(false);
+    expect((await stored())[site as "spotify" | "deezer"]).toBe(value);
+  },
+);

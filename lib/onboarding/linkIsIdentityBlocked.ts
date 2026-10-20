@@ -1,3 +1,4 @@
+import { automaticSpotifyIdentityIsBlocked } from "@/lib/providerIdentity/automaticSpotifyIdentityIsBlocked";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
@@ -24,7 +25,8 @@ export async function linkIsIdentityBlocked(
     (await nameIsAmbiguousInDirectory(run.artistId, await artistNameForRun(run))) ||
     (await handleBelongsToAnotherArtist(run.artistId, siteName, id)) ||
     (await contradictsScrapedPosts(run.artistId, siteName, id)) ||
-    (siteName === "deezer" && (await automaticDeezerIdentityIsBlocked(run, id)));
+    (siteName === "deezer" && (await automaticDeezerIdentityIsBlocked(run, id))) ||
+    (siteName === "spotify" && (await automaticSpotifyIdentityIsBlocked(run, id)));
   if (blocked) {
     console.log(`[onboarding] Not writing ${siteName}=${id} — identity checks did not clear it`);
   }
