@@ -23,7 +23,7 @@ vi.mock("@/lib/networking/getCorsHeaders", () => ({
 const { postDirectEditLinkHandler } =
   await import("@/lib/directEditLink/postDirectEditLinkHandler");
 
-const artistId = "00000000-0000-0000-0000-000000000001";
+const artistId = "00000000-0000-4000-8000-000000000001";
 
 beforeEach(() => {
   authenticateRequest.mockReset().mockResolvedValue({ userId: "u1" });
