@@ -5,9 +5,7 @@ import { getPrivyClient } from "@/lib/auth/getPrivyClient";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { db } from "@/lib/db/db";
 
-export async function postLinkWalletHandler(
-  request: Request,
-): Promise<NextResponse> {
+export async function postLinkWalletHandler(request: Request): Promise<NextResponse> {
   const auth = await authenticateRequest(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -22,10 +20,7 @@ export async function postLinkWalletHandler(
     );
   }
 
-  if (
-    typeof walletAddress !== "string" ||
-    !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)
-  ) {
+  if (typeof walletAddress !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
     return NextResponse.json(
       { status: "error", error: "Invalid wallet address" },
       { status: 400, headers: getCorsHeaders() },
@@ -37,8 +32,7 @@ export async function postLinkWalletHandler(
   const userRows = await db.execute(
     sql`SELECT privy_user_id FROM users WHERE id = ${auth.userId}::uuid`,
   );
-  const privyUserId = (userRows[0] as { privy_user_id: string } | undefined)
-    ?.privy_user_id;
+  const privyUserId = (userRows[0] as { privy_user_id: string } | undefined)?.privy_user_id;
   if (!privyUserId) {
     return NextResponse.json(
       { status: "error", error: "Account not linked to Privy" },
@@ -59,8 +53,7 @@ export async function postLinkWalletHandler(
 
   const ownsWallet = privyUser?.linkedAccounts?.some(
     (account: { type: string; address?: string }) =>
-      account.type === "wallet" &&
-      account.address?.toLowerCase() === normalizedWallet,
+      account.type === "wallet" && account.address?.toLowerCase() === normalizedWallet,
   );
   if (!ownsWallet) {
     return NextResponse.json(
@@ -72,9 +65,7 @@ export async function postLinkWalletHandler(
   const legacyRows = await db.execute(
     sql`SELECT id, privy_user_id FROM users WHERE lower(wallet) = ${normalizedWallet} AND id != ${auth.userId}::uuid LIMIT 1`,
   );
-  const legacyUser = legacyRows[0] as
-    | { id: string; privy_user_id: string | null }
-    | undefined;
+  const legacyUser = legacyRows[0] as { id: string; privy_user_id: string | null } | undefined;
 
   if (legacyUser) {
     if (legacyUser.privy_user_id) {

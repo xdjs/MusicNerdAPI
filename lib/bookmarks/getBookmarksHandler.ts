@@ -4,9 +4,7 @@ import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { db } from "@/lib/db/db";
 
-export async function getBookmarksHandler(
-  request: Request,
-): Promise<NextResponse> {
+export async function getBookmarksHandler(request: Request): Promise<NextResponse> {
   const auth = await authenticateRequest(request);
   if (auth instanceof NextResponse) return auth;
   if ([...new URL(request.url).searchParams].length) {
@@ -25,7 +23,7 @@ export async function getBookmarksHandler(
     WHERE b.user_id = ${auth.userId}::uuid AND b.removed_at IS NULL
     ORDER BY b.position ASC, b.created_at ASC, b.artist_id ASC
   `);
-  const bookmarks = (rows as Array<Record<string, unknown>>).map((r) => ({
+  const bookmarks = (rows as Array<Record<string, unknown>>).map(r => ({
     artistId: r.artistId,
     artistName: (r.artistName as string) ?? "Unknown Artist",
     imageUrl:

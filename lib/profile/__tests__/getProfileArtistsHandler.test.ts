@@ -6,9 +6,7 @@ vi.mock("@/lib/auth/authenticateRequest", () => ({
   authenticateRequest: m.auth,
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.exec } }));
-const { getProfileArtistsHandler } = await import(
-  "@/lib/profile/getProfileArtistsHandler"
-);
+const { getProfileArtistsHandler } = await import("@/lib/profile/getProfileArtistsHandler");
 
 const req = (qs = "") =>
   new Request(`https://api/api/profile/artists${qs}`, {
@@ -27,18 +25,14 @@ describe("getProfileArtistsHandler", () => {
   });
 
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getProfileArtistsHandler(req());
     expect(res.status).toBe(401);
   });
 
   it("returns artists for the user", async () => {
     m.exec
-      .mockResolvedValueOnce([
-        { id: "a1", name: "Artist 1", custom_image: null },
-      ])
+      .mockResolvedValueOnce([{ id: "a1", name: "Artist 1", custom_image: null }])
       .mockResolvedValueOnce([{ total: 1 }]);
     const res = await getProfileArtistsHandler(req());
     expect(res.status).toBe(200);

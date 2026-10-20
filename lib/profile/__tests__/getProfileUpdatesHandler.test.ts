@@ -6,9 +6,7 @@ vi.mock("@/lib/auth/authenticateRequest", () => ({
   authenticateRequest: m.auth,
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.exec } }));
-const { getProfileUpdatesHandler } = await import(
-  "@/lib/profile/getProfileUpdatesHandler"
-);
+const { getProfileUpdatesHandler } = await import("@/lib/profile/getProfileUpdatesHandler");
 
 const req = () =>
   new Request("https://api/api/profile/updates", {
@@ -22,9 +20,7 @@ beforeEach(() => {
 
 describe("getProfileUpdatesHandler", () => {
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getProfileUpdatesHandler(req());
     expect(res.status).toBe(401);
   });

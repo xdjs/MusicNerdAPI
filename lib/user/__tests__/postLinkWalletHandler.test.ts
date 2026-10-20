@@ -13,9 +13,7 @@ vi.mock("@/lib/auth/getPrivyClient", () => ({
   getPrivyClient: () => ({ getUser: m.getUser }),
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.exec } }));
-const { postLinkWalletHandler } = await import(
-  "@/lib/user/postLinkWalletHandler"
-);
+const { postLinkWalletHandler } = await import("@/lib/user/postLinkWalletHandler");
 
 const WALLET = "0x" + "a".repeat(40);
 const req = (body: unknown) =>
@@ -47,9 +45,7 @@ describe("postLinkWalletHandler", () => {
   });
 
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await postLinkWalletHandler(req({ walletAddress: WALLET }));
     expect(res.status).toBe(401);
   });

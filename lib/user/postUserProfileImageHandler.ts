@@ -10,9 +10,7 @@ import { db } from "@/lib/db/db";
 const BUCKET = "user-profile-images";
 const MAX_BYTES = 2 * 1024 * 1024;
 
-export async function postUserProfileImageHandler(
-  request: Request,
-): Promise<NextResponse> {
+export async function postUserProfileImageHandler(request: Request): Promise<NextResponse> {
   const auth = await authenticateRequest(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -61,9 +59,7 @@ export async function postUserProfileImageHandler(
   const ownerRows = await db.execute(
     sql`SELECT id, privy_user_id FROM users WHERE id = ${auth.userId}::uuid`,
   );
-  const owner = ownerRows[0] as
-    | { id: string; privy_user_id: string | null }
-    | undefined;
+  const owner = ownerRows[0] as { id: string; privy_user_id: string | null } | undefined;
   if (!owner) {
     return NextResponse.json(
       { status: "error", error: "Account not found" },

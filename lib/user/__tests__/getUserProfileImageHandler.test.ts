@@ -21,9 +21,7 @@ vi.mock("@/lib/storage/getSupabaseAdmin", () => ({
     },
   }),
 }));
-const { getUserProfileImageHandler } = await import(
-  "@/lib/user/getUserProfileImageHandler"
-);
+const { getUserProfileImageHandler } = await import("@/lib/user/getUserProfileImageHandler");
 
 const req = () => new Request("https://api/api/user/profile-image");
 beforeEach(() => {
@@ -33,9 +31,7 @@ beforeEach(() => {
 
 describe("getUserProfileImageHandler", () => {
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getUserProfileImageHandler(req());
     expect(res.status).toBe(401);
   });

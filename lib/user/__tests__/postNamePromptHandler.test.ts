@@ -4,9 +4,7 @@ import { NextResponse } from "next/server";
 const m = vi.hoisted(() => ({ auth: vi.fn(), exec: vi.fn() }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.exec } }));
-const { postNamePromptHandler } = await import(
-  "@/lib/user/postNamePromptHandler"
-);
+const { postNamePromptHandler } = await import("@/lib/user/postNamePromptHandler");
 
 const req = () => new Request("https://api/api/user/u1/name-prompt", { method: "POST" });
 beforeEach(() => {
@@ -34,9 +32,7 @@ describe("postNamePromptHandler", () => {
   });
 
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await postNamePromptHandler(req(), "u1");
     expect(res.status).toBe(401);
   });

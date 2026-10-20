@@ -4,10 +4,7 @@ import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { db } from "@/lib/db/db";
 
-export async function postNamePromptHandler(
-  request: Request,
-  id: string,
-): Promise<NextResponse> {
+export async function postNamePromptHandler(request: Request, id: string): Promise<NextResponse> {
   const auth = await authenticateRequest(request);
   if (auth instanceof NextResponse) return auth;
   if (auth.userId !== id) {

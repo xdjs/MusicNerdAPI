@@ -6,9 +6,7 @@ vi.mock("@/lib/auth/authenticateRequest", () => ({
   authenticateRequest: m.auth,
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: m.exec } }));
-const { getProfileSummaryHandler } = await import(
-  "@/lib/profile/getProfileSummaryHandler"
-);
+const { getProfileSummaryHandler } = await import("@/lib/profile/getProfileSummaryHandler");
 
 const req = () =>
   new Request("https://api/api/profile/summary", {
@@ -17,16 +15,12 @@ const req = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   m.auth.mockResolvedValue({ userId: "u1" });
-  m.exec.mockResolvedValue([
-    { totalContributions: 5, approved: 3, pending: 2, total: 1 },
-  ]);
+  m.exec.mockResolvedValue([{ totalContributions: 5, approved: 3, pending: 2, total: 1 }]);
 });
 
 describe("getProfileSummaryHandler", () => {
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getProfileSummaryHandler(req());
     expect(res.status).toBe(401);
   });

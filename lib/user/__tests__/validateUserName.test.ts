@@ -12,15 +12,11 @@ describe("validateUserName", () => {
   });
 
   it("rejects names longer than 50 characters", () => {
-    expect(validateUserName("a".repeat(51))).toBe(
-      "User name must be 50 characters or less.",
-    );
+    expect(validateUserName("a".repeat(51))).toBe("User name must be 50 characters or less.");
   });
 
   it("rejects control characters", () => {
-    expect(validateUserName("bad\x00name")).toBe(
-      "User name contains invalid characters.",
-    );
+    expect(validateUserName("bad\x00name")).toBe("User name contains invalid characters.");
   });
 
   it("rejects emails", () => {

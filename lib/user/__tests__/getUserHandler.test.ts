@@ -26,9 +26,7 @@ describe("getUserHandler", () => {
   });
 
   it("returns 401 when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getUserHandler(req(), "u1");
     expect(res.status).toBe(401);
   });

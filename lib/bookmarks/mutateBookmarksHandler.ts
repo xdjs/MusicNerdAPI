@@ -6,7 +6,10 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { db } from "@/lib/db/db";
 import { getBookmarksHandler } from "@/lib/bookmarks/getBookmarksHandler";
 
-const uuid = z.string().uuid().transform((v) => v.toLowerCase());
+const uuid = z
+  .string()
+  .uuid()
+  .transform(v => v.toLowerCase());
 const ids = z.array(uuid).max(500);
 const addBody = z.object({ artistIds: ids, import: z.boolean().optional() }).strict();
 const removeBody = z.object({ artistId: uuid }).strict();

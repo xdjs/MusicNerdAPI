@@ -5,10 +5,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { validateUserName } from "@/lib/user/validateUserName";
 import { db } from "@/lib/db/db";
 
-export async function patchUserHandler(
-  request: Request,
-  id: string,
-): Promise<NextResponse> {
+export async function patchUserHandler(request: Request, id: string): Promise<NextResponse> {
   const auth = await authenticateRequest(request);
   if (auth instanceof NextResponse) return auth;
   if (auth.userId !== id) {
@@ -45,18 +42,13 @@ export async function patchUserHandler(
         { status: 409, headers: getCorsHeaders() },
       );
     }
-    await db.execute(
-      sql`UPDATE users SET username = ${trimmed} WHERE id = ${id}::uuid`,
-    );
+    await db.execute(sql`UPDATE users SET username = ${trimmed} WHERE id = ${id}::uuid`);
     return NextResponse.json(
       { status: "ok", message: "User name updated" },
       { headers: getCorsHeaders() },
     );
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("email or wallet")
-    ) {
+    if (error instanceof Error && error.message.includes("email or wallet")) {
       return NextResponse.json(
         { status: "error", error: error.message },
         { status: 400, headers: getCorsHeaders() },

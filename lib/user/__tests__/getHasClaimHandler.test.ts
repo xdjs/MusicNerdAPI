@@ -27,9 +27,7 @@ describe("getHasClaimHandler", () => {
   });
 
   it("returns hasClaim false when not authenticated", async () => {
-    m.auth.mockResolvedValueOnce(
-      NextResponse.json({ status: "error" }, { status: 401 }),
-    );
+    m.auth.mockResolvedValueOnce(NextResponse.json({ status: "error" }, { status: 401 }));
     const res = await getHasClaimHandler(req());
     expect(await res.json()).toEqual({ hasClaim: false, artistId: null });
   });
