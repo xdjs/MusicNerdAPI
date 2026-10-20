@@ -4,17 +4,31 @@ import { postUserProfileImageHandler } from "@/lib/user/postUserProfileImageHand
 
 export const dynamic = "force-dynamic";
 
-/** Get the signed URL for the authenticated user's profile image. */
+/**
+ * GET /api/user/profile-image — signed URL for the user's profile image.
+ *
+ * @param request - The incoming request.
+ * @returns 200 with `{ url }`.
+ */
 export async function GET(request: Request) {
   return getUserProfileImageHandler(request);
 }
 
-/** Upload a new profile image for the authenticated user. */
+/**
+ * POST /api/user/profile-image — upload a new profile image.
+ *
+ * @param request - The incoming request with image data.
+ * @returns 200 on success.
+ */
 export async function POST(request: Request) {
   return postUserProfileImageHandler(request);
 }
 
-/** CORS preflight. */
+/**
+ * CORS preflight.
+ *
+ * @returns 204 with CORS headers.
+ */
 export function OPTIONS() {
   return new Response(null, { status: 204, headers: getCorsHeaders() });
 }

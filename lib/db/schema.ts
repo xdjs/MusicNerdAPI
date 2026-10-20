@@ -5,7 +5,6 @@
  */
 import { sql } from "drizzle-orm";
 import {
-  bigint,
   boolean,
   date,
   integer,
@@ -76,36 +75,13 @@ export const artists = pgTable("artists", {
   subvert: text(),
   bluesky: text(),
   inprocess: text(),
-  customImage: text("custom_image"),
-  addedBy: text("added_by"),
 });
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().notNull(),
   isAdmin: boolean("is_admin").notNull(),
   privyUserId: text("privy_user_id"),
-  username: text(),
-  email: text(),
-  wallet: text(),
-  isWhiteListed: boolean("is_white_listed"),
-  isHidden: boolean("is_hidden"),
-  usernameNeedsConfirmation: boolean("username_needs_confirmation").default(false).notNull(),
-  usernamePromptedAt: timestamp("username_prompted_at", { withTimezone: true, mode: "string" }),
-  acceptedUgcCount: bigint("accepted_ugc_count", { mode: "number" }),
 });
-
-
-export const userArtistBookmarks = pgTable(
-  "user_artist_bookmarks",
-  {
-    userId: uuid("user_id").notNull(),
-    artistId: uuid("artist_id").notNull(),
-    position: integer("position").notNull(),
-    removedAt: timestamp("removed_at", { withTimezone: true, mode: "string" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.userId, table.artistId] })],
-);
 
 /** Platform templates and patterns, one row per platform. */
 export const urlmap = pgTable("urlmap", {
@@ -369,39 +345,3 @@ export const artistLatestProviderSnapshots = pgTable(
   },
   table => [primaryKey({ columns: [table.artistId, table.provider] })],
 );
-
-export const ugcresearch = pgTable("ugcresearch", {
-  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
-  origin: text("origin").default("unknown").notNull(),
-  createdAt: timestamp("created_at", { mode: "string" }).defaultNow(),
-  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow(),
-  artistUri: text("artist_uri"),
-  accepted: boolean().default(false),
-  ugcUrl: text("ugc_url"),
-  siteName: text("site_name"),
-  siteUsername: text("site_username"),
-  artistId: uuid("artist_id"),
-  dateProcessed: timestamp("date_processed", { mode: "string" }),
-  name: text(),
-  userId: uuid("user_id"),
-});
-
-export const artistSelfEdits = pgTable("artist_self_edits", {
-  id: uuid().defaultRandom().primaryKey(),
-  artistId: uuid("artist_id").notNull(),
-  userId: uuid("user_id").notNull(),
-  siteName: text("site_name").notNull(),
-  oldValue: text("old_value"),
-  newValue: text("new_value").notNull(),
-  submittedUrl: text("submitted_url").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
-});
-
-export const funfacts = pgTable("funfacts", {
-  id: bigint({ mode: "number" }).generatedByDefaultAsIdentity(),
-  loreDrop: text("lore_drop"),
-  behindTheScenes: text("behind_the_scenes"),
-  recentActivity: text("recent_activity"),
-  surpriseMe: text("surprise_me").notNull(),
-  isActive: boolean("is_active").default(false),
-});
