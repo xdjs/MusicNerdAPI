@@ -75,12 +75,17 @@ export const artists = pgTable("artists", {
   subvert: text(),
   bluesky: text(),
   inprocess: text(),
+  customImage: text("custom_image"),
 });
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().notNull(),
   isAdmin: boolean("is_admin").notNull(),
   privyUserId: text("privy_user_id"),
+  username: text(),
+  email: text(),
+  wallet: text(),
+  isHidden: boolean("is_hidden"),
 });
 
 /** Platform templates and patterns, one row per platform. */
