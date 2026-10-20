@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { createPublicResearchTools } from "../createPublicResearchTools";
-import type { ResearchOriginal, ResearchRequest } from "../types";
+import type { ResearchOriginal, ResearchReference, ResearchRequest } from "../types";
 
 const request: ResearchRequest = {
   topic: "Latest activities",
@@ -52,6 +52,9 @@ it("makes quieter providers visible without discarding or hiding the busy accoun
 
 it("lets a model search a new term and return only an actually read original", async () => {
   const s = createPublicResearchTools(corpus, request, "Artist", []);
+  expect(s.tools.searchSources.description).toContain("body text of all eligible saved originals");
+  expect(s.tools.searchSources.description).toContain("not publisher domains");
+  expect(s.tools.searchSources.description).toContain("browseSources with a provider filter");
   const result = await s.tools.searchSources.execute!({ query: "studio recordings" }, context);
   expect(result).toMatchObject({ references: [expect.objectContaining({ sourceId: "moment:1" })] });
   await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context);
@@ -59,6 +62,278 @@ it("lets a model search a new term and return only an actually read original", a
     sufficient: true,
     references: [expect.objectContaining({ sourceId: "moment:1" })],
   });
+});
+it("keeps the legacy finish contract when no evidence facets were requested", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"], facetCoverage: [] }, context);
+  expect(s.outcome()).toMatchObject({ sufficient: true, references: [expect.any(Object)] });
+  expect(s.outcome()).not.toHaveProperty("facetCoverage");
+});
+
+it("maps only assigned, actually read facet references to final reference indexes", async () => {
+  const sources = [
+    original(
+      "period:early",
+      "https://artist.example/early",
+      "The early record used drum machines.",
+    ),
+    original("period:late", "https://artist.example/late", "The later record used live drums."),
+  ];
+  const facetedRequest: ResearchRequest = {
+    ...request,
+    topic: "Artist; early record production; later record production",
+    evidenceFacets: [
+      { id: "f1", intent: "early record production" },
+      { id: "f2", intent: "later record production" },
+    ],
+  };
+  const s = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await s.tools.readSources.execute!(
+    {
+      sources: [
+        { sourceId: "period:early", start: 0 },
+        { sourceId: "period:late", start: 0 },
+      ],
+    },
+    context,
+  );
+  expect(
+    await s.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0", "read:1"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: ["read:1"] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ status: "complete" });
+  expect(s.outcome()).toMatchObject({
+    references: [
+      expect.objectContaining({ sourceId: "period:early" }),
+      expect.objectContaining({ sourceId: "period:late" }),
+    ],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+  });
+});
+
+it("keeps a one-sided comparison explicitly partial and rejects invented/unassigned refs", async () => {
+  const sources = [
+    original(
+      "period:early",
+      "https://artist.example/early",
+      "The early record used drum machines.",
+    ),
+    original("period:late", "https://artist.example/late", "The later record used live drums."),
+  ];
+  const facetedRequest: ResearchRequest = {
+    ...request,
+    topic: "Artist; early record production; later record production",
+    evidenceFacets: [
+      { id: "f1", intent: "early record production" },
+      { id: "f2", intent: "later record production" },
+    ],
+  };
+  const s = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await s.tools.readSources.execute!(
+    { sources: [{ sourceId: "period:early", start: 0 }] },
+    context,
+  );
+  expect(
+    await s.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: [] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ status: "complete" });
+  expect(s.outcome()?.facetCoverage).toEqual([
+    { id: "f1", referenceIndexes: [0] },
+    { id: "f2", referenceIndexes: [] },
+  ]);
+  expect(s.outcome()).toMatchObject({ sufficient: false, finishedEvidence: true });
+
+  const next = createPublicResearchTools(sources, facetedRequest, "Artist", []);
+  await next.tools.readSources.execute!(
+    { sources: [{ sourceId: "period:early", start: 0 }] },
+    context,
+  );
+  expect(
+    await next.tools.finishEvidence.execute!(
+      {
+        referenceIds: ["read:0"],
+        facetCoverage: [
+          { id: "f1", referenceIds: ["read:0"] },
+          { id: "f2", referenceIds: ["read:1"] },
+        ],
+      },
+      context,
+    ),
+  ).toMatchObject({ error: "invalid_facet_coverage" });
+  expect(next.outcome()).toBeUndefined();
+});
+
+it("reserves two of twelve tool calls for finishing after ten exploration calls", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  await s.tools.readSources.execute!({ sources: [{ sourceId: "moment:1", start: 0 }] }, context);
+  for (let i = 0; i < 9; i++) await s.tools.browseSources.execute!({ offset: 0 }, context);
+
+  expect(await s.tools.searchSources.execute!({ query: "more" }, context)).toMatchObject({
+    error: "exploration_tool_budget_exhausted",
+    remainingToolCalls: 2,
+    remainingExplorationCalls: 0,
+    remainingCompletionCalls: 2,
+  });
+  expect(s.trace().toolCalls).toBe(10);
+  expect(s.trace().readSourceIds).toEqual(["moment:1"]);
+
+  expect(
+    await s.tools.finishEvidence.execute!({ referenceIds: ["invented"] }, context),
+  ).toMatchObject({
+    error: "unread_reference",
+    remainingToolCalls: 1,
+    remainingExplorationCalls: 0,
+    remainingCompletionCalls: 1,
+  });
+  expect(
+    await s.tools.finishEvidence.execute!({ referenceIds: ["read:0"] }, context),
+  ).toMatchObject({
+    status: "complete",
+  });
+  expect(s.trace()).toMatchObject({
+    toolCalls: 12,
+    readSourceIds: ["moment:1"],
+    stopReason: "supported",
+  });
+});
+
+it("never reports more remaining exploration calls than the total call budget", async () => {
+  const s = createPublicResearchTools(corpus, request, "Artist", []);
+  for (let i = 0; i < 3; i++)
+    await s.tools.finishEvidence.execute!({ referenceIds: [`invented:${i}`] }, context);
+
+  expect(s.trace()).toMatchObject({
+    toolCalls: 3,
+    readChars: 0,
+    calls: ["finish", "finish", "finish"],
+    readSourceIds: [],
+    rejectedIdCount: 3,
+    stopReason: "incomplete",
+  });
+  expect(Object.keys(s.trace()).sort()).toEqual(
+    [
+      "eligibleSources",
+      "toolCalls",
+      "readChars",
+      "calls",
+      "readSourceIds",
+      "rejectedIdCount",
+      "stopReason",
+    ].sort(),
+  );
+});
+
+it("keeps repeated navigation searches compact and leaves budget for a later passage", async () => {
+  const text =
+    "Opening context. " +
+    "Archive notes. ".repeat(600) +
+    "Early sound and studio recording notes. " +
+    "Long middle section. ".repeat(500) +
+    "Later record production and sound change. " +
+    "Closing context. ".repeat(200);
+  const secondText =
+    "Another source. " +
+    "Early sound description. ".repeat(80) +
+    "Other context. ".repeat(500) +
+    "Later record production details. " +
+    "Final notes. ".repeat(200);
+  const sources = [
+    original("long:one", "https://artist.example/one", text),
+    original("long:two", "https://artist.example/two", secondText),
+  ];
+  const s = createPublicResearchTools(sources, request, "Artist", []);
+  let returnedChars = 0;
+  const firstSearch = (await s.tools.searchSources.execute!(
+    { query: "early sound studio" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  expect(firstSearch.references.length).toBeGreaterThan(0);
+  expect(firstSearch.references.every(reference => reference.text.length <= 1000)).toBe(true);
+  expect(
+    firstSearch.references.reduce((total, reference) => total + reference.text.length, 0),
+  ).toBeLessThanOrEqual(4000);
+  returnedChars += firstSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(firstSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const readStarts = firstSearch.references.slice(0, 2).map(reference => ({
+    sourceId: reference.sourceId,
+    start: reference.end,
+  }));
+  const initialRead = (await s.tools.readSources.execute!({ sources: readStarts }, context)) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += initialRead.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(initialRead.remainingReadChars).toBe(24000 - returnedChars);
+
+  const repeatedSearch = (await s.tools.searchSources.execute!(
+    { query: "early sound studio" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += repeatedSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(repeatedSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const laterSearch = (await s.tools.searchSources.execute!(
+    { query: "later record production" },
+    context,
+  )) as {
+    references: ResearchReference[];
+    remainingReadChars: number;
+  };
+  returnedChars += laterSearch.references.reduce(
+    (total, reference) => total + reference.text.length,
+    0,
+  );
+  expect(laterSearch.remainingReadChars).toBe(24000 - returnedChars);
+
+  const laterStart = text.indexOf("Later record production and sound change.");
+  const laterRead = (await s.tools.readSources.execute!(
+    { sources: [{ sourceId: "long:one", start: laterStart }] },
+    context,
+  )) as { references: ResearchReference[]; remainingReadChars: number };
+  expect(laterRead.references).toHaveLength(1);
+  expect(laterRead.references[0].start).toBe(laterStart);
+  expect(laterRead.references[0].text).toContain("Later record production and sound change.");
+  expect(text.slice(laterRead.references[0].start, laterRead.references[0].end)).toBe(
+    laterRead.references[0].text,
+  );
+  returnedChars += laterRead.references[0].text.length;
+  expect(laterRead.remainingReadChars).toBe(24000 - returnedChars);
+  expect(laterRead.remainingReadChars).toBeGreaterThan(0);
 });
 
 it("rejects invented and unread IDs, allowing a later valid selection", async () => {

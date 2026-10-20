@@ -55,6 +55,69 @@ it("retains supporting context and qualifications without turning approval into 
   expect(model.mock.calls[0][0]).toMatchObject({ maxRetries: 0, maxOutputTokens: 2800 });
   expect(model.mock.calls[0][0].abortSignal).toBeInstanceOf(AbortSignal);
 });
+it("maps assessor facet assignments onto its final selected reference order", async () => {
+  const faceted = {
+    ...request,
+    topic: "Artist; early production; later production",
+    evidenceFacets: [
+      { id: "f1" as const, intent: "early production" },
+      { id: "f2" as const, intent: "later production" },
+    ],
+  };
+  const later = { ...ref, sourceId: "vault:2", text: "The later record used live drums." };
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [{ referenceId: "reference:1" }, { referenceId: "reference:0" }],
+      facetCoverage: [
+        { id: "f1", referenceIds: ["reference:0"] },
+        { id: "f2", referenceIds: ["reference:1"] },
+      ],
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(faceted, [ref, later], { name: "Artist" }, [], 5000);
+  expect(result.references).toEqual([later, ref]);
+  expect(result.facetCoverage).toEqual([
+    { id: "f1", referenceIndexes: [1] },
+    { id: "f2", referenceIndexes: [0] },
+  ]);
+});
+it("retains useful partial assessor references while refusing full sufficiency for a missing facet", async () => {
+  const faceted = {
+    ...request,
+    topic: "Artist; early production; later production",
+    evidenceFacets: [
+      { id: "f1" as const, intent: "early production" },
+      { id: "f2" as const, intent: "later production" },
+    ],
+  };
+  model.mockResolvedValue({
+    output: {
+      sufficient: true,
+      supports: [{ referenceId: "reference:0" }],
+      facetCoverage: [
+        { id: "f1", referenceIds: ["reference:0"] },
+        { id: "f2", referenceIds: [] },
+      ],
+      identity: [],
+      limitation: "none",
+    },
+    usage: {},
+  });
+  const result = await assessResearchEvidence(faceted, [ref], { name: "Artist" }, [], 5000);
+  expect(result).toMatchObject({
+    sufficient: false,
+    references: [ref],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [] },
+    ],
+    limitation: "missing_original",
+  });
+});
 it("accepts the same contiguous quote when the model collapses whitespace", async () => {
   const spaced = {
     ...ref,

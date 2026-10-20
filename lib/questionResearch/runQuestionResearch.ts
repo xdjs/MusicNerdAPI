@@ -27,6 +27,7 @@ import {
   SAVED_RESEARCH_MODEL_STEPS,
   type DiscoveryOriginal,
   type ResearchOriginal,
+  type ResearchFacetCoverage,
   type ResearchReference,
 } from "@/lib/questionResearch/types";
 
@@ -101,6 +102,7 @@ export async function runQuestionResearch(
       state.stage = "cancelled";
       state.errorCode = "source_identity_changed";
       state.references = [];
+      delete state.facetCoverage;
       return await finish();
     }
     switch (state.step ?? "saved") {
@@ -130,14 +132,22 @@ export async function runQuestionResearch(
             state.stage = "failed";
             state.errorCode = assessment.failure;
             state.references = [];
+            delete state.facetCoverage;
             return await finish();
           }
-          if (assessment.sufficient) {
+          if (assessment.sufficient || assessment.finishedEvidence) {
             state.references = assessment.references;
+            if (assessment.facetCoverage) state.facetCoverage = assessment.facetCoverage;
+            else delete state.facetCoverage;
+            if (assessment.finishedEvidence && !assessment.sufficient)
+              state.limitations.push(
+                "The selected saved originals support only part of the requested evidence facets.",
+              );
             state.stage = "complete";
             return await finish();
           }
           state.references = assessment.references;
+          delete state.facetCoverage;
           // The model selects a tool, but only the server's validated plan can execute.
           if (assessment.nextLookup !== undefined) {
             plan = options.find(option => option.provider === assessment.nextLookup) ?? {
@@ -150,6 +160,7 @@ export async function runQuestionResearch(
         if (state.savedOnly) {
           state.stage = "unresolved";
           state.references = [];
+          delete state.facetCoverage;
           state.limitations.push(
             "Outside research is at its limit. The saved sources checked did not establish this answer; no external search or scrape was started.",
           );
@@ -308,6 +319,7 @@ export async function runQuestionResearch(
         ];
         let sufficient = false;
         let selected: ResearchReference[] = [];
+        let selectedFacetCoverage: ResearchFacetCoverage | undefined;
         if (refs.length) {
           if (!(await reserve("model"))) return stale;
           const assessment = await assessResearchEvidence(
@@ -324,15 +336,26 @@ export async function runQuestionResearch(
             state.stage = "failed";
             state.errorCode = assessment.failure;
             state.references = [];
+            delete state.facetCoverage;
             return await finish();
           }
           sufficient = assessment.sufficient;
           selected = assessment.references;
+          selectedFacetCoverage = assessment.facetCoverage;
           for (const [i, original] of originals.entries())
             if (assessment.confirmedIds.includes(`new:${i}`)) original.identity = "confirmed";
           if (assessment.limitation !== "none") state.limitations.push(assessment.limitation);
         }
-        state.stage = sufficient ? "complete" : "unresolved";
+        const terminalFacetSelection = Boolean(
+          state.request.evidenceFacets &&
+          selectedFacetCoverage?.length === state.request.evidenceFacets.length &&
+          selected.length,
+        );
+        state.stage = sufficient || terminalFacetSelection ? "complete" : "unresolved";
+        if (terminalFacetSelection && !sufficient)
+          state.limitations.push(
+            "The selected originals support only part of the requested evidence facets.",
+          );
         const saved = await checkpointQuestionResearch(job, state, true, async tx => {
           const retained = await persistResearchOriginals(tx, job.artistId, state, originals);
           // Preserve the model's actual selection and offsets instead of re-ranking only
@@ -346,7 +369,14 @@ export async function runQuestionResearch(
             );
             return saved ? [{ ...saved, start: ref.start, end: ref.end, text: ref.text }] : [];
           });
-          if (state.references.length !== selected.length) state.stage = "unresolved";
+          if (state.references.length !== selected.length) {
+            state.stage = "unresolved";
+            delete state.facetCoverage;
+          } else if (selectedFacetCoverage) {
+            state.facetCoverage = selectedFacetCoverage;
+          } else {
+            delete state.facetCoverage;
+          }
           if (!state.references.length) state.stage = "unresolved";
           delete state.originals;
           delete state.candidates;

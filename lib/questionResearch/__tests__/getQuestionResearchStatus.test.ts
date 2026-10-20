@@ -135,3 +135,60 @@ it("reports elapsed reset time as zero without extending the blocked job", async
     retryAfterSeconds: 0,
   });
 });
+
+it("remaps facet coverage after revalidation and omits it when an assigned source is stale", async () => {
+  const stale = { ...ref, sourceId: "vault:stale" };
+  const request = {
+    topic: "Artist; early records; later albums",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+    evidenceFacets: [
+      { id: "f1", intent: "early records" },
+      { id: "f2", intent: "later albums" },
+    ],
+  };
+  const state = {
+    version: 1,
+    key: "key",
+    expectedClaimId: null,
+    request,
+    stage: "complete",
+    createdAt: new Date().toISOString(),
+    references: [stale, ref],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [1] },
+      { id: "f2", referenceIndexes: [1] },
+    ],
+    limitations: [],
+    modelCalls: 1,
+    providerCalls: 0,
+    inputTokens: 1,
+    outputTokens: 1,
+  };
+  m.execute.mockResolvedValue([{ status: "done", updated_at: new Date().toISOString(), state }]);
+  expect(await getQuestionResearchStatus("artist", "job", { kind: "service" })).toMatchObject({
+    references: [ref],
+    facetCoverage: [
+      { id: "f1", referenceIndexes: [0] },
+      { id: "f2", referenceIndexes: [0] },
+    ],
+  });
+
+  m.execute.mockResolvedValue([
+    {
+      status: "done",
+      updated_at: new Date().toISOString(),
+      state: {
+        ...state,
+        references: [stale],
+        facetCoverage: [
+          { id: "f1", referenceIndexes: [0] },
+          { id: "f2", referenceIndexes: [] },
+        ],
+      },
+    },
+  ]);
+  const staleResult = await getQuestionResearchStatus("artist", "job", { kind: "service" });
+  expect(staleResult.references).toEqual([]);
+  expect(staleResult).not.toHaveProperty("facetCoverage");
+});

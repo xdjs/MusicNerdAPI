@@ -47,6 +47,34 @@ it("separates an overview from focused cached evidence and preserves omitted sco
     researchRequestKey(request),
   );
 });
+it("does not reuse a different positive evidence-facet decomposition", () => {
+  const request = {
+    topic: "Tom Vek; early records and their sound; later albums and their production",
+    evidenceNeed: "reporting",
+    freshness: "stored",
+  } as const;
+  const facets = [
+    { id: "f1" as const, intent: "early records and their sound" },
+    { id: "f2" as const, intent: "later albums and their production" },
+  ];
+  expect(researchRequestKey({ ...request, evidenceFacets: facets })).not.toBe(
+    researchRequestKey(request),
+  );
+  expect(
+    researchRequestKey({
+      ...request,
+      evidenceFacets: [{ id: "f1", intent: "early records and their sound" }],
+    }),
+  ).not.toBe(
+    researchRequestKey({
+      ...request,
+      evidenceFacets: [{ id: "f1", intent: "another positive requirement" }],
+    }),
+  );
+  expect(researchRequestKey(request)).toBe(
+    researchRequestKey({ ...request, evidenceFacets: undefined }),
+  );
+});
 it("versions all evidence so cached cutoff results are reassessed", () => {
   const request = {
     topic: "latest updates",

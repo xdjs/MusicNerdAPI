@@ -514,6 +514,16 @@ it("does not let legacy callers reuse candidate-only selections", async () => {
   await expect(
     continueQuestionResearch(artist, candidate.jobId, { kind: "service" }),
   ).rejects.toMatchObject({ status: 429, code: "research_busy" });
+  await client.query(
+    "update artist_research_jobs set status='done',state=state || '{\"stage\":\"complete\"}'::jsonb where id=$1",
+    [normal.jobId],
+  );
+  const completed = await queueQuestionResearch(artist, { kind: "service" }, request);
+  expect(completed).toMatchObject({
+    jobId: normal.jobId,
+    reused: true,
+    stage: "complete",
+  });
   expect(
     (await client.query("select status from artist_research_jobs where id=$1", [candidate.jobId]))
       .rows[0],

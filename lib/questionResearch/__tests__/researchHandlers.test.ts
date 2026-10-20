@@ -84,7 +84,141 @@ it("does not read candidates for legacy requests or a false option", async () =>
   expect(response.status).toBe(202);
   expect(m.originals).not.toHaveBeenCalled();
   expect(m.queue.mock.calls[0][2]).not.toHaveProperty("preferDirectEvidence");
+  expect(m.queue.mock.calls[0]).toHaveLength(3);
 });
+it("routes an authorized cross-record sound comparison through the durable navigator", async () => {
+  const response = await postQuestionResearchHandler(
+    new Request("https://api.example", {
+      method: "POST",
+      body: JSON.stringify({
+        topic: "Marlowe Echo; sound changed since early records",
+        evidenceNeed: "reporting",
+        preferDirectEvidence: true,
+      }),
+    }),
+    artist,
+  );
+
+  expect(response.status).toBe(202);
+  expect(m.queue).toHaveBeenCalledWith(
+    artist,
+    { kind: "service" },
+    {
+      topic: "Marlowe Echo; sound changed since early records",
+      evidenceNeed: "reporting",
+      freshness: "stored",
+    },
+  );
+  expect(m.queue.mock.calls[0]).toHaveLength(3);
+  expect(m.auth.mock.invocationCallOrder[0]).toBeLessThan(m.queue.mock.invocationCallOrder[0]);
+  expect(m.artist).not.toHaveBeenCalled();
+  expect(m.originals).not.toHaveBeenCalled();
+  expect(m.select).not.toHaveBeenCalled();
+});
+it("bypasses direct candidate selection for explicit multifacet requests, but keeps the single-facet path", async () => {
+  const twoFacets = {
+    topic: "Marlowe Echo; early records and their sound; later albums and their production",
+    evidenceNeed: "reporting",
+    preferDirectEvidence: true,
+    evidenceFacets: [
+      { id: "f1", intent: "early records and their sound" },
+      { id: "f2", intent: "later albums and their production" },
+    ],
+  };
+  expect(
+    (
+      await postQuestionResearchHandler(
+        new Request("https://api.example", { method: "POST", body: JSON.stringify(twoFacets) }),
+        artist,
+      )
+    ).status,
+  ).toBe(202);
+  expect(m.queue.mock.calls[0][2]).toMatchObject({ evidenceFacets: twoFacets.evidenceFacets });
+  expect(m.originals).not.toHaveBeenCalled();
+  expect(m.select).not.toHaveBeenCalled();
+
+  m.queue.mockClear();
+  m.originals.mockClear();
+  m.select.mockClear();
+  const oneFacet = {
+    ...twoFacets,
+    topic: "Marlowe Echo; sound changed since early records",
+    evidenceFacets: [{ id: "f1", intent: "sound changed since early records" }],
+  };
+  expect(
+    (
+      await postQuestionResearchHandler(
+        new Request("https://api.example", { method: "POST", body: JSON.stringify(oneFacet) }),
+        artist,
+      )
+    ).status,
+  ).toBe(202);
+  expect(m.originals).toHaveBeenCalledOnce();
+  expect(m.select).toHaveBeenCalledOnce();
+});
+it("preserves service authorization before routing cross-record comparisons", async () => {
+  m.auth.mockResolvedValue({ kind: "artist", userId: "33333333-3333-4333-8333-333333333333" });
+  const response = await postQuestionResearchHandler(
+    new Request("https://api.example", {
+      method: "POST",
+      body: JSON.stringify({
+        topic: "Marlowe Echo; sound changed since early records",
+        evidenceNeed: "reporting",
+        preferDirectEvidence: true,
+      }),
+    }),
+    artist,
+  );
+
+  expect(response.status).toBe(403);
+  expect(m.queue).not.toHaveBeenCalled();
+  expect(m.artist).not.toHaveBeenCalled();
+  expect(m.originals).not.toHaveBeenCalled();
+  expect(m.select).not.toHaveBeenCalled();
+});
+it.each([
+  {
+    topic: "Artist; release date of a single track",
+    evidenceNeed: "release_date",
+    retrieval: "relevance",
+  },
+  {
+    topic: "Artist; compare the sound of two mixes for one song",
+    evidenceNeed: "reporting",
+    retrieval: "relevance",
+  },
+  {
+    topic: "Artist; recording setup changes across early albums",
+    evidenceNeed: "reporting",
+    retrieval: "relevance",
+  },
+  {
+    topic: "Artist; record label changes since 2020",
+    evidenceNeed: "reporting",
+    retrieval: "relevance",
+  },
+  {
+    topic: "Artist; sound changed since early records",
+    evidenceNeed: "reporting",
+    retrieval: "latest",
+  },
+])(
+  "retains direct candidate selection outside the cross-record sonic route: $topic",
+  async body => {
+    const response = await postQuestionResearchHandler(
+      new Request("https://api.example", {
+        method: "POST",
+        body: JSON.stringify({ ...body, preferDirectEvidence: true }),
+      }),
+      artist,
+    );
+
+    expect(response.status).toBe(202);
+    expect(m.originals).toHaveBeenCalledOnce();
+    expect(m.select).toHaveBeenCalledOnce();
+    expect(m.queue.mock.calls[0]).toHaveLength(4);
+  },
+);
 it.each(["yes", 1, {}, null])(
   "rejects malformed direct preference %j",
   async preferDirectEvidence => {
