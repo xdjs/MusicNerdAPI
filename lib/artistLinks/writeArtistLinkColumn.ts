@@ -1,3 +1,5 @@
+import type { DeezerWriteEvidence } from "@/lib/providerIdentity/types";
+import { rowsOf } from "@/lib/db/rowsOf";
 import { and, eq, sql } from "drizzle-orm";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
@@ -14,6 +16,7 @@ import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpot
  * @param artistId - The artist.
  * @param columnName - A whitelisted column.
  * @param value - The new value.
+ * @param evidence - Exact source and target values observed by automatic verification.
  * @returns The previous value and the artist's name; throws ArtistLinkConflictError on a conflict.
  */
 export async function writeArtistLinkColumn(
@@ -21,6 +24,7 @@ export async function writeArtistLinkColumn(
   artistId: string,
   columnName: string,
   value: string,
+  evidence?: DeezerWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
@@ -60,9 +64,24 @@ export async function writeArtistLinkColumn(
     }
   }
 
-  await database.execute(
-    sql`UPDATE artists SET ${sql.identifier(columnName)} = ${value} WHERE id = ${artistId}`,
-  );
+  if (evidence) {
+    if (columnName !== "deezer" || value !== evidence.deezerId)
+      throw new ArtistLinkConflictError("Automatic Deezer evidence does not match the write");
+    const updated = rowsOf(
+      await database.execute(sql`
+      UPDATE artists SET deezer = ${value}
+      WHERE id = ${artistId} AND spotify = ${evidence.spotifyId}
+        AND deezer IS NOT DISTINCT FROM ${evidence.previousDeezerId}
+      RETURNING id
+    `),
+    );
+    if (updated.length !== 1)
+      throw new ArtistLinkConflictError("Catalog identity changed during automatic verification");
+  } else {
+    await database.execute(
+      sql`UPDATE artists SET ${sql.identifier(columnName)} = ${value} WHERE id = ${artistId}`,
+    );
+  }
   if ((columnName === "spotify" || columnName === "deezer") && oldValue !== value)
     await cancelSpotifyMatchForIdentityEdit(database, artistId);
   return { oldValue, artistName: artist.name ?? null };
