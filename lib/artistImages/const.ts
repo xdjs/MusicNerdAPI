@@ -26,6 +26,3 @@ export const PROFILE_IMAGE_FOLDER = "profile-images";
  * the first one's database update lands.
  */
 export const STALE_PROFILE_IMAGE_GRACE_MS = 30_000;
-
-/** How long a provider's oEmbed lookup may take. */
-export const SPOTIFY_OEMBED_TIMEOUT_MS = 2_500;

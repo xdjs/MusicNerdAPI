@@ -5,7 +5,7 @@ const m = vi.hoisted(() => ({
   authenticateRequest: vi.fn(),
   canEditArtist: vi.fn(),
   isSupabaseStorageConfigured: vi.fn(),
-  uploadProfileImage: vi.fn(),
+  uploadStorageObject: vi.fn(),
   purgeStaleProfileImages: vi.fn(),
   set: vi.fn(),
   where: vi.fn(),
@@ -16,8 +16,8 @@ vi.mock("@/lib/db/db", () => ({ db: { update: () => ({ set: m.set }) } }));
 vi.mock("@/lib/artistImages/isSupabaseStorageConfigured", () => ({
   isSupabaseStorageConfigured: m.isSupabaseStorageConfigured,
 }));
-vi.mock("@/lib/artistImages/uploadProfileImage", () => ({
-  uploadProfileImage: m.uploadProfileImage,
+vi.mock("@/lib/storage/uploadStorageObject", () => ({
+  uploadStorageObject: m.uploadStorageObject,
 }));
 vi.mock("@/lib/artistImages/purgeStaleProfileImages", () => ({
   purgeStaleProfileImages: m.purgeStaleProfileImages,
@@ -41,7 +41,7 @@ beforeEach(() => {
   m.authenticateRequest.mockReset().mockResolvedValue({ userId: "u1" });
   m.canEditArtist.mockReset().mockResolvedValue(true);
   m.isSupabaseStorageConfigured.mockReset().mockReturnValue(true);
-  m.uploadProfileImage.mockReset().mockResolvedValue(true);
+  m.uploadStorageObject.mockReset().mockResolvedValue(undefined);
   m.purgeStaleProfileImages.mockReset().mockResolvedValue(undefined);
   m.set.mockReset().mockReturnValue({ where: m.where });
   m.where.mockReset().mockResolvedValue(undefined);
@@ -61,10 +61,11 @@ describe("postProfileImageHandler", () => {
     const url = `https://test.supabase.co/storage/v1/object/public/vault-files/profile-images/${ARTIST}_1761000000000.png`;
     expect(await response.json()).toEqual({ status: "ok", success: true, imagePath: url });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    const [path, body, type] = m.uploadProfileImage.mock.calls[0];
+    const [bucket, path, body, options] = m.uploadStorageObject.mock.calls[0];
+    expect(bucket).toBe("vault-files");
     expect(path).toBe(`profile-images/${ARTIST}_1761000000000.png`);
     expect(Buffer.from(body)).toEqual(Buffer.from(PNG));
-    expect(type).toBe("image/png");
+    expect(options).toEqual({ contentType: "image/png", upsert: false, cacheControl: "3600" });
     expect(m.set).toHaveBeenCalledWith({ customImage: url });
     expect(m.purgeStaleProfileImages).toHaveBeenCalledWith(ARTIST, `${ARTIST}_1761000000000.png`);
     expect(m.set.mock.invocationCallOrder[0]).toBeLessThan(
@@ -107,7 +108,7 @@ describe("postProfileImageHandler", () => {
       status: "error",
       error: "Not authorized for this artist",
     });
-    expect(m.uploadProfileImage).not.toHaveBeenCalled();
+    expect(m.uploadStorageObject).not.toHaveBeenCalled();
   });
 
   it("answers 400 for a file over 5MB, a type other than PNG/JPEG/WebP, or mismatched bytes", async () => {
@@ -136,7 +137,7 @@ describe("postProfileImageHandler", () => {
       "[artist/profile-image] rejected:",
       expect.objectContaining({ reason: "magic_byte_mismatch", header: "89 50 4e 47 0d 0a 1a 0a" }),
     );
-    expect(m.uploadProfileImage).not.toHaveBeenCalled();
+    expect(m.uploadStorageObject).not.toHaveBeenCalled();
   });
 
   it("answers 503 when storage isn't configured", async () => {
@@ -151,7 +152,7 @@ describe("postProfileImageHandler", () => {
   });
 
   it("answers 500 when storage refuses the upload, without touching the artist", async () => {
-    m.uploadProfileImage.mockResolvedValueOnce(false);
+    m.uploadStorageObject.mockRejectedValueOnce(new Error("Storage upload failed: HTTP 409"));
     const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({

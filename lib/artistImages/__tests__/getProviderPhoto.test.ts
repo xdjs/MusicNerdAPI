@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { getDeezerArtist, getSpotifyArtistImage } = vi.hoisted(() => ({
+const { getDeezerArtist, getSpotifyArtistImage, getSpotifyHeaders } = vi.hoisted(() => ({
   getDeezerArtist: vi.fn(),
   getSpotifyArtistImage: vi.fn(),
+  getSpotifyHeaders: vi.fn(),
 }));
 vi.mock("@/lib/musicPlatform/getDeezerArtist", () => ({ getDeezerArtist }));
 vi.mock("@/lib/musicPlatform/getSpotifyArtistImage", () => ({ getSpotifyArtistImage }));
+vi.mock("@/lib/spotify/getSpotifyHeaders", () => ({ getSpotifyHeaders }));
 const { getProviderPhoto } = await import("@/lib/artistImages/getProviderPhoto");
+
+const HEADERS = { headers: { Authorization: "Bearer t" } };
 
 beforeEach(() => {
   getDeezerArtist.mockReset();
   getSpotifyArtistImage.mockReset();
+  getSpotifyHeaders.mockReset().mockResolvedValue(HEADERS);
 });
 
 describe("getProviderPhoto", () => {
@@ -34,7 +39,16 @@ describe("getProviderPhoto", () => {
     expect(await getProviderPhoto({ deezer: null, spotify: "abc" }, "spotify")).toBe(
       "https://i.scdn.co/image/abc",
     );
-    expect(getSpotifyArtistImage).toHaveBeenCalledWith("abc");
+    expect(getSpotifyArtistImage).toHaveBeenCalledWith("abc", HEADERS);
+  });
+
+  it("falls back to Spotify's oEmbed (null headers) when no token is available", async () => {
+    getSpotifyHeaders.mockRejectedValueOnce(new Error("no token"));
+    getSpotifyArtistImage.mockResolvedValueOnce("https://i.scdn.co/image/abc");
+    expect(await getProviderPhoto({ deezer: null, spotify: "abc" }, "spotify")).toBe(
+      "https://i.scdn.co/image/abc",
+    );
+    expect(getSpotifyArtistImage).toHaveBeenCalledWith("abc", null);
   });
 
   it("refuses anything but a credential-free https URL", async () => {

@@ -1,7 +1,7 @@
 import { PROFILE_IMAGE_FOLDER } from "@/lib/artistImages/const";
-import { storageRequest } from "@/lib/artistImages/storageRequest";
 import type { StorageObject } from "@/lib/artistImages/types";
 import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { storageFetch } from "@/lib/storage/storageFetch";
 
 /**
  * The artist's uploaded profile images, as storage lists them. Storage's
@@ -11,7 +11,7 @@ import { VAULT_BUCKET } from "@/lib/instagram/const";
  * @returns The objects in the profile-images folder matching `<artistId>_`; throws when storage refuses.
  */
 export async function listProfileImages(artistId: string): Promise<StorageObject[]> {
-  const response = await storageRequest(`object/list/${VAULT_BUCKET}`, {
+  const response = await storageFetch(`object/list/${VAULT_BUCKET}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

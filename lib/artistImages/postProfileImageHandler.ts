@@ -9,14 +9,15 @@ import {
 import { isSupabaseStorageConfigured } from "@/lib/artistImages/isSupabaseStorageConfigured";
 import { profileImagePublicUrl } from "@/lib/artistImages/profileImagePublicUrl";
 import { purgeStaleProfileImages } from "@/lib/artistImages/purgeStaleProfileImages";
-import { uploadProfileImage } from "@/lib/artistImages/uploadProfileImage";
 import { validateMagicBytes } from "@/lib/artistImages/validateMagicBytes";
 import { validateProfileImageForm } from "@/lib/artistImages/validateProfileImageForm";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
 import { db } from "@/lib/db/db";
 import { artists } from "@/lib/db/schema";
+import { VAULT_BUCKET } from "@/lib/instagram/const";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
+import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 
 /**
  * Handles POST /api/artist/profile-image: stores an uploaded PNG, JPEG or
@@ -66,8 +67,16 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
     const ext = PROFILE_IMAGE_EXTENSIONS[file.type] ?? ".bin";
     const filename = `${artistId}_${Date.now()}${ext}`;
     const storagePath = `${PROFILE_IMAGE_FOLDER}/${filename}`;
-    if (!(await uploadProfileImage(storagePath, buffer, file.type)))
+    try {
+      await uploadStorageObject(VAULT_BUCKET, storagePath, buffer, {
+        contentType: file.type,
+        upsert: false,
+        cacheControl: "3600",
+      });
+    } catch (e) {
+      console.error("[artist/profile-image] Supabase upload error:", e);
       return error("Failed to upload image to storage", 500);
+    }
     const publicUrl = profileImagePublicUrl(storagePath);
     await db.update(artists).set({ customImage: publicUrl }).where(eq(artists.id, artistId));
     await purgeStaleProfileImages(artistId, filename);

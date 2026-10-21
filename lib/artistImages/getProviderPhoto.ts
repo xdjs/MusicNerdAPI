@@ -1,6 +1,7 @@
 import type { PhotoChoiceArtist, PhotoSource } from "@/lib/artistImages/types";
 import { getDeezerArtist } from "@/lib/musicPlatform/getDeezerArtist";
 import { getSpotifyArtistImage } from "@/lib/musicPlatform/getSpotifyArtistImage";
+import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
 
 /**
  * Resolves only the requested, already-linked provider's photo. No arbitrary
@@ -18,7 +19,9 @@ export async function getProviderPhoto(
   if (!id) return null;
   try {
     const image =
-      source === "deezer" ? (await getDeezerArtist(id))?.imageUrl : await getSpotifyArtistImage(id);
+      source === "deezer"
+        ? (await getDeezerArtist(id))?.imageUrl
+        : await getSpotifyArtistImage(id, await getSpotifyHeaders().catch(() => null));
     if (!image) return null;
     const url = new URL(image);
     return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;

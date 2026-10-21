@@ -1,5 +1,5 @@
-import { storageRequest } from "@/lib/artistImages/storageRequest";
 import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { storageFetch } from "@/lib/storage/storageFetch";
 
 /**
  * Removes stored profile images by their full object paths.
@@ -8,7 +8,7 @@ import { VAULT_BUCKET } from "@/lib/instagram/const";
  * @returns Nothing; throws when storage refuses.
  */
 export async function removeProfileImages(paths: string[]): Promise<void> {
-  const response = await storageRequest(`object/${VAULT_BUCKET}`, {
+  const response = await storageFetch(`object/${VAULT_BUCKET}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prefixes: paths }),
