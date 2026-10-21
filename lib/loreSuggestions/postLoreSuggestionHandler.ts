@@ -25,13 +25,13 @@ export async function postLoreSuggestionHandler(request: Request, artistId: stri
   const headers = getCorsHeaders();
   const fail = (error: string, status: number) =>
     NextResponse.json({ status: "error", error }, { status, headers });
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  if (!ARTIST_ID_PATTERN.test(artistId)) return fail("Invalid artist ID", 400);
-  const input = validateLoreSuggestionBody(await request.json().catch(() => null));
-  if (input instanceof NextResponse) return input;
-  const { url } = input;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    if (!ARTIST_ID_PATTERN.test(artistId)) return fail("Invalid artist ID", 400);
+    const input = validateLoreSuggestionBody(await request.json().catch(() => null));
+    if (input instanceof NextResponse) return input;
+    const { url } = input;
     // Older editor submissions could keep fragments: compare canonical forms
     // before relying on the raw-URL unique index.
     const existing = await getVaultSourceUrlsByArtistId(artistId);

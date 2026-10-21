@@ -131,4 +131,16 @@ describe("postBioCorrectionHandler", () => {
       error: "Could not save your suggestion. Please try again.",
     });
   });
+
+  it("answers a JSON 500 with CORS when the account lookup throws", async () => {
+    mock.auth.mockRejectedValueOnce(new Error("pool exhausted"));
+    const res = await send();
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not save your suggestion. Please try again.",
+    });
+    expect(mock.submit).not.toHaveBeenCalled();
+  });
 });

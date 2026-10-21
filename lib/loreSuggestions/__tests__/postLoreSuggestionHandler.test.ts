@@ -137,4 +137,16 @@ describe("postLoreSuggestionHandler", () => {
     });
     expect(mock.queue).not.toHaveBeenCalled();
   });
+
+  it("answers a JSON 500 with CORS when the account lookup throws", async () => {
+    mock.auth.mockRejectedValueOnce(new Error("pool exhausted"));
+    const res = await call("https://example.com/interview");
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not submit the source. Please try again.",
+    });
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
 });

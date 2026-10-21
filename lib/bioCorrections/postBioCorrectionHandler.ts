@@ -25,20 +25,20 @@ export async function postBioCorrectionHandler(request: Request, id: string) {
   const headers = getCorsHeaders();
   const fail = (error: string, status: number) =>
     NextResponse.json({ status: "error", error }, { status, headers });
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  if (!ARTIST_ID_PATTERN.test(id)) return fail("Invalid artist ID", 400);
-  const raw = await request.text();
-  if (raw.length > BIO_CORRECTION_MAX_BODY) return fail("Report is too long", 413);
-  let body: unknown;
   try {
-    body = JSON.parse(raw);
-  } catch {
-    return fail("Invalid report", 400);
-  }
-  const input = validateBioCorrectionBody(body);
-  if (input instanceof NextResponse) return input;
-  try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    if (!ARTIST_ID_PATTERN.test(id)) return fail("Invalid artist ID", 400);
+    const raw = await request.text();
+    if (raw.length > BIO_CORRECTION_MAX_BODY) return fail("Report is too long", 413);
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return fail("Invalid report", 400);
+    }
+    const input = validateBioCorrectionBody(body);
+    if (input instanceof NextResponse) return input;
     const artist = await getArtistById(id);
     if (!artist) return fail("Artist not found", 404);
     const claimed = (await findApprovedClaim(db, id))?.id ?? null;
