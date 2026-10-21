@@ -7,3 +7,11 @@ export type BioCorrectionInput = {
   sourceUrl: string | null;
   expectedBio: string;
 };
+
+/** What the About editor reads before saving. */
+export type CorrectionAbout = {
+  bio: string;
+  revision: string;
+  artistId: string;
+  claimed: boolean;
+};
