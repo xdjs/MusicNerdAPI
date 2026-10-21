@@ -71,7 +71,7 @@ export async function getLeaderboardInRange(
         `),
     ) as LeaderboardEntry[];
     // Filter before callers calculate totals, pagination or ranks.
-    return result.filter(entry => entry.ugcCount > 0 || entry.artistsCount > 0);
+    return result.filter(entry => Number(entry.ugcCount) > 0 || Number(entry.artistsCount) > 0);
   } catch (e) {
     console.error("error getting leaderboard in range", e);
     throw new Error("Error getting leaderboard in range");
