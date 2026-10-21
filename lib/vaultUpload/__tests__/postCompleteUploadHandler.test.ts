@@ -236,6 +236,7 @@ describe("postCompleteUploadHandler", () => {
     expect(mock.insert).toHaveBeenCalledWith(
       expect.objectContaining({ extractedText: null, snippet: "Uploaded file: fixture.pdf" }),
       expect.anything(),
+      expect.anything(),
     );
   });
 
