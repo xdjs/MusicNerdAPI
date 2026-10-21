@@ -37,6 +37,23 @@ describe("shared Spotify request cooldown", () => {
     });
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("sends the request through a caller's transport instead of fetch", async () => {
+    execute.mockResolvedValue([]);
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const transport = vi.fn(async () => new Response("{}"));
+    const res = await fetchSpotifyResponse(
+      "https://api.spotify.com/v1/artists/a",
+      { headers: { Authorization: "Bearer t" } },
+      transport,
+    );
+    expect(res.status).toBe(200);
+    expect(transport).toHaveBeenCalledWith(
+      "https://api.spotify.com/v1/artists/a",
+      expect.objectContaining({ headers: { Authorization: "Bearer t" } }),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("records Retry-After on 429 and honors a longer concurrent cooldown", async () => {
     execute.mockResolvedValueOnce([]).mockResolvedValueOnce([{ retryAtMs: now + 50000000 }]);
     const fetch = vi.fn(

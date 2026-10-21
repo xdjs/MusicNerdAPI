@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { normaliseArtistName } from "@/lib/artistLookups/normaliseArtistName";
+import { artistNameMatch } from "@/lib/artistLookups/artistNameMatch";
 
 /**
  * The best match for a name, ranked as MusicNerdWeb's `searchForArtistByName`
@@ -12,15 +12,7 @@ import { normaliseArtistName } from "@/lib/artistLookups/normaliseArtistName";
  * @returns The top artist's `x`, or undefined; throws on a database error.
  */
 export async function searchArtistByName(name: string): Promise<{ x: string | null } | undefined> {
-  const query = normaliseArtistName(name);
-  const compact = query.replace(/\s+/g, "");
-  const twoForms = compact && compact !== query;
-  const nameMatch = twoForms
-    ? sql`(lcname LIKE '%' || ${query} || '%' OR lcname LIKE '%' || ${compact} || '%')`
-    : sql`lcname LIKE '%' || ${query} || '%'`;
-  const matchPosition = twoForms
-    ? sql`COALESCE(NULLIF(POSITION(${query} IN lcname), 0), POSITION(${compact} IN lcname))`
-    : sql`POSITION(${query} IN lcname)`;
+  const { query, nameMatch, matchPosition } = artistNameMatch(name);
   const rows = await db.execute<{ x: string | null }>(sql`
     SELECT x
     FROM artists
