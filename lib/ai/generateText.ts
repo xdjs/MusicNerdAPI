@@ -15,6 +15,10 @@ export type GenerateTextOptions<OUTPUT extends OutputInterface = TextOutput> = {
   maxRetries?: number;
   /** Gemini thinking budget in tokens; omitted means the model's default. */
   thinkingBudget?: number;
+  /** Gemini 3+ reasoning level, selected explicitly by the caller. */
+  thinkingLevel?: "low";
+  /** Explicit effort for Anthropic verification calls; omitted keeps the provider default. */
+  anthropicEffort?: "low";
   /** `Output.object({ schema })` for a reply parsed as JSON. */
   output?: OUTPUT;
 };
@@ -35,6 +39,8 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     prompt,
     temperature,
     thinkingBudget,
+    thinkingLevel,
+    anthropicEffort,
     output,
     abortSignal,
     maxOutputTokens,
@@ -49,8 +55,15 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     ...(abortSignal ? { abortSignal } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(maxRetries !== undefined ? { maxRetries } : {}),
-    ...(thinkingBudget !== undefined
-      ? { providerOptions: { google: { thinkingConfig: { thinkingBudget } } } }
+    ...(thinkingBudget !== undefined || thinkingLevel !== undefined || anthropicEffort !== undefined
+      ? {
+          providerOptions: {
+            ...(thinkingBudget !== undefined || thinkingLevel !== undefined
+              ? { google: { thinkingConfig: { thinkingBudget, thinkingLevel } } }
+              : {}),
+            ...(anthropicEffort !== undefined ? { anthropic: { effort: anthropicEffort } } : {}),
+          },
+        }
       : {}),
   });
 }
