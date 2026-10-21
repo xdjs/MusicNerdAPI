@@ -5,7 +5,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 export const dynamic = "force-dynamic";
 
 /**
- * CORS preflight: MusicNerdWeb calls this from the browser, on another origin.
+ * CORS preflight for browser callers on other origins.
  *
  * @returns 200 with the CORS headers.
  */
@@ -14,9 +14,9 @@ export async function OPTIONS() {
 }
 
 /**
- * Writes one fun fact about an artist for the artist page's Fun Facts card:
- * the kind's stored prompt, plus the approved vault sources and the Lore
- * document when the artist has an approved claim. Public; nothing is stored.
+ * Writes one fun fact about an artist: the kind's stored prompt, plus the
+ * approved vault sources and the Lore document when the artist has an
+ * approved claim. Public; nothing is stored.
  *
  * @param request - The request; `?id=<artistId>`.
  * @param context - The route context.
