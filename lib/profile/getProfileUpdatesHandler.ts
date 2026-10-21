@@ -22,13 +22,13 @@ type ProfileUpdate = Card & { artistId: string; artistName: string };
  * @returns 200 `{ status: "ok", userId, items, checked, next, unavailable, unavailableProviders }`, or 400, 401, 409 or 503.
  */
 export async function getProfileUpdatesHandler(request: Request) {
-  const auth = await authenticateProfileRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const query = validateProfileUpdatesQuery(request);
-  if (query instanceof NextResponse) return query;
-  const { offset, filter } = query;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateProfileRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const query = validateProfileUpdatesQuery(request);
+    if (query instanceof NextResponse) return query;
+    const { offset, filter } = query;
     const { artists: rows, total } = await getContributedArtists(auth.userId, {
       offset,
       limit: PROFILE_UPDATES_BATCH,

@@ -65,4 +65,12 @@ describe("getProfileArtistsHandler", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ status: "error", error: "Could not load your artists" });
   });
+
+  it("answers JSON 503 with CORS when authentication throws", async () => {
+    auth.mockRejectedValue(new Error("user lookup failed"));
+    const res = await getProfileArtistsHandler(request());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ status: "error", error: "Could not load your artists" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

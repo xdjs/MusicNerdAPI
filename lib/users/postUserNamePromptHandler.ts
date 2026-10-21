@@ -11,10 +11,10 @@ import { recordUserNamePrompt } from "@/lib/users/recordUserNamePrompt";
  * @returns 200 `{ status: "ok", showPrompt }`, or 401, 403 or 503.
  */
 export async function postUserNamePromptHandler(request: Request, id: string) {
-  const auth = await authenticateOwnAccount(request, id);
-  if (auth instanceof NextResponse) return auth;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateOwnAccount(request, id);
+    if (auth instanceof NextResponse) return auth;
     return NextResponse.json(
       { status: "ok", showPrompt: await recordUserNamePrompt(id) },
       { headers },

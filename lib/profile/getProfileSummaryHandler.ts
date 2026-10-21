@@ -10,10 +10,10 @@ import { getProfileSummary } from "@/lib/profile/getProfileSummary";
  * @returns 200 with the summary, `userId` and `status: "ok"`, or 401, 409 or 503.
  */
 export async function getProfileSummaryHandler(request: Request) {
-  const auth = await authenticateProfileRequest(request);
-  if (auth instanceof NextResponse) return auth;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateProfileRequest(request);
+    if (auth instanceof NextResponse) return auth;
     return NextResponse.json(
       { status: "ok", ...(await getProfileSummary(auth.userId)), userId: auth.userId },
       { headers: { ...headers, "Cache-Control": "private, no-store" } },

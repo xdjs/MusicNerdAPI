@@ -13,12 +13,12 @@ import { validateProfileArtistsQuery } from "@/lib/profile/validateProfileArtist
  * @returns 200 `{ status: "ok", userId, artists, total, next }`, or 400, 401, 409 or 503.
  */
 export async function getProfileArtistsHandler(request: Request) {
-  const auth = await authenticateProfileRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const query = validateProfileArtistsQuery(request);
-  if (query instanceof NextResponse) return query;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateProfileRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const query = validateProfileArtistsQuery(request);
+    if (query instanceof NextResponse) return query;
     const { offset } = query;
     const result = await getContributedArtists(auth.userId, {
       offset,

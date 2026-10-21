@@ -39,4 +39,15 @@ describe("postUserNamePromptHandler", () => {
       error: "Could not load your user name setup.",
     });
   });
+
+  it("answers JSON 503 with CORS when authentication throws", async () => {
+    auth.mockRejectedValue(new Error("user lookup failed"));
+    const res = await postUserNamePromptHandler(request, "u1");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not load your user name setup.",
+    });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

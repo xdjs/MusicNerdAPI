@@ -11,12 +11,12 @@ import { validateArtistSummariesQuery } from "@/lib/profile/validateArtistSummar
  * @returns 200 `{ status: "ok", summaries }`, or 400, 401 or 500.
  */
 export async function getProfileArtistSummariesHandler(request: Request) {
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const ids = validateArtistSummariesQuery(request);
-  if (ids instanceof NextResponse) return ids;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const ids = validateArtistSummariesQuery(request);
+    if (ids instanceof NextResponse) return ids;
     return NextResponse.json(
       { status: "ok", summaries: await getArtistSummaries(ids) },
       { headers: { ...headers, "Cache-Control": "private, no-store" } },

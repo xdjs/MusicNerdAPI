@@ -50,4 +50,12 @@ describe("getProfileArtistSummariesHandler", () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
   });
+
+  it("answers JSON 500 with CORS when authentication throws", async () => {
+    authenticateRequest.mockRejectedValue(new Error("user lookup failed"));
+    const res = await getProfileArtistSummariesHandler(request());
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

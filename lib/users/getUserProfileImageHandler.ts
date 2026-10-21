@@ -14,10 +14,10 @@ import { resolveProfileImageOwner } from "@/lib/users/resolveProfileImageOwner";
  * @returns 200 `{ status: "ok", userId, url }` (url null when there is none), or 401, 409 or 503.
  */
 export async function getUserProfileImageHandler(request: Request) {
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
   const headers = getCorsHeaders();
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
     const resolved = await resolveProfileImageOwner(request, auth.userId);
     if (resolved instanceof NextResponse) return resolved;
     const { owner, folder } = resolved;

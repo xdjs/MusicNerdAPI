@@ -17,14 +17,14 @@ const TYPES = ["image/jpeg", "image/png", "image/webp"];
  * @returns 200 `{ status: "ok", success: true }`, or 400, 401, 409, 413 or 503.
  */
 export async function postUserProfileImageHandler(request: Request) {
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
   const headers = getCorsHeaders();
   const error = (message: string, status: number) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
-  if (Number(request.headers.get("content-length")) > PROFILE_IMAGE_MAX_BYTES + 65536)
-    return error("Choose an image smaller than 2 MB", 413);
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    if (Number(request.headers.get("content-length")) > PROFILE_IMAGE_MAX_BYTES + 65536)
+      return error("Choose an image smaller than 2 MB", 413);
     const form = await request.formData();
     const file = form.get("file");
     if (

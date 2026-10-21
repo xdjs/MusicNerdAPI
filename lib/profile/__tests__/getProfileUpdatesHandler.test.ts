@@ -158,4 +158,12 @@ describe("getProfileUpdatesHandler", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ status: "error", error: "Could not load artist updates" });
   });
+
+  it("answers JSON 503 with CORS when authentication throws", async () => {
+    auth.mockRejectedValue(new Error("user lookup failed"));
+    const res = await getProfileUpdatesHandler(request());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ status: "error", error: "Could not load artist updates" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

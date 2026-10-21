@@ -114,4 +114,15 @@ describe("postUserProfileImageHandler", () => {
     );
     expect(res.status).toBe(503);
   });
+
+  it("answers JSON 503 with CORS when authentication throws", async () => {
+    authenticateRequest.mockRejectedValue(new Error("user lookup failed"));
+    const res = await postUserProfileImageHandler(post(image()));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not save your profile photo. Try again.",
+    });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

@@ -96,4 +96,15 @@ describe("getUserProfileImageHandler", () => {
     resolve.mockRejectedValue(new Error("db down"));
     expect((await getUserProfileImageHandler(request)).status).toBe(503);
   });
+
+  it("answers JSON 503 with CORS when authentication throws", async () => {
+    authenticateRequest.mockRejectedValue(new Error("user lookup failed"));
+    const res = await getUserProfileImageHandler(request);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not load your profile photo",
+    });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });
