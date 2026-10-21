@@ -1,4 +1,5 @@
-import { UUID, VAULT_BUCKET } from "@/lib/instagram/const";
+import { UUID } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 
 /**
  * A thumbnail this environment already retained for this post, so a refresh

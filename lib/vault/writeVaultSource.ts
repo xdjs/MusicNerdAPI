@@ -12,11 +12,12 @@ import type { SourceProvenance, VaultSource, VaultSourceInput } from "@/lib/vaul
 
 /**
  * The insert behind `insertVaultSource`, given the transaction to write in.
- * Origin and activity come from the running operation. When there's no
+ * Origin and activity come from the running operation, or from `provenance`:
+ * a submitter's file (`filePath` set) is an `upload`, anything else they send
+ * a `submission`, attributed to them. With `approveIfTrusted` it is approved
+ * when the submitter is an admin or whitelisted at write time. When there's no
  * activity, the addition is recorded and linked in the same transaction, and
- * only by the writer that won the uniqueness check. A submitter's source
- * (`provenance`) is attributed to them, and with `approveIfTrusted` it is
- * approved when the submitter is an admin or whitelisted at write time.
+ * only by the writer that won the uniqueness check.
  *
  * @param writer - The transaction.
  * @param data - The source.
@@ -32,7 +33,8 @@ export async function writeVaultSource(
 ): Promise<(VaultSource & { activityId: string | null }) | undefined> {
   const context = getArtistOperationOwnership(data.artistId);
   const userId = provenance?.userId ?? context?.userId;
-  const origin = context?.sourceOrigin ?? (userId ? "submission" : "unknown");
+  const origin =
+    context?.sourceOrigin ?? (userId ? (data.filePath ? "upload" : "submission") : "unknown");
   const music = isMusicSource({ ...data, url });
   if (
     origin === "research" &&
@@ -67,6 +69,10 @@ export async function writeVaultSource(
       snippet: data.snippet,
       type: music ? "music" : (data.type ?? "article"),
       status,
+      fileName: data.fileName,
+      fileSize: data.fileSize,
+      filePath: data.filePath,
+      contentType: data.contentType,
       extractedText: data.extractedText,
       ogImage: data.ogImage,
       podcastEpisodeKey: data.podcastEpisodeKey,
@@ -81,7 +87,11 @@ export async function writeVaultSource(
   if (!activityId) {
     activityId = await recordArtistActivity(
       data.artistId,
-      origin === "submission" ? "source_submission" : "source_added",
+      origin === "upload"
+        ? "source_upload"
+        : origin === "submission"
+          ? "source_submission"
+          : "source_added",
       { userId, sourceId: source.id, trigger: trigger ?? context?.trigger ?? "editor_source" },
       writer,
     );

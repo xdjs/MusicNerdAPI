@@ -4,7 +4,8 @@ import sharp from "sharp";
 import { instagramMediaUrl } from "@/lib/instagram/instagramMediaUrl";
 import { readImage } from "@/lib/instagram/readImage";
 import type { ThumbnailUploadScope } from "@/lib/instagram/types";
-import { THUMBNAIL_TIMEOUT_MS, UUID, VAULT_BUCKET } from "@/lib/instagram/const";
+import { THUMBNAIL_TIMEOUT_MS, UUID } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 
 /**
  * Copies a post's thumbnail into Supabase Storage, because Instagram's media

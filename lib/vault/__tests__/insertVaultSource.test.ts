@@ -1,15 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { values, execute, transaction, scoped, record } = vi.hoisted(() => ({
+const { values, execute, transaction, scoped, upload, record } = vi.hoisted(() => ({
   values: vi.fn(),
   execute: vi.fn(async () => []),
   transaction: vi.fn(),
   scoped: vi.fn(),
+  upload: vi.fn(),
   record: vi.fn(async () => "activity-new"),
 }));
 const writer = { insert: () => ({ values }), execute };
 vi.mock("@/lib/db/db", () => ({ db: { transaction } }));
 vi.mock("@/lib/ownership/withScopedArtistWrite", () => ({ withScopedArtistWrite: scoped }));
+vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: upload }));
 vi.mock("@/lib/activity/recordArtistActivity", () => ({ recordArtistActivity: record }));
 const { insertVaultSource } = await import("@/lib/vault/insertVaultSource");
 const { withArtistOperation } = await import("@/lib/ownership/withArtistOperation");
@@ -116,5 +118,66 @@ describe("insertVaultSource", () => {
     await expect(
       insertVaultSource({ artistId: "a1", url: "https://example.com/a" }),
     ).rejects.toThrow("source database unavailable");
+  });
+});
+
+describe("insertVaultSource with upload authorization", () => {
+  beforeEach(() => {
+    upload
+      .mockReset()
+      .mockImplementation(
+        async (_a: string, _u: string, _c: string | null, fn: (tx: unknown) => unknown) =>
+          fn(writer),
+      );
+  });
+
+  it("re-authorizes the user under the expected claim and writes the file columns", async () => {
+    const source = await insertVaultSource(
+      {
+        artistId: "a1",
+        url: "https://example.supabase.co/storage/v1/object/public/vault-files/a1/x.pdf",
+        title: "x.pdf",
+        status: "approved",
+        fileName: "x.pdf",
+        fileSize: 12,
+        filePath: "a1/x.pdf",
+        contentType: "application/pdf",
+        extractedText: "text",
+      },
+      { userId: "u1", trigger: "upload" },
+      { userId: "u1", expectedClaimId: "c1" },
+    );
+    expect(upload).toHaveBeenCalledWith("a1", "u1", "c1", expect.any(Function));
+    expect(transaction).not.toHaveBeenCalled();
+    expect(scoped).not.toHaveBeenCalled();
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "upload",
+        fileName: "x.pdf",
+        fileSize: 12,
+        filePath: "a1/x.pdf",
+        contentType: "application/pdf",
+        status: "approved",
+      }),
+    );
+    expect(record).toHaveBeenCalledWith(
+      "a1",
+      "source_upload",
+      { userId: "u1", sourceId: "s1", trigger: "upload" },
+      writer,
+    );
+    expect(source).toMatchObject({ id: "s1", activityId: "activity-new" });
+  });
+
+  it("uses the upload fence even inside a running operation", async () => {
+    await withArtistOperation("a1", { expectedClaimId: "c1", userId: "admin" }, () =>
+      insertVaultSource(
+        { artistId: "a1", url: "https://example.com/a", filePath: "a1/a" },
+        { userId: "admin", trigger: "upload" },
+        { userId: "admin", expectedClaimId: "c1" },
+      ),
+    );
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(scoped).not.toHaveBeenCalled();
   });
 });
