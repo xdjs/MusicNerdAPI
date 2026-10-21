@@ -14,7 +14,6 @@ const m = vi.hoisted(() => ({
   set: vi.fn(),
   clear: vi.fn(),
   notify: vi.fn(),
-  track: vi.fn(),
 }));
 vi.mock("@/lib/db/db", () => ({ db: { query: { users: { findFirst: m.user } } } }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
@@ -29,7 +28,6 @@ vi.mock("@/lib/artistLinks/clearArtistLink", () => ({ clearArtistLink: m.clear }
 vi.mock("@/lib/directEditLink/notifyDiscordOfArtistLinkAdded", () => ({
   notifyDiscordOfArtistLinkAdded: m.notify,
 }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: m.track }));
 const { postDirectEditLinkHandler } =
   await import("@/lib/directEditLink/postDirectEditLinkHandler");
 
@@ -84,18 +82,13 @@ describe("postDirectEditLinkHandler set", () => {
       platformId: "p3t3rango",
       submittedUrl: igUrl,
     });
-    expect(m.track).toHaveBeenCalledWith("profile_edit", {
-      action: "link_add",
-      target: "instagram",
-    });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
-  it("neither notifies nor counts a save of the same value", async () => {
+  it("does not notify on a save of the same value", async () => {
     m.set.mockResolvedValue({ oldValue: "p3t3rango", artistName: "Pete Rango" });
     expect((await set(igUrl)).status).toBe(200);
     expect(m.notify).not.toHaveBeenCalled();
-    expect(m.track).not.toHaveBeenCalled();
   });
 
   it("falls back to the artist id, the site name and an empty user in the notification", async () => {
@@ -149,7 +142,7 @@ describe("postDirectEditLinkHandler set", () => {
 });
 
 describe("postDirectEditLinkHandler clear", () => {
-  it("clears the column under the operation and counts a removal", async () => {
+  it("clears the column under the operation", async () => {
     let scope: unknown;
     m.clear.mockImplementation(async () => {
       scope = getArtistOperationOwnership(artistId);
@@ -159,10 +152,6 @@ describe("postDirectEditLinkHandler clear", () => {
     expect(await res.json()).toEqual({ status: "ok", success: true });
     expect(m.clear).toHaveBeenCalledWith(artistId, "instagram");
     expect(scope).toEqual({ artistId, userId: "u1", expectedClaimId: "c1" });
-    expect(m.track).toHaveBeenCalledWith("profile_edit", {
-      action: "link_remove",
-      target: "instagram",
-    });
   });
 
   it("400s a clear without a siteName", async () => {
@@ -209,6 +198,15 @@ describe("postDirectEditLinkHandler errors", () => {
     expect(failed.status).toBe(500);
     expect(await failed.json()).toEqual({ status: "error", error: "Internal server error" });
     expect(failed.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    log.mockRestore();
+  });
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.auth.mockRejectedValueOnce(new Error("db down"));
+    const res = await post({ artistId, action: "clear", siteName: "instagram" });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     log.mockRestore();
   });
 });

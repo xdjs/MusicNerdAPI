@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
-const m = vi.hoisted(() => ({ auth: vi.fn(), user: vi.fn(), remove: vi.fn(), track: vi.fn() }));
+const m = vi.hoisted(() => ({ auth: vi.fn(), user: vi.fn(), remove: vi.fn() }));
 vi.mock("@/lib/db/db", () => ({ db: { query: { users: { findFirst: m.user } } } }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
 vi.mock("@/lib/removeArtistData/removeArtistData", () => ({ removeArtistData: m.remove }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: m.track }));
 const { postRemoveArtistDataHandler } =
   await import("@/lib/removeArtistData/postRemoveArtistDataHandler");
 
@@ -25,7 +24,7 @@ beforeEach(() => {
 });
 
 describe("postRemoveArtistDataHandler", () => {
-  it("lets a whitelisted user remove a link and counts it", async () => {
+  it("lets a whitelisted user remove a link", async () => {
     const res = await post();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -34,10 +33,6 @@ describe("postRemoveArtistDataHandler", () => {
       message: "Artist data removed",
     });
     expect(m.remove).toHaveBeenCalledWith("a1", "instagram");
-    expect(m.track).toHaveBeenCalledWith("profile_edit", {
-      action: "link_remove",
-      target: "instagram",
-    });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
@@ -59,7 +54,6 @@ describe("postRemoveArtistDataHandler", () => {
     const res = await post();
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ status: "error", error: "Invalid platform column" });
-    expect(m.track).not.toHaveBeenCalled();
   });
 
   it("passes 401 and 400 through and 500s when the user can't be read", async () => {
@@ -71,6 +65,15 @@ describe("postRemoveArtistDataHandler", () => {
     const res = await post();
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    log.mockRestore();
+  });
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.auth.mockRejectedValueOnce(new Error("db down"));
+    const res = await post();
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     log.mockRestore();
   });
 });

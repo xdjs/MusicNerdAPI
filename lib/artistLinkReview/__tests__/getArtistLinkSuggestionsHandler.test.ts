@@ -57,4 +57,13 @@ describe("getArtistLinkSuggestionsHandler", () => {
     });
     log.mockRestore();
   });
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.auth.mockRejectedValueOnce(new Error("db down"));
+    const res = await get();
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Could not load link suggestions" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    log.mockRestore();
+  });
 });

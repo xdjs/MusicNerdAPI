@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import { saveArtistLinkOrder } from "@/lib/artistLinkOrder/saveArtistLinkOrder";
 import { validateArtistLinkOrderBody } from "@/lib/artistLinkOrder/validateArtistLinkOrderBody";
 import { getAllLinks } from "@/lib/artists/getAllLinks";
@@ -13,8 +12,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
 /**
  * Handles PUT /api/artist/link-order: saves the order the claimant or an admin
- * dragged a link group into, under the ownership fence, and counts a
- * `profile_edit` reorder event.
+ * dragged a link group into, under the ownership fence.
  *
  * @param request - The request; a Privy token and `{ artistId, section, order }`.
  * @returns 200 `{ status, success }`; 400, 401, 403, 404 or 500 `{ status, error }`.
@@ -40,7 +38,6 @@ export async function putArtistLinkOrderHandler(request: Request): Promise<NextR
       () => saveArtistLinkOrder(artistId, section, order),
     );
     if (!saved) return error("Artist not found", 404);
-    await trackServerEvent("profile_edit", { action: "reorder", target: section });
     return NextResponse.json({ status: "ok", success: true }, { status: 200, headers });
   } catch (e) {
     if (e instanceof OwnershipChangedError) return error(e.message, 403);

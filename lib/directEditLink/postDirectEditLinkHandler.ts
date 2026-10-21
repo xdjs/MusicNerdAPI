@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import { submitArtistDestination } from "@/lib/artistLinkReview/submitArtistDestination";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
@@ -24,8 +23,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
  * one platform link. `set` refuses song/album URLs, files an Apple Music or
  * Beatport artist page as an approved Lore source, and otherwise writes the
  * urlmap platform's column under the ownership fence, recording the
- * claimant's self-edit. A changed value posts to Discord and counts a
- * `profile_edit` event.
+ * claimant's self-edit. A changed value posts to Discord.
  *
  * @param request - The request; a Privy token and `{ artistId, action, url?, siteName? }`.
  * @returns 200 `{ status, success, siteName?, platformName? }`; 400, 401, 403, 409 or 500.
@@ -80,8 +78,6 @@ export async function postDirectEditLinkHandler(request: Request): Promise<NextR
           platformId: extracted.id,
           submittedUrl: url,
         });
-        // A no-op save (same value) is not a profile change; don't count it.
-        await trackServerEvent("profile_edit", { action: "link_add", target: extracted.siteName });
       }
       return ok({
         success: true,
@@ -94,7 +90,6 @@ export async function postDirectEditLinkHandler(request: Request): Promise<NextR
     await withArtistOperation(artistId, { userId, expectedClaimId }, () =>
       clearArtistLink(artistId, siteName),
     );
-    await trackServerEvent("profile_edit", { action: "link_remove", target: siteName });
     return ok({ success: true });
   } catch (e) {
     if (e instanceof OwnershipChangedError) return error(e.message, 403);

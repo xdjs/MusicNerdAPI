@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { db } from "@/lib/db/db";
 import { users } from "@/lib/db/schema";
@@ -10,7 +9,7 @@ import { validateRemoveArtistDataBody } from "@/lib/removeArtistData/validateRem
 
 /**
  * Handles POST /api/removeArtistData: a whitelisted user or an admin empties
- * one platform column on any artist, and a `profile_edit` event is counted.
+ * one platform column on any artist.
  * MusicNerdWeb answered every refusal with 403, the write's own failures
  * included; that is kept.
  *
@@ -38,7 +37,6 @@ export async function postRemoveArtistDataHandler(request: Request): Promise<Nex
         { status: "error", error: result.message },
         { status: 403, headers },
       );
-    await trackServerEvent("profile_edit", { action: "link_remove", target: siteName });
     return NextResponse.json(
       { status: "ok", success: true, message: result.message },
       { status: 200, headers },

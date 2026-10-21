@@ -9,7 +9,6 @@ const m = vi.hoisted(() => ({
   canEdit: vi.fn(),
   links: vi.fn(),
   save: vi.fn(),
-  track: vi.fn(),
 }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
@@ -17,7 +16,6 @@ vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim: m.claim
 vi.mock("@/lib/auth/canEditArtist", () => ({ canEditArtist: m.canEdit }));
 vi.mock("@/lib/artists/getAllLinks", () => ({ getAllLinks: m.links }));
 vi.mock("@/lib/artistLinkOrder/saveArtistLinkOrder", () => ({ saveArtistLinkOrder: m.save }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: m.track }));
 const { putArtistLinkOrderHandler } =
   await import("@/lib/artistLinkOrder/putArtistLinkOrderHandler");
 
@@ -41,7 +39,7 @@ beforeEach(() => {
 });
 
 describe("putArtistLinkOrderHandler", () => {
-  it("saves under the claimant's operation and counts a reorder", async () => {
+  it("saves under the claimant's operation", async () => {
     let scope: unknown;
     m.save.mockImplementation(async () => {
       scope = getArtistOperationOwnership(artistId);
@@ -53,7 +51,6 @@ describe("putArtistLinkOrderHandler", () => {
     expect(m.save).toHaveBeenCalledWith(artistId, "links", ["spotify", "instagram"]);
     expect(scope).toEqual({ artistId, userId: "u1", expectedClaimId: "c1" });
     expect(m.claim.mock.invocationCallOrder[0]).toBeLessThan(m.canEdit.mock.invocationCallOrder[0]);
-    expect(m.track).toHaveBeenCalledWith("profile_edit", { action: "reorder", target: "links" });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
@@ -78,12 +75,11 @@ describe("putArtistLinkOrderHandler", () => {
     expect(await res.json()).toEqual({ status: "error", error: "Unknown platform" });
   });
 
-  it("404s a missing artist and counts nothing", async () => {
+  it("404s a missing artist", async () => {
     m.save.mockResolvedValue(false);
     const res = await put(body);
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ status: "error", error: "Artist not found" });
-    expect(m.track).not.toHaveBeenCalled();
   });
 
   it("403s a changed claim and 500s anything else", async () => {
@@ -100,6 +96,15 @@ describe("putArtistLinkOrderHandler", () => {
     expect(failed.status).toBe(500);
     expect(await failed.json()).toEqual({ status: "error", error: "Could not save link order" });
     expect(failed.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    log.mockRestore();
+  });
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    m.auth.mockRejectedValueOnce(new Error("db down"));
+    const res = await put(body);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Could not save link order" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     log.mockRestore();
   });
 });
