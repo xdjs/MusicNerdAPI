@@ -1,4 +1,4 @@
-import { storageRequest } from "@/lib/storage/storageRequest";
+import { storageFetch } from "@/lib/storage/storageFetch";
 
 /**
  * Reads one object's bytes with the service role, from any bucket.
@@ -8,6 +8,10 @@ import { storageRequest } from "@/lib/storage/storageRequest";
  * @returns The bytes; throws when the object is missing or storage refuses.
  */
 export async function downloadObject(bucket: string, path: string): Promise<Buffer> {
-  const response = await storageRequest(`object/${bucket}/${path}`, { method: "GET" });
+  const response = await storageFetch(`object/${bucket}/${path}`, { method: "GET" });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`HTTP ${response.status}`);
+  }
   return Buffer.from(await response.arrayBuffer());
 }

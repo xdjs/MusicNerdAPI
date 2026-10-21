@@ -21,7 +21,7 @@ vi.mock("@/lib/vaultUpload/extractPdfText", () => ({ extractPdfText: mock.pdf })
 vi.mock("@/lib/storage/isSupabaseStorageConfigured", () => ({
   isSupabaseStorageConfigured: mock.configured,
 }));
-vi.mock("@/lib/storage/uploadObject", () => ({ uploadObject: mock.upload }));
+vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
 const { postUploadHandler } = await import("@/lib/vaultUpload/postUploadHandler");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
@@ -75,12 +75,11 @@ describe("postUploadHandler", () => {
     });
     expect(provenance).toEqual({ userId: "admin-1", trigger: "upload" });
     expect(authorization).toEqual({ userId: "admin-1", expectedClaimId: "claim-1" });
-    expect(mock.upload).toHaveBeenCalledWith(
-      "vault-files",
-      data.filePath,
-      Buffer.from(png),
-      "image/png",
-    );
+    expect(mock.upload).toHaveBeenCalledWith("vault-files", data.filePath, Buffer.from(png), {
+      contentType: "image/png",
+      upsert: false,
+      cacheControl: "3600",
+    });
     expect(mock.queue).toHaveBeenCalledWith("artist-x", "claim-1", {
       userId: "admin-1",
       trigger: "upload",

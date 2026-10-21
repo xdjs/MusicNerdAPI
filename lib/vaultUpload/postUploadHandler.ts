@@ -9,7 +9,7 @@ import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
 import { isSupabaseStorageConfigured } from "@/lib/storage/isSupabaseStorageConfigured";
 import { removeObjects } from "@/lib/storage/removeObjects";
-import { uploadObject } from "@/lib/storage/uploadObject";
+import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import {
   MAX_VAULT_FILE_BYTES,
@@ -113,7 +113,11 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
     const storagePath = `${artistId}/${Date.now()}_${baseName}${ext}`;
 
     try {
-      await uploadObject(VAULT_BUCKET, storagePath, buffer, resolvedType);
+      await uploadStorageObject(VAULT_BUCKET, storagePath, buffer, {
+        contentType: resolvedType,
+        upsert: false,
+        cacheControl: "3600",
+      });
     } catch (uploadError) {
       console.error("[vault/upload] Supabase upload error:", uploadError);
       return error(500, "Failed to upload file to storage");

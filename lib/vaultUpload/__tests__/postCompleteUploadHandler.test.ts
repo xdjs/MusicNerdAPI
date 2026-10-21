@@ -21,7 +21,7 @@ vi.mock("@/lib/vault/insertVaultSource", () => ({ insertVaultSource: mock.insert
 vi.mock("@/lib/research/queueLoreRefresh", () => ({ queueLoreRefresh: mock.queue }));
 vi.mock("@/lib/vaultUpload/extractPdfText", () => ({ extractPdfText: mock.pdf }));
 vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: mock.download }));
-vi.mock("@/lib/storage/uploadObject", () => ({ uploadObject: mock.upload }));
+vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
 const { postCompleteUploadHandler: complete } =
   await import("@/lib/vaultUpload/postCompleteUploadHandler");
@@ -95,8 +95,10 @@ describe("postCompleteUploadHandler", () => {
       "queue",
       "remove",
     ]);
-    expect(mock.upload).toHaveBeenCalledWith("vault-files", path, bytes, "application/pdf", {
+    expect(mock.upload).toHaveBeenCalledWith("vault-files", path, bytes, {
+      contentType: "application/pdf",
       upsert: true,
+      cacheControl: "3600",
     });
     expect(mock.insert).toHaveBeenCalledWith(
       {

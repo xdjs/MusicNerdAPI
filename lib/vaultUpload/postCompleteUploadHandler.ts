@@ -8,7 +8,7 @@ import { LORE_UPLOAD_BUCKET, VAULT_BUCKET } from "@/lib/storage/const";
 import { downloadObject } from "@/lib/storage/downloadObject";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
 import { removeObjects } from "@/lib/storage/removeObjects";
-import { uploadObject } from "@/lib/storage/uploadObject";
+import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 import { getVaultUploadByPath } from "@/lib/vault/getVaultUploadByPath";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { cleanupSavedUpload } from "@/lib/vaultUpload/cleanupSavedUpload";
@@ -90,7 +90,11 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
         : ticket.type.startsWith("text/") || ticket.type === "application/json"
           ? buffer.toString("utf8")
           : null;
-    await uploadObject(VAULT_BUCKET, ticket.path, buffer, ticket.type, { upsert: true });
+    await uploadStorageObject(VAULT_BUCKET, ticket.path, buffer, {
+      contentType: ticket.type,
+      upsert: true,
+      cacheControl: "3600",
+    });
     unpublishedPath = ticket.path;
     const url = getPublicUrl(VAULT_BUCKET, ticket.path);
     const inserted = await insertVaultSource(
