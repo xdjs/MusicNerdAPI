@@ -33,3 +33,14 @@ it("rejects an invalid body with Web's message", async () => {
   expect(await r.json()).toEqual({ status: "error", error: "Invalid question" });
   expect(m.ask).not.toHaveBeenCalled();
 });
+it("answers a thrown error with a JSON 503 and CORS, not an empty 500", async () => {
+  m.ask.mockRejectedValue(new Error("connection refused"));
+  const r = await postQuestionAnswerHandler(post({ question: "Who played drums?" }), id, jobId);
+  expect(r.status).toBe(503);
+  expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  expect(r.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(await r.json()).toEqual({
+    status: "error",
+    error: "Research is temporarily unavailable. Please try again.",
+  });
+});

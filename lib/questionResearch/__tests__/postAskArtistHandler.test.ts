@@ -407,3 +407,22 @@ it("refuses planner routing the research endpoint would refuse, without queueing
   });
   expect(m.queue).not.toHaveBeenCalled();
 });
+it("answers an unreadable body or a visitor-key database error with a JSON 503 and CORS", async () => {
+  const broken = new Request("https://api.example/api/askArtist", {
+    method: "POST",
+    body: new ReadableStream({ pull: c => c.error(new Error("socket hang up")) }),
+    duplex: "half",
+  } as RequestInit);
+  const unreadable = await postAskArtistHandler(broken);
+  expect(unreadable.status).toBe(503);
+  expect(unreadable.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  expect(await unreadable.json()).toMatchObject({ status: "error" });
+  m.visitor.mockRejectedValue(new Error("connection refused"));
+  const down = await postAskArtistHandler(request());
+  expect(down.status).toBe(503);
+  expect(down.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  expect(await down.json()).toEqual({
+    status: "error",
+    error: "Research is temporarily unavailable. Please try again.",
+  });
+});
