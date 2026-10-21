@@ -19,13 +19,13 @@ export async function putCorrectionAboutHandler(
   id: string,
 ): Promise<NextResponse> {
   const headers = getCorsHeaders();
-  const auth = await authenticateAdmin(request);
-  if (auth instanceof NextResponse) return auth;
-  const reportId = validateReportId(id);
-  if (reportId instanceof NextResponse) return reportId;
-  const body = await validateCorrectionAboutBody(request);
-  if (body instanceof NextResponse) return body;
   try {
+    const auth = await authenticateAdmin(request);
+    if (auth instanceof NextResponse) return auth;
+    const reportId = validateReportId(id);
+    if (reportId instanceof NextResponse) return reportId;
+    const body = await validateCorrectionAboutBody(request);
+    if (body instanceof NextResponse) return body;
     await saveCorrectionAbout(reportId, auth.userId, body.bio, body.revision);
     return NextResponse.json({ status: "ok", success: true }, { status: 200, headers });
   } catch (error) {

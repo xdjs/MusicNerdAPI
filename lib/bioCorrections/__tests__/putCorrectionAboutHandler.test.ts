@@ -79,4 +79,19 @@ describe("putCorrectionAboutHandler", () => {
     );
     expect((await putCorrectionAboutHandler(request("{}"), id)).status).toBe(403);
   });
+
+  it("answers JSON 500 with CORS when authentication throws", async () => {
+    mock.auth.mockRejectedValueOnce(new Error("user lookup failed"));
+    const res = await putCorrectionAboutHandler(
+      request(JSON.stringify({ bio: "Bio", revision })),
+      id,
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not confirm the save. Your draft is kept; refresh the queue before retrying.",
+    });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(mock.save).not.toHaveBeenCalled();
+  });
 });

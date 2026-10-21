@@ -18,11 +18,11 @@ export async function getCorrectionAboutHandler(
   id: string,
 ): Promise<NextResponse> {
   const headers = { ...getCorsHeaders(), "Cache-Control": "private, no-store" };
-  const auth = await authenticateAdmin(request);
-  if (auth instanceof NextResponse) return auth;
-  const reportId = validateReportId(id);
-  if (reportId instanceof NextResponse) return reportId;
   try {
+    const auth = await authenticateAdmin(request);
+    if (auth instanceof NextResponse) return auth;
+    const reportId = validateReportId(id);
+    if (reportId instanceof NextResponse) return reportId;
     const { bio, revision } = await getCorrectionAbout(reportId);
     return NextResponse.json({ status: "ok", bio, revision }, { status: 200, headers });
   } catch (error) {

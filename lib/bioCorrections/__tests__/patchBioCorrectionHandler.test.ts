@@ -56,4 +56,21 @@ describe("patchBioCorrectionHandler", () => {
       403,
     );
   });
+
+  it("answers JSON 500 with CORS when authentication throws", async () => {
+    mock.auth.mockRejectedValueOnce(new Error("user lookup failed"));
+    const res = await patchBioCorrectionHandler(request('{"status":"dismissed"}'), id);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(mock.review).not.toHaveBeenCalled();
+  });
+
+  it("answers JSON 500 with CORS when the review write throws", async () => {
+    mock.review.mockRejectedValueOnce(new Error("database unavailable"));
+    const res = await patchBioCorrectionHandler(request('{"status":"resolved"}'), id);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

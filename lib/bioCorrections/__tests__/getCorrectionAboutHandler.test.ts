@@ -52,4 +52,15 @@ describe("getCorrectionAboutHandler", () => {
     expect((await getCorrectionAboutHandler(request, id)).status).toBe(401);
     expect(mock.read).not.toHaveBeenCalled();
   });
+
+  it("answers JSON 500 with CORS when authentication throws", async () => {
+    mock.auth.mockRejectedValueOnce(new Error("user lookup failed"));
+    const res = await getCorrectionAboutHandler(request, id);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Could not load the current About. Try again.",
+    });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });
