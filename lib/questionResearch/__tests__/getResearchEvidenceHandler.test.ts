@@ -41,3 +41,14 @@ it("does not turn arbitrary interview source identifiers into public reads", asy
   expect(m.publicRead).not.toHaveBeenCalled();
   expect(m.discoveryRead).not.toHaveBeenCalled();
 });
+it("answers a thrown credential lookup with a JSON 503 and CORS, not an empty 500", async () => {
+  m.auth.mockRejectedValue(new Error("connection refused"));
+  const response = await getResearchEvidenceHandler(
+    new Request(`https://api.example?revision=${revision}`),
+    artist,
+    `public_answer:${answer}`,
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  expect(await response.json()).toMatchObject({ status: "error", code: "research_unavailable" });
+});

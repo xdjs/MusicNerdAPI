@@ -2,9 +2,7 @@ import { withResearchRequest } from "@/lib/questionResearch/withResearchRequest"
 import { queueQuestionResearch } from "@/lib/questionResearch/queueQuestionResearch";
 import { validateQuestionResearchBody } from "@/lib/questionResearch/validateQuestionResearchBody";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
-import { loadResearchArtist } from "@/lib/questionResearch/loadResearchArtist";
-import { loadPublicResearchOriginals } from "@/lib/questionResearch/loadPublicResearchOriginals";
-import { selectDirectResearchCandidates } from "@/lib/questionResearch/selectDirectResearchCandidates";
+import { queueDirectEvidenceResearch } from "@/lib/questionResearch/queueDirectEvidenceResearch";
 /** Acknowledge a persisted request; all model/provider work belongs to the durable worker. */
 export async function postQuestionResearchHandler(request: Request, artistId: string) {
   return withResearchRequest(
@@ -29,13 +27,7 @@ export async function postQuestionResearchHandler(request: Request, artistId: st
       if (!preferDirectEvidence) return queueQuestionResearch(artistId, auth, routing);
       if (auth.kind !== "service")
         throw new KnowledgeError("forbidden", 403, "Direct evidence requires a service credential");
-      // Read before the global admission transaction; never hold its quota lock over a corpus read.
-      const artist = await loadResearchArtist(artistId);
-      const originals = await loadPublicResearchOriginals(artistId);
-      const selected = selectDirectResearchCandidates(originals, routing, artist.name ?? "");
-      return queueQuestionResearch(artistId, auth, routing, {
-        directCandidates: selected.references,
-      });
+      return queueDirectEvidenceResearch(artistId, routing);
     },
     202,
   );

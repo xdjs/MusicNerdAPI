@@ -36,3 +36,15 @@ it("passes explicit research cancellation, output and retry limits through witho
     maxRetries: 0,
   });
 });
+
+it("sends a Gemini thinking level and an Anthropic effort as provider options, only when given", async () => {
+  await generateText({ prompt: "p", model: "google/gemini-3.8-flash", thinkingLevel: "low" });
+  expect(sdkGenerateText.mock.calls[0][0]).toMatchObject({
+    providerOptions: { google: { thinkingConfig: { thinkingLevel: "low" } } },
+  });
+  await generateText({ prompt: "p", model: "anthropic/claude-sonnet-5.5", anthropicEffort: "low" });
+  expect(sdkGenerateText.mock.calls[1][0]).toMatchObject({
+    providerOptions: { anthropic: { effort: "low" } },
+  });
+  expect(sdkGenerateText.mock.calls[1][0].providerOptions).not.toHaveProperty("google");
+});
