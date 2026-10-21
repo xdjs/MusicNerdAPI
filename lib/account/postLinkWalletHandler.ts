@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getUserById } from "@/lib/account/getUserById";
+import { getUserById } from "@/lib/users/getUserById";
+import { withDbRetry } from "@/lib/db/withDbRetry";
 import { getUserByWallet } from "@/lib/account/getUserByWallet";
 import { linkWalletToUser } from "@/lib/account/linkWalletToUser";
 import { mergeAccounts } from "@/lib/account/mergeAccounts";
@@ -30,7 +31,7 @@ export async function postLinkWalletHandler(request: Request): Promise<NextRespo
     if (body instanceof NextResponse) return body;
     const normalizedWallet = body.walletAddress;
 
-    const currentUser = await getUserById(auth.userId);
+    const currentUser = await withDbRetry(() => getUserById(auth.userId));
     if (!currentUser?.privyUserId) return error(401, "Not authenticated");
 
     // A browser callback is not proof of wallet ownership. Verify the linked

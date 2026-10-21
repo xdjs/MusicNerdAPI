@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { lockUsers } from "@/lib/account/lockUsers";
-import { needsUserName } from "@/lib/account/needsUserName";
+import { needsUserName } from "@/lib/users/needsUserName";
 import { transferBioCorrections } from "@/lib/account/transferBioCorrections";
 import { db } from "@/lib/db/db";
 import { users } from "@/lib/db/schema";

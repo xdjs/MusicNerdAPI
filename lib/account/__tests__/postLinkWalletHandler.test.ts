@@ -12,7 +12,7 @@ const mock = vi.hoisted(() => ({
 vi.mock("@/lib/auth/authenticateRequest", () => ({
   authenticateRequest: mock.authenticateRequest,
 }));
-vi.mock("@/lib/account/getUserById", () => ({ getUserById: mock.getUserById }));
+vi.mock("@/lib/users/getUserById", () => ({ getUserById: mock.getUserById }));
 vi.mock("@/lib/auth/getPrivyUser", () => ({ getPrivyUser: mock.getPrivyUser }));
 vi.mock("@/lib/account/getUserByWallet", () => ({ getUserByWallet: mock.getUserByWallet }));
 vi.mock("@/lib/account/mergeAccounts", () => ({ mergeAccounts: mock.mergeAccounts }));
