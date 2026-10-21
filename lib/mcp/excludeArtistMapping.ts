@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { artists } from "@/lib/db/schema";
+import { artistMappingExclusions, artists } from "@/lib/db/schema";
 import { VALID_EXCLUSION_REASONS, VALID_MAPPING_PLATFORMS } from "@/lib/mcp/const";
 import { MappingNotFoundError } from "@/lib/mcp/MappingNotFoundError";
 import { MappingValidationError } from "@/lib/mcp/MappingValidationError";
@@ -8,7 +8,8 @@ import type { ExclusionReason } from "@/lib/mcp/types";
 
 /**
  * Marks an artist as excluded from future mapping batches for a platform, one
- * row per artist and platform; a repeat replaces the reason and details.
+ * row per artist and platform; a repeat replaces the reason, details and key
+ * (an omitted one becomes null).
  *
  * @param params - The exclusion and the reporting key's hash.
  * @returns Whether the row was created or updated (Postgres' xmax is 0 on an insert).
@@ -37,15 +38,24 @@ export async function excludeArtistMapping(params: {
     throw new MappingNotFoundError(`Artist not found: ${artistId}`);
   }
 
-  const result = await db.execute<{ xmax: string }>(sql`
-    INSERT INTO artist_mapping_exclusions (artist_id, platform, reason, details, api_key_hash)
-    VALUES (${artistId}, ${platform}, ${reason}::exclusion_reason, ${details ?? null}, ${apiKeyHash ?? null})
-    ON CONFLICT (artist_id, platform) DO UPDATE SET
-      reason = EXCLUDED.reason,
-      details = EXCLUDED.details,
-      api_key_hash = EXCLUDED.api_key_hash
-    RETURNING xmax
-  `);
+  const result = await db
+    .insert(artistMappingExclusions)
+    .values({
+      artistId,
+      platform,
+      reason,
+      details: details ?? null,
+      apiKeyHash: apiKeyHash ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [artistMappingExclusions.artistId, artistMappingExclusions.platform],
+      set: {
+        reason: sql`excluded.reason`,
+        details: sql`excluded.details`,
+        apiKeyHash: sql`excluded.api_key_hash`,
+      },
+    })
+    .returning({ xmax: sql<string>`xmax::text` });
 
   const wasInsert = result[0]?.xmax === "0";
   return { created: wasInsert, updated: !wasInsert };

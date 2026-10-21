@@ -7,7 +7,7 @@ import { handleUniqueViolation } from "@/lib/mcp/handleUniqueViolation";
 import { MappingConflictError } from "@/lib/mcp/MappingConflictError";
 import { MappingNotFoundError } from "@/lib/mcp/MappingNotFoundError";
 import { MappingValidationError } from "@/lib/mcp/MappingValidationError";
-import type { ResolveResult } from "@/lib/mcp/types";
+import type { MappingConfidence, ResolveResult } from "@/lib/mcp/types";
 
 /**
  * Stores one cross-platform id mapping, in a transaction that takes the same
@@ -94,17 +94,20 @@ export async function resolveArtistMapping(params: {
       }
 
       try {
-        await transaction.execute(sql`
-          UPDATE artist_id_mappings
-          SET platform_id = ${platformId},
-              confidence = ${confidence}::confidence_level,
-              source = ${source},
-              reasoning = ${reasoning ?? null},
-              api_key_hash = ${apiKeyHash ?? null},
-              resolved_at = now(),
-              updated_at = now()
-          WHERE artist_id = ${artistId} AND platform = ${platform}
-        `);
+        await transaction
+          .update(artistIdMappings)
+          .set({
+            platformId,
+            confidence: confidence as MappingConfidence,
+            source,
+            reasoning: reasoning ?? null,
+            apiKeyHash: apiKeyHash ?? null,
+            resolvedAt: sql`now()`,
+            updatedAt: sql`now()`,
+          })
+          .where(
+            and(eq(artistIdMappings.artistId, artistId), eq(artistIdMappings.platform, platform)),
+          );
       } catch (err: unknown) {
         handleUniqueViolation(err, platform, platformId);
       }
@@ -118,10 +121,15 @@ export async function resolveArtistMapping(params: {
     }
 
     try {
-      await transaction.execute(sql`
-        INSERT INTO artist_id_mappings (artist_id, platform, platform_id, confidence, source, reasoning, api_key_hash)
-        VALUES (${artistId}, ${platform}, ${platformId}, ${confidence}::confidence_level, ${source}, ${reasoning ?? null}, ${apiKeyHash ?? null})
-      `);
+      await transaction.insert(artistIdMappings).values({
+        artistId,
+        platform,
+        platformId,
+        confidence: confidence as MappingConfidence,
+        source,
+        reasoning: reasoning ?? null,
+        apiKeyHash: apiKeyHash ?? null,
+      });
     } catch (err: unknown) {
       handleUniqueViolation(err, platform, platformId);
     }

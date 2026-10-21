@@ -69,4 +69,17 @@ describe("postMcpHandler", () => {
       id: null,
     });
   });
+
+  it("is a 500 JSON-RPC error with CORS headers when the key lookup throws (e.g. the database is down)", async () => {
+    validate.mockRejectedValueOnce(new Error("connection refused"));
+    const response = await postMcpHandler(request("Bearer good"));
+    expect(response.status).toBe(500);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await response.json()).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32603, message: "Internal server error" },
+      id: null,
+    });
+    expect(handle).not.toHaveBeenCalled();
+  });
 });

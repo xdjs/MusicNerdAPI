@@ -41,6 +41,7 @@ describe("getMcpHandler", () => {
       new Request("https://api/mcp", { headers: { Accept: "text/event-stream" } }),
     );
     expect(response.status).toBe(500);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(await response.json()).toEqual({ error: "Internal server error" });
   });
 });
