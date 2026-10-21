@@ -53,6 +53,8 @@ export const correction: RawKnowledge["corrections"][number] = {
   claim: "A solo recording",
   correction: "My drummer was there.",
   kind: "correction",
+  createdAt: "2026-10-02T00:00:00Z",
+  updatedAt: "2026-10-02T00:00:00Z",
 };
 export const rawKnowledge: RawKnowledge = {
   artist: { id: artistId, name: "Fixture Artist", bio: null },

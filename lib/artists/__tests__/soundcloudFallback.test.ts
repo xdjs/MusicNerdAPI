@@ -1,16 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { soundcloudFallback } from "@/lib/artists/soundcloudFallback";
+import { urlmapRows } from "@/lib/artists/__tests__/urlmapRows";
 
 const rows = [
-  {
-    id: "1",
-    siteName: "soundcloud",
-    cardPlatformName: "Soundcloud",
-    appStringFormat: "",
-    regex: "",
-    siteImage: null,
-    colorHex: null,
-  },
+  { ...urlmapRows.find(r => r.siteName === "soundcloud")!, appStringFormat: "", regex: "" },
 ];
 
 describe("soundcloudFallback", () => {

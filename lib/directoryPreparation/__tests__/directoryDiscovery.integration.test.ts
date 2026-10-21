@@ -33,7 +33,7 @@ const job = {
 };
 beforeAll(async () => {
   await client.exec(
-    `create table artists(id uuid,added_by uuid,name text,spotify text,deezer text);create table artist_activity_events(id uuid,artist_id uuid,actor_kind text,actor_user_id uuid,action text,trigger text);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,status text,body text,updated_at timestamptz default now());create table artist_research_jobs(id uuid,artist_id uuid,activity_id uuid,kind text,status text,attempts integer,state jsonb,updated_at timestamptz,claimed_at timestamptz,last_error text);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'body',v.body,'status',v.status,'updatedAt',v.updated_at)$$;`,
+    `create table artists(id uuid,added_by uuid,name text,spotify text,deezer text);create table artist_activity_events(id uuid,artist_id uuid,actor_kind text,actor_user_id uuid,action text,trigger text);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,status text,body text,updated_at timestamptz default now(),file_name text,file_size integer,content_type text);create table artist_research_jobs(id uuid,artist_id uuid,activity_id uuid,kind text,status text,attempts integer,state jsonb,updated_at timestamptz,claimed_at timestamptz,last_error text);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'body',v.body,'status',v.status,'updatedAt',v.updated_at)$$;`,
   );
 });
 afterAll(() => client.close());

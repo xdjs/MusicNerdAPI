@@ -46,7 +46,7 @@ const tables = [
 ];
 beforeAll(async () => {
   await client.exec(
-    "CREATE ROLE mnweb; CREATE ROLE anon; CREATE TYPE claim_status AS ENUM ('pending','approved','rejected'); CREATE TYPE source_status AS ENUM ('pending','approved','rejected'); CREATE FUNCTION uuid_generate_v4() RETURNS uuid LANGUAGE SQL AS 'SELECT gen_random_uuid()'",
+    "CREATE ROLE mnweb; CREATE ROLE anon; CREATE TYPE claim_status AS ENUM ('pending','approved','rejected'); CREATE TYPE source_status AS ENUM ('pending','approved','rejected'); CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE FUNCTION uuid_generate_v4() RETURNS uuid LANGUAGE SQL AS 'SELECT gen_random_uuid()'",
   );
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -54,13 +54,15 @@ beforeAll(async () => {
       const defaultSql = column.hasDefault
         ? column.name === "id"
           ? "DEFAULT uuid_generate_v4()"
-          : column.name === "created_at"
+          : column.getSQLType().startsWith("timestamp")
             ? "DEFAULT now()"
-            : column.name === "status"
-              ? "DEFAULT 'pending'"
-              : column.name === "origin"
-                ? "DEFAULT 'unknown'"
-                : ""
+            : column.getSQLType() === "boolean"
+              ? "DEFAULT false"
+              : column.name === "status"
+                ? "DEFAULT 'pending'"
+                : column.name === "origin"
+                  ? "DEFAULT 'unknown'"
+                  : ""
         : "";
       return `"${column.name}" ${column.getSQLType()} ${column.primary ? "PRIMARY KEY" : ""} ${column.notNull ? "NOT NULL" : ""} ${defaultSql}`;
     });
@@ -149,6 +151,8 @@ describe("catalog source persistence with real PostgreSQL and application role",
       artistId: otherId,
       platform: "apple_music",
       platformId: "1513734272",
+      confidence: "manual",
+      source: "manual",
     });
     expect(await save("https://itunes.apple.com/artist/id1513734272")).toBeUndefined();
   });
@@ -193,6 +197,8 @@ describe("catalog source persistence with real PostgreSQL and application role",
       artistId: owner === "self" ? artistId : otherId,
       platform: "apple_music",
       platformId: id,
+      confidence: "manual",
+      source: "manual",
     });
     expect(await save()).toBeUndefined();
     expect(await database.query.artistVaultSources.findMany()).toEqual([]);
@@ -345,6 +351,8 @@ describe("catalog source persistence with real PostgreSQL and application role",
       artistId,
       platform: "apple_music",
       platformId: "42",
+      confidence: "manual",
+      source: "manual",
     });
     const { fetchPageContent } = await import("@/lib/pages/fetchPageContent");
     const { judgeSourceRelevance } = await import("@/lib/relevance/judgeSourceRelevance");
@@ -376,9 +384,14 @@ describe("catalog source persistence with real PostgreSQL and application role",
     expect(await save("https://soundcloud.com/pete-rango")).toMatchObject({ type: "music" });
   });
   it("keeps releases distinct from artist identities", async () => {
-    await database
-      .insert(schema.artistIdMappings)
-      .values({ id: crypto.randomUUID(), artistId, platform: "apple_music", platformId: "42" });
+    await database.insert(schema.artistIdMappings).values({
+      id: crypto.randomUUID(),
+      artistId,
+      platform: "apple_music",
+      platformId: "42",
+      confidence: "manual",
+      source: "manual",
+    });
     expect(await save("https://music.apple.com/us/album/rush/123?i=456")).toMatchObject({
       type: "music",
       url: "https://music.apple.com/us/album/rush/123?i=456",
