@@ -124,4 +124,16 @@ describe("handleLatestRefresh", () => {
       error: "Latest could not be checked. Please try again.",
     });
   });
+
+  it("answers a JSON error with CORS when the account lookup throws", async () => {
+    m.auth.mockRejectedValue(new Error("pool exhausted"));
+    const res = await handleLatestRefresh(request(), artistId, true);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await res.json()).toEqual({
+      status: "error",
+      error: "Latest could not be checked. Please try again.",
+    });
+    expect(m.request).not.toHaveBeenCalled();
+  });
 });

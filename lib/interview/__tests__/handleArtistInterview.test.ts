@@ -447,4 +447,15 @@ describe("handleArtistInterview", () => {
     expect(body.error).toContain("reload and try again");
     expect(body.error).not.toContain("provider");
   });
+
+  it("answers a JSON error with CORS when the account lookup throws", async () => {
+    m.auth.mockRejectedValue(new Error("pool exhausted"));
+    const r = await handleArtistInterview(request({ action: "memory" }), artistId);
+    expect(r.status).toBe(503);
+    expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    const body = await r.json();
+    expect(body.status).toBe("error");
+    expect(body.error).toContain("reload and try again");
+    expect(m.session).not.toHaveBeenCalled();
+  });
 });
