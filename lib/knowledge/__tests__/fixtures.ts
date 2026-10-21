@@ -50,8 +50,6 @@ export const answer: RawKnowledge["answers"][number] = {
 export const correction: RawKnowledge["corrections"][number] = {
   id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   artistId,
-  createdAt: "2026-10-01T00:00:00Z",
-  updatedAt: "2026-10-01T00:00:00Z",
   claim: "A solo recording",
   correction: "My drummer was there.",
   kind: "correction",
