@@ -1,3 +1,4 @@
+import { runEditorSourceSearchJob } from "@/lib/editorSourceSearch/runEditorSourceSearchJob";
 import { recordDirectoryDiscovery } from "@/lib/directoryPreparation/recordDirectoryDiscovery";
 import { hasSavedDirectoryDiscovery } from "@/lib/directoryPreparation/hasSavedDirectoryDiscovery";
 import { completeDirectoryDiscovery } from "@/lib/directoryPreparation/completeDirectoryDiscovery";
@@ -28,6 +29,7 @@ export async function runSourceSearchJob(
   job: ResearchJob,
   deadline: number,
 ): Promise<SliceOutcome> {
+  if (job.state.mode === "editor_source_search") return runEditorSourceSearchJob(job, deadline);
   if (deadline - Date.now() < SOURCE_SEARCH_MIN_SLICE_MS) {
     await saveJobProgress(job.id, job.cursor);
     return { progress: "Waiting for a full research slice", done: false, waiting: true };

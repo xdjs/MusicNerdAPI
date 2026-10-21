@@ -1,3 +1,6 @@
+import { automaticDeezerIdentityIsBlocked } from "@/lib/providerIdentity/automaticDeezerIdentityIsBlocked";
+import { automaticSpotifyIdentityIsBlocked } from "@/lib/providerIdentity/automaticSpotifyIdentityIsBlocked";
+import type { LinkDecisionRun } from "@/lib/onboarding/types";
 import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
 
 /**
@@ -20,7 +23,18 @@ export async function writeArtistLink(
   provisional?: Set<string>,
   record?: Record<string, unknown>,
 ): Promise<void> {
-  await setArtistLink(artistId, siteName, value);
+  if (siteName === "spotify" || siteName === "deezer") {
+    const run: LinkDecisionRun = { artistId };
+    const blocked =
+      siteName === "spotify"
+        ? await automaticSpotifyIdentityIsBlocked(run, value)
+        : await automaticDeezerIdentityIsBlocked(run, value);
+    const evidence = siteName === "spotify" ? run.spotifyWriteEvidence : run.deezerWriteEvidence;
+    if (blocked || !evidence) throw new Error("Automatic catalog identity not corroborated");
+    await setArtistLink(artistId, siteName, value, undefined, undefined, evidence);
+  } else {
+    await setArtistLink(artistId, siteName, value);
+  }
   provisional?.delete(siteName);
   if (record) record[siteName] = value;
 }

@@ -4,4 +4,4 @@ import type { db } from "@/lib/db/db";
 export type ArtistIdentityLockExecutor = Pick<typeof db, "execute">;
 
 /** What a link write needs from its transaction or client. */
-export type ArtistLinkExecutor = Pick<typeof db, "query" | "execute">;
+export type ArtistLinkExecutor = Pick<typeof db, "query" | "execute" | "insert">;

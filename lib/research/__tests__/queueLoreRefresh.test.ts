@@ -56,3 +56,18 @@ describe("queueLoreRefresh", () => {
     expect(txExecute).toHaveBeenCalledTimes(1);
   });
 });
+it("retains API84 submitter attribution while checking the same claim", async () => {
+  await queueLoreRefresh("a1", "c1", { userId: "u1", trigger: "source_submission" });
+  expect(record).toHaveBeenCalledWith(
+    "a1",
+    "lore_refresh",
+    { userId: "u1", trigger: "source_submission" },
+    tx,
+  );
+  record.mockClear();
+  findApprovedClaim.mockResolvedValueOnce({ id: "replacement" });
+  await expect(
+    queueLoreRefresh("a1", "c1", { userId: "u1", trigger: "source_submission" }),
+  ).rejects.toBeInstanceOf(OwnershipChangedError);
+  expect(record).not.toHaveBeenCalled();
+});

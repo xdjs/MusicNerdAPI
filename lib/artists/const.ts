@@ -159,3 +159,6 @@ export const URLMAP_TTL_MS = 60_000;
 
 /** Platforms whose urlmap rows discovery never resolves. */
 export const UNRESOLVED_URLMAP_SITES = ["catalog", "foundation", "soundxyz", "sound"];
+
+/** UUID-shaped artist id, mirrored from API84. */
+export const ARTIST_ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;

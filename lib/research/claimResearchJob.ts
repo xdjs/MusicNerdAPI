@@ -59,7 +59,8 @@ export async function claimResearchJob(opts: {
                  and live.status in ('pending','running')
             )
           ))
-            and (attempts < ${MAX_ATTEMPTS} or (candidate.kind='spotify_match' and candidate.status='running'))
+            and (attempts < ${MAX_ATTEMPTS} or (candidate.kind='spotify_match' and candidate.status='running')
+              or (candidate.kind='source_search' and candidate.state->>'mode'='editor_source_search' and candidate.status='running'))
             and (candidate.kind not in ('spotify_match','interview_prepare') or case
               when jsonb_typeof(candidate.state->'nextAttemptAtMs')='number'
               then (candidate.state->>'nextAttemptAtMs')::numeric<=extract(epoch from now())*1000

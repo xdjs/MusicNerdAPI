@@ -555,7 +555,8 @@ describe("runOnboardingTurn", () => {
       reasoning: null,
     });
     discoverArtistProfilesStream.mockImplementationOnce(async function* () {
-      yield { kind: "found", profile: p("spotify", "bio") };
+      yield { kind: "found", profile: p("spotify", "bio") }; // uncorroborated: never linked
+      yield { kind: "found", profile: p("bandcamp", "bio") };
       yield { kind: "found", profile: p("spotify", "second") };
       yield { kind: "found", profile: p("soundcloud", "blocked") };
       yield { kind: "unreachable", siteName: "instagram", displayName: "Instagram" };
@@ -573,7 +574,9 @@ describe("runOnboardingTurn", () => {
 
     const linked = events.filter(e => e.kind === "linked");
     expect(linked).toHaveLength(1);
-    expect(linked[0].profiles.map((x: any) => `${x.siteName}=${x.value}`)).toEqual(["spotify=bio"]);
+    expect(linked[0].profiles.map((x: any) => `${x.siteName}=${x.value}`)).toEqual([
+      "bandcamp=bio",
+    ]);
     expect(events.find(e => e.kind === "unreachable")).toEqual({
       kind: "unreachable",
       platforms: ["Instagram"],
