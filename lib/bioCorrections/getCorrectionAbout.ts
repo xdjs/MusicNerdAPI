@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { isRealBio } from "@/lib/bio/isRealBio";
 import { CorrectionAboutConflict } from "@/lib/bioCorrections/CorrectionAboutConflict";
-import { getPublicArtistAbout } from "@/lib/bioCorrections/getPublicArtistAbout";
+import { getPublicArtistAbout } from "@/lib/bio/getPublicArtistAbout";
 import type { CorrectionAbout } from "@/lib/bioCorrections/types";
 
 /**

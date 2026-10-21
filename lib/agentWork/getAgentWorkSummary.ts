@@ -1,7 +1,7 @@
 import { getActiveWorkers } from "@/lib/agentWork/getActiveWorkers";
 import { getActivityPulse } from "@/lib/agentWork/getActivityPulse";
 import { getHourlyActivity } from "@/lib/agentWork/getHourlyActivity";
-import { getMappingStats } from "@/lib/agentWork/getMappingStats";
+import { getMappingStats } from "@/lib/mcp/getMappingStats";
 import { getTodayCounts } from "@/lib/agentWork/getTodayCounts";
 import type { AgentWorkSummary } from "@/lib/agentWork/types";
 

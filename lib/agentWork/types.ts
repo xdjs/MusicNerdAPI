@@ -1,3 +1,6 @@
+import type { getMappingExclusions } from "@/lib/mcp/getMappingExclusions";
+import type { getMappingStats } from "@/lib/mcp/getMappingStats";
+
 /** The shapes the Agent work tab reads, as MusicNerdWeb's `agentWorkQueries` declares them. */
 
 export interface AuditLogEntry {
@@ -46,28 +49,6 @@ export interface PlatformStat {
   todayCount: number;
 }
 
-export interface MappingStats {
-  totalArtistsWithSpotify: number;
-  totalArtistsWithDeezer: number;
-  platformStats: { platform: string; mappedCount: number; percentage: number }[];
-}
-
-export interface MappingExclusion {
-  id: string;
-  artistId: string;
-  artistName: string | null;
-  spotify: string | null;
-  platform: string;
-  reason: string;
-  details: string | null;
-  createdAt: string;
-}
-
-export interface MappingExclusions {
-  exclusions: MappingExclusion[];
-  total: number;
-}
-
 export interface WorkerHeartbeat {
   workerId: string;
   apiKeyHash: string;
@@ -109,7 +90,7 @@ export interface AgentRun {
 }
 
 export interface AgentWorkSummary {
-  stats: MappingStats & { platformStats: PlatformStat[] };
+  stats: Awaited<ReturnType<typeof getMappingStats>> & { platformStats: PlatformStat[] };
   activityPulse: ActivityPulse;
   hourlyActivity: HourlyActivityBucket[];
   workers: WorkerHeartbeat[];
@@ -123,6 +104,8 @@ export interface AgentWorkDetails {
     limit: number;
   };
   agentBreakdown: { agents: AgentBreakdownRow[] };
-  exclusions: { platforms: Record<string, MappingExclusions> };
+  exclusions: {
+    platforms: Record<string, Awaited<ReturnType<typeof getMappingExclusions>>>;
+  };
   runHistory: { runs: AgentRun[]; total: number };
 }

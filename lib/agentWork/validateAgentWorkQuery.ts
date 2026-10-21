@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /** `parseInt(value) || fallback`, as MusicNerdWeb's route read these. */
 const intOr = (fallback: number) =>
-  z.preprocess(value => parseInt(String(value ?? ""), 10) || fallback, z.number().int());
+  z.preprocess(value => parseInt(String(value ?? ""), 10) || fallback, z.number());
 
 const schema = z.object({
   sections: z.string().nullable(),

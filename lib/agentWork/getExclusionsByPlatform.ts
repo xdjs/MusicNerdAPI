@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { VALID_MAPPING_PLATFORMS } from "@/lib/agentWork/const";
-import { getMappingExclusions } from "@/lib/agentWork/getMappingExclusions";
+import { VALID_MAPPING_PLATFORMS } from "@/lib/mcp/const";
+import { getMappingExclusions } from "@/lib/mcp/getMappingExclusions";
 import type { AgentWorkDetails } from "@/lib/agentWork/types";
 import { db } from "@/lib/db/db";
 

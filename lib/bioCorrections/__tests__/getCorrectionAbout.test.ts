@@ -8,7 +8,7 @@ import { getCorrectionAbout } from "@/lib/bioCorrections/getCorrectionAbout";
 
 const mock = vi.hoisted(() => ({ execute: vi.fn(), publicAbout: vi.fn() }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
-vi.mock("@/lib/bioCorrections/getPublicArtistAbout", () => ({
+vi.mock("@/lib/bio/getPublicArtistAbout", () => ({
   getPublicArtistAbout: mock.publicAbout,
 }));
 

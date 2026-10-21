@@ -35,4 +35,10 @@ describe("validateAgentWorkQuery", () => {
       auditLimit: 999,
     });
   });
+
+  it("passes a limit too big for an integer through for the audit log to clamp, as MusicNerdWeb did", () => {
+    expect(validateAgentWorkQuery(request("?auditLimit=99999999999999999999")).auditLimit).toBe(
+      1e20,
+    );
+  });
 });

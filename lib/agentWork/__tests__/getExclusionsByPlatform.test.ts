@@ -3,7 +3,7 @@ import { getExclusionsByPlatform } from "@/lib/agentWork/getExclusionsByPlatform
 
 const mock = vi.hoisted(() => ({ execute: vi.fn(), exclusions: vi.fn() }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
-vi.mock("@/lib/agentWork/getMappingExclusions", () => ({
+vi.mock("@/lib/mcp/getMappingExclusions", () => ({
   getMappingExclusions: mock.exclusions,
 }));
 

@@ -8,7 +8,7 @@ const mock = vi.hoisted(() => ({
   today: vi.fn(),
   workers: vi.fn(),
 }));
-vi.mock("@/lib/agentWork/getMappingStats", () => ({ getMappingStats: mock.stats }));
+vi.mock("@/lib/mcp/getMappingStats", () => ({ getMappingStats: mock.stats }));
 vi.mock("@/lib/agentWork/getActivityPulse", () => ({ getActivityPulse: mock.pulse }));
 vi.mock("@/lib/agentWork/getHourlyActivity", () => ({ getHourlyActivity: mock.hourly }));
 vi.mock("@/lib/agentWork/getTodayCounts", () => ({ getTodayCounts: mock.today }));

@@ -40,4 +40,11 @@ describe("getPublicArtistAbout", () => {
     execute.mockResolvedValueOnce([{ public_about: { version: 0 } }]);
     expect(await getPublicArtistAbout("x")).toBeNull();
   });
+
+  it("reads with the caller's transaction when given one", async () => {
+    const reader = vi.fn().mockResolvedValueOnce([{ public_about: { version: 0 } }]);
+    expect(await getPublicArtistAbout("x", { execute: reader } as never)).toBeNull();
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
