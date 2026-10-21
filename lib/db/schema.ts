@@ -30,6 +30,11 @@ export const platformType = pgEnum("platform_type", ["social", "web3", "listen"]
 export const claimStatus = pgEnum("claim_status", ["pending", "approved", "rejected"]);
 export const sourceStatus = pgEnum("source_status", ["pending", "approved", "rejected"]);
 export const confidenceLevel = pgEnum("confidence_level", ["high", "medium", "low", "manual"]);
+export const exclusionReason = pgEnum("exclusion_reason", [
+  "conflict",
+  "name_mismatch",
+  "too_ambiguous",
+]);
 
 export const funfacts = pgTable("funfacts", {
   id: bigint("id", { mode: "number" }).generatedByDefaultAsIdentity({
@@ -338,12 +343,12 @@ export const mcpAuditLog = pgTable(
 export const artistIdMappings = pgTable(
   "artist_id_mappings",
   {
-    id: uuid()
+    id: uuid("id")
       .default(sql`uuid_generate_v4()`)
       .primaryKey()
       .notNull(),
     artistId: uuid("artist_id").notNull(),
-    platform: text().notNull(),
+    platform: text("platform").notNull(),
     platformId: text("platform_id").notNull(),
     confidence: confidenceLevel("confidence").notNull(),
     source: text("source").notNull(),
@@ -373,6 +378,111 @@ export const artistIdMappings = pgTable(
       table.artistId.asc().nullsLast(),
     ),
     index("idx_artist_id_mappings_confidence").using("btree", table.confidence.asc().nullsLast()),
+  ],
+);
+
+export const artistMappingExclusions = pgTable(
+  "artist_mapping_exclusions",
+  {
+    id: uuid("id")
+      .default(sql`uuid_generate_v4()`)
+      .primaryKey()
+      .notNull(),
+    artistId: uuid("artist_id").notNull(),
+    platform: text("platform").notNull(),
+    reason: exclusionReason("reason").notNull(),
+    details: text("details"),
+    apiKeyHash: text("api_key_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  table => [
+    unique("artist_mapping_exclusions_artist_platform_uniq").on(table.artistId, table.platform),
+    foreignKey({
+      columns: [table.artistId],
+      foreignColumns: [artists.id],
+      name: "artist_mapping_exclusions_artist_id_fkey",
+    }).onDelete("cascade"),
+    index("idx_artist_mapping_exclusions_platform").using(
+      "btree",
+      table.platform.asc().nullsLast(),
+    ),
+  ],
+);
+
+export const agentHeartbeats = pgTable(
+  "agent_heartbeats",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey()
+      .notNull(),
+    workerId: text("worker_id").notNull(),
+    apiKeyHash: text("api_key_hash").notNull(),
+    status: text("status").default("starting").notNull(),
+    currentRun: integer("current_run"),
+    batchPlatform: text("batch_platform"),
+    batchSize: integer("batch_size"),
+    message: text("message"),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+    config: jsonb("config").$type<Record<string, unknown>>(),
+  },
+  table => [
+    unique("agent_heartbeats_worker_id_key").on(table.workerId),
+    index("idx_agent_heartbeats_updated_at").using("btree", table.updatedAt.desc().nullsLast()),
+  ],
+);
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: uuid("id")
+      .default(sql`gen_random_uuid()`)
+      .primaryKey()
+      .notNull(),
+    workerId: text("worker_id").notNull(),
+    apiKeyHash: text("api_key_hash").notNull(),
+    runNumber: integer("run_number").notNull(),
+    platform: text("platform").default("deezer").notNull(),
+    status: text("status").default("running").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true, mode: "string" }),
+    wallTimeSecs: integer("wall_time_secs"),
+    claudeTimeSecs: integer("claude_time_secs"),
+    apiTimeSecs: integer("api_time_secs"),
+    turns: integer("turns"),
+    batchSize: integer("batch_size"),
+    resolved: integer("resolved").default(0),
+    excluded: integer("excluded").default(0),
+    skipped: integer("skipped").default(0),
+    errors: integer("errors").default(0),
+    highConfidence: integer("high_confidence").default(0),
+    mediumConfidence: integer("medium_confidence").default(0),
+    conflicts: integer("conflicts").default(0),
+    nameMismatches: integer("name_mismatches").default(0),
+    tooAmbiguous: integer("too_ambiguous").default(0),
+    exitCode: integer("exit_code"),
+    failCategory: text("fail_category"),
+    failReason: text("fail_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  table => [
+    uniqueIndex("idx_agent_runs_worker_run").using(
+      "btree",
+      table.workerId.asc().nullsLast(),
+      table.runNumber.asc().nullsLast(),
+    ),
+    index("idx_agent_runs_started_at").using("btree", table.startedAt.desc().nullsLast()),
   ],
 );
 

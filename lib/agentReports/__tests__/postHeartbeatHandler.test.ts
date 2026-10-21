@@ -72,4 +72,13 @@ describe("postHeartbeatHandler", () => {
     const failed = await postHeartbeatHandler(request({ workerId: "w1", status: "idle" }));
     expect(failed.status).toBe(500);
   });
+
+  it("is a JSON 500 with CORS headers when the key lookup throws (e.g. the database is down)", async () => {
+    validate.mockRejectedValueOnce(new Error("connection refused"));
+    const res = await postHeartbeatHandler(request({ workerId: "w1", status: "idle" }));
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await res.json()).toEqual({ error: "Internal server error" });
+    expect(upsert).not.toHaveBeenCalled();
+  });
 });
