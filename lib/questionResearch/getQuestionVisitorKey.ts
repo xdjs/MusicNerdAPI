@@ -1,19 +1,16 @@
 import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
-import { getBearerToken } from "@/lib/auth/getBearerToken";
-import { getUserByPrivyId } from "@/lib/auth/getUserByPrivyId";
-import { verifyPrivyAccessToken } from "@/lib/auth/verifyPrivyAccessToken";
+import { NextResponse } from "next/server";
+import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 
 /** Private quota identity: verified account, otherwise Vercel's overwritten proxy IP. Web read its NextAuth session; here an optional Privy bearer token plays that part, and an invalid token counts as anonymous. */
 export async function getQuestionVisitorKey(request: Request): Promise<string> {
   const secret = process.env.MUSICNERD_RESEARCH_API_KEY ?? "";
   if (secret.length < 32) throw new Error("Question allowance unavailable");
-  const token = getBearerToken(request);
-  const privyUserId = token ? await verifyPrivyAccessToken(token) : null;
-  const user = privyUserId ? await getUserByPrivyId(privyUserId) : undefined;
+  const auth = await authenticateRequest(request);
   let identity: string;
-  if (user?.id) {
-    identity = `user:${user.id}`;
+  if (!(auth instanceof NextResponse)) {
+    identity = `user:${auth.userId}`;
   } else {
     const ip = process.env.VERCEL === "1" ? request.headers.get("x-real-ip")?.trim() : undefined;
     if (!ip || !isIP(ip)) throw new Error("Question visitor unavailable");

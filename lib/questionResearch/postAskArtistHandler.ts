@@ -23,6 +23,14 @@ import { reserveQuestionPlanning } from "@/lib/questionResearch/reserveQuestionP
 import { reuseQuestionRequest } from "@/lib/questionResearch/reuseQuestionRequest";
 import { validateAskArtistBody } from "@/lib/questionResearch/validateAskArtistBody";
 
+const PUBLIC_ERROR_CODES = [
+  "visitor_question_quota",
+  "question_planning_quota",
+  "saved_evidence_quota",
+  "research_quota",
+  "research_busy",
+];
+
 /** Public chat is limited to the public evidence capability; private history is never loaded. MusicNerdWeb's `handleArtistQuestion`, calling the research library in process instead of over HTTP. */
 export async function postAskArtistHandler(request: Request) {
   const signal = AbortSignal.any([
@@ -345,7 +353,9 @@ export async function postAskArtistHandler(request: Request) {
     if (quota) return quota;
     const status =
       typeof error === "object" && error && "status" in error && error.status === 429 ? 429 : 503;
-    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    const raw = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    // Only the documented `AskArtistError.code` values; a database error code never reaches the visitor.
+    const code = PUBLIC_ERROR_CODES.includes(raw) ? raw : undefined;
     return fail(
       {
         code,

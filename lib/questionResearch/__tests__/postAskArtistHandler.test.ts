@@ -426,3 +426,12 @@ it("answers an unreadable body or a visitor-key database error with a JSON 503 a
     error: "Research is temporarily unavailable. Please try again.",
   });
 });
+it("never echoes an unknown error code, such as a Postgres one", async () => {
+  m.register.mockRejectedValue(Object.assign(new Error("duplicate key"), { code: "23505" }));
+  const r = await postAskArtistHandler(request());
+  expect(r.status).toBe(503);
+  expect(await r.json()).toEqual({
+    status: "error",
+    error: "Research is temporarily unavailable. Please try again.",
+  });
+});

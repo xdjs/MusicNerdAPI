@@ -1,21 +1,14 @@
 import { z } from "zod";
 import { MAX_ORIGINAL_CHARACTERS, MAX_RESEARCH_REFERENCES } from "./answerLimits";
+import { researchSourceIdSchema } from "@/lib/questionResearch/researchOutputSchemas";
 /** The shapes Web's Ask About flow reads from research status, original reads, the planner and the drafter (MusicNerdWeb `lib/questionResearch/schemas`). */
 const revision = z.string().regex(/^[a-f0-9]{64}$/);
 const publicUrl = z
   .string()
   .url()
   .refine(v => /^https?:\/\//.test(v));
-const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
 export const referenceSchema = z.object({
-  sourceId: z
-    .string()
-    .regex(
-      new RegExp(
-        `^(?:(?:discovery|vault|public_answer):${uuid}|social:${uuid}:(?:caption|transcript)|latest:(?:spotify|deezer|inprocess):[a-f0-9]{64})$`,
-        "i",
-      ),
-    ),
+  sourceId: researchSourceIdSchema,
   revision,
   start: z.number().int().nonnegative(),
   end: z.number().int().nonnegative(),
