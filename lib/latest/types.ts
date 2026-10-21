@@ -1,6 +1,13 @@
 import type { SocialScan } from "@/lib/socialRefresh/types";
-/** Update Latest's sources. MusicNerdWeb checks every one but Instagram inline. */
-export type LatestSource = "instagram" | "inprocess" | "spotify" | "deezer" | "interviews";
+/** Update Latest's sources, in the order the editor view lists them. */
+export const LATEST_SOURCES = [
+  "instagram",
+  "inprocess",
+  "spotify",
+  "deezer",
+  "interviews",
+] as const;
+export type LatestSource = (typeof LATEST_SOURCES)[number];
 
 export type SourceResult = {
   status: "pending" | "checked" | "failed" | "disconnected";
@@ -36,4 +43,13 @@ export type LatestRefreshState = {
   providerStarted?: boolean;
   runId?: string;
   datasetId?: string;
+};
+
+/** The private editor view of a Latest request, as `getLatestRefresh` returns it. */
+export type LatestRefreshView = {
+  id: string;
+  status: string;
+  requestedAt: string;
+  sources: Partial<Record<LatestSource, SourceResult>>;
+  retryAt: string;
 };
