@@ -1,3 +1,4 @@
+import { fetchWithoutAcceptLanguage } from "@/lib/networking/fetchWithoutAcceptLanguage";
 import { fetchSpotifyResponse } from "@/lib/spotify/fetchSpotifyResponse";
 import { SpotifyDeferredError } from "@/lib/spotify/SpotifyDeferredError";
 import type { SpotifyHeaders } from "@/lib/spotify/types";
@@ -6,7 +7,8 @@ import type { SpotifyArtistApiResponse, SpotifyArtistData } from "@/lib/spotifyD
 /**
  * One Spotify artist, with MusicNerdWeb's `getSpotifyArtist` answers: the
  * object as Spotify returns it (images, genres and followers defaulted), or
- * an `error` naming what went wrong. Never throws.
+ * an `error` naming what went wrong. Never throws. Sent without
+ * `Accept-Language`, as MusicNerdWeb sent it, so `href` carries no `?locale=`.
  *
  * @param artistId - The Spotify artist id.
  * @param headers - Bearer headers from `getSpotifyHeaders`.
@@ -24,6 +26,7 @@ export async function getSpotifyArtistData(
     const res = await fetchSpotifyResponse(
       `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`,
       { headers: headers.headers, signal: AbortSignal.timeout(5_000) },
+      fetchWithoutAcceptLanguage,
     );
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;

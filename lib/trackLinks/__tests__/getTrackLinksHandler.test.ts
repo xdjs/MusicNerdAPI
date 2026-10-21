@@ -220,4 +220,14 @@ describe("getTrackLinksHandler", () => {
       cached: true,
     });
   });
+
+  it("answers a thrown error with a JSON 500 and CORS, not an empty 500", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await getTrackLinksHandler({ url: "not a url" } as Request);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal server error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
+  });
 });

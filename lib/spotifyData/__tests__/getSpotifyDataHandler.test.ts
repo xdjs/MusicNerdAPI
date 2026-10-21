@@ -105,4 +105,12 @@ describe("getSpotifyDataHandler", () => {
   it("answers 400 without an id", async () => {
     expect((await get("")).status).toBe(400);
   });
+
+  it("answers a thrown error with Web's JSON 502 and CORS, not an empty 500", async () => {
+    const res = await getSpotifyDataHandler({ url: "not a url" } as Request);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Failed to fetch artist data" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
 });

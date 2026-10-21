@@ -1,3 +1,4 @@
+import { fetchWithoutAcceptLanguage } from "@/lib/networking/fetchWithoutAcceptLanguage";
 import { readSpotifyJson } from "@/lib/spotify/readSpotifyJson";
 import type { SpotifyHeaders } from "@/lib/spotify/types";
 import { SPOTIFY_BATCH_MAX } from "@/lib/spotifyData/const";
@@ -6,7 +7,8 @@ import type { SpotifyArtistData } from "@/lib/spotifyData/types";
 /**
  * Several Spotify artists in one call per 50 ids, in request order, as
  * MusicNerdWeb's `getSpotifyArtists` fetched them. Spotify answers `null`
- * for an id it does not know; that is passed through.
+ * for an id it does not know; that is passed through. Sent without
+ * `Accept-Language`, as MusicNerdWeb sent it, so no `href` carries `?locale=`.
  *
  * @param artistIds - The Spotify artist ids.
  * @param headers - Bearer headers from `getSpotifyHeaders`.
@@ -21,7 +23,11 @@ export async function getSpotifyArtistsData(
     chunks.push(artistIds.slice(i, i + SPOTIFY_BATCH_MAX));
   const results = await Promise.all(
     chunks.map(chunk =>
-      readSpotifyJson(`https://api.spotify.com/v1/artists?ids=${chunk.join(",")}`, headers),
+      readSpotifyJson(
+        `https://api.spotify.com/v1/artists?ids=${chunk.join(",")}`,
+        headers,
+        fetchWithoutAcceptLanguage,
+      ),
     ),
   );
   return results.flatMap(response => (response.artists ?? []) as (SpotifyArtistData | null)[]);

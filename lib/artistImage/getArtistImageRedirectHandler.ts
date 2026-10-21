@@ -12,7 +12,7 @@ import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
  * request), else their Spotify or Deezer portrait. Public artist imagery
  * loads separately from private profile data. Placeholder uploads and
  * malformed legacy values fall through to the providers; every answer but
- * the redirect is empty and uncached.
+ * the redirect is empty and uncached; a 503's cause is logged.
  *
  * @param request - The GET request.
  * @param id - The artist id from the path.
@@ -25,9 +25,9 @@ export async function getArtistImageRedirectHandler(
   const cors = getCorsHeaders();
   const unavailable = (status: number) =>
     new Response(null, { status, headers: { ...cors, "Cache-Control": "no-store" } });
-  const valid = validateArtistImageId(id);
-  if (valid instanceof Response) return valid;
   try {
+    const valid = validateArtistImageId(id);
+    if (valid instanceof Response) return valid;
     const artist = await findArtistByColumn(lookupArtists.id, id);
     if (!artist) return unavailable(404);
     const custom = customImageUrl(artist.customImage);
@@ -58,7 +58,8 @@ export async function getArtistImageRedirectHandler(
       status: 307,
       headers: { ...cors, Location: url.toString(), "Cache-Control": "public, max-age=3600" },
     });
-  } catch {
+  } catch (error) {
+    console.error("[artist image]", id, error);
     return unavailable(503);
   }
 }

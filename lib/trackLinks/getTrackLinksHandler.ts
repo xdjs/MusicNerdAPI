@@ -14,30 +14,35 @@ import { validateTrackLinksQuery } from "@/lib/trackLinks/validateTrackLinksQuer
  * must not pin an empty answer in front of every later click for an hour.
  *
  * @param request - The GET request.
- * @returns 200 `{ links }` (`cached: true` from memory), or 400 `{ error }`.
+ * @returns 200 `{ links }` (`cached: true` from memory), or 400 or 500 `{ error }`.
  */
 export async function getTrackLinksHandler(request: Request): Promise<Response> {
   const headers = getCorsHeaders();
-  const query = validateTrackLinksQuery(new URL(request.url).searchParams);
-  if (query instanceof NextResponse) return query;
-  const { title, artist, isAlbum } = query;
+  try {
+    const query = validateTrackLinksQuery(new URL(request.url).searchParams);
+    if (query instanceof NextResponse) return query;
+    const { title, artist, isAlbum } = query;
 
-  const key = `${foldTrackText(artist)}::${foldTrackText(title)}::${isAlbum ? "album" : "song"}`;
-  const hit = trackLinksCache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS)
-    return NextResponse.json({ links: hit.links, cached: true }, { headers });
+    const key = `${foldTrackText(artist)}::${foldTrackText(title)}::${isAlbum ? "album" : "song"}`;
+    const hit = trackLinksCache.get(key);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS)
+      return NextResponse.json({ links: hit.links, cached: true }, { headers });
 
-  const [apple, dz] = await Promise.all([
-    appleMusicTrackLink(title, artist, isAlbum).catch(() => undefined),
-    deezerTrackLink(title, artist, isAlbum).catch(() => undefined),
-  ]);
-  const links = [apple, dz].filter((l): l is TrackLink => !!l);
+    const [apple, dz] = await Promise.all([
+      appleMusicTrackLink(title, artist, isAlbum).catch(() => undefined),
+      deezerTrackLink(title, artist, isAlbum).catch(() => undefined),
+    ]);
+    const links = [apple, dz].filter((l): l is TrackLink => !!l);
 
-  const complete = apple !== undefined && dz !== undefined;
-  if (complete) {
-    if (trackLinksCache.size >= CACHE_MAX)
-      trackLinksCache.delete(trackLinksCache.keys().next().value as string);
-    trackLinksCache.set(key, { at: Date.now(), links });
+    const complete = apple !== undefined && dz !== undefined;
+    if (complete) {
+      if (trackLinksCache.size >= CACHE_MAX)
+        trackLinksCache.delete(trackLinksCache.keys().next().value as string);
+      trackLinksCache.set(key, { at: Date.now(), links });
+    }
+    return NextResponse.json({ links }, { headers });
+  } catch (error) {
+    console.error("[trackLinks]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500, headers });
   }
-  return NextResponse.json({ links }, { headers });
 }

@@ -76,6 +76,19 @@ describe("getArtistImageRedirectHandler", () => {
     expect((await get()).status).toBe(503);
   });
 
+  it("logs the error behind an empty 503, which keeps CORS and no-store", async () => {
+    const error = new Error("database unavailable");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    find.mockRejectedValueOnce(error);
+    const r = await get();
+    expect(r.status).toBe(503);
+    expect(await r.text()).toBe("");
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+    expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(log).toHaveBeenCalledWith("[artist image]", id, error);
+    log.mockRestore();
+  });
+
   it("ignores stored placeholder images when a provider portrait exists", async () => {
     for (const customImage of ["/default_pfp_pink.png", "/musicNerdLogo.png", "/placeholder.png"]) {
       find.mockResolvedValueOnce({ id, customImage });

@@ -23,4 +23,15 @@ describe("readSpotifyJson", () => {
       "Spotify returned 429",
     );
   });
+
+  it("uses a caller's transport when given one", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = vi.fn(async () => new Response(JSON.stringify({ b: 2 })));
+    expect(await readSpotifyJson("https://api.spotify.com/v1/x", headers, transport)).toEqual({
+      b: 2,
+    });
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

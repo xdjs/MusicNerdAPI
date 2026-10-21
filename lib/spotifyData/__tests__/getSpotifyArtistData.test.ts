@@ -3,6 +3,7 @@ import { SpotifyDeferredError } from "@/lib/spotify/SpotifyDeferredError";
 
 const { fetchSpotifyResponse } = vi.hoisted(() => ({ fetchSpotifyResponse: vi.fn() }));
 vi.mock("@/lib/spotify/fetchSpotifyResponse", () => ({ fetchSpotifyResponse }));
+const { fetchWithoutAcceptLanguage } = await import("@/lib/networking/fetchWithoutAcceptLanguage");
 const { getSpotifyArtistData } = await import("@/lib/spotifyData/getSpotifyArtistData");
 
 const headers = { headers: { Authorization: "Bearer t" } };
@@ -35,6 +36,7 @@ describe("getSpotifyArtistData", () => {
     expect(fetchSpotifyResponse).toHaveBeenCalledWith(
       "https://api.spotify.com/v1/artists/sp1",
       expect.objectContaining({ headers: headers.headers }),
+      fetchWithoutAcceptLanguage, // MusicNerdWeb's href carries no ?locale=*
     );
   });
 

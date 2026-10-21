@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { readSpotifyJson } = vi.hoisted(() => ({ readSpotifyJson: vi.fn() }));
 vi.mock("@/lib/spotify/readSpotifyJson", () => ({ readSpotifyJson }));
 const { getSpotifyArtistsData } = await import("@/lib/spotifyData/getSpotifyArtistsData");
+const { fetchWithoutAcceptLanguage } = await import("@/lib/networking/fetchWithoutAcceptLanguage");
 
 const headers = { headers: { Authorization: "Bearer t" } };
 beforeEach(() => readSpotifyJson.mockReset());
@@ -14,6 +15,7 @@ describe("getSpotifyArtistsData", () => {
     expect(readSpotifyJson).toHaveBeenCalledWith(
       "https://api.spotify.com/v1/artists?ids=a,b",
       headers,
+      fetchWithoutAcceptLanguage, // MusicNerdWeb's hrefs carry no ?locale=*
     );
   });
 

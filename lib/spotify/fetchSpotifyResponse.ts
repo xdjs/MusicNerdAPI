@@ -2,8 +2,19 @@ import { checkSpotifyCooldown } from "./checkSpotifyCooldown";
 import { recordSpotifyCooldown } from "./recordSpotifyCooldown";
 import { SpotifyDeferredError } from "./SpotifyDeferredError";
 
-/** One bounded Spotify request, coordinated with every API/Web request using the same app. */
-export async function fetchSpotifyResponse(url: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * One bounded Spotify request, coordinated with every API/Web request using the same app.
+ *
+ * @param url - A Spotify Web API or accounts URL.
+ * @param init - The request options.
+ * @param transport - What sends the request; `fetch` unless the caller needs another.
+ * @returns The response. Throws `SpotifyDeferredError` during a cooldown or on 429.
+ */
+export async function fetchSpotifyResponse(
+  url: string,
+  init: RequestInit = {},
+  transport: (url: string, init: RequestInit) => Promise<Response> = fetch,
+): Promise<Response> {
   const target = new URL(url);
   if (
     target.protocol !== "https:" ||
@@ -14,7 +25,7 @@ export async function fetchSpotifyResponse(url: string, init: RequestInit = {}):
   )
     throw new Error("Invalid Spotify endpoint");
   await checkSpotifyCooldown();
-  const response = await fetch(url, {
+  const response = await transport(url, {
     ...init,
     signal: init.signal ?? AbortSignal.timeout(8000),
     cache: "no-store",
