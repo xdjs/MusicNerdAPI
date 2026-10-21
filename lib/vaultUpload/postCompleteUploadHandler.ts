@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -39,14 +38,15 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       { status: "error", error: message, ...(retryCompletion ? { retryCompletion } : {}) },
       { status, headers },
     );
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const userId = auth.userId;
+  let userId = "";
   let unpublishedPath: string | undefined;
   let uploadArtistId: string | undefined;
   let uploadClaimId: string | null = null;
   let stagedPath: string | undefined;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    userId = auth.userId;
     const body = await validateCompleteUploadBody(request);
     if (body instanceof NextResponse) return body;
     let ticket;
@@ -115,7 +115,6 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
     unpublishedPath = undefined;
     const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
     await cleanupSavedUpload(ticket.path);
-    await trackServerEvent("profile_edit", { action: "vault_upload", target: ticket.type });
     const warning =
       [
         refreshWarning,

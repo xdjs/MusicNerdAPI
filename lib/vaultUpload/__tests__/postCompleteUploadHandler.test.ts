@@ -9,7 +9,6 @@ const mock = vi.hoisted(() => ({
   insert: vi.fn(),
   queue: vi.fn(),
   pdf: vi.fn(),
-  track: vi.fn(),
   download: vi.fn(),
   upload: vi.fn(),
   remove: vi.fn(),
@@ -21,7 +20,6 @@ vi.mock("@/lib/vault/getVaultUploadByPath", () => ({ getVaultUploadByPath: mock.
 vi.mock("@/lib/vault/insertVaultSource", () => ({ insertVaultSource: mock.insert }));
 vi.mock("@/lib/research/queueLoreRefresh", () => ({ queueLoreRefresh: mock.queue }));
 vi.mock("@/lib/vaultUpload/extractPdfText", () => ({ extractPdfText: mock.pdf }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: mock.track }));
 vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: mock.download }));
 vi.mock("@/lib/storage/uploadObject", () => ({ uploadObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
@@ -50,7 +48,6 @@ beforeEach(() => {
   mock.insert.mockReset().mockResolvedValue({ id: "source" });
   mock.queue.mockReset().mockResolvedValue(true);
   mock.pdf.mockReset().mockResolvedValue("A short artist-written document.");
-  mock.track.mockReset().mockResolvedValue(undefined);
   mock.download.mockReset().mockResolvedValue(bytes);
   mock.upload.mockReset().mockResolvedValue(undefined);
   mock.remove.mockReset().mockResolvedValue(undefined);
@@ -67,7 +64,7 @@ beforeEach(() => {
 });
 
 describe("postCompleteUploadHandler", () => {
-  it("runs the statements in order: download, check, publish, save, refresh, clean up, track", async () => {
+  it("runs the statements in order: download, check, publish, save, refresh, clean up", async () => {
     const order: string[] = [];
     for (const [name, fn] of Object.entries(mock)) {
       fn.mockImplementation(async (...args: unknown[]) => {
@@ -97,7 +94,6 @@ describe("postCompleteUploadHandler", () => {
       "insert",
       "queue",
       "remove",
-      "track",
     ]);
     expect(mock.upload).toHaveBeenCalledWith("vault-files", path, bytes, "application/pdf", {
       upsert: true,
@@ -124,10 +120,6 @@ describe("postCompleteUploadHandler", () => {
       trigger: "upload",
     });
     expect(mock.remove).toHaveBeenCalledWith("lore-upload-staging", [path]);
-    expect(mock.track).toHaveBeenCalledWith("profile_edit", {
-      action: "vault_upload",
-      target: "application/pdf",
-    });
     expect(await response.json()).toEqual({
       status: "ok",
       source: { id: "source", filePath: expect.any(Object) },
@@ -389,5 +381,17 @@ describe("postCompleteUploadHandler", () => {
     expect(response.status).toBe(500);
     expect((await response.json()).retryCompletion).toBe(true);
     expect(mock.upload).not.toHaveBeenCalled();
+  });
+
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    mock.authenticate.mockRejectedValueOnce(new Error("db down"));
+    const response = await complete(req({ ticket }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      status: "error",
+      error: "Could not finish the upload. Please retry this file.",
+      retryCompletion: true,
+    });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 });

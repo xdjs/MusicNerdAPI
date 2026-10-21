@@ -98,4 +98,17 @@ describe("postSignUploadHandler", () => {
       error: "Could not prepare file storage. Please try again.",
     });
   });
+
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    mock.authenticate.mockRejectedValueOnce(new Error("db down"));
+    const response = await postSignUploadHandler(
+      req({ artistId, name: "file.pdf", type: "application/pdf", size: 100 }),
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      status: "error",
+      error: "Could not prepare file storage. Please try again.",
+    });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });

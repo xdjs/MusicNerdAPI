@@ -37,10 +37,10 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
   const error = (status: number, message: string) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
   let unpublishedPath: string | undefined;
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const userId = auth.userId;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const userId = auth.userId;
     const form = await validateUploadForm(request);
     if (form instanceof NextResponse) return form;
     const { file, artistId } = form;

@@ -20,9 +20,9 @@ import { validateSignUploadBody } from "@/lib/vaultUpload/validateSignUploadBody
  */
 export async function postSignUploadHandler(request: Request): Promise<NextResponse> {
   const headers = getCorsHeaders();
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
     const body = await validateSignUploadBody(request);
     if (body instanceof NextResponse) return body;
     const { artistId, name, type, size } = body;

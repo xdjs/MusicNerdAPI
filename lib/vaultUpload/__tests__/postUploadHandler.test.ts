@@ -218,4 +218,14 @@ describe("postUploadHandler", () => {
     expect(await res.json()).toEqual({ status: "error", error: "Failed to upload file" });
     expect(mock.remove).not.toHaveBeenCalled();
   });
+
+  it("answers a JSON 500 with CORS when signing in throws", async () => {
+    mock.authenticate.mockRejectedValueOnce(new Error("db down"));
+    const response = await postUploadHandler(
+      req(new File([png], "photo.png", { type: "image/png" })),
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ status: "error", error: "Failed to upload file" });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
 });
