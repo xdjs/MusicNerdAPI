@@ -3,7 +3,7 @@ import { db } from "@/lib/db/db";
 import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
 import { canonicalizeLoreUrl } from "@/lib/sources/canonicalizeLoreUrl";
-import type { VaultSource, VaultSourceInput } from "@/lib/vault/types";
+import type { SourceProvenance, VaultSource, VaultSourceInput } from "@/lib/vault/types";
 import { writeVaultSource } from "@/lib/vault/writeVaultSource";
 
 /**
@@ -13,18 +13,22 @@ import { writeVaultSource } from "@/lib/vault/writeVaultSource";
  * transaction with its activity record, so a failed audit rolls the source back.
  *
  * @param data - The source.
+ * @param provenance - Who submitted it and why, for a source a user sent in.
  * @returns The stored source with its activity, or undefined when it already existed. Throws on a failed write.
  */
 export async function insertVaultSource(
   data: VaultSourceInput,
+  provenance?: SourceProvenance,
 ): Promise<(VaultSource & { activityId: string | null }) | undefined> {
   try {
     const url = canonicalizeLoreUrl(data.url) ?? data.url;
     return getArtistOperationOwnership(data.artistId)
-      ? await withScopedArtistWrite(data.artistId, tx => writeVaultSource(tx, data, url))
+      ? await withScopedArtistWrite(data.artistId, tx =>
+          writeVaultSource(tx, data, url, provenance),
+        )
       : await db.transaction(async tx => {
           await lockArtistRow(tx, data.artistId);
-          return writeVaultSource(tx, data, url);
+          return writeVaultSource(tx, data, url, provenance);
         });
   } catch (e) {
     console.error("[insertVaultSource] Error:", e);

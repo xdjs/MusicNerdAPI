@@ -11,7 +11,7 @@ export async function queueLoreRefreshInTransaction(
   tx: TransactionDb,
   artistId: string,
   expectedClaimId: string | null,
-  opts?: { manual?: boolean },
+  opts?: { manual?: boolean; userId?: string; trigger?: string },
 ): Promise<boolean> {
   await lockArtistRow(tx, artistId);
   const claim = await findApprovedClaim(tx, artistId);
@@ -25,7 +25,12 @@ export async function queueLoreRefreshInTransaction(
          limit 1`);
     if (rowsOf(recent).length > 0) return false;
   }
-  const activityId = await recordArtistActivity(artistId, "lore_refresh", {}, tx);
+  const activityId = await recordArtistActivity(
+    artistId,
+    "lore_refresh",
+    { userId: opts?.userId, trigger: opts?.trigger },
+    tx,
+  );
   const state = JSON.stringify({ claimId: expectedClaimId });
   await tx.execute(sql`
       insert into artist_research_jobs (artist_id, kind, state, activity_id)

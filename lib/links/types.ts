@@ -1,3 +1,4 @@
+import type { UrlMapRow } from "@/lib/artists/types";
 import type { PROFILE_DISPLAY_COLUMNS } from "@/lib/links/const";
 
 /** One of the profile-card columns. */
@@ -18,3 +19,31 @@ export interface LinkPresentationMeta {
   colorHex: string | null;
   profileUrl: string | null;
 }
+
+/** The profile's two link sections. */
+export type LinkSection = "links" | "support";
+
+/** One link as the profile shows it. */
+export interface ProfileLink {
+  siteName: string;
+  href: string;
+  label: string;
+  iconSrc: string;
+}
+
+/** A profile link backed by an approved vault source. */
+export type SourceLink = ProfileLink & {
+  sourceId: string;
+  kind: "artist" | "release" | "website";
+};
+
+/** The source fields that decide whether a source is shown as a destination. */
+export type DestinationSource = {
+  url: string;
+  type?: string | null;
+  status?: string;
+  podcastEpisodeKey?: string | null;
+};
+
+/** A urlmap row with the artist's URL on that platform. */
+export type ArtistLink = UrlMapRow & { artistUrl: string };

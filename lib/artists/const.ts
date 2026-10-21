@@ -159,3 +159,6 @@ export const URLMAP_TTL_MS = 60_000;
 
 /** Platforms whose urlmap rows discovery never resolves. */
 export const UNRESOLVED_URLMAP_SITES = ["catalog", "foundation", "soundxyz", "sound"];
+
+/** An artist id as MusicNerdWeb's artist routes check it: any UUID-shaped hex string. */
+export const ARTIST_ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;

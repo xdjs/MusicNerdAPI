@@ -41,6 +41,16 @@ describe("queueLoreRefresh", () => {
     expect(params).toContain("e1");
   });
 
+  it("records who asked for the refresh and why", async () => {
+    await queueLoreRefresh("a1", "c1", { userId: "u1", trigger: "source_submission" });
+    expect(record).toHaveBeenCalledWith(
+      "a1",
+      "lore_refresh",
+      { userId: "u1", trigger: "source_submission" },
+      tx,
+    );
+  });
+
   it("refuses when the claim changed", async () => {
     findApprovedClaim.mockResolvedValueOnce({ id: "c2" });
     await expect(queueLoreRefresh("a1", "c1")).rejects.toBeInstanceOf(OwnershipChangedError);

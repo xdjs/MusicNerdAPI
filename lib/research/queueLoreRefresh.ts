@@ -6,7 +6,7 @@ import { queueLoreRefreshInTransaction } from "./queueLoreRefreshInTransaction";
 export async function queueLoreRefresh(
   artistId: string,
   expectedClaimId: string | null,
-  opts?: { manual?: boolean },
+  opts?: { manual?: boolean; userId?: string; trigger?: string },
   writer?: TransactionDb,
 ): Promise<boolean> {
   if (writer) return queueLoreRefreshInTransaction(writer, artistId, expectedClaimId, opts);
