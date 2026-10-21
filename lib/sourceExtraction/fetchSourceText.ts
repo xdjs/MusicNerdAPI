@@ -1,3 +1,4 @@
+import { extractOgImage } from "@/lib/pages/extractOgImage";
 import { lookup } from "node:dns/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -125,6 +126,7 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
         truncated: extracted.truncated,
         resolvedUrl: url.href,
         publishedAt: extractPublicationDate(html),
+        ogImage: extractOgImage(html),
       });
     }
     return result("unavailable");

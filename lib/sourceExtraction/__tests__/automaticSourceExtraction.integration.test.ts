@@ -393,3 +393,20 @@ it("does not restart a finished blocked extraction when the same approval is rep
     (await client.query("select count(*)::int as count from artist_activity_events")).rows,
   ).toEqual([{ count: 1 }]);
 });
+
+it.each([null, "https://cdn.example/existing.jpg"])(
+  "persists the fetched page thumbnail without replacing existing artwork %s",
+  async existing => {
+    await client.query("update artist_vault_sources set og_image=$1 where id=$2", [
+      existing,
+      source,
+    ]);
+    fetch.mockResolvedValue({ ...fetched, ogImage: "https://cdn.example/page.jpg" });
+    await enqueue();
+    await runSourceExtraction(await claimJob(), Date.now() + 2000);
+    expect(
+      (await client.query("select og_image from artist_vault_sources where id=$1", [source]))
+        .rows[0],
+    ).toMatchObject({ og_image: existing ?? "https://cdn.example/page.jpg" });
+  },
+);

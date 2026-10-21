@@ -1353,6 +1353,7 @@ describe("runOnboardingTurn", () => {
       }),
     );
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: null,
       artistId: "a1",
       url: "https://novareyesmusic.com/",
       title: "Nova Reyes — Official Site",
@@ -1389,6 +1390,7 @@ describe("runOnboardingTurn", () => {
       }),
     );
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: null,
       artistId: "a1",
       url: "https://novareyesmusic.com/",
       title: "Nova Reyes — Official Site",
@@ -1516,6 +1518,7 @@ describe("runOnboardingTurn", () => {
       }),
     );
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: "https://example.com/og.jpg",
       artistId: "a1",
       url: "https://example.com/blog",
       title: "Totally Unrelated Blog",
@@ -1553,6 +1556,7 @@ describe("runOnboardingTurn", () => {
     );
     // Title carries the artist's name -> their official site.
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: null,
       artistId: "a1",
       url: "https://novareyesmusic.com/",
       title: "Nova Reyes — Official Site",
@@ -1561,6 +1565,7 @@ describe("runOnboardingTurn", () => {
     });
     // No ownership evidence -> unchanged behaviour, still a pending article.
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: null,
       artistId: "a1",
       url: "https://example.com/blog",
       title: "Totally Unrelated Blog",
@@ -1695,6 +1700,7 @@ describe("runOnboardingTurn", () => {
     expect(setArtistLink).toHaveBeenCalledWith("a1", "instagram", "nova");
     // Non-platform link: routed to the vault, approved (name match).
     expect(dq.insertVaultSource).toHaveBeenCalledWith({
+      ogImage: null,
       artistId: "a1",
       url: "https://novareyesmusic.com/",
       title: "Nova Reyes — Official Site",

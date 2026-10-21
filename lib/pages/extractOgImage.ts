@@ -1,20 +1,44 @@
-import { decodeEntities } from "@/lib/pages/decodeEntities";
+import { isIP } from "node:net";
+import { isPublicAddress } from "@/lib/sourceExtraction/isPublicAddress";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
 
 /**
- * The page's `og:image`, in either attribute order. Entities are decoded
- * before the scheme check, because serializers escape `&` in attribute values
- * and a signed CDN URL would otherwise come back broken.
- *
- * @param html - The page's HTML.
- * @returns The image URL, only when it is https; otherwise null.
+ * Read a usable page-declared HTTPS image, preferring Open Graph to Twitter.
+ * No image is fetched; unsupported or unsafe metadata falls back to no image.
+ * @param html - The specific source page's HTML.
+ * @returns A public HTTPS image URL, or null.
  */
 export function extractOgImage(html: string): string | null {
-  const match =
-    html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ??
-    html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-  if (match?.[1]) {
-    const imgUrl = decodeEntities(match[1].trim());
-    if (imgUrl.startsWith("https://")) return imgUrl;
+  const nodes: DefaultTreeAdapterMap["node"][] = [parse(html)];
+  const candidates: Record<string, string[]> = { "og:image": [], "twitter:image": [] };
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    if ("childNodes" in node) nodes.push(...node.childNodes);
+    if (!("tagName" in node) || node.tagName !== "meta") continue;
+    const attrs = Object.fromEntries(node.attrs.map(attr => [attr.name, attr.value]));
+    const kind = (attrs.property ?? attrs.name ?? "").toLowerCase();
+    if ((kind === "og:image" || kind === "twitter:image") && attrs.content)
+      candidates[kind].push(attrs.content.trim());
+  }
+  for (const candidate of [...candidates["og:image"], ...candidates["twitter:image"]]) {
+    try {
+      const url = new URL(candidate);
+      const host = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+      if (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.port &&
+        (!isIP(host) || isPublicAddress(host)) &&
+        host !== "localhost" &&
+        host !== "local" &&
+        !host.endsWith(".localhost") &&
+        !host.endsWith(".local")
+      )
+        return url.href;
+    } catch {
+      /* Invalid metadata is not a thumbnail. */
+    }
   }
   return null;
 }

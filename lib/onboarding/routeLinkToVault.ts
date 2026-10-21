@@ -42,6 +42,7 @@ export async function routeLinkToVault(
       artistId: run.artistId,
       url,
       title: preview.title ?? undefined,
+      ogImage: preview.imageUrl,
       // The artist handed us this URL and it carries their name: their official site.
       type: ownedByArtist ? "website" : inferTypeFromUrl(url),
       status: ownedByArtist ? "approved" : "pending",
