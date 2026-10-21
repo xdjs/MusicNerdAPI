@@ -45,12 +45,27 @@ describe("getPhotoChoiceHandler", () => {
     expect(canEditArtist).toHaveBeenCalledWith("u1", ARTIST);
   });
 
-  it("forwards the auth error when not signed in", async () => {
+  it("answers 401 with no-store and CORS when not signed in", async () => {
     authenticateRequest.mockResolvedValueOnce(
       NextResponse.json({ status: "error", error: "Not signed in" }, { status: 401 }),
     );
-    expect((await getPhotoChoiceHandler(request())).status).toBe(401);
+    const response = await getPhotoChoiceHandler(request());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ status: "error", error: "Not signed in" });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it("answers its JSON error (503, Web's status for this route) when signing in throws", async () => {
+    authenticateRequest.mockRejectedValueOnce(new Error("db down"));
+    const response = await getPhotoChoiceHandler(request());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      status: "error",
+      error: "Could not load photo choices",
+    });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
   it("answers 400 for a bad artist id, before any authorization", async () => {

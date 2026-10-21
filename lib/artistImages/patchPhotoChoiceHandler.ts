@@ -1,6 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import { getProviderPhoto } from "@/lib/artistImages/getProviderPhoto";
 import { validatePhotoChoiceBody } from "@/lib/artistImages/validatePhotoChoiceBody";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
@@ -27,12 +26,12 @@ export async function patchPhotoChoiceHandler(request: Request): Promise<NextRes
   const headers = { ...getCorsHeaders(), "Cache-Control": "no-store" };
   const error = (message: string, status: number) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const body = await validatePhotoChoiceBody(request);
-  if (body instanceof NextResponse) return body;
-  const { artistId, source, imageUrl, expectedCustomImage, providerId } = body;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return error("Not signed in", 401);
+    const body = await validatePhotoChoiceBody(request);
+    if (body instanceof NextResponse) return body;
+    const { artistId, source, imageUrl, expectedCustomImage, providerId } = body;
     const expectedClaimId = (await findApprovedClaim(db, artistId))?.id ?? null;
     if (!(await canEditArtist(auth.userId, artistId)))
       return error("Not authorized for this artist", 403);
@@ -66,7 +65,6 @@ export async function patchPhotoChoiceHandler(request: Request): Promise<NextRes
         ),
     );
     if (!updated.length) return error(STALE, 409);
-    await trackServerEvent("profile_edit", { action: "photo", target: null });
     return NextResponse.json(
       {
         status: "ok",

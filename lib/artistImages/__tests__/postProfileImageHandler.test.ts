@@ -7,7 +7,6 @@ const m = vi.hoisted(() => ({
   isSupabaseStorageConfigured: vi.fn(),
   uploadProfileImage: vi.fn(),
   purgeStaleProfileImages: vi.fn(),
-  trackServerEvent: vi.fn(),
   set: vi.fn(),
   where: vi.fn(),
 }));
@@ -23,7 +22,6 @@ vi.mock("@/lib/artistImages/uploadProfileImage", () => ({
 vi.mock("@/lib/artistImages/purgeStaleProfileImages", () => ({
   purgeStaleProfileImages: m.purgeStaleProfileImages,
 }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: m.trackServerEvent }));
 const { postProfileImageHandler } = await import("@/lib/artistImages/postProfileImageHandler");
 
 const ARTIST = "aab92f80-f9e1-4299-aa33-7dd85c8de5d3";
@@ -45,7 +43,6 @@ beforeEach(() => {
   m.isSupabaseStorageConfigured.mockReset().mockReturnValue(true);
   m.uploadProfileImage.mockReset().mockResolvedValue(true);
   m.purgeStaleProfileImages.mockReset().mockResolvedValue(undefined);
-  m.trackServerEvent.mockReset().mockResolvedValue(undefined);
   m.set.mockReset().mockReturnValue({ where: m.where });
   m.where.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -58,7 +55,7 @@ afterEach(() => {
 });
 
 describe("postProfileImageHandler", () => {
-  it("stores the image, points the artist at its public URL, purges older uploads and reports the edit", async () => {
+  it("stores the image, points the artist at its public URL, purges older uploads", async () => {
     const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
     expect(response.status).toBe(200);
     const url = `https://test.supabase.co/storage/v1/object/public/vault-files/profile-images/${ARTIST}_1761000000000.png`;
@@ -73,10 +70,6 @@ describe("postProfileImageHandler", () => {
     expect(m.set.mock.invocationCallOrder[0]).toBeLessThan(
       m.purgeStaleProfileImages.mock.invocationCallOrder[0],
     );
-    expect(m.trackServerEvent).toHaveBeenCalledWith("profile_edit", {
-      action: "photo",
-      target: null,
-    });
   });
 
   it("forwards the auth error when not signed in", async () => {
@@ -86,6 +79,14 @@ describe("postProfileImageHandler", () => {
     expect((await postProfileImageHandler(request({ file: png(), artistId: ARTIST }))).status).toBe(
       401,
     );
+  });
+
+  it("answers a JSON 500 when signing in throws", async () => {
+    m.authenticateRequest.mockRejectedValueOnce(new Error("db down"));
+    const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ status: "error", error: "Failed to upload image" });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
   it("answers 400 when the file or artist id is missing", async () => {
@@ -165,6 +166,5 @@ describe("postProfileImageHandler", () => {
     const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ status: "error", error: "Failed to upload image" });
-    expect(m.trackServerEvent).not.toHaveBeenCalled();
   });
 });

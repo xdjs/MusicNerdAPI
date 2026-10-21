@@ -8,7 +8,6 @@ const m = vi.hoisted(() => ({
   findApprovedClaim: vi.fn(),
   getProviderPhoto: vi.fn(),
   withScopedArtistWrite: vi.fn(),
-  trackServerEvent: vi.fn(),
   set: vi.fn(),
   where: vi.fn(),
   returning: vi.fn(),
@@ -21,7 +20,6 @@ vi.mock("@/lib/artistImages/getProviderPhoto", () => ({ getProviderPhoto: m.getP
 vi.mock("@/lib/ownership/withScopedArtistWrite", () => ({
   withScopedArtistWrite: m.withScopedArtistWrite,
 }));
-vi.mock("@/lib/analytics/trackServerEvent", () => ({ trackServerEvent: m.trackServerEvent }));
 const { patchPhotoChoiceHandler } = await import("@/lib/artistImages/patchPhotoChoiceHandler");
 const { getArtistOperationOwnership } = await import("@/lib/ownership/getArtistOperationOwnership");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
@@ -50,7 +48,6 @@ beforeEach(() => {
   m.findFirst.mockReset().mockResolvedValue(artist);
   m.findApprovedClaim.mockReset().mockResolvedValue({ id: "c1", userId: "u1" });
   m.getProviderPhoto.mockReset().mockResolvedValue(RESOLVED);
-  m.trackServerEvent.mockReset().mockResolvedValue(undefined);
   m.set.mockReset().mockReturnValue({ where: m.where });
   m.where.mockReset().mockReturnValue({ returning: m.returning });
   m.returning.mockReset().mockResolvedValue([{ imagePath: RESOLVED, position: null }]);
@@ -63,7 +60,7 @@ beforeEach(() => {
 });
 
 describe("patchPhotoChoiceHandler", () => {
-  it("saves the re-resolved provider photo under the ownership fence and reports the edit", async () => {
+  it("saves the re-resolved provider photo under the ownership fence", async () => {
     const response = await patchPhotoChoiceHandler(request());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -78,10 +75,6 @@ describe("patchPhotoChoiceHandler", () => {
     expect(m.set).toHaveBeenCalledWith(
       expect.objectContaining({ customImage: RESOLVED, headerImagePosition: expect.anything() }),
     );
-    expect(m.trackServerEvent).toHaveBeenCalledWith("profile_edit", {
-      action: "photo",
-      target: null,
-    });
   });
 
   it("keeps a header position that was set for this same image", async () => {
@@ -93,11 +86,26 @@ describe("patchPhotoChoiceHandler", () => {
     });
   });
 
-  it("forwards the auth error when not signed in", async () => {
+  it("answers 401 with no-store and CORS when not signed in", async () => {
     m.authenticateRequest.mockResolvedValueOnce(
       NextResponse.json({ status: "error", error: "Not signed in" }, { status: 401 }),
     );
-    expect((await patchPhotoChoiceHandler(request())).status).toBe(401);
+    const response = await patchPhotoChoiceHandler(request());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ status: "error", error: "Not signed in" });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("answers a JSON 500 when signing in throws", async () => {
+    m.authenticateRequest.mockRejectedValueOnce(new Error("db down"));
+    const response = await patchPhotoChoiceHandler(request());
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      status: "error",
+      error: "Could not save photo. Your current photo is unchanged.",
+    });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
   it("answers 400 for a bad body", async () => {
@@ -159,7 +167,6 @@ describe("patchPhotoChoiceHandler", () => {
     m.returning.mockResolvedValueOnce([]);
     const response = await patchPhotoChoiceHandler(request());
     expect(response.status).toBe(409);
-    expect(m.trackServerEvent).not.toHaveBeenCalled();
   });
 
   it("answers 403 when ownership changed during the write, 500 on any other failure", async () => {

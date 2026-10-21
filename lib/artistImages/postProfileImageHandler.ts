@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { trackServerEvent } from "@/lib/analytics/trackServerEvent";
 import {
   MAX_PROFILE_IMAGE_BYTES,
   PROFILE_IMAGE_EXTENSIONS,
@@ -31,9 +30,9 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
   const headers = getCorsHeaders();
   const error = (message: string, status: number) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
     const form = await validateProfileImageForm(request);
     if (form instanceof NextResponse) return form;
     const { file, artistId } = form;
@@ -72,7 +71,6 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
     const publicUrl = profileImagePublicUrl(storagePath);
     await db.update(artists).set({ customImage: publicUrl }).where(eq(artists.id, artistId));
     await purgeStaleProfileImages(artistId, filename);
-    await trackServerEvent("profile_edit", { action: "photo", target: null });
     return NextResponse.json(
       { status: "ok", success: true, imagePath: publicUrl },
       { status: 200, headers },

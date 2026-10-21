@@ -22,12 +22,12 @@ export async function patchHeaderPositionHandler(request: Request): Promise<Next
   const headers = getCorsHeaders();
   const error = (message: string, status: number) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const body = await validateHeaderPositionBody(request);
-  if (body instanceof NextResponse) return body;
-  const { artistId, imageUrl, y } = body;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const body = await validateHeaderPositionBody(request);
+    if (body instanceof NextResponse) return body;
+    const { artistId, imageUrl, y } = body;
     const expectedClaimId = (await findApprovedClaim(db, artistId))?.id ?? null;
     if (!(await canEditArtist(auth.userId, artistId)))
       return error("Not authorized for this artist", 403);

@@ -18,11 +18,15 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
  */
 export async function getPhotoChoiceHandler(request: Request): Promise<NextResponse> {
   const headers = { ...getCorsHeaders(), "Cache-Control": "no-store" };
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const artistId = validatePhotoChoiceQuery(request);
-  if (artistId instanceof NextResponse) return artistId;
   try {
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse)
+      return NextResponse.json(
+        { status: "error", error: "Not signed in" },
+        { status: 401, headers },
+      );
+    const artistId = validatePhotoChoiceQuery(request);
+    if (artistId instanceof NextResponse) return artistId;
     if (!(await canEditArtist(auth.userId, artistId)))
       return NextResponse.json(
         { status: "error", error: "Not authorized for this artist" },

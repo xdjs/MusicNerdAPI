@@ -72,6 +72,17 @@ describe("patchHeaderPositionHandler", () => {
     expect((await patchHeaderPositionHandler(request())).status).toBe(401);
   });
 
+  it("answers a JSON 500 when signing in throws", async () => {
+    m.authenticateRequest.mockRejectedValueOnce(new Error("db down"));
+    const response = await patchHeaderPositionHandler(request());
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      status: "error",
+      error: "Could not save photo position",
+    });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
   it("answers 400 for a bad body", async () => {
     const response = await patchHeaderPositionHandler(request({ ...body, y: 101 }));
     expect(response.status).toBe(400);
