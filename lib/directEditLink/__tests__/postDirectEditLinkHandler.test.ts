@@ -15,7 +15,8 @@ const m = vi.hoisted(() => ({
   clear: vi.fn(),
   notify: vi.fn(),
 }));
-vi.mock("@/lib/db/db", () => ({ db: { query: { users: { findFirst: m.user } } } }));
+vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/users/getUserById", () => ({ getUserById: m.user }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim: m.claim }));
 vi.mock("@/lib/auth/canEditArtist", () => ({ canEditArtist: m.canEdit }));
@@ -73,6 +74,7 @@ describe("postDirectEditLinkHandler set", () => {
       platformName: "Instagram",
     });
     expect(m.set).toHaveBeenCalledWith(artistId, "instagram", "p3t3rango", igUrl);
+    expect(m.user).toHaveBeenCalledWith("u1");
     expect(scope).toEqual({ artistId, userId: "u1", expectedClaimId: "c1" });
     expect(m.claim.mock.invocationCallOrder[0]).toBeLessThan(m.canEdit.mock.invocationCallOrder[0]);
     expect(m.notify).toHaveBeenCalledWith({

@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { submitArtistDestination } from "@/lib/artistLinkReview/submitArtistDestination";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
@@ -9,7 +8,6 @@ import { extractArtistId } from "@/lib/artists/extractArtistId";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
 import { db } from "@/lib/db/db";
-import { users } from "@/lib/db/schema";
 import { notifyDiscordOfArtistLinkAdded } from "@/lib/directEditLink/notifyDiscordOfArtistLinkAdded";
 import { validateDirectEditLinkBody } from "@/lib/directEditLink/validateDirectEditLinkBody";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
@@ -17,6 +15,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { withArtistOperation } from "@/lib/ownership/withArtistOperation";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
+import { getUserById } from "@/lib/users/getUserById";
 
 /**
  * Handles POST /api/directEditLink: the claimant or an admin sets or clears
@@ -61,10 +60,7 @@ export async function postDirectEditLinkHandler(request: Request): Promise<NextR
       const extracted = await extractArtistId(url);
       if (!extracted?.siteName || !extracted?.id) return error(LINK_NOT_SUPPORTED_LONG, 400);
 
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId),
-        columns: { username: true, wallet: true },
-      });
+      const user = await getUserById(userId);
       const { oldValue, artistName } = await withArtistOperation(
         artistId,
         { userId, expectedClaimId },

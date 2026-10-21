@@ -1,11 +1,9 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
-import { db } from "@/lib/db/db";
-import { users } from "@/lib/db/schema";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { removeArtistData } from "@/lib/removeArtistData/removeArtistData";
 import { validateRemoveArtistDataBody } from "@/lib/removeArtistData/validateRemoveArtistDataBody";
+import { getUserById } from "@/lib/users/getUserById";
 
 /**
  * Handles POST /api/removeArtistData: a whitelisted user or an admin empties
@@ -24,10 +22,7 @@ export async function postRemoveArtistDataHandler(request: Request): Promise<Nex
     const body = await validateRemoveArtistDataBody(request);
     if (body instanceof NextResponse) return body;
     const { artistId, siteName } = body;
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, auth.userId),
-      columns: { isAdmin: true, isWhiteListed: true },
-    });
+    const user = await getUserById(auth.userId);
     const result =
       user?.isAdmin || user?.isWhiteListed
         ? await removeArtistData(artistId, siteName)

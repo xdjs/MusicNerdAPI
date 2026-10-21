@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { lockLinkReview } from "@/lib/artistLinkReview/lockLinkReview";
 import type { LinkSuggestion } from "@/lib/artistLinkReview/types";
 import { db } from "@/lib/db/db";
-import { isDestinationSource } from "@/lib/musicLinks/isDestinationSource";
+import { isDestinationSource } from "@/lib/links/isDestinationSource";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { getUserDisplayName } from "@/lib/users/getUserDisplayName";
 

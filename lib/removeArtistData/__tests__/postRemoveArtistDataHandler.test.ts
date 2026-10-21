@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const m = vi.hoisted(() => ({ auth: vi.fn(), user: vi.fn(), remove: vi.fn() }));
-vi.mock("@/lib/db/db", () => ({ db: { query: { users: { findFirst: m.user } } } }));
+vi.mock("@/lib/users/getUserById", () => ({ getUserById: m.user }));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: m.auth }));
 vi.mock("@/lib/removeArtistData/removeArtistData", () => ({ removeArtistData: m.remove }));
 const { postRemoveArtistDataHandler } =
@@ -33,6 +33,7 @@ describe("postRemoveArtistDataHandler", () => {
       message: "Artist data removed",
     });
     expect(m.remove).toHaveBeenCalledWith("a1", "instagram");
+    expect(m.user).toHaveBeenCalledWith("u1");
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 

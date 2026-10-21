@@ -9,7 +9,7 @@ import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictErr
 import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkColumn";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
 import { db } from "@/lib/db/db";
-import { isDestinationSource } from "@/lib/musicLinks/isDestinationSource";
+import { isDestinationSource } from "@/lib/links/isDestinationSource";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { queueApprovedSourceExtraction } from "@/lib/sourceExtraction/queueApprovedSourceExtraction";
 
