@@ -5,7 +5,7 @@ import { rowsOf } from "@/lib/db/rowsOf";
 import { artistVaultSources } from "@/lib/db/schema";
 import { publicLinkRevision } from "@/lib/directoryDiscovery/publicLinkRevision";
 import type { DirectoryDiscoveryStatus } from "@/lib/directoryDiscovery/types";
-import { getArtistLinks } from "@/lib/links/getArtistLinks";
+import { getArtistLinks } from "@/lib/artists/getArtistLinks";
 import { getHiddenLinkSourceIds } from "@/lib/links/getHiddenLinkSourceIds";
 import { getConflictingMusicSourceIds } from "@/lib/musicLinks/getConflictingMusicSourceIds";
 

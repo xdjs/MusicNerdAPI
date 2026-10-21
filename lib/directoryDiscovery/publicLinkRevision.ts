@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { ArtistRow } from "@/lib/artists/types";
 import { getProfileLinks } from "@/lib/links/getProfileLinks";
 import { getSourceLinks } from "@/lib/links/getSourceLinks";
-import type { ArtistLink, DestinationSource } from "@/lib/links/types";
+import type { ArtistLink } from "@/lib/artists/types";
+import type { DestinationSource } from "@/lib/links/types";
 
 /**
  * A fingerprint of the profile's public destinations only: its link columns

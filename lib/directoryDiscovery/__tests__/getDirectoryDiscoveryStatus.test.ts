@@ -12,7 +12,7 @@ vi.mock("@/lib/db/db", () => ({
   },
 }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: mock.getArtistById }));
-vi.mock("@/lib/links/getArtistLinks", () => ({ getArtistLinks: async () => [] }));
+vi.mock("@/lib/artists/getArtistLinks", () => ({ getArtistLinks: async () => [] }));
 vi.mock("@/lib/musicLinks/getConflictingMusicSourceIds", () => ({
   getConflictingMusicSourceIds: async () => [],
 }));

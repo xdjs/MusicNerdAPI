@@ -1,6 +1,6 @@
 import { it, expect } from "vitest";
 import { getProfileLinks } from "@/lib/links/getProfileLinks";
-import type { ArtistLink } from "@/lib/links/types";
+import type { ArtistLink } from "@/lib/artists/types";
 
 const link = (siteName: string, artistUrl: string, extra: Partial<ArtistLink> = {}) =>
   ({

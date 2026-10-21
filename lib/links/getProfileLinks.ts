@@ -1,7 +1,8 @@
 import type { ArtistRow } from "@/lib/artists/types";
 import { LOCAL_LINK_ICONS, SUPPORT_SITES } from "@/lib/links/const";
 import { latestExternalUrl } from "@/lib/links/latestExternalUrl";
-import type { ArtistLink, LinkSection, ProfileLink } from "@/lib/links/types";
+import type { ArtistLink } from "@/lib/artists/types";
+import type { LinkSection, ProfileLink } from "@/lib/links/types";
 
 /**
  * The artist's own link columns as profile links, in one section. Spotify and

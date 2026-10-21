@@ -16,7 +16,7 @@ vi.mock("@/lib/db/db", () => ({
 vi.mock("@/lib/artists/getArtistById", () => ({
   getArtistById: async () => ({ id: "a", spotify: null, deezer: null }),
 }));
-vi.mock("@/lib/links/getArtistLinks", () => ({ getArtistLinks: async () => [] }));
+vi.mock("@/lib/artists/getArtistLinks", () => ({ getArtistLinks: async () => [] }));
 vi.mock("@/lib/musicLinks/getConflictingMusicSourceIds", () => ({
   getConflictingMusicSourceIds: async () => [],
 }));

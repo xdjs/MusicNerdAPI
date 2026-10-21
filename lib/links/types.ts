@@ -1,4 +1,3 @@
-import type { UrlMapRow } from "@/lib/artists/types";
 import type { PROFILE_DISPLAY_COLUMNS } from "@/lib/links/const";
 
 /** One of the profile-card columns. */
@@ -44,6 +43,3 @@ export type DestinationSource = {
   status?: string;
   podcastEpisodeKey?: string | null;
 };
-
-/** A urlmap row with the artist's URL on that platform. */
-export type ArtistLink = UrlMapRow & { artistUrl: string };
