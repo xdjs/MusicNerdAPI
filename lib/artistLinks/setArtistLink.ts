@@ -3,7 +3,9 @@ import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkCo
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
 import { writeArtistLinkColumn } from "@/lib/artistLinks/writeArtistLinkColumn";
 import { db } from "@/lib/db/db";
+import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
+import type { TransactionDb } from "@/lib/ownership/types";
 import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
 
 /**
@@ -12,31 +14,35 @@ import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
  * other column is one scoped write. Inside an artist operation both paths
  * re-check the claim first.
  *
- * MusicNerdWeb's self-edit recording (`selfEditUrl`) isn't ported: research
- * never passes one.
- *
  * @param artistId - The artist.
  * @param siteName - The platform, sanitized to a column name.
  * @param value - The id or handle.
+ * @param selfEditUrl - The URL a claimant submitted, to record their self-edit; needs a user operation.
+ * @param transaction - A transaction to write in instead of opening one (a link review's).
  * @returns The previous value and the artist's name.
  */
 export async function setArtistLink(
   artistId: string,
   siteName: string,
   value: string,
+  selfEditUrl?: string,
+  transaction?: TransactionDb,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
+  if (selfEditUrl && !getArtistOperationOwnership(artistId)?.userId)
+    throw new Error("Self-edit recording requires an authenticated artist operation");
   const columnName = sanitizeColumnName(siteName);
   assertWritableLinkColumn(columnName);
   if (!value) throw new Error("Value must not be empty");
 
-  if (columnName === "spotify" || columnName === "deezer") {
-    return db.transaction(async transaction => {
-      await acquireArtistPlatformWriteLocks(transaction, artistId, columnName, value);
-      await lockScopedArtistWrite(transaction, artistId);
-      return writeArtistLinkColumn(transaction, artistId, columnName, value);
-    });
-  }
+  const identity = columnName === "spotify" || columnName === "deezer";
+  const write = async (tx: TransactionDb) => {
+    if (identity) await acquireArtistPlatformWriteLocks(tx, artistId, columnName, value);
+    await lockScopedArtistWrite(tx, artistId);
+    return writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl);
+  };
+  if (transaction) return write(transaction);
+  if (identity) return db.transaction(write);
   return withScopedArtistWrite(artistId, tx =>
-    writeArtistLinkColumn(tx, artistId, columnName, value),
+    writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl),
   );
 }

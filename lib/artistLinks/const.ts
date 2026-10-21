@@ -49,3 +49,10 @@ export const WRITABLE_LINK_COLUMNS = new Set([
   "bluesky",
   "inprocess",
 ]);
+
+/**
+ * MusicNerdWeb's server rejection for a link no platform reads, verbatim: its
+ * client shows it as is.
+ */
+export const LINK_NOT_SUPPORTED_LONG =
+  'We don\'t support that link yet — we currently accept links from a fixed set of platforms. Check the "Supported links" list to see them.';

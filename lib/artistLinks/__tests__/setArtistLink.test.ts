@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { writeColumn, locks, lockScoped, scoped, transaction, tx } = vi.hoisted(() => {
+const { writeColumn, locks, lockScoped, scoped, transaction, tx, ownership } = vi.hoisted(() => {
   const tx = { name: "tx" };
   return {
     tx,
-    writeColumn: vi.fn(async (_db: unknown, _a: string, _c: string, _v: string) => ({
+    ownership: vi.fn((_a: string): { userId?: string } | undefined => undefined),
+    writeColumn: vi.fn(async (_db: unknown, _a: string, _c: string, _v: string, _u?: string) => ({
       oldValue: null,
       artistName: "A",
     })),
@@ -21,6 +22,9 @@ vi.mock("@/lib/artistLinks/acquireArtistPlatformWriteLocks", () => ({
 }));
 vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite: lockScoped }));
 vi.mock("@/lib/ownership/withScopedArtistWrite", () => ({ withScopedArtistWrite: scoped }));
+vi.mock("@/lib/ownership/getArtistOperationOwnership", () => ({
+  getArtistOperationOwnership: ownership,
+}));
 const { setArtistLink } = await import("@/lib/artistLinks/setArtistLink");
 
 beforeEach(() => vi.clearAllMocks());
@@ -32,7 +36,13 @@ describe("setArtistLink", () => {
       artistName: "A",
     });
     expect(scoped).toHaveBeenCalledWith("a1", expect.any(Function));
-    expect(writeColumn).toHaveBeenCalledWith({ name: "scoped" }, "a1", "instagram", "pete");
+    expect(writeColumn).toHaveBeenCalledWith(
+      { name: "scoped" },
+      "a1",
+      "instagram",
+      "pete",
+      undefined,
+    );
     expect(transaction).not.toHaveBeenCalled();
   });
 
@@ -40,7 +50,7 @@ describe("setArtistLink", () => {
     await setArtistLink("a1", "spotify", "S1");
     expect(locks).toHaveBeenCalledWith(tx, "a1", "spotify", "S1");
     expect(lockScoped).toHaveBeenCalledWith(tx, "a1");
-    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1");
+    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1", undefined);
     expect(locks.mock.invocationCallOrder[0]).toBeLessThan(lockScoped.mock.invocationCallOrder[0]);
     expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
       writeColumn.mock.invocationCallOrder[0],
@@ -50,12 +60,46 @@ describe("setArtistLink", () => {
 
   it("sanitizes the column name and refuses non-link columns and empty values", async () => {
     await setArtistLink("a1", "insta-gram", "pete");
-    expect(writeColumn).toHaveBeenCalledWith({ name: "scoped" }, "a1", "instagram", "pete");
+    expect(writeColumn).toHaveBeenCalledWith(
+      { name: "scoped" },
+      "a1",
+      "instagram",
+      "pete",
+      undefined,
+    );
     await expect(setArtistLink("a1", "wallets", "0x1")).rejects.toThrow(
       "dedicated array operations",
     );
     await expect(setArtistLink("a1", "bio", "x")).rejects.toThrow("whitelist");
     await expect(setArtistLink("a1", "!!!", "x")).rejects.toThrow("Invalid column name");
     await expect(setArtistLink("a1", "x", "")).rejects.toThrow("Value must not be empty");
+  });
+
+  it("passes the submitted URL through for the self-edit, inside a user operation only", async () => {
+    ownership.mockReturnValue({ userId: "u1" });
+    await setArtistLink("a1", "instagram", "pete", "https://ig/pete");
+    expect(writeColumn).toHaveBeenCalledWith(
+      { name: "scoped" },
+      "a1",
+      "instagram",
+      "pete",
+      "https://ig/pete",
+    );
+    ownership.mockReturnValue(undefined);
+    await expect(setArtistLink("a1", "instagram", "pete", "https://ig/pete")).rejects.toThrow(
+      "Self-edit recording requires an authenticated artist operation",
+    );
+  });
+
+  it("writes in the caller's transaction when given one: spotify locks, scoped lock, write", async () => {
+    const callerTx = { name: "caller" };
+    await setArtistLink("a1", "deezer", "D1", undefined, callerTx as never);
+    expect(locks).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1");
+    expect(lockScoped).toHaveBeenCalledWith(callerTx, "a1");
+    expect(writeColumn).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1", undefined);
+    await setArtistLink("a1", "instagram", "pete", undefined, callerTx as never);
+    expect(locks).toHaveBeenCalledTimes(1);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(scoped).not.toHaveBeenCalled();
   });
 });
