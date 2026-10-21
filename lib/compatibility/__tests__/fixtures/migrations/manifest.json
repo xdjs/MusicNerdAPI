@@ -1,0 +1,21 @@
+{
+  "webCommit": "add24202f4966a464fbcfce97189bb9b48bc04e0",
+  "sha256": {
+    "0005_artist_claims_vault_and_deezer.sql": "a45b3f6d70d7a972086ee56eb3644d33e3f514f0b33f6ce6dc21d1b20cf03b3e",
+    "0006_vault_sources_cascade.sql": "c1438a2527475608ddfaf83a948c4adb3e2adc0153bba2d4d6709d36f52927b6",
+    "0007_artist_claims_partial_unique.sql": "619c1efa60b2cb071cd6a8904ec7768306711e2ad39e5e2a09f484111ba4da0d",
+    "0010_fix_artist_edit_rls_policies.sql": "6233dccc1edba88cfb391a9feb7074ebed324ae0457d8049f79aed89139a48d1",
+    "0014_vault_source_url_unique.sql": "edca06e489298fa34b81274cf9e21b4d28767356c94e5e0b0e7f1b7b4608b207",
+    "0015_vault_source_published_at.sql": "ccd467ac945584b2ee3cf333ba71143e19d056c78e262ef61de1f475a8b5c080",
+    "0021_artist_research_jobs.sql": "7d0c911f5329caf8416c3952a70913433283ea1aa58526848df527e1688705ad",
+    "0027_artist_self_edits.sql": "5692f0fc353e95447c0a51f013b0182f5b706fd0563db925043183db58015873",
+    "0028_famous_captain_britain.sql": "dc9da6f4e1041cefdf4ae0ce8c7c60f177fcb4f2e0b13b4f3a1e5e69de3e751d",
+    "0030_podcast_episode_identity.sql": "53233ac091acc178c07581c1f47cb19b5ac487166c076c2b300ea232e485aa14",
+    "0031_lore_attribution.sql": "445ead9ef840f386a156e481cfe2ea1c0464c0c283a206199f9ef23cf01b4596",
+    "0035_account_merge_attribution.sql": "ce893158ed3b9dc0fcfbe27151789fdf48b5a5628c1ded6edd9f4a97282e17e8",
+    "0037_source_extract.sql": "ae956f5c51d6074976219f64c4e29e2a686276505b126710e5fab031bf34cd85",
+    "0038_automatic_source_extraction.sql": "db31816818efbf3049743aaae76c698296717e2ef9c78e460dba93f6d15ff0cb",
+    "0050_deferred_spotify_matching.sql": "053f25dcf40859105ba7ca1b60b0c6a977bb09eb21feba97c66aa612342eebbe",
+    "0055_interview_preparation.sql": "cb418a0ea3ea889f2a7bcf2ea1a9d07adc3029da5a7474b51b749813ad3d7b4d"
+  }
+}
