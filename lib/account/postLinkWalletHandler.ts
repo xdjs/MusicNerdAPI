@@ -21,13 +21,15 @@ export async function postLinkWalletHandler(request: Request): Promise<NextRespo
   const error = (status: number, message: string) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
 
-  const auth = await authenticateRequest(request);
-  if (auth instanceof NextResponse) return auth;
-  const body = await validateLinkWalletBody(request);
-  if (body instanceof NextResponse) return body;
-  const normalizedWallet = body.walletAddress;
-
   try {
+    // Inside the try: the auth lookup reads the database, and a failure there
+    // must answer with the JSON error and CORS headers, not an empty 500.
+    const auth = await authenticateRequest(request);
+    if (auth instanceof NextResponse) return auth;
+    const body = await validateLinkWalletBody(request);
+    if (body instanceof NextResponse) return body;
+    const normalizedWallet = body.walletAddress;
+
     const currentUser = await getUserById(auth.userId);
     if (!currentUser?.privyUserId) return error(401, "Not authenticated");
 

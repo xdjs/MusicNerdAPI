@@ -1,8 +1,7 @@
 import { eq, sql } from "drizzle-orm";
-import { lockBookmarkUsers } from "@/lib/account/lockBookmarkUsers";
+import { lockUsers } from "@/lib/account/lockUsers";
 import { needsUserName } from "@/lib/account/needsUserName";
 import { transferBioCorrections } from "@/lib/account/transferBioCorrections";
-import { transferUserBookmarks } from "@/lib/account/transferUserBookmarks";
 import { db } from "@/lib/db/db";
 import { users } from "@/lib/db/schema";
 
@@ -10,7 +9,7 @@ import { users } from "@/lib/db/schema";
  * Merges the signed-in placeholder account into the legacy wallet account, in
  * one transaction: the legacy account takes the Privy identity, the merged
  * name and counts, the artists added, the UGC, the self-edits, the activity
- * ledger, the bookmarks and the bio corrections; the placeholder is deleted.
+ * ledger and the bio corrections; the placeholder is deleted.
  * Any failure rolls everything back.
  *
  * @param currentUserId - The signed-in placeholder account.
@@ -31,8 +30,7 @@ export async function mergeAccounts(
       // Match the name reservation lock order before taking account row locks.
       await tx.execute(sql`select pg_advisory_xact_lock(1387)`);
       // Lock both accounts in stable order before reading or changing either.
-      // Bookmark writes take the same lock, so a concurrent save cannot be lost.
-      await lockBookmarkUsers(tx, [currentUserId, legacyUserId]);
+      await lockUsers(tx, [currentUserId, legacyUserId]);
       // Get both users inside transaction to ensure consistency
       const currentUser = await tx.query.users.findFirst({ where: eq(users.id, currentUserId) });
       const legacyUser = await tx.query.users.findFirst({ where: eq(users.id, legacyUserId) });
@@ -115,10 +113,9 @@ export async function mergeAccounts(
                 )
             `);
 
-      await transferUserBookmarks(tx, currentUserId, legacyUserId);
       await transferBioCorrections(tx, currentUserId, legacyUserId);
 
-      // Delete the current (placeholder) user; bookmarks are already transferred.
+      // Delete the current (placeholder) user.
       await tx.delete(users).where(eq(users.id, currentUserId));
 
       return { success: true as const };

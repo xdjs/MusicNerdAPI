@@ -143,6 +143,14 @@ describe("postLinkWalletHandler", () => {
     expect(await res.json()).toEqual({ status: "error", error: "User not found" });
   });
 
+  it("returns the JSON 500 with CORS when the auth lookup throws", async () => {
+    mock.authenticateRequest.mockRejectedValue(new Error("db pool exhausted"));
+    const res = await postLinkWalletHandler(request());
+    expect(res.status).toBe(500);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(await res.json()).toEqual({ status: "error", error: "Failed to link wallet" });
+  });
+
   it("hides an unexpected failure", async () => {
     mock.getUserByWallet.mockRejectedValue(new Error("private connection error"));
     const res = await postLinkWalletHandler(request());

@@ -37,7 +37,6 @@ export function mockTransaction(results: unknown[][] = []) {
     log.push(entry);
     const query = {
       from: vi.fn(() => query),
-      innerJoin: vi.fn(() => query),
       where: vi.fn((condition: SQL) => {
         Object.assign(entry, renderSql(condition));
         return query;
@@ -58,21 +57,6 @@ export function mockTransaction(results: unknown[][] = []) {
       log.push({ kind: "execute", ...renderSql(query) });
       return [];
     }),
-    insert: vi.fn(() => ({
-      values: (rows: unknown[]) => {
-        const entry: LoggedStatement = { kind: "insert", rows };
-        log.push(entry);
-        return {
-          onConflictDoNothing: vi.fn(async () => {
-            entry.kind = "insert on conflict do nothing";
-          }),
-          onConflictDoUpdate: vi.fn(async (conflict: { set: Record<string, unknown> }) => {
-            entry.kind = "insert on conflict do update";
-            entry.values = conflict.set;
-          }),
-        };
-      },
-    })),
     update: vi.fn(() => ({
       set: (values: Record<string, unknown>) => ({
         where: async (condition: SQL) => {

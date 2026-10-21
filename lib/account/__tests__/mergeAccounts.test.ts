@@ -21,8 +21,6 @@ const { mergeAccounts } = await import("@/lib/account/mergeAccounts");
 
 const CURRENT = "11111111-1111-4111-8111-111111111111";
 const LEGACY = "22222222-2222-4222-8222-222222222222";
-const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const date = "2026-09-06T12:00:00Z";
 const currentUser = {
   id: CURRENT,
@@ -67,13 +65,7 @@ beforeEach(() => {
 
 describe("mergeAccounts", () => {
   it("runs every step in one transaction, in Web's order", async () => {
-    const { log } = setup([
-      [{ id: CURRENT }, { id: LEGACY }],
-      [currentUser],
-      [legacyUser],
-      [{ artistId: A, createdAt: date }],
-      [{ artistId: B, createdAt: date, removedAt: null }],
-    ]);
+    const { log } = setup([[{ id: CURRENT }, { id: LEGACY }], [currentUser], [legacyUser]]);
     expect(await mergeAccounts(CURRENT, LEGACY)).toEqual({ success: true });
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(log.map(({ kind }) => kind)).toEqual([
@@ -87,10 +79,6 @@ describe("mergeAccounts", () => {
       "execute",
       "execute",
       "execute",
-      "select",
-      "select",
-      "insert on conflict do nothing",
-      "update",
       "execute",
       "delete",
     ]);
@@ -129,13 +117,11 @@ describe("mergeAccounts", () => {
       text: "SELECT public.transfer_account_activity( $1::uuid, $2::uuid, $3 )",
       params: [CURRENT, LEGACY, "did:privy:current"],
     });
-    expect(log[12].rows).toEqual([
-      { userId: LEGACY, artistId: B, createdAt: date, removedAt: null, position: 1 },
-    ]);
-    expect(log[13].values).toMatchObject({ position: { params: [A, 0, B, 1] } });
-    expect(log[14].text).toContain("update artist_bio_corrections set");
-    expect(log[14].params).toEqual([CURRENT, LEGACY, CURRENT, LEGACY, CURRENT, CURRENT]);
-    expect(log[15].params).toEqual([CURRENT]);
+    expect(log[10].text).toContain("update artist_bio_corrections set");
+    expect(log[10].params).toEqual([CURRENT, LEGACY, CURRENT, LEGACY, CURRENT, CURRENT]);
+    expect(log[11].params).toEqual([CURRENT]);
+    // Bookmarks are not migrated: the placeholder's rows go with it (ON DELETE CASCADE).
+    expect(log.map(({ text }) => text ?? "").join(" ")).not.toContain("user_artist_bookmarks");
     expect(state.rolledBack).toBe(false);
   });
 
@@ -144,14 +130,11 @@ describe("mergeAccounts", () => {
       [{ id: CURRENT }, { id: LEGACY }],
       [{ ...currentUser, usernameNeedsConfirmation: true }],
       [legacyUser],
-      [],
-      [],
     ]);
     expect(await mergeAccounts(CURRENT, LEGACY)).toEqual({ success: true });
     expect(log[4].values).toEqual({ privyUserId: null });
     expect(log[5].values).toMatchObject({ usernamePromptedAt: date });
     expect(log[5].values).not.toHaveProperty("username");
-    expect(log.map(({ kind }) => kind)).not.toContain("insert");
   });
 
   it("refuses the same account without opening a transaction", async () => {
