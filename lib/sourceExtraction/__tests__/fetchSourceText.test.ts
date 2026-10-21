@@ -90,3 +90,16 @@ it("reports the final validated URL when a public original redirects", async () 
   const r = await fetchSourceText("https://artist.example/outbound", 2000);
   expect(r.resolvedUrl).toBe("https://publisher.example/story");
 });
+
+it("returns the final page image from the same safe HTML response without another request", async () => {
+  response(302, "", { location: "https://publisher.example/about" });
+  response(
+    200,
+    '<meta property="og:image" content="https://cdn.example/about.jpg"><article>Original biography words.</article>',
+  );
+  expect(await fetchSourceText("https://artist.example/about", 2000)).toMatchObject({
+    status: "ready",
+    ogImage: "https://cdn.example/about.jpg",
+  });
+  expect(mocks.request).toHaveBeenCalledTimes(2);
+});

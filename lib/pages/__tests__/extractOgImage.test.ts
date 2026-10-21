@@ -25,3 +25,44 @@ describe("extractOgImage", () => {
     expect(extractOgImage("<html></html>")).toBeNull();
   });
 });
+
+it("prefers usable Open Graph and falls back to Twitter metadata", () => {
+  expect(
+    extractOgImage(
+      '<meta name="twitter:image" content="https://cdn.example/twitter.jpg"><meta property="og:image" content="https://cdn.example/og.jpg">',
+    ),
+  ).toBe("https://cdn.example/og.jpg");
+  expect(
+    extractOgImage(
+      '<meta property="og:image" content="data:bad"><meta content="https://cdn.example/twitter.jpg" name="twitter:image">',
+    ),
+  ).toBe("https://cdn.example/twitter.jpg");
+});
+it.each([
+  "https://localhost/image",
+  "https://localhost./image",
+  "https://sub.localhost./image",
+  "https://127.0.0.2/image",
+  "https://[::]/image",
+  "https://100.64.0.1/image",
+  "https://10.0.0.1/image",
+  "https://user:pass@cdn.example/image",
+  "https://cdn.example:8443/image",
+])("ignores unsafe image metadata %s", url => {
+  expect(extractOgImage(`<meta property="og:image" content="${url}">`)).toBeNull();
+});
+
+it("ignores unrelated metadata, comments and script text", () => {
+  expect(
+    extractOgImage(`<meta name="constructor" content="ignored">
+    <!-- <meta property="og:image" content="https://cdn.example/comment.jpg"> -->
+    <script>const sample = '<meta property="og:image" content="https://cdn.example/script.jpg">';</script>
+    <meta property="og:image" content="https://cdn.example/page.jpg">`),
+  ).toBe("https://cdn.example/page.jpg");
+});
+
+it("accepts public domain names beginning with IPv6-like letters", () => {
+  expect(extractOgImage('<meta property="og:image" content="https://fcdn.example/image">')).toBe(
+    "https://fcdn.example/image",
+  );
+});

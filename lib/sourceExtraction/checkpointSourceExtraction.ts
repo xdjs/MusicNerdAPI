@@ -24,7 +24,7 @@ export async function checkpointSourceExtraction(
       let status = permission === "changed" ? ("skipped" as const) : result.status;
       if (status === "ready" && result.text?.trim()) {
         const rows = await tx.execute(
-          sql`update artist_vault_sources set extracted_text=${result.text},updated_at=now() where id=${source.id}::uuid and artist_id=${job.artistId}::uuid and status='approved' and file_path is null and url=${source.url} and coalesce(extracted_text,'') ~ '^[[:space:]]*$' returning id`,
+          sql`update artist_vault_sources set extracted_text=${result.text},og_image=coalesce(nullif(btrim(og_image),''),${result.ogImage ?? null}),updated_at=now() where id=${source.id}::uuid and artist_id=${job.artistId}::uuid and status='approved' and file_path is null and url=${source.url} and coalesce(extracted_text,'') ~ '^[[:space:]]*$' returning id`,
         );
         if (rows.length) storedChars = result.text.length;
         else status = "skipped";

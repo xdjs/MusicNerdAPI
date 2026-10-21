@@ -37,7 +37,7 @@ beforeAll(async () => {
  create table users(id uuid primary key,is_admin boolean);
  create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text,reference_code text,created_at timestamptz,updated_at timestamptz);
  create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
- create table artist_vault_sources(id uuid primary key,artist_id uuid,url text,status text,file_path text,extracted_text text,updated_at timestamptz default now(),file_name text,file_size integer,content_type text);
+ create table artist_vault_sources(id uuid primary key,artist_id uuid,url text,status text,file_path text,extracted_text text,og_image text,updated_at timestamptz default now(),file_name text,file_size integer,content_type text);
  create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text check(kind in ('source_extract')),status text default 'pending',cursor integer default 0,total integer,claimed_at timestamptz,attempts integer default 0,last_error text,state jsonb,activity_id uuid,created_at timestamptz default now(),updated_at timestamptz default now());
  create unique index live_jobs on artist_research_jobs(artist_id,kind) where status in ('pending','running');
  insert into artists values('${artist}');insert into users values('${user}',false);insert into artist_claims(id,artist_id,user_id,status)values('${claim}','${artist}','${user}','approved');

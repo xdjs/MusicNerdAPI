@@ -34,6 +34,7 @@ describe("routeLinkToVault", () => {
       artistId: "a1",
       url: "https://peterango.com",
       title: "Pete Rango — Official Site",
+      ogImage: null,
       type: "website",
       status: "approved",
     });
@@ -78,4 +79,14 @@ describe("routeLinkToVault", () => {
     );
     error.mockRestore();
   });
+});
+
+it("preserves the fetched page image on approved and pending sources", async () => {
+  for (const title of ["Pete Rango biography", "Another website"]) {
+    m.preview.mockResolvedValueOnce({ title, imageUrl: "https://cdn.example/page.jpg" });
+    await routeLinkToVault({ artistId: "a1" }, "https://example.org/about");
+    expect(m.insert).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ogImage: "https://cdn.example/page.jpg" }),
+    );
+  }
 });

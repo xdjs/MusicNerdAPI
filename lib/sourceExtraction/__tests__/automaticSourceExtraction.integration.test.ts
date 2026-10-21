@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+import { Readable } from "node:stream";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { sql } from "drizzle-orm";
@@ -30,6 +32,10 @@ const database = {
       }),
     ),
 };
+const transport = vi.hoisted(() => ({ lookup: vi.fn(), request: vi.fn() }));
+vi.mock("node:dns/promises", () => ({ lookup: transport.lookup }));
+vi.mock("node:http", () => ({ request: transport.request }));
+vi.mock("node:https", () => ({ request: transport.request }));
 const fetch = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/db/db", () => ({
   get db() {
@@ -392,4 +398,69 @@ it("does not restart a finished blocked extraction when the same approval is rep
   expect(
     (await client.query("select count(*)::int as count from artist_activity_events")).rows,
   ).toEqual([{ count: 1 }]);
+});
+
+it.each([null, "https://cdn.example/existing.jpg"])(
+  "persists the fetched page thumbnail without replacing existing artwork %s",
+  async existing => {
+    await client.query("update artist_vault_sources set og_image=$1 where id=$2", [
+      existing,
+      source,
+    ]);
+    fetch.mockResolvedValue({ ...fetched, ogImage: "https://cdn.example/page.jpg" });
+    await enqueue();
+    await runSourceExtraction(await claimJob(), Date.now() + 2000);
+    expect(
+      (await client.query("select og_image from artist_vault_sources where id=$1", [source]))
+        .rows[0],
+    ).toMatchObject({ og_image: existing ?? "https://cdn.example/page.jpg" });
+  },
+);
+
+// Real parser + real worker/checkpoint + isolated PostgreSQL. Only DNS/HTTP are simulated.
+it.each([
+  [
+    "<meta property='og:image' content='https://artist.example/images/unique-interview.jpg'>",
+    "https://artist.example/images/unique-interview.jpg",
+  ],
+  ["", null],
+])("persists actual page metadata through the worker: %s", async (metadata, expectedImage) => {
+  const { fetchSourceText: actualFetch } = await vi.importActual<
+    typeof import("@/lib/sourceExtraction/fetchSourceText")
+  >("@/lib/sourceExtraction/fetchSourceText");
+  transport.lookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+  transport.request.mockReset().mockImplementation((_url, _options, callback) => {
+    const request = new EventEmitter() as EventEmitter & { end: () => void; destroy: () => void };
+    request.destroy = vi.fn();
+    request.end = () =>
+      queueMicrotask(() =>
+        callback(
+          Object.assign(
+            Readable.from([
+              Buffer.from(
+                `<html><head>${metadata}</head><body><article>Unique interview evidence from this specific page.</article></body></html>`,
+              ),
+            ]),
+            { statusCode: 200, headers: { "content-type": "text/html" } },
+          ),
+        ),
+      );
+    return request;
+  });
+  fetch.mockImplementation(actualFetch);
+  await enqueue();
+  await runSourceExtraction(await claimJob(), Date.now() + 5000);
+  const persisted = (
+    await client.query<{ url: string; og_image: string | null; extracted_text: string }>(
+      "select url, og_image, extracted_text from artist_vault_sources where id=$1",
+      [source],
+    )
+  ).rows[0];
+  expect(persisted).toMatchObject({ url: row.url, og_image: expectedImage });
+  expect(persisted.extracted_text).toContain("Unique interview evidence");
+  expect(transport.request).toHaveBeenCalledTimes(1);
+  expect(String(transport.request.mock.calls[0][0])).toBe(row.url);
+  expect((await client.query("select kind,status from artist_research_jobs")).rows).toEqual([
+    { kind: "source_extract", status: "done" },
+  ]);
 });
