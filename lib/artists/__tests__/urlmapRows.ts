@@ -1,3 +1,5 @@
+import type { UrlMapRow } from "@/lib/artists/types";
+
 /** Staging's urlmap patterns (2026-09-29), as the database stores them. */
 export const urlmapRows = [
   {
@@ -68,4 +70,22 @@ export const urlmapRows = [
     appStringFormat: "https://www.youtube.com/channel/%@",
     regex: "^https://(www\\.)?youtube\\.com/channel/([^/]+)$",
   },
-].map((r, i) => ({ id: String(i), siteImage: null, colorHex: null, ...r }));
+].map((r, i): UrlMapRow => ({
+  id: String(i),
+  siteUrl: `https://${r.siteName}.example`,
+  example: `https://${r.siteName}.example/artist`,
+  order: null,
+  isIframeEnabled: false,
+  isEmbedEnabled: false,
+  cardDescription: null,
+  isWeb3Site: false,
+  createdAt: "2026-09-29T00:00:00Z",
+  updatedAt: null,
+  siteImage: null,
+  regexMatcher: null,
+  isMonetized: false,
+  regexOptions: null,
+  colorHex: null,
+  platformTypeList: null,
+  ...r,
+}));

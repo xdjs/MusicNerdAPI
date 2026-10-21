@@ -40,7 +40,7 @@ beforeAll(async () => {
   await client.exec(`
 create table artists(id uuid primary key,name text,bio text);
 create table users(id uuid primary key,is_admin boolean);
-create table artist_vault_sources(id uuid primary key default gen_random_uuid(),artist_id uuid,status text,extracted_text text);
+create table artist_vault_sources(id uuid primary key default gen_random_uuid(),artist_id uuid,status text,extracted_text text,file_name text,file_size integer,content_type text);
 create table artist_social_posts(id uuid primary key default gen_random_uuid(),artist_id uuid,is_own_post boolean,caption text);
 create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text);
 create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());

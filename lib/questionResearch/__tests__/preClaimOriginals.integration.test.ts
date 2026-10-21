@@ -21,7 +21,7 @@ const artist = "00000000-0000-4000-8000-000000000001";
 beforeAll(async () => {
   await client.exec(`
     create table artist_claims(artist_id uuid,status text);
-    create table artist_vault_sources(id uuid,artist_id uuid,status text,file_path text,snapshot jsonb);
+    create table artist_vault_sources(id uuid,artist_id uuid,status text,file_path text,snapshot jsonb,file_name text,file_size integer,content_type text);
     create table artist_social_posts(artist_id uuid,is_own_post boolean,raw jsonb,snapshot jsonb);
     create table artist_research_candidates(id uuid,artist_id uuid,current_revision text,identity text,curation text,reviewed_revision text,destination text,source_id uuid,platform text,platform_id text,url text);
     create table artist_research_evidence(id uuid,candidate_id uuid,artist_id uuid,revision text,original_text text,provenance jsonb,retrieved_at timestamptz);

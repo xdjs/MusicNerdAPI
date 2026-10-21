@@ -16,7 +16,7 @@ const a = "00000000-0000-4000-8000-000000000001",
   s = "00000000-0000-4000-8000-000000000004";
 beforeAll(async () => {
   await client.exec(
-    `create table artists(id uuid,bio text);create table artist_claims(id uuid,artist_id uuid,user_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,body text);create table artist_directory_preparations(artist_id uuid,status text,document text,about text,starting_bio text,manifest jsonb);create table artist_interview_answers(artist_id uuid);create table artist_doc_corrections(artist_id uuid);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.body)$$;`,
+    `create table artists(id uuid,bio text);create table artist_claims(id uuid,artist_id uuid,user_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,body text,file_name text,file_size integer,content_type text);create table artist_directory_preparations(artist_id uuid,status text,document text,about text,starting_bio text,manifest jsonb);create table artist_interview_answers(artist_id uuid);create table artist_doc_corrections(artist_id uuid);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.body)$$;`,
   );
 });
 afterAll(() => client.close());
