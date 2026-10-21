@@ -6,6 +6,8 @@ import { writeArtistLinkColumn } from "@/lib/artistLinks/writeArtistLinkColumn";
 vi.mock("@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit", () => ({
   cancelSpotifyMatchForIdentityEdit: vi.fn(),
 }));
+vi.mock("@/lib/artistLinks/recordArtistSelfEdit", () => ({ recordArtistSelfEdit: vi.fn() }));
+const { recordArtistSelfEdit } = await import("@/lib/artistLinks/recordArtistSelfEdit");
 const client = new PGlite();
 const evidence = { spotifyId: "source-a", deezerId: "87797542", previousDeezerId: null };
 const database = {
@@ -25,6 +27,7 @@ afterAll(async () => {
   await client.close();
 });
 beforeEach(async () => {
+  vi.mocked(recordArtistSelfEdit).mockClear();
   await client.exec(
     "DELETE FROM artists; INSERT INTO artists VALUES ('a1','Synthetic alias','source-a',NULL)",
   );
@@ -34,7 +37,22 @@ beforeEach(async () => {
     .mockResolvedValue(undefined);
 });
 it("writes the verified pair while both observed slots are unchanged", async () => {
-  await writeArtistLinkColumn(database as never, "a1", "deezer", evidence.deezerId, evidence);
+  await writeArtistLinkColumn(
+    database as never,
+    "a1",
+    "deezer",
+    evidence.deezerId,
+    "https://deezer.com/artist/87797542",
+    evidence,
+  );
+  expect(recordArtistSelfEdit).toHaveBeenCalledWith(
+    database,
+    "a1",
+    "deezer",
+    null,
+    evidence.deezerId,
+    "https://deezer.com/artist/87797542",
+  );
   expect((await client.query("SELECT deezer FROM artists")).rows).toEqual([
     { deezer: evidence.deezerId },
   ]);
@@ -44,8 +62,16 @@ it.each(["UPDATE artists SET spotify='source-b'", "UPDATE artists SET deezer='ow
   async change => {
     await client.exec(change);
     await expect(
-      writeArtistLinkColumn(database as never, "a1", "deezer", evidence.deezerId, evidence),
+      writeArtistLinkColumn(
+        database as never,
+        "a1",
+        "deezer",
+        evidence.deezerId,
+        "https://deezer.com/artist/87797542",
+        evidence,
+      ),
     ).rejects.toThrow("changed during automatic verification");
+    expect(recordArtistSelfEdit).not.toHaveBeenCalled();
     expect((await client.query("SELECT deezer FROM artists WHERE deezer='87797542'")).rows).toEqual(
       [],
     );
@@ -53,6 +79,30 @@ it.each(["UPDATE artists SET spotify='source-b'", "UPDATE artists SET deezer='ow
 );
 it("does not reuse evidence for a different destination", async () => {
   await expect(
-    writeArtistLinkColumn(database as never, "a1", "deezer", "123", evidence),
+    writeArtistLinkColumn(database as never, "a1", "deezer", "123", undefined, evidence),
   ).rejects.toThrow("does not match");
+});
+
+it("rolls back the conditional link write when self-edit recording fails", async () => {
+  vi.mocked(recordArtistSelfEdit).mockRejectedValueOnce(new Error("audit failed"));
+  await expect(
+    client.transaction(async tx => {
+      const transactional = {
+        ...database,
+        execute: async (query: SQL) => {
+          const { text, params } = renderSql(query);
+          return (await tx.query(text, params)).rows;
+        },
+      };
+      await writeArtistLinkColumn(
+        transactional as never,
+        "a1",
+        "deezer",
+        evidence.deezerId,
+        "https://deezer.com/artist/87797542",
+        evidence,
+      );
+    }),
+  ).rejects.toThrow("audit failed");
+  expect((await client.query("SELECT deezer FROM artists")).rows).toEqual([{ deezer: null }]);
 });

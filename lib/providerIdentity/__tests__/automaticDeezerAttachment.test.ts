@@ -72,7 +72,7 @@ it("automatically accepts a corroborated exact pair regardless of the display na
     }),
   );
   expect((await apply()).written).toEqual(["deezer"]);
-  expect(m.set).toHaveBeenCalledWith("rnd1", "deezer", "87797542", {
+  expect(m.set).toHaveBeenCalledWith("rnd1", "deezer", "87797542", undefined, undefined, {
     spotifyId: spotify,
     deezerId: "87797542",
     previousDeezerId: null,

@@ -32,7 +32,14 @@ describe("setArtistLink", () => {
       artistName: "A",
     });
     expect(scoped).toHaveBeenCalledWith("a1", expect.any(Function));
-    expect(writeColumn).toHaveBeenCalledWith({ name: "scoped" }, "a1", "instagram", "pete");
+    expect(writeColumn).toHaveBeenCalledWith(
+      { name: "scoped" },
+      "a1",
+      "instagram",
+      "pete",
+      undefined,
+      undefined,
+    );
     expect(transaction).not.toHaveBeenCalled();
   });
 
@@ -40,7 +47,7 @@ describe("setArtistLink", () => {
     await setArtistLink("a1", "spotify", "S1");
     expect(locks).toHaveBeenCalledWith(tx, "a1", "spotify", "S1");
     expect(lockScoped).toHaveBeenCalledWith(tx, "a1");
-    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1");
+    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1", undefined, undefined);
     expect(locks.mock.invocationCallOrder[0]).toBeLessThan(lockScoped.mock.invocationCallOrder[0]);
     expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
       writeColumn.mock.invocationCallOrder[0],
@@ -50,7 +57,14 @@ describe("setArtistLink", () => {
 
   it("sanitizes the column name and refuses non-link columns and empty values", async () => {
     await setArtistLink("a1", "insta-gram", "pete");
-    expect(writeColumn).toHaveBeenCalledWith({ name: "scoped" }, "a1", "instagram", "pete");
+    expect(writeColumn).toHaveBeenCalledWith(
+      { name: "scoped" },
+      "a1",
+      "instagram",
+      "pete",
+      undefined,
+      undefined,
+    );
     await expect(setArtistLink("a1", "wallets", "0x1")).rejects.toThrow(
       "dedicated array operations",
     );
@@ -62,9 +76,27 @@ describe("setArtistLink", () => {
 
 it("carries automatic evidence into the locked writer", async () => {
   const evidence = { spotifyId: "S1", deezerId: "D1", previousDeezerId: null };
-  await setArtistLink("a1", "deezer", "D1", evidence);
-  expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "deezer", "D1", evidence);
+  await setArtistLink("a1", "deezer", "D1", undefined, undefined, evidence);
+  expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "deezer", "D1", undefined, evidence);
   expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
     writeColumn.mock.invocationCallOrder[0],
+  );
+});
+
+it("preserves submitted URL and evidence in a caller-supplied transaction", async () => {
+  const { withArtistOperation } = await import("@/lib/ownership/withArtistOperation");
+  const evidence = { spotifyId: "S1", deezerId: "D1", previousDeezerId: null };
+  await withArtistOperation("a1", { userId: "u1", expectedClaimId: "c1" }, () =>
+    setArtistLink("a1", "deezer", "D1", "https://deezer.com/artist/D1", tx as never, evidence),
+  );
+  expect(transaction).not.toHaveBeenCalled();
+  expect(lockScoped).toHaveBeenCalledWith(tx, "a1");
+  expect(writeColumn).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    "deezer",
+    "D1",
+    "https://deezer.com/artist/D1",
+    evidence,
   );
 });

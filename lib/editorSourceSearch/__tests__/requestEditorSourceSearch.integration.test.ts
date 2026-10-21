@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/pglite";
 import { beforeAll, beforeEach, afterAll, it, expect, vi } from "vitest";
 import * as schema from "@/lib/db/schema";
@@ -35,13 +36,15 @@ const nextId = "00000000-0000-4000-8000-000000000005";
 beforeAll(async () => {
   await client.exec(`
 create table artists(id uuid primary key,name text,bio text);
-create table users(id uuid primary key,is_admin boolean);
+create table users(${getTableConfig(schema.users)
+    .columns.map(c => `"${c.name}" ${c.getSQLType()}`)
+    .join(",")});
 create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text);
 create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
 create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text,status text default 'pending',state jsonb,claimed_at timestamptz,last_error text,activity_id uuid,attempts int default 0,cursor int default 0,total int,created_at timestamptz default now(),updated_at timestamptz default now());
 create unique index one_active_job on artist_research_jobs(artist_id,kind) where status in ('pending','running');
 create table artist_vault_sources(id uuid primary key default gen_random_uuid(),artist_id uuid,activity_id uuid);
-insert into artists values('${artist}','Artist',null);insert into users values('${user}',false);`);
+insert into artists values('${artist}','Artist',null);insert into users(id,is_admin) values('${user}',false);`);
 }, 30000);
 beforeEach(async () => {
   vi.stubGlobal(
@@ -272,4 +275,25 @@ it("settles an unstarted attempt at the cap even when the slice is short", async
   expect(await runEditorSourceSearchJob(job!, Date.now() + 1000)).toMatchObject({ done: true });
   expect(search).not.toHaveBeenCalled();
   expect(await getEditorSourceSearch(artist, user, requestId)).toMatchObject({ phase: "failed" });
+});
+
+it("queues and starts once for an admin without an artist claim", async () => {
+  await client.exec(`delete from artist_claims;update users set is_admin=true where id='${user}'`);
+  try {
+    expect(await requestEditorSourceSearch(artist, user, requestId)).toMatchObject({
+      phase: "pending",
+    });
+    const rows = (await client.query<{ state: unknown }>("select state from artist_research_jobs"))
+      .rows;
+    expect(rows).toEqual([{ state: { mode: "editor_source_search", claimId: null } }]);
+    search.mockReset().mockResolvedValue([]);
+    const job = await claimed();
+    expect(await runEditorSourceSearchJob(job, Date.now() + 51000)).toMatchObject({ done: true });
+    expect(search).toHaveBeenCalledTimes(1);
+    await runEditorSourceSearchJob(job, Date.now() + 51000);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    await client.exec(`update users set is_admin=false where id='${user}'`);
+  }
 });

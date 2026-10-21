@@ -60,7 +60,7 @@ const stored = async () =>
   (await database.select().from(schema.artists).where(eq(schema.artists.id, artistId)))[0];
 beforeAll(async () => {
   await client.exec(
-    "CREATE ROLE mnweb; CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
+    "CREATE ROLE mnweb; CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
   );
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -150,9 +150,14 @@ it("rejects a revoked claim at the actual write and keeps jobs unchanged", async
 });
 it("retains mapping collisions for explicit confirmations", async () => {
   await database.insert(schema.artists).values({ id: otherId, name: "Other artist" });
-  await database
-    .insert(schema.artistIdMappings)
-    .values({ id: otherId, artistId: otherId, platform: "deezer", platformId: "87797542" });
+  await database.insert(schema.artistIdMappings).values({
+    confidence: "manual",
+    source: "synthetic-test",
+    id: otherId,
+    artistId: otherId,
+    platform: "deezer",
+    platformId: "87797542",
+  });
   expect((await run(false)).writeRejected).toEqual([url]);
   expect((await stored()).deezer).toBeNull();
 });
@@ -163,7 +168,7 @@ it("rejects pre-reset evidence when reset has cleared the Spotify anchor", async
     .where(eq(schema.artists.id, artistId));
   await expect(
     withArtistOperation(artistId, { userId, expectedClaimId: claimId }, () =>
-      setArtistLink(artistId, "deezer", "87797542", {
+      setArtistLink(artistId, "deezer", "87797542", undefined, undefined, {
         spotifyId: spotify,
         deezerId: "87797542",
         previousDeezerId: null,
@@ -232,9 +237,14 @@ it("explicit Spotify confirmation still requires an approved claim", async () =>
 it("explicit Spotify confirmation keeps mapping collision guards", async () => {
   await seedDeezerAnchor();
   await database.insert(schema.artists).values({ id: otherId, name: "Other" });
-  await database
-    .insert(schema.artistIdMappings)
-    .values({ id: otherId, artistId: otherId, platform: "spotify", platformId: spotify });
+  await database.insert(schema.artistIdMappings).values({
+    confidence: "manual",
+    source: "synthetic-test",
+    id: otherId,
+    artistId: otherId,
+    platform: "spotify",
+    platformId: spotify,
+  });
   expect((await runSpotify(false)).writeRejected).toEqual([spotifyUrl]);
   expect((await stored()).spotify).toBeNull();
 });

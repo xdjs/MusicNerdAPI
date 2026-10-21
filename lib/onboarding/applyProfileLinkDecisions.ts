@@ -79,7 +79,14 @@ export async function applyProfileLinkDecisions(
           outcome.identityBlocked.push(url);
           continue;
         }
-        await setArtistLink(artistId, extracted.siteName, extracted.id, evidence);
+        await setArtistLink(
+          artistId,
+          extracted.siteName,
+          extracted.id,
+          undefined,
+          undefined,
+          evidence,
+        );
       } else {
         await setArtistLink(artistId, extracted.siteName, extracted.id);
       }

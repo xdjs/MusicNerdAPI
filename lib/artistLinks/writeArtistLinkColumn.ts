@@ -1,3 +1,4 @@
+import { recordArtistSelfEdit } from "./recordArtistSelfEdit";
 import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { rowsOf } from "@/lib/db/rowsOf";
 import { and, eq, sql } from "drizzle-orm";
@@ -24,6 +25,7 @@ export async function writeArtistLinkColumn(
   artistId: string,
   columnName: string,
   value: string,
+  selfEditUrl?: string,
   evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
@@ -97,5 +99,7 @@ export async function writeArtistLinkColumn(
   }
   if ((columnName === "spotify" || columnName === "deezer") && oldValue !== value)
     await cancelSpotifyMatchForIdentityEdit(database, artistId);
+  if (selfEditUrl)
+    await recordArtistSelfEdit(database, artistId, columnName, oldValue, value, selfEditUrl);
   return { oldValue, artistName: artist.name ?? null };
 }

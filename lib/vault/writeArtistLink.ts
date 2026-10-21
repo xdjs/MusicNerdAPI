@@ -31,7 +31,7 @@ export async function writeArtistLink(
         : await automaticDeezerIdentityIsBlocked(run, value);
     const evidence = siteName === "spotify" ? run.spotifyWriteEvidence : run.deezerWriteEvidence;
     if (blocked || !evidence) throw new Error("Automatic catalog identity not corroborated");
-    await setArtistLink(artistId, siteName, value, evidence);
+    await setArtistLink(artistId, siteName, value, undefined, undefined, evidence);
   } else {
     await setArtistLink(artistId, siteName, value);
   }

@@ -97,3 +97,83 @@ describe("insertVaultSource", () => {
     ).rejects.toThrow("source database unavailable");
   });
 });
+
+const upload = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: upload }));
+it("preserves upload authorization separately from submission provenance", async () => {
+  upload.mockImplementation(async (_a, _u, _c, write) => write(writer));
+  await insertVaultSource(
+    {
+      artistId: "a1",
+      url: "https://example.com/file",
+      filePath: "private/file",
+      fileName: "file",
+      fileSize: 12,
+      contentType: "text/plain",
+    },
+    { userId: "u1", expectedClaimId: "c1" },
+    { userId: "u1", trigger: "fixture" },
+  );
+  expect(upload).toHaveBeenCalledWith("a1", "u1", "c1", expect.any(Function));
+  expect(values).toHaveBeenCalledWith(
+    expect.objectContaining({
+      origin: "upload",
+      filePath: "private/file",
+      fileName: "file",
+      fileSize: 12,
+      contentType: "text/plain",
+    }),
+  );
+  expect(record).toHaveBeenCalledWith(
+    "a1",
+    "source_upload",
+    expect.objectContaining({ userId: "u1", trigger: "fixture" }),
+    writer,
+  );
+});
+it("rejects conflicting upload and provenance actors before persistence", async () => {
+  await expect(
+    insertVaultSource(
+      { artistId: "a1", url: "https://example.com/file" },
+      { userId: "u1", expectedClaimId: "c1" },
+      { userId: "u2", trigger: "fixture" },
+    ),
+  ).rejects.toThrow("Conflicting source actors");
+  expect(values).not.toHaveBeenCalled();
+});
+it("does not use provenance as upload authorization and rechecks trust", async () => {
+  upload.mockClear();
+  execute
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{ is_admin: false, is_white_listed: false }] as never);
+  await insertVaultSource(
+    { artistId: "a1", url: "https://example.com/suggestion", status: "approved" },
+    undefined,
+    { userId: "u1", trigger: "suggestion", approveIfTrusted: true },
+  );
+  expect(upload).not.toHaveBeenCalled();
+  expect(values).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "pending", origin: "submission" }),
+  );
+});
+it.each(["old-claim", null])(
+  "rejects mixed claim generations even for the same actor: %s",
+  async expectedClaimId => {
+    upload.mockClear();
+    await expect(
+      withArtistOperation(
+        "a1",
+        { userId: "u1", expectedClaimId, activityId: "old-receipt", sourceOrigin: "research" },
+        () =>
+          insertVaultSource(
+            { artistId: "a1", url: "https://example.com/file" },
+            { userId: "u1", expectedClaimId: "new-claim" },
+            { userId: "u1", trigger: "fixture" },
+          ),
+      ),
+    ).rejects.toThrow("Conflicting source claims");
+    expect(upload).not.toHaveBeenCalled();
+    expect(values).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+  },
+);
