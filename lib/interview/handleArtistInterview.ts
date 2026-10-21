@@ -160,6 +160,7 @@ export async function handleArtistInterview(request: Request, artistId: string) 
         "Mandatory memory exceeds its page budget",
         "Mandatory memory response exceeds its byte budget",
         "Mandatory memory API returned HTTP 413; restart after 409, sign in after 401",
+        "Mandatory memory exceeds the supported snapshot size",
         "Prior interview history exceeds its page budget",
         "Prior interview history exceeds its response budget",
         "Prior questions exceed their model context budget",

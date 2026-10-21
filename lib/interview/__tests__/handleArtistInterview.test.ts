@@ -433,6 +433,23 @@ describe("handleArtistInterview", () => {
     });
   });
 
+  it("answers the oversized memory snapshot with 413 and the topic-preferences message", async () => {
+    m.memory.mockRejectedValue(
+      new KnowledgeError(
+        "memory_too_large",
+        413,
+        "Mandatory memory exceeds the supported snapshot size",
+      ),
+    );
+    const r = await handleArtistInterview(request({ action: "memory" }), artistId);
+    expect(r.status).toBe(413);
+    expect(await r.json()).toEqual({
+      status: "error",
+      error:
+        "I cannot safely prepare another question with all the saved context yet. Your saved answers remain available, and you can still review or remove topic instructions in Topic preferences.",
+    });
+  });
+
   it("preserves a context-limit status without classifying transient failures by a loose keyword", async () => {
     m.session.mockRejectedValue(
       Object.assign(new Error("Mandatory memory exceeds its context budget"), { status: 413 }),

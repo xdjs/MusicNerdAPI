@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
 import { db } from "@/lib/db/db";
@@ -23,8 +24,7 @@ export async function handleLatestRefresh(request: Request, artistId: string, wr
   const headers = getCorsHeaders();
   const fail = (error: string, status: number) =>
     NextResponse.json({ status: "error", error }, { status, headers });
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(artistId))
-    return fail("Invalid artist", 400);
+  if (!z.uuid().safeParse(artistId).success) return fail("Invalid artist", 400);
   try {
     const auth = await authenticateRequest(request);
     if (auth instanceof NextResponse) return fail("Sign in to update Latest.", 401);
