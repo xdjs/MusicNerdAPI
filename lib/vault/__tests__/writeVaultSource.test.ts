@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { renderSql } from "@/lib/db/__tests__/renderSql";
 
 const { record, queue } = vi.hoisted(() => ({
   record: vi.fn(async () => "activity-new"),
@@ -95,4 +97,51 @@ it("does not insert or queue a research music destination rejected by the curren
   expect(values).not.toHaveBeenCalled();
   expect(queue).not.toHaveBeenCalled();
   expect(record).not.toHaveBeenCalled();
+});
+
+describe("writeVaultSource with a submitter's provenance", () => {
+  const provenance = { userId: "u1", trigger: "visitor_suggestion", approveIfTrusted: true };
+  const write = () =>
+    writeVaultSource(writer, { artistId: "a1", url: "u", status: "pending" }, "u", provenance);
+
+  it.each([
+    [{ is_admin: true, is_white_listed: false }, "approved", "trusted_submission"],
+    [{ is_admin: false, is_white_listed: true }, "approved", "trusted_submission"],
+    [{ is_admin: false, is_white_listed: false }, "pending", "visitor_suggestion"],
+  ])("reads the role under a share lock: %j", async (role, status, trigger) => {
+    execute.mockResolvedValueOnce([role] as never);
+    await write();
+    const { text } = renderSql((execute.mock.calls[0] as unknown[])[0] as SQL);
+    expect(text).toContain("select is_admin, is_white_listed from users");
+    expect(text).toContain("for share");
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ origin: "submission", status }));
+    expect(record).toHaveBeenCalledWith(
+      "a1",
+      "source_submission",
+      { userId: "u1", sourceId: "s1", trigger },
+      writer,
+    );
+  });
+
+  it("saves nothing when the submitting account no longer exists", async () => {
+    execute.mockResolvedValueOnce([]);
+    await expect(write()).rejects.toThrow("Submitting account no longer exists");
+    expect(values).not.toHaveBeenCalled();
+  });
+
+  it("attributes a submission without approval to its submitter", async () => {
+    await writeVaultSource(writer, { artistId: "a1", url: "u" }, "u", {
+      userId: "u1",
+      trigger: "visitor_suggestion",
+    });
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: "submission", status: "pending" }),
+    );
+    expect(record).toHaveBeenCalledWith(
+      "a1",
+      "source_submission",
+      { userId: "u1", sourceId: "s1", trigger: "visitor_suggestion" },
+      writer,
+    );
+  });
 });

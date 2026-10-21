@@ -88,6 +88,27 @@ describe("insertVaultSource", () => {
     expect(record).not.toHaveBeenCalled();
   });
 
+  it("passes a submitter's provenance to the write", async () => {
+    // The artist row lock, then the submitter's role.
+    execute
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([{ is_admin: false, is_white_listed: true }] as never);
+    const source = await insertVaultSource(
+      { artistId: "a1", url: "https://example.com/a", status: "pending" },
+      { userId: "u1", trigger: "visitor_suggestion", approveIfTrusted: true },
+    );
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: "submission", status: "approved" }),
+    );
+    expect(record).toHaveBeenCalledWith(
+      "a1",
+      "source_submission",
+      expect.objectContaining({ userId: "u1", trigger: "trusted_submission" }),
+      writer,
+    );
+    expect(source).toMatchObject({ id: "s1" });
+  });
+
   it("rethrows a failed write", async () => {
     transaction.mockImplementationOnce(async () => {
       throw new Error("source database unavailable");
