@@ -104,3 +104,15 @@ describe("applyProfileLinkDecisions", () => {
     expect(m.set).not.toHaveBeenCalled();
   });
 });
+
+it.each(["spotify", "deezer", "dee-zer"])(
+  "rejects name-only %s removal before any write",
+  async site => {
+    await expect(
+      applyProfileLinkDecisions("a1", [{ url: "instagram.com/new" }], ["x", site]),
+    ).rejects.toThrow("profile editor");
+    expect(m.clear).not.toHaveBeenCalled();
+    expect(m.set).not.toHaveBeenCalled();
+    expect(m.extract).not.toHaveBeenCalled();
+  },
+);

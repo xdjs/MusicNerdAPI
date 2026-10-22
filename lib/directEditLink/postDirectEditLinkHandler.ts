@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { submitArtistDestination } from "@/lib/artistLinkReview/submitArtistDestination";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
+import { CatalogDisconnectUnavailableError } from "@/lib/artistLinks/CatalogDisconnectUnavailableError";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
 import { LINK_NOT_SUPPORTED_LONG } from "@/lib/artistLinks/const";
 import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
@@ -38,7 +39,7 @@ export async function postDirectEditLinkHandler(request: Request): Promise<NextR
     if (auth instanceof NextResponse) return auth;
     const body = validateDirectEditLinkBody(await request.json().catch(() => null));
     if (body instanceof NextResponse) return body;
-    const { artistId, action, url, siteName } = body;
+    const { artistId, action, url, siteName, expectedValue } = body;
     const userId = auth.userId;
 
     const expectedClaimId = (await findApprovedClaim(db, artistId))?.id ?? null;
@@ -79,15 +80,19 @@ export async function postDirectEditLinkHandler(request: Request): Promise<NextR
         success: true,
         siteName: extracted.siteName,
         platformName: extracted.cardPlatformName,
+        changed: oldValue !== extracted.id,
       });
     }
 
     if (!siteName) return error("siteName is required for clear action", 400);
     await withArtistOperation(artistId, { userId, expectedClaimId }, () =>
-      clearArtistLink(artistId, siteName),
+      siteName === "spotify" || siteName === "deezer"
+        ? clearArtistLink(artistId, siteName, expectedValue)
+        : clearArtistLink(artistId, siteName),
     );
     return ok({ success: true });
   } catch (e) {
+    if (e instanceof CatalogDisconnectUnavailableError) return error(e.message, 503);
     if (e instanceof OwnershipChangedError) return error(e.message, 403);
     if (e instanceof ArtistLinkConflictError) return error(e.message, 409, { code: "CONFLICT" });
     console.error("[directEditLink] Error:", e);

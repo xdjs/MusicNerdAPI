@@ -8,6 +8,7 @@ export type DirectEditLinkBody = {
   action: "set" | "clear";
   url?: string;
   siteName?: string;
+  expectedValue?: string | null;
 };
 
 /**
@@ -21,11 +22,22 @@ export type DirectEditLinkBody = {
 export function validateDirectEditLinkBody(body: unknown): DirectEditLinkBody | NextResponse {
   const fail = (error: string) =>
     NextResponse.json({ status: "error", error }, { status: 400, headers: getCorsHeaders() });
-  const { artistId, action, url, siteName } = (body ?? {}) as Record<string, unknown>;
+  const { artistId, action, url, siteName, expectedValue } = (body ?? {}) as Record<
+    string,
+    unknown
+  >;
   if (!artistId || !action) return fail("artistId and action are required");
   if (action !== "set" && action !== "clear") return fail("action must be 'set' or 'clear'");
   if (!z.uuid().safeParse(artistId).success) return fail("artistId must be a UUID");
+  if (
+    action === "clear" &&
+    (siteName === "spotify" || siteName === "deezer") &&
+    (expectedValue === undefined ||
+      (expectedValue !== null && (typeof expectedValue !== "string" || !expectedValue.trim())))
+  )
+    return fail("expectedValue is required for catalog disconnect; refresh the profile");
   return {
+    ...(expectedValue === null || typeof expectedValue === "string" ? { expectedValue } : {}),
     artistId: artistId as string,
     action,
     url: typeof url === "string" ? url : undefined,

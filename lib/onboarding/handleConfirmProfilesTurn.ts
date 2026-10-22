@@ -1,3 +1,4 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { hasReusableDirectoryDiscovery } from "@/lib/directoryPreparation/hasReusableDirectoryDiscovery";
 import { emitVaultStep } from "@/lib/onboarding/emitVaultStep";
 import { getArtistById } from "@/lib/artists/getArtistById";
@@ -32,11 +33,14 @@ export async function* handleConfirmProfilesTurn(
   const { artistId } = ctx;
   if (!(yield* guardTurnStep(ctx, "profiles", TURN_MESSAGES.notYet))) return;
   const addedLinks = turn.addedLinks ?? [];
-  const outcome = await applyProfileLinkDecisions(
-    artistId,
-    addedLinks,
-    turn.removedSiteNames ?? [],
-  );
+  let outcome;
+  try {
+    outcome = await applyProfileLinkDecisions(artistId, addedLinks, turn.removedSiteNames ?? []);
+  } catch (error) {
+    if (!(error instanceof ArtistLinkConflictError)) throw error;
+    yield { kind: "error", message: error.message };
+    return;
+  }
   const linkRecord = ((await getArtistById(artistId)) ?? {}) as Record<string, unknown>;
   const hasAtLeastOneLink = PROFILE_DISPLAY_COLUMNS.some(col => {
     const value = linkRecord[col];

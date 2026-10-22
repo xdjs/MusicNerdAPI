@@ -72,6 +72,7 @@ describe("postDirectEditLinkHandler set", () => {
       success: true,
       siteName: "instagram",
       platformName: "Instagram",
+      changed: true,
     });
     expect(m.set).toHaveBeenCalledWith(artistId, "instagram", "p3t3rango", igUrl);
     expect(m.user).toHaveBeenCalledWith("u1");
@@ -210,5 +211,33 @@ describe("postDirectEditLinkHandler errors", () => {
     expect(await res.json()).toEqual({ status: "error", error: "Internal server error" });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     log.mockRestore();
+  });
+});
+
+describe("catalog disconnect contract", () => {
+  it("requires the displayed ID and forwards it without accepting a request-body actor", async () => {
+    expect((await post({ artistId, action: "clear", siteName: "deezer" })).status).toBe(400);
+    m.clear.mockClear();
+    expect(
+      (
+        await post({
+          artistId,
+          action: "clear",
+          siteName: "deezer",
+          expectedValue: "101",
+          userId: "forged",
+        })
+      ).status,
+    ).toBe(200);
+    expect(m.clear).toHaveBeenCalledWith(artistId, "deezer", "101");
+  });
+  it("accepts explicit null and reports whether a set actually changed for client analytics", async () => {
+    expect(
+      (await post({ artistId, action: "clear", siteName: "spotify", expectedValue: null })).status,
+    ).toBe(200);
+    expect(m.clear).toHaveBeenCalledWith(artistId, "spotify", null);
+    expect((await (await set(igUrl)).json()).changed).toBe(true);
+    m.set.mockResolvedValueOnce({ oldValue: "p3t3rango", artistName: "Same" });
+    expect((await (await set(igUrl)).json()).changed).toBe(false);
   });
 });

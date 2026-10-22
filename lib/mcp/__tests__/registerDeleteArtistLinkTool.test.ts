@@ -101,3 +101,18 @@ describe("delete_artist_link", () => {
     expect(result.isError).toBeUndefined();
   });
 });
+
+it.each(["spotify", "deezer"])(
+  "fails closed for %s without granting API keys owner authority",
+  async siteName => {
+    const { result, parsed } = await callTool(registerDeleteArtistLinkTool(testServer()), {
+      artistId,
+      siteName,
+    });
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe("OWNER_DISCONNECT_REQUIRED");
+    expect(requireMcpAuth).toHaveBeenCalled();
+    expect(clearArtistLink).not.toHaveBeenCalled();
+    expect(logMcpAudit).not.toHaveBeenCalled();
+  },
+);

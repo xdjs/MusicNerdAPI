@@ -21,7 +21,7 @@ describe("postResetClaimBuildHandler", () => {
     mock.validate.mockResolvedValue({ artistId: "abc", userId: "u1" });
     const removed = {
       steps: ["profiles", "vault"],
-      links: { spotify: "123" },
+      links: { instagram: "research-handle" },
       bio: "Old bio",
       doc: true,
       sources: 5,

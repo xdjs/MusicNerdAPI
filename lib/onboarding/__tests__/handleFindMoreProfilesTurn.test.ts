@@ -1,3 +1,4 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 import { emitStepMock } from "@/lib/onboarding/__tests__/emitStepMock";
@@ -62,4 +63,17 @@ describe("handleFindMoreProfilesTurn", () => {
     });
     expect(m.apply).not.toHaveBeenCalled();
   });
+});
+
+it("reports unsafe catalog removal and does not start more discovery", async () => {
+  m.apply.mockRejectedValueOnce(new ArtistLinkConflictError("Use the profile editor"));
+  expect(
+    await collect(
+      handleFindMoreProfilesTurn(turnContext("profiles"), {
+        type: "find_more_profiles",
+        removedSiteNames: ["deezer"],
+      }),
+    ),
+  ).toEqual([{ kind: "error", message: "Use the profile editor" }]);
+  expect(m.emitStep).not.toHaveBeenCalled();
 });

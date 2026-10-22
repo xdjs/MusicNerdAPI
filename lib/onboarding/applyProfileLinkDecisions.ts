@@ -1,3 +1,5 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
+import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
 import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
 import { extractArtistId } from "@/lib/artists/extractArtistId";
@@ -26,6 +28,12 @@ export async function applyProfileLinkDecisions(
   removedSiteNames: string[],
   opts?: { verifyIdentity?: boolean },
 ): Promise<ProfileLinkOutcome> {
+  // This legacy turn carries names only, so it cannot prove which displayed
+  // account the artist meant to remove. Refuse before any partial decisions.
+  if (removedSiteNames.some(site => ["spotify", "deezer"].includes(sanitizeColumnName(site))))
+    throw new ArtistLinkConflictError(
+      "Remove Spotify or Deezer in the profile editor, then retry this step. The displayed account must be checked before disconnecting it.",
+    );
   for (const siteName of removedSiteNames) {
     try {
       await clearArtistLink(artistId, siteName);

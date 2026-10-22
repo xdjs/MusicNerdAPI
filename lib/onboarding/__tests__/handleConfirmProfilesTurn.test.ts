@@ -1,3 +1,4 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 import { emitStepMock } from "@/lib/onboarding/__tests__/emitStepMock";
@@ -139,4 +140,20 @@ it("explicit link edits still use the normal discovery path", async () => {
   );
   expect(m.vault).not.toHaveBeenCalled();
   expect(m.emitStep).toHaveBeenCalled();
+});
+
+it("reports unsafe catalog removal without confirmation, step advance, or research", async () => {
+  m.apply.mockRejectedValueOnce(new ArtistLinkConflictError("Use the profile editor"));
+  expect(
+    await collect(
+      handleConfirmProfilesTurn(turnContext("profiles"), {
+        ...turn(),
+        removedSiteNames: ["spotify"],
+      }),
+    ),
+  ).toEqual([{ kind: "error", message: "Use the profile editor" }]);
+  expect(m.confirm).not.toHaveBeenCalled();
+  expect(m.queue).not.toHaveBeenCalled();
+  expect(m.emitStep).not.toHaveBeenCalled();
+  expect(m.vault).not.toHaveBeenCalled();
 });

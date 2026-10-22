@@ -32,6 +32,11 @@ export function registerDeleteArtistLinkTool(server: McpServer) {
 
       try {
         const apiKeyHash = requireMcpAuth();
+        if (siteName.toLowerCase() === "spotify" || siteName.toLowerCase() === "deezer")
+          return toolError(
+            "Catalog disconnect requires the authenticated profile editor with the displayed account ID. Use POST /api/directEditLink with a Privy bearer token.",
+            "OWNER_DISCONNECT_REQUIRED",
+          );
 
         const { oldValue } = await clearArtistLink(artistId, siteName);
 
