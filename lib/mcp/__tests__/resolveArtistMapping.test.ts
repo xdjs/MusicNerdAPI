@@ -1,5 +1,6 @@
+import { sql } from "drizzle-orm";
 import type { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MappingConflictError } from "@/lib/mcp/MappingConflictError";
 import { MappingNotFoundError } from "@/lib/mcp/MappingNotFoundError";
 import { MappingValidationError } from "@/lib/mcp/MappingValidationError";
@@ -24,7 +25,7 @@ const a1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const a2 = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const unknownId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-// artist_id_mappings as it exists on the staging database.
+// Reduced local schema for mapping constraints; no live database is accessed.
 beforeAll(async () => {
   await pg.client.exec(`
     create table artists (id uuid primary key, spotify text, deezer text);
@@ -44,12 +45,31 @@ beforeAll(async () => {
 }, 30000);
 beforeEach(async () => {
   locks.mockClear();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: {
+          bindings: [
+            {
+              item: { value: "https://www.wikidata.org/entity/Q1" },
+              sourceId: { value: "0y9DJxRh3j84i13hctQcFx" },
+              targetId: { value: "123" },
+            },
+          ],
+        },
+      }),
+    })),
+  );
+
   await pg.client.exec(
     `delete from artist_id_mappings; delete from artists;
-     insert into artists values ('${a1}', null, null), ('${a2}', null, null);`,
+     insert into artists values ('${a1}', '0y9DJxRh3j84i13hctQcFx', null), ('${a2}', null, null);`,
   );
 });
 afterAll(async () => pg.client.close());
+afterEach(() => vi.unstubAllGlobals());
 
 type Row = {
   artist_id: string;
@@ -193,4 +213,107 @@ describe("resolveArtistMapping", () => {
       [a2, "T1"],
     ]);
   });
+});
+
+// Public incident IDs and recorded source/confidence; the response and reasoning are synthetic.
+it.each([
+  { source: "name_search", confidence: "medium" },
+  { source: "manual", confidence: "manual" },
+])("rejects uncorroborated Rnd1/RNDN mapping despite caller labels: %j", async labels => {
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results: { bindings: [] } }),
+  } as Response);
+  await expect(
+    resolveArtistMapping({
+      ...base,
+      ...labels,
+      platformId: "87797542",
+      reasoning: "Synthetic reconstruction: Rnd1/RNDN one-character name difference",
+    }),
+  ).rejects.toThrow("corroborated");
+  expect(await rows()).toEqual([]);
+});
+it("refuses an uncorroborated same-ID confidence upgrade without changing metadata", async () => {
+  await seed(a1, "deezer", "123", "low");
+  const before = await rows();
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results: { bindings: [] } }),
+  } as Response);
+  await expect(
+    resolveArtistMapping({ ...base, confidence: "manual", source: "manual" }),
+  ).rejects.toThrow("corroborated");
+  expect(await rows()).toEqual(before);
+});
+it("keeps lower-confidence skips provider-free", async () => {
+  await seed(a1, "deezer", "123", "manual");
+  expect((await resolveArtistMapping(base)).skipped).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it.each(["spotify", "deezer"])("rejects a changed %s slot after corroboration", async column => {
+  vi.mocked(fetch).mockImplementationOnce(async () => {
+    // Same-transaction mutation simulates a row change between observation and locking;
+    // this is a snapshot regression, not real concurrent PostgreSQL evidence.
+    const tx = locks.mock.calls.at(-1)![0] as { execute: (q: unknown) => Promise<unknown> };
+    await tx.execute(
+      sql`update artists set ${sql.identifier(column)} = 'changed' where id = ${a1}::uuid`,
+    );
+    return {
+      ok: true,
+      json: async () => ({
+        results: {
+          bindings: [
+            {
+              item: { value: "https://www.wikidata.org/entity/Q1" },
+              sourceId: { value: "0y9DJxRh3j84i13hctQcFx" },
+              targetId: { value: "123" },
+            },
+          ],
+        },
+      }),
+    } as Response;
+  });
+  await expect(resolveArtistMapping(base)).rejects.toThrow("corroborated");
+  expect(await rows()).toEqual([]);
+});
+
+// Captured incident state and reasoning; verifier responses below are synthetic.
+it.each([
+  { confidence: "medium", source: "name_search" },
+  { confidence: "manual", source: "manual" },
+])("rejects existing incident mapping metadata rewrites without fresh proof: %j", async labels => {
+  const reasoning =
+    "Deezer API search for 'Rnd1' returned 'RNDN' (ID 87797542) as best match with only 1 character difference";
+  await seed(a1, "deezer", "87797542", "medium");
+  await pg.client.query("update artists set deezer = '87797542' where id = $1", [a1]);
+  await pg.client.query("update artist_id_mappings set source = 'name_search', reasoning = $1", [
+    reasoning,
+  ]);
+  const before = await rows();
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results: { bindings: [] } }),
+  } as Response);
+  await expect(
+    resolveArtistMapping({ ...base, ...labels, platformId: "87797542", reasoning }),
+  ).rejects.toThrow("corroborated");
+  expect(await rows()).toEqual(before);
+});
+it("rejects Deezer persistence without a Spotify anchor and does not call a provider", async () => {
+  await pg.client.query("update artists set spotify = null where id = $1", [a1]);
+  await expect(resolveArtistMapping(base)).rejects.toThrow("corroborated");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await rows()).toEqual([]);
+});
+it("fails closed when the verifier is unavailable", async () => {
+  vi.mocked(fetch).mockRejectedValueOnce(new Error("synthetic outage"));
+  await expect(resolveArtistMapping(base)).rejects.toThrow("corroborated");
+  expect(await rows()).toEqual([]);
+});
+it("keeps non-Deezer mapping writes provider-free", async () => {
+  expect(
+    (await resolveArtistMapping({ ...base, platform: "tidal", platformId: "T1" })).created,
+  ).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
 });
