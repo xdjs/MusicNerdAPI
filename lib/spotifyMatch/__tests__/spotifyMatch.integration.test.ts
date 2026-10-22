@@ -11,7 +11,8 @@ import type { ResearchJob } from "@/lib/research/types";
 import type { SpotifyMatchState } from "../types";
 import { spotifyMatchEligible } from "../spotifyMatchEligible";
 import { attachSpotifyMatch } from "../attachSpotifyMatch";
-import { clearArtistLinkColumn } from "@/lib/artistLinks/clearArtistLinkColumn";
+import { readFileSync, realpathSync } from "node:fs";
+import { sql } from "drizzle-orm";
 import { writeArtistLinkColumn } from "@/lib/artistLinks/writeArtistLinkColumn";
 import { recordSpotifyCooldown } from "@/lib/spotify/recordSpotifyCooldown";
 import { spotifyCooldownKey } from "@/lib/spotify/spotifyCooldownKey";
@@ -48,7 +49,10 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
       max: 1,
     });
     const [location] = await admin`select current_setting('data_directory') as path`;
-    expect(location.path).toBe("/private/tmp/mn-spotify-match-local/cluster");
+    expect([
+      "/private/tmp/mn-spotify-match-local/cluster",
+      "/private/tmp/mn-1580-disconnect-postgres/cluster",
+    ]).toContain(realpathSync(location.path));
     await admin.unsafe(`create database ${dbname}`);
     client = postgres({
       host: "127.0.0.1",
@@ -60,13 +64,20 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
     });
     database = drizzle(client, { schema });
     shared.database = database;
+    for (const role of ["mnweb", "anon", "authenticated"]) {
+      const exists = await client`select 1 from pg_roles where rolname=${role}`;
+      if (!exists.length) await client.unsafe(`create role ${role}`);
+    }
+    await client`create type confidence_level as enum ('high','medium','low','manual')`;
     await client`create type source_status as enum ('pending','approved','rejected')`;
     await client`create type claim_status as enum ('pending','approved','rejected')`;
     for (const table of [
       schema.artists,
+      schema.users,
       schema.artistActivityEvents,
       schema.artistIdMappings,
       schema.artistVaultSources,
+      schema.artistSocialPosts,
       schema.artistClaims,
       schema.artistResearchJobs,
     ]) {
@@ -75,8 +86,21 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
         `create table "${config.name}" (${config.columns.map(c => `"${c.name}" ${c.getSQLType()}`).join(",")})`,
       );
     }
+    const migrationConnection = await client.reserve();
+    try {
+      await migrationConnection.unsafe(
+        readFileSync(
+          new URL(
+            "../../artistLinks/__tests__/fixtures/0056_catalog_disconnect.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+    } finally {
+      migrationConnection.release();
+    }
     await client`alter table artist_activity_events alter column id set default gen_random_uuid()`;
-    await client`alter table artists add column added_by uuid`;
     await client`create table artist_mapping_exclusions(artist_id uuid,platform text,reason text)`;
     await client`create table artist_self_edits(artist_id uuid,site_name text,created_at timestamptz)`;
     await client`create table provider_request_cooldowns(provider_key text primary key,blocked_until timestamptz not null,updated_at timestamptz not null default now())`;
@@ -141,9 +165,28 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
     expect(saved.status).toBe("done");
     expect(saved.state.outcome).toBe("matched");
   });
+  async function claimant(artistId: string) {
+    const userId = randomUUID(),
+      claimId = randomUUID();
+    await client`insert into users(id,is_admin,is_white_listed) values(${userId},false,false)`;
+    await client`insert into artist_claims(id,artist_id,user_id,status) values(${claimId},${artistId},${userId},'approved')`;
+    return { userId, claimId };
+  }
+  async function disconnectEmptySpotify(
+    tx: Parameters<Parameters<typeof database.transaction>[0]>[0],
+    artistId: string,
+    actor: { userId: string; claimId: string },
+  ) {
+    // The real private primitive independently checks actor, claim, empty slot,
+    // exact absent mapping and cancellation under the shared identity locks.
+    await tx.execute(
+      sql`SELECT musicnerd_private.disconnect_catalog_link(${artistId}::uuid,'spotify',NULL,NULL,${actor.userId}::uuid,${actor.claimId}::uuid,'owner')`,
+    );
+  }
   it("does not recreate a manually removed Spotify slot, even when it was empty", async () => {
     const { job, state } = await fixture();
-    await database.transaction(tx => clearArtistLinkColumn(tx, job.artistId, "spotify"));
+    const actor = await claimant(job.artistId);
+    await database.transaction(tx => disconnectEmptySpotify(tx, job.artistId, actor));
     expect(await spotifyMatchEligible(job, state)).toBe(false);
     expect(await attachSpotifyMatch(job, state, "CCCCCCCCCCCCCCCCCCCCCC")).toBe(false);
     const [saved] = await client`select status,state from artist_research_jobs where id=${job.id}`;
@@ -193,6 +236,7 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
   });
   it("lets a concurrent manual removal cancel final attachment under the same locks", async () => {
     const { job, state } = await fixture();
+    const actor = await claimant(job.artistId);
     let unlock!: () => void;
     let acquired!: () => void;
     const release = new Promise<void>(resolve => {
@@ -206,7 +250,7 @@ describe.skipIf(!port)("durable identity SQL on disposable local PostgreSQL", ()
       await lockArtistRow(tx, job.artistId);
       acquired();
       await release;
-      await clearArtistLinkColumn(tx, job.artistId, "spotify");
+      await disconnectEmptySpotify(tx, job.artistId, actor);
     });
     await ready;
     const matching = attachSpotifyMatch(job, state, "FFFFFFFFFFFFFFFFFFFFFF");

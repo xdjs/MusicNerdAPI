@@ -9,17 +9,27 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
  */
 export async function validateRemoveArtistDataBody(
   request: Request,
-): Promise<{ artistId: string; siteName: string } | NextResponse> {
+): Promise<{ artistId: string; siteName: string; expectedValue?: string | null } | NextResponse> {
   const fail = (error: string) =>
     NextResponse.json({ status: "error", error }, { status: 400, headers: getCorsHeaders() });
-  let body: { artistId?: unknown; siteName?: unknown } | null;
+  let body: { artistId?: unknown; siteName?: unknown; expectedValue?: unknown } | null;
   try {
     body = await request.json();
   } catch {
     return fail("Invalid request body");
   }
-  const { artistId, siteName } = body ?? {};
+  const { artistId, siteName, expectedValue } = body ?? {};
   if (!artistId || !siteName || typeof artistId !== "string" || typeof siteName !== "string")
     return fail("artistId and siteName are required");
-  return { artistId, siteName };
+  if (
+    (siteName === "spotify" || siteName === "deezer") &&
+    (expectedValue === undefined ||
+      (expectedValue !== null && (typeof expectedValue !== "string" || !expectedValue.trim())))
+  )
+    return fail("expectedValue is required for catalog disconnect; refresh the profile");
+  return {
+    artistId,
+    siteName,
+    ...(expectedValue === null || typeof expectedValue === "string" ? { expectedValue } : {}),
+  };
 }

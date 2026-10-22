@@ -1,3 +1,9 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
+import { CatalogDisconnectUnavailableError } from "@/lib/artistLinks/CatalogDisconnectUnavailableError";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
+import { db } from "@/lib/db/db";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
+import { withArtistOperation } from "@/lib/ownership/withArtistOperation";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -21,11 +27,17 @@ export async function postRemoveArtistDataHandler(request: Request): Promise<Nex
     if (auth instanceof NextResponse) return auth;
     const body = await validateRemoveArtistDataBody(request);
     if (body instanceof NextResponse) return body;
-    const { artistId, siteName } = body;
+    const { artistId, siteName, expectedValue } = body;
+    const catalog = siteName === "spotify" || siteName === "deezer";
+    const expectedClaimId = catalog ? ((await findApprovedClaim(db, artistId))?.id ?? null) : null;
     const user = await getUserById(auth.userId);
     const result =
       user?.isAdmin || user?.isWhiteListed
-        ? await removeArtistData(artistId, siteName)
+        ? catalog
+          ? await withArtistOperation(artistId, { userId: auth.userId, expectedClaimId }, () =>
+              removeArtistData(artistId, siteName, expectedValue),
+            )
+          : await removeArtistData(artistId, siteName)
         : ({ status: "error", message: "Unauthorized" } as const);
     if (result.status === "error")
       return NextResponse.json(
@@ -37,6 +49,23 @@ export async function postRemoveArtistDataHandler(request: Request): Promise<Nex
       { status: 200, headers },
     );
   } catch (error) {
+    if (
+      error instanceof ArtistLinkConflictError ||
+      error instanceof OwnershipChangedError ||
+      error instanceof CatalogDisconnectUnavailableError
+    )
+      return NextResponse.json(
+        { status: "error", error: error.message },
+        {
+          status:
+            error instanceof ArtistLinkConflictError
+              ? 409
+              : error instanceof OwnershipChangedError
+                ? 403
+                : 503,
+          headers,
+        },
+      );
     console.error("[removeArtistData] Error:", error);
     return NextResponse.json(
       { status: "error", error: "Internal server error" },

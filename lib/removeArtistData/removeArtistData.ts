@@ -1,3 +1,6 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
+import { CatalogDisconnectUnavailableError } from "@/lib/artistLinks/CatalogDisconnectUnavailableError";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { sql } from "drizzle-orm";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
 import { db } from "@/lib/db/db";
@@ -15,6 +18,7 @@ import { db } from "@/lib/db/db";
 export async function removeArtistData(
   artistId: string,
   siteName: string,
+  expectedValue?: string | null,
 ): Promise<{ status: "success" | "error"; message: string }> {
   try {
     if (siteName === "wallets" || siteName === "wallet") {
@@ -23,10 +27,18 @@ export async function removeArtistData(
         SET wallets = array_remove(wallets, ${artistId})
         WHERE id = ${artistId}`);
     } else {
-      await clearArtistLink(artistId, siteName);
+      if (siteName === "spotify" || siteName === "deezer")
+        await clearArtistLink(artistId, siteName, expectedValue, "contributor");
+      else await clearArtistLink(artistId, siteName);
     }
     return { status: "success", message: "Artist data removed" };
   } catch (e) {
+    if (
+      e instanceof ArtistLinkConflictError ||
+      e instanceof OwnershipChangedError ||
+      e instanceof CatalogDisconnectUnavailableError
+    )
+      throw e;
     console.error("Error removing artist data", e);
     if (e instanceof Error && e.message.startsWith("Column not in writable whitelist"))
       return { status: "error", message: "Invalid platform column" };

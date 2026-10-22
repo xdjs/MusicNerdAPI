@@ -8,11 +8,10 @@ import {
   artistVaultSources,
 } from "@/lib/db/schema";
 
-/** Link columns the claim build discovers; reset nulls all of them.
- *  Deezer is excluded: it comes from `artist_id_mappings`, not discovery,
- *  so the build cannot re-find it. */
+/** Research link columns reset by the claim build. Spotify and Deezer are
+ *  preserved with their active mappings: catalog identity must be removed through
+ *  the authenticated disconnect path, never by a field-only research reset. */
 const DISCOVERABLE_LINK_COLUMNS = [
-  "spotify",
   "instagram",
   "tiktok",
   "x",
@@ -27,7 +26,7 @@ const DISCOVERABLE_LINK_COLUMNS = [
 /**
  * Removes everything the claim build wrote for an artist and returns the
  * removed values as a backup. The artist's own edits, uploads, interview
- * answers and social posts stay.
+ * answers, social posts and catalog identity stay.
  *
  * @param artistId - The artist to reset.
  * @returns The removed data for the caller to keep as a backup, or null if the artist does not exist.
@@ -43,7 +42,6 @@ export async function resetClaimBuild(artistId: string) {
     // 2. Links -- read then null
     const [artist] = await tx
       .select({
-        spotify: artists.spotify,
         instagram: artists.instagram,
         tiktok: artists.tiktok,
         x: artists.x,
@@ -70,7 +68,6 @@ export async function resetClaimBuild(artistId: string) {
     await tx
       .update(artists)
       .set({
-        spotify: null,
         instagram: null,
         tiktok: null,
         x: null,

@@ -2,7 +2,6 @@ import { eq, sql } from "drizzle-orm";
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
 import type { ArtistLinkExecutor } from "@/lib/artistLinks/types";
 import { artists } from "@/lib/db/schema";
-import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit";
 
 /**
  * Nulls one link column on an artist's row. The caller has already checked
@@ -18,13 +17,13 @@ export async function clearArtistLinkColumn(
   artistId: string,
   columnName: string,
 ): Promise<{ oldValue: string | null }> {
+  if (columnName === "spotify" || columnName === "deezer")
+    throw new Error("Catalog links require authenticated atomic disconnect");
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const oldValue = getArtistLinkValue(artist, columnName);
   await database.execute(
     sql`UPDATE artists SET ${sql.identifier(columnName)} = NULL WHERE id = ${artistId}`,
   );
-  if (columnName === "spotify" || columnName === "deezer")
-    await cancelSpotifyMatchForIdentityEdit(database, artistId);
   return { oldValue };
 }

@@ -28,3 +28,15 @@ describe("clearArtistLinkColumn", () => {
     expect(database.execute).not.toHaveBeenCalled();
   });
 });
+
+it.each(["spotify", "deezer"])(
+  "rejects direct %s clear before reading or writing",
+  async column => {
+    const database = { query: { artists: { findFirst: vi.fn() } }, execute: vi.fn() };
+    await expect(clearArtistLinkColumn(database as never, "a1", column)).rejects.toThrow(
+      "atomic disconnect",
+    );
+    expect(database.query.artists.findFirst).not.toHaveBeenCalled();
+    expect(database.execute).not.toHaveBeenCalled();
+  },
+);

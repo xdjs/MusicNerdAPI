@@ -1,3 +1,4 @@
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { applyProfileLinkDecisions } from "@/lib/onboarding/applyProfileLinkDecisions";
 import { TURN_MESSAGES } from "@/lib/onboarding/const";
 import { emitStep } from "@/lib/onboarding/emitStep";
@@ -19,11 +20,18 @@ export async function* handleFindMoreProfilesTurn(
   turn: Extract<ClientTurn, { type: "find_more_profiles" }>,
 ): AsyncGenerator<TurnEvent> {
   if (!(yield* guardTurnStep(ctx, "profiles", TURN_MESSAGES.pastProfiles))) return;
-  const outcome = await applyProfileLinkDecisions(
-    ctx.artistId,
-    turn.addedLinks ?? [],
-    turn.removedSiteNames ?? [],
-  );
+  let outcome;
+  try {
+    outcome = await applyProfileLinkDecisions(
+      ctx.artistId,
+      turn.addedLinks ?? [],
+      turn.removedSiteNames ?? [],
+    );
+  } catch (error) {
+    if (!(error instanceof ArtistLinkConflictError)) throw error;
+    yield { kind: "error", message: error.message };
+    return;
+  }
   yield* linkFailureMessages(outcome, true);
   yield* emitStep(ctx.artistId, "profiles", { discoverProfiles: true });
 }
