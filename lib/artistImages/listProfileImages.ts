@@ -1,6 +1,6 @@
 import { PROFILE_IMAGE_FOLDER } from "@/lib/artistImages/const";
 import type { StorageObject } from "@/lib/artistImages/types";
-import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 import { storageFetch } from "@/lib/storage/storageFetch";
 
 /**

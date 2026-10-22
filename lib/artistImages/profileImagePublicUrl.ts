@@ -1,4 +1,4 @@
-import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 
 /**
  * The public URL of an object in the vault bucket, as Supabase's

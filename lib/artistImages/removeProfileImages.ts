@@ -1,4 +1,4 @@
-import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 import { storageFetch } from "@/lib/storage/storageFetch";
 
 /**
