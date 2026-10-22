@@ -1,3 +1,4 @@
+import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { acquireArtistPlatformWriteLocks } from "@/lib/artistLinks/acquireArtistPlatformWriteLocks";
 import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkColumn";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
@@ -19,6 +20,7 @@ import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
  * @param value - The id or handle.
  * @param selfEditUrl - The URL a claimant submitted, to record their self-edit; needs a user operation.
  * @param transaction - A transaction to write in instead of opening one (a link review's).
+ * @param evidence - Exact source and target values observed by automatic verification.
  * @returns The previous value and the artist's name.
  */
 export async function setArtistLink(
@@ -27,6 +29,7 @@ export async function setArtistLink(
   value: string,
   selfEditUrl?: string,
   transaction?: TransactionDb,
+  evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   if (selfEditUrl && !getArtistOperationOwnership(artistId)?.userId)
     throw new Error("Self-edit recording requires an authenticated artist operation");
@@ -38,11 +41,11 @@ export async function setArtistLink(
   const write = async (tx: TransactionDb) => {
     if (identity) await acquireArtistPlatformWriteLocks(tx, artistId, columnName, value);
     await lockScopedArtistWrite(tx, artistId);
-    return writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl);
+    return writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl, evidence);
   };
   if (transaction) return write(transaction);
   if (identity) return db.transaction(write);
   return withScopedArtistWrite(artistId, tx =>
-    writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl),
+    writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl, evidence),
   );
 }

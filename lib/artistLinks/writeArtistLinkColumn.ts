@@ -1,7 +1,9 @@
+import { recordArtistSelfEdit } from "@/lib/artistLinks/recordArtistSelfEdit";
+import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
+import { rowsOf } from "@/lib/db/rowsOf";
 import { and, eq, sql } from "drizzle-orm";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
-import { recordArtistSelfEdit } from "@/lib/artistLinks/recordArtistSelfEdit";
 import type { ArtistLinkExecutor } from "@/lib/artistLinks/types";
 import { artistIdMappings, artists } from "@/lib/db/schema";
 import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit";
@@ -15,7 +17,8 @@ import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpot
  * @param artistId - The artist.
  * @param columnName - A whitelisted column.
  * @param value - The new value.
- * @param selfEditUrl - The URL a user submitted; a changed value is then recorded as their self-edit.
+ * @param selfEditUrl - The submitted URL to audit after a successful changed write.
+ * @param evidence - Exact source and target values observed by automatic verification.
  * @returns The previous value and the artist's name; throws ArtistLinkConflictError on a conflict.
  */
 export async function writeArtistLinkColumn(
@@ -24,6 +27,7 @@ export async function writeArtistLinkColumn(
   columnName: string,
   value: string,
   selfEditUrl?: string,
+  evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
@@ -63,9 +67,37 @@ export async function writeArtistLinkColumn(
     }
   }
 
-  await database.execute(
-    sql`UPDATE artists SET ${sql.identifier(columnName)} = ${value} WHERE id = ${artistId}`,
-  );
+  if (evidence) {
+    const isDeezer = "previousDeezerId" in evidence;
+    if (
+      columnName !== (isDeezer ? "deezer" : "spotify") ||
+      value !== (isDeezer ? evidence.deezerId : evidence.spotifyId)
+    )
+      throw new ArtistLinkConflictError("Automatic catalog evidence does not match the write");
+    const updated = rowsOf(
+      await database.execute(
+        isDeezer
+          ? sql`
+        UPDATE artists SET deezer = ${value}
+        WHERE id = ${artistId} AND spotify = ${evidence.spotifyId}
+          AND deezer IS NOT DISTINCT FROM ${evidence.previousDeezerId}
+        RETURNING id
+      `
+          : sql`
+        UPDATE artists SET spotify = ${value}
+        WHERE id = ${artistId} AND deezer = ${evidence.deezerId}
+          AND spotify IS NOT DISTINCT FROM ${evidence.previousSpotifyId}
+        RETURNING id
+      `,
+      ),
+    );
+    if (updated.length !== 1)
+      throw new ArtistLinkConflictError("Catalog identity changed during automatic verification");
+  } else {
+    await database.execute(
+      sql`UPDATE artists SET ${sql.identifier(columnName)} = ${value} WHERE id = ${artistId}`,
+    );
+  }
   if ((columnName === "spotify" || columnName === "deezer") && oldValue !== value)
     await cancelSpotifyMatchForIdentityEdit(database, artistId);
   if (selfEditUrl && oldValue !== value)

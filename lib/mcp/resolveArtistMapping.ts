@@ -1,3 +1,4 @@
+import { lockVerifiedDeezerMapping } from "@/lib/providerIdentity/lockVerifiedDeezerMapping";
 import { and, eq, sql } from "drizzle-orm";
 import { acquireArtistPlatformWriteLocks } from "@/lib/artistLinks/acquireArtistPlatformWriteLocks";
 import { db } from "@/lib/db/db";
@@ -93,6 +94,13 @@ export async function resolveArtistMapping(params: {
         };
       }
 
+      if (
+        platform === "deezer" &&
+        !(await lockVerifiedDeezerMapping(transaction, artist, platformId))
+      )
+        throw new MappingConflictError(
+          "Deezer mapping identity not corroborated or changed during verification",
+        );
       try {
         await transaction
           .update(artistIdMappings)
@@ -120,6 +128,13 @@ export async function resolveArtistMapping(params: {
       };
     }
 
+    if (
+      platform === "deezer" &&
+      !(await lockVerifiedDeezerMapping(transaction, artist, platformId))
+    )
+      throw new MappingConflictError(
+        "Deezer mapping identity not corroborated or changed during verification",
+      );
     try {
       await transaction.insert(artistIdMappings).values({
         artistId,
