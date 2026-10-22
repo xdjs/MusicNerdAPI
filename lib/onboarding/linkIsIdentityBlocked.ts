@@ -1,8 +1,10 @@
+import { automaticSpotifyIdentityIsBlocked } from "@/lib/providerIdentity/automaticSpotifyIdentityIsBlocked";
 import { contradictsScrapedPosts } from "@/lib/identity/contradictsScrapedPosts";
 import { handleBelongsToAnotherArtist } from "@/lib/identity/handleBelongsToAnotherArtist";
 import { nameIsAmbiguousInDirectory } from "@/lib/identity/nameIsAmbiguousInDirectory";
 import { artistNameForRun } from "@/lib/onboarding/artistNameForRun";
 import type { LinkDecisionRun } from "@/lib/onboarding/types";
+import { automaticDeezerIdentityIsBlocked } from "@/lib/providerIdentity/automaticDeezerIdentityIsBlocked";
 
 /**
  * The same identity checks the source search applies, for a handle discovery
@@ -22,7 +24,9 @@ export async function linkIsIdentityBlocked(
   const blocked =
     (await nameIsAmbiguousInDirectory(run.artistId, await artistNameForRun(run))) ||
     (await handleBelongsToAnotherArtist(run.artistId, siteName, id)) ||
-    (await contradictsScrapedPosts(run.artistId, siteName, id));
+    (await contradictsScrapedPosts(run.artistId, siteName, id)) ||
+    (siteName === "deezer" && (await automaticDeezerIdentityIsBlocked(run, id))) ||
+    (siteName === "spotify" && (await automaticSpotifyIdentityIsBlocked(run, id)));
   if (blocked) {
     console.log(`[onboarding] Not writing ${siteName}=${id} — identity checks did not clear it`);
   }

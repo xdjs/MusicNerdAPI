@@ -1,3 +1,4 @@
+import type { DeezerWriteEvidence, SpotifyWriteEvidence } from "@/lib/providerIdentity/types";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import type { DocSource } from "@/lib/lore/types";
 import type { ONBOARDING_QUESTIONS, ONBOARDING_STEPS } from "@/lib/onboarding/const";
@@ -96,6 +97,8 @@ export interface InterviewQuestionCandidate {
 
 /** State shared across one `applyProfileLinkDecisions` call, read lazily and at most once. */
 export type LinkDecisionRun = {
+  deezerWriteEvidence?: DeezerWriteEvidence;
+  spotifyWriteEvidence?: SpotifyWriteEvidence;
   artistId: string;
   artistName?: string;
   /** URL → status of the artist's vault sources, so a repeated paste isn't inserted twice. */

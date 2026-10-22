@@ -42,6 +42,7 @@ describe("setArtistLink", () => {
       "instagram",
       "pete",
       undefined,
+      undefined,
     );
     expect(transaction).not.toHaveBeenCalled();
   });
@@ -50,7 +51,7 @@ describe("setArtistLink", () => {
     await setArtistLink("a1", "spotify", "S1");
     expect(locks).toHaveBeenCalledWith(tx, "a1", "spotify", "S1");
     expect(lockScoped).toHaveBeenCalledWith(tx, "a1");
-    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1", undefined);
+    expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "spotify", "S1", undefined, undefined);
     expect(locks.mock.invocationCallOrder[0]).toBeLessThan(lockScoped.mock.invocationCallOrder[0]);
     expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
       writeColumn.mock.invocationCallOrder[0],
@@ -65,6 +66,7 @@ describe("setArtistLink", () => {
       "a1",
       "instagram",
       "pete",
+      undefined,
       undefined,
     );
     await expect(setArtistLink("a1", "wallets", "0x1")).rejects.toThrow(
@@ -84,6 +86,7 @@ describe("setArtistLink", () => {
       "instagram",
       "pete",
       "https://ig/pete",
+      undefined,
     );
     ownership.mockReturnValue(undefined);
     await expect(setArtistLink("a1", "instagram", "pete", "https://ig/pete")).rejects.toThrow(
@@ -96,10 +99,46 @@ describe("setArtistLink", () => {
     await setArtistLink("a1", "deezer", "D1", undefined, callerTx as never);
     expect(locks).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1");
     expect(lockScoped).toHaveBeenCalledWith(callerTx, "a1");
-    expect(writeColumn).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1", undefined);
+    expect(writeColumn).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1", undefined, undefined);
     await setArtistLink("a1", "instagram", "pete", undefined, callerTx as never);
     expect(locks).toHaveBeenCalledTimes(1);
     expect(transaction).not.toHaveBeenCalled();
     expect(scoped).not.toHaveBeenCalled();
   });
+});
+
+it("carries automatic evidence into the locked writer", async () => {
+  const evidence = { spotifyId: "S1", deezerId: "D1", previousDeezerId: null };
+  await setArtistLink("a1", "deezer", "D1", undefined, undefined, evidence);
+  expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "deezer", "D1", undefined, evidence);
+  expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
+    writeColumn.mock.invocationCallOrder[0],
+  );
+});
+
+it("preserves submitted URL and evidence in the caller transaction", async () => {
+  const callerTx = { name: "review" };
+  const evidence = { spotifyId: "S1", deezerId: "D1", previousDeezerId: null };
+  ownership.mockReturnValue({ userId: "u1" });
+  await setArtistLink(
+    "a1",
+    "deezer",
+    "D1",
+    "https://www.deezer.com/artist/D1",
+    callerTx as never,
+    evidence,
+  );
+  expect(writeColumn).toHaveBeenCalledWith(
+    callerTx,
+    "a1",
+    "deezer",
+    "D1",
+    "https://www.deezer.com/artist/D1",
+    evidence,
+  );
+  expect(locks).toHaveBeenCalledWith(callerTx, "a1", "deezer", "D1");
+  expect(lockScoped).toHaveBeenCalledWith(callerTx, "a1");
+  expect(transaction).not.toHaveBeenCalled();
+  expect(scoped).not.toHaveBeenCalled();
+  ownership.mockReturnValue(undefined);
 });
