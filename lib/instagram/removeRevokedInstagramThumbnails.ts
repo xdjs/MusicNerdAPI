@@ -1,6 +1,7 @@
 import { isJobThumbnailPath } from "@/lib/instagram/isJobThumbnailPath";
 import type { ThumbnailUploadScope } from "@/lib/instagram/types";
-import { THUMBNAIL_TIMEOUT_MS, UUID, VAULT_BUCKET } from "@/lib/instagram/const";
+import { THUMBNAIL_TIMEOUT_MS, UUID } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 
 /**
  * Removes a revoked job's late uploads after it lost its guarded write. Only

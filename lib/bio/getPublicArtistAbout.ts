@@ -11,11 +11,15 @@ import { rowsOf } from "@/lib/db/rowsOf";
  * sources and their accounts. Never widens the claim gate for private Lore.
  *
  * @param artistId - The artist.
+ * @param reader - The client or open transaction to read with.
  * @returns The About, or null when none qualifies.
  */
-export async function getPublicArtistAbout(artistId: string): Promise<PublicArtistAbout | null> {
+export async function getPublicArtistAbout(
+  artistId: string,
+  reader: Pick<typeof db, "execute"> = db,
+): Promise<PublicArtistAbout | null> {
   const [row] = rowsOf(
-    await db.execute(sql`
+    await reader.execute(sql`
         select p.public_about from artist_directory_preparations p
         join artists a on a.id=p.artist_id
         join artist_activity_events e on e.id=p.activity_id and e.artist_id=a.id and e.trigger='directory_add'

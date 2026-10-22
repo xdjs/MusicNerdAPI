@@ -24,6 +24,11 @@ export type VaultSourceInput = {
   snippet?: string;
   type?: string;
   status?: "pending" | "approved" | "rejected";
+  /** Set for an uploaded file: its name, size in bytes, storage key and resolved MIME type. */
+  fileName?: string;
+  fileSize?: number;
+  filePath?: string;
+  contentType?: string;
   extractedText?: string | null;
   ogImage?: string | null;
   podcastEpisodeKey?: string | null;

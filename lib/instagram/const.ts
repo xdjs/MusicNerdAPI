@@ -11,5 +11,4 @@ export const MAX_SCRAPE_LIMIT = 300;
 export const THUMBNAILS_PER_SLICE = 9;
 export const THUMBNAIL_MAX_BYTES = 8 * 1024 * 1024;
 export const THUMBNAIL_TIMEOUT_MS = 9_000;
-export const VAULT_BUCKET = "vault-files";
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

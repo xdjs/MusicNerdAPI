@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   typescript: {
     tsconfigPath: "tsconfig.build.json",
   },
+  // pdf-parse is a Node-only CJS lib with dynamic requires; let it load at
+  // runtime from node_modules instead of being bundled by Next.
+  serverExternalPackages: ["pdf-parse"],
   async headers() {
     return [
       {

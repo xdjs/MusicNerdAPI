@@ -145,3 +145,38 @@ describe("writeVaultSource with a submitter's provenance", () => {
     );
   });
 });
+
+describe("writeVaultSource for an upload", () => {
+  it("records a file the user uploaded as an upload, with the file columns", async () => {
+    await writeVaultSource(
+      writer,
+      {
+        artistId: "a1",
+        url: "u",
+        fileName: "x.pdf",
+        fileSize: 12,
+        filePath: "a1/x.pdf",
+        contentType: "application/pdf",
+        status: "approved",
+      },
+      "u",
+      { userId: "u1", trigger: "upload" },
+    );
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "upload",
+        status: "approved",
+        fileName: "x.pdf",
+        fileSize: 12,
+        filePath: "a1/x.pdf",
+        contentType: "application/pdf",
+      }),
+    );
+    expect(record).toHaveBeenLastCalledWith(
+      "a1",
+      "source_upload",
+      { userId: "u1", sourceId: "s1", trigger: "upload" },
+      writer,
+    );
+  });
+});
