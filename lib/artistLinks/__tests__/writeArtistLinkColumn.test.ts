@@ -4,6 +4,9 @@ import { renderSql } from "@/lib/db/__tests__/renderSql";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { writeArtistLinkColumn } from "@/lib/artistLinks/writeArtistLinkColumn";
 
+const { recordSelfEdit } = vi.hoisted(() => ({ recordSelfEdit: vi.fn(async () => {}) }));
+vi.mock("@/lib/artistLinks/recordArtistSelfEdit", () => ({ recordArtistSelfEdit: recordSelfEdit }));
+
 function database({
   artist = { id: "a1", name: "Pete Rango", instagram: "old", spotify: null } as Record<
     string,
@@ -68,5 +71,29 @@ describe("writeArtistLinkColumn", () => {
     await writeArtistLinkColumn(d as never, "a1", "spotify", "S1");
     expect(d.execute).toHaveBeenCalledTimes(2);
     expect(renderSql(d.execute.mock.calls[1][0]).text).toContain("kind='spotify_match'");
+  });
+
+  it("records a self-edit for a changed value when given the submitted URL", async () => {
+    recordSelfEdit.mockClear();
+    const d = database();
+    await writeArtistLinkColumn(d as never, "a1", "instagram", "new", "https://ig/new");
+    expect(recordSelfEdit).toHaveBeenCalledWith(
+      d,
+      "a1",
+      "instagram",
+      "old",
+      "new",
+      "https://ig/new",
+    );
+    expect(recordSelfEdit.mock.invocationCallOrder[0]).toBeGreaterThan(
+      d.execute.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("records no self-edit without a submitted URL or for an unchanged value", async () => {
+    recordSelfEdit.mockClear();
+    await writeArtistLinkColumn(database() as never, "a1", "instagram", "new");
+    await writeArtistLinkColumn(database() as never, "a1", "instagram", "old", "https://ig/old");
+    expect(recordSelfEdit).not.toHaveBeenCalled();
   });
 });

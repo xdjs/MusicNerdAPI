@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { getArtistLinkValue } from "@/lib/artistLinks/getArtistLinkValue";
+import { recordArtistSelfEdit } from "@/lib/artistLinks/recordArtistSelfEdit";
 import type { ArtistLinkExecutor } from "@/lib/artistLinks/types";
 import { artistIdMappings, artists } from "@/lib/db/schema";
 import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpotifyMatchForIdentityEdit";
@@ -14,6 +15,7 @@ import { cancelSpotifyMatchForIdentityEdit } from "@/lib/spotifyMatch/cancelSpot
  * @param artistId - The artist.
  * @param columnName - A whitelisted column.
  * @param value - The new value.
+ * @param selfEditUrl - The URL a user submitted; a changed value is then recorded as their self-edit.
  * @returns The previous value and the artist's name; throws ArtistLinkConflictError on a conflict.
  */
 export async function writeArtistLinkColumn(
@@ -21,6 +23,7 @@ export async function writeArtistLinkColumn(
   artistId: string,
   columnName: string,
   value: string,
+  selfEditUrl?: string,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const artist = await database.query.artists.findFirst({ where: eq(artists.id, artistId) });
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
@@ -65,5 +68,7 @@ export async function writeArtistLinkColumn(
   );
   if ((columnName === "spotify" || columnName === "deezer") && oldValue !== value)
     await cancelSpotifyMatchForIdentityEdit(database, artistId);
+  if (selfEditUrl && oldValue !== value)
+    await recordArtistSelfEdit(database, artistId, columnName, oldValue, value, selfEditUrl);
   return { oldValue, artistName: artist.name ?? null };
 }
