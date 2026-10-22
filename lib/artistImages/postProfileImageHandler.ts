@@ -15,7 +15,7 @@ import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
 import { db } from "@/lib/db/db";
 import { artists } from "@/lib/db/schema";
-import { VAULT_BUCKET } from "@/lib/instagram/const";
+import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 

@@ -6,7 +6,7 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
 import type { TransactionDb } from "@/lib/ownership/types";
-/** Queue the existing durable rebuild atomically with a saved interview finish. */
+/** Queue the existing durable rebuild atomically with a saved interview finish, attributed to the requesting user and trigger when given. */
 export async function queueLoreRefreshInTransaction(
   tx: TransactionDb,
   artistId: string,

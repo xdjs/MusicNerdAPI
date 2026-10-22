@@ -66,3 +66,13 @@ describe("queueLoreRefresh", () => {
     expect(txExecute).toHaveBeenCalledTimes(1);
   });
 });
+
+it("attributes the request to the user and trigger an upload passes", async () => {
+  expect(await queueLoreRefresh("a1", "c1", { userId: "u1", trigger: "upload" })).toBe(true);
+  expect(record).toHaveBeenCalledWith(
+    "a1",
+    "lore_refresh",
+    { userId: "u1", trigger: "upload" },
+    tx,
+  );
+});
