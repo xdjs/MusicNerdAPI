@@ -69,7 +69,20 @@ export async function applyProfileLinkDecisions(
       continue;
     }
     try {
-      await setArtistLink(artistId, extracted.siteName, extracted.id);
+      if (
+        opts?.verifyIdentity &&
+        (extracted.siteName === "deezer" || extracted.siteName === "spotify")
+      ) {
+        const evidence =
+          extracted.siteName === "deezer" ? run.deezerWriteEvidence : run.spotifyWriteEvidence;
+        if (!evidence) {
+          outcome.identityBlocked.push(url);
+          continue;
+        }
+        await setArtistLink(artistId, extracted.siteName, extracted.id, evidence);
+      } else {
+        await setArtistLink(artistId, extracted.siteName, extracted.id);
+      }
       outcome.written.push(extracted.siteName);
     } catch (e) {
       console.error(`[onboarding] setArtistLink failed for ${url}:`, e);

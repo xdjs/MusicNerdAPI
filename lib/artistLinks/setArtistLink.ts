@@ -1,3 +1,4 @@
+import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { acquireArtistPlatformWriteLocks } from "@/lib/artistLinks/acquireArtistPlatformWriteLocks";
 import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkColumn";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
@@ -18,12 +19,14 @@ import { withScopedArtistWrite } from "@/lib/ownership/withScopedArtistWrite";
  * @param artistId - The artist.
  * @param siteName - The platform, sanitized to a column name.
  * @param value - The id or handle.
+ * @param evidence - Optional automatic Deezer write precondition.
  * @returns The previous value and the artist's name.
  */
 export async function setArtistLink(
   artistId: string,
   siteName: string,
   value: string,
+  evidence?: CatalogWriteEvidence,
 ): Promise<{ oldValue: string | null; artistName: string | null }> {
   const columnName = sanitizeColumnName(siteName);
   assertWritableLinkColumn(columnName);
@@ -33,7 +36,9 @@ export async function setArtistLink(
     return db.transaction(async transaction => {
       await acquireArtistPlatformWriteLocks(transaction, artistId, columnName, value);
       await lockScopedArtistWrite(transaction, artistId);
-      return writeArtistLinkColumn(transaction, artistId, columnName, value);
+      return evidence
+        ? writeArtistLinkColumn(transaction, artistId, columnName, value, evidence)
+        : writeArtistLinkColumn(transaction, artistId, columnName, value);
     });
   }
   return withScopedArtistWrite(artistId, tx =>

@@ -59,3 +59,12 @@ describe("setArtistLink", () => {
     await expect(setArtistLink("a1", "x", "")).rejects.toThrow("Value must not be empty");
   });
 });
+
+it("carries automatic evidence into the locked writer", async () => {
+  const evidence = { spotifyId: "S1", deezerId: "D1", previousDeezerId: null };
+  await setArtistLink("a1", "deezer", "D1", evidence);
+  expect(writeColumn).toHaveBeenCalledWith(tx, "a1", "deezer", "D1", evidence);
+  expect(lockScoped.mock.invocationCallOrder[0]).toBeLessThan(
+    writeColumn.mock.invocationCallOrder[0],
+  );
+});
