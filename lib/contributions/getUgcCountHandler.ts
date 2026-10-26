@@ -17,7 +17,7 @@ export async function getUgcCountHandler(request: Request) {
     const auth = await authenticateRequest(request);
     if (auth instanceof NextResponse)
       return NextResponse.json({ status: "ok", count: 0 }, { headers });
-    const count = await countUserUgc(auth.userId, false);
+    const count = await countUserUgc(auth.userId);
     return NextResponse.json({ status: "ok", count }, { headers });
   } catch (error) {
     console.error("[ugcCount] Error:", error);

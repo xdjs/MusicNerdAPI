@@ -21,9 +21,8 @@ insert into ugcresearch(artist_id,accepted,user_id) values
 afterAll(async () => test.client.close());
 
 describe("countUserUgc", () => {
-  it("counts the user's submissions, all or only the approved ones, as a number", async () => {
-    expect(await countUserUgc(ids.user, false)).toBe(4);
-    expect(await countUserUgc(ids.user, true)).toBe(2);
-    expect(await countUserUgc("00000000-0000-4000-8000-0000000000ff", false)).toBe(0);
+  it("counts all of the user's submissions, whatever their review state, as a number", async () => {
+    expect(await countUserUgc(ids.user)).toBe(4);
+    expect(await countUserUgc("00000000-0000-4000-8000-0000000000ff")).toBe(0);
   });
 });

@@ -16,7 +16,7 @@ describe("getUgcCountHandler", () => {
     const response = await getUgcCountHandler(new Request("https://example.org/api/ugcCount"));
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    expect(mock.count).toHaveBeenCalledWith("token-user", false);
+    expect(mock.count).toHaveBeenCalledWith("token-user");
     expect(await response.json()).toEqual({ status: "ok", count: 42 });
   });
 
