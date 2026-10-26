@@ -1,4 +1,4 @@
-import type { BatchSearchArtistResult, SearchArtistResult } from "@/lib/artistSearch/types";
+import type { SearchArtistResult } from "@/lib/artistSearch/types";
 
 /** The link columns a search result's `linkCount` counts, as MusicNerdWeb
  *  listed them. Only those the search selects can be set; the rest count 0. */
@@ -39,9 +39,4 @@ export const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 export const searchArtistsCache = new Map<
   string,
   { results: SearchArtistResult[]; timestamp: number }
->();
-/** `POST /api/searchArtists/batch` results by name list. */
-export const searchArtistsBatchCache = new Map<
-  string,
-  { results: (BatchSearchArtistResult | null)[]; timestamp: number }
 >();

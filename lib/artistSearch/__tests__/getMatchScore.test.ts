@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { getMatchScore } from "@/lib/artistSearch/getMatchScore";
-import { getNormalisedMatchScore } from "@/lib/artistSearch/getNormalisedMatchScore";
 import { getLinkCount } from "@/lib/artistSearch/getLinkCount";
 
 describe("getMatchScore", () => {
@@ -13,15 +12,6 @@ describe("getMatchScore", () => {
 
   it("does not normalise accents or punctuation, as the single search did not", () => {
     expect(getMatchScore("Sigur Rós", "sigur ros")).toBe(3);
-  });
-});
-
-describe("getNormalisedMatchScore", () => {
-  it("ranks the same tiers on normalised names, as the batch search does", () => {
-    expect(getNormalisedMatchScore("Sigur Rós", "sigur ros")).toBe(0);
-    expect(getNormalisedMatchScore("AC/DC", "acdc")).toBe(0);
-    expect(getNormalisedMatchScore("Pete Rango", "rango")).toBe(2);
-    expect(getNormalisedMatchScore("Pete Rango", "dame")).toBe(3);
   });
 });
 

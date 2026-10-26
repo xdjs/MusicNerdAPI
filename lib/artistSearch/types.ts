@@ -38,10 +38,3 @@ export type ExternalSearchArtistResult = {
 };
 
 export type SearchArtistResult = LocalSearchArtistResult | ExternalSearchArtistResult;
-
-/** The best match for one name in `POST /api/searchArtists/batch`. */
-export type BatchSearchArtistResult = ArtistSearchRow & {
-  bio: null;
-  isSpotifyOnly: false;
-  matchScore: number;
-};
