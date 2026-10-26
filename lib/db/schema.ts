@@ -969,29 +969,6 @@ export const artistSelfEdits = pgTable(
   ],
 );
 
-export const userArtistBookmarks = pgTable(
-  "user_artist_bookmarks",
-  {
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    artistId: uuid("artist_id")
-      .notNull()
-      .references(() => artists.id, { onDelete: "cascade" }),
-    position: integer("position").notNull(),
-    removedAt: timestamp("removed_at", { withTimezone: true, mode: "string" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .defaultNow()
-      .notNull(),
-  },
-  table => [
-    primaryKey({ name: "user_artist_bookmarks_pkey", columns: [table.userId, table.artistId] }),
-    index("user_artist_bookmarks_user_order_idx").on(table.userId, table.position),
-    index("user_artist_bookmarks_artist_idx").on(table.artistId),
-    check("user_artist_bookmarks_position_nonnegative", sql`${table.position} >= 0`),
-  ],
-);
-
 // Prospective original retention. The writer's transaction captures old eligible
 // evidence; API authorization and current parent eligibility govern every read.
 export const artistBioCorrections = pgTable(
