@@ -21,5 +21,3 @@ export const DOC_REBUILD_RESERVE_MS = 20_000;
 export const LORE_SUMMARY_MAX_CHARS = 900;
 /** The last-resort About's bound: a lighter prompt than the document or the cited About. */
 export const FALLBACK_TIMEOUT_MS = 12_000;
-/** Cap on the Lore document slice injected into prompts (fun facts), as in MusicNerdWeb. */
-export const ARTIST_DOC_CONTEXT_CAP = 8_000;

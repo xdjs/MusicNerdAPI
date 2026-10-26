@@ -36,22 +36,6 @@ export const exclusionReason = pgEnum("exclusion_reason", [
   "too_ambiguous",
 ]);
 
-export const funfacts = pgTable("funfacts", {
-  id: bigint("id", { mode: "number" }).generatedByDefaultAsIdentity({
-    name: "funfacts_id_seq",
-    startWith: 1,
-    increment: 1,
-    minValue: 1,
-    maxValue: 9223372036854775807,
-    cache: 1,
-  }),
-  loreDrop: text("lore_drop"),
-  behindTheScenes: text("behind_the_scenes"),
-  recentActivity: text("recent_activity"),
-  surpriseMe: text("surprise_me").notNull(),
-  isActive: boolean("is_active").default(false),
-});
-
 export const users = pgTable(
   "users",
   {
