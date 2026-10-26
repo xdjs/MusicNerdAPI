@@ -33,8 +33,6 @@ export async function handleArtistInterview(request: Request, artistId: string) 
   const headers = { ...getCorsHeaders(), "Cache-Control": "private, no-store" };
   const reply = (body: unknown, status = 200) => NextResponse.json(body, { status, headers });
   const fail = (error: string, status: number) => reply({ status: "error", error }, status);
-  if (process.env.MUSICNERD_API_INTERVIEWER_ENABLED !== "true")
-    return fail("This interview preview is not enabled.", 503);
   if (!z.uuid().safeParse(artistId).success) return fail("Invalid artist.", 400);
   const authorization = request.headers.get("authorization");
   if (

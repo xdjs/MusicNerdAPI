@@ -93,7 +93,6 @@ const request = (body?: unknown, init: RequestInit = {}) =>
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv("MUSICNERD_API_INTERVIEWER_ENABLED", "true");
   m.auth.mockResolvedValue({ userId: "user" });
   m.transaction.mockImplementation(fn => fn({}));
   m.session.mockResolvedValue(state);
@@ -104,17 +103,6 @@ beforeEach(() => {
 });
 
 describe("handleArtistInterview", () => {
-  it("is off until MUSICNERD_API_INTERVIEWER_ENABLED is true", async () => {
-    vi.stubEnv("MUSICNERD_API_INTERVIEWER_ENABLED", "");
-    const r = await handleArtistInterview(request(), artistId);
-    expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({
-      status: "error",
-      error: "This interview preview is not enabled.",
-    });
-    expect(m.auth).not.toHaveBeenCalled();
-  });
-
   it("rejects a non-UUID artist and a query string", async () => {
     const bad = await handleArtistInterview(request(), "artist");
     expect(bad.status).toBe(400);
