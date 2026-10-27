@@ -9,6 +9,7 @@ import {
 import { MODEL_FLASH } from "@/lib/ai/const";
 import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 import type { GenerateTextOptions } from "@/lib/ai/generateText";
+import { withoutCustomParts } from "@/lib/ai/withoutCustomParts";
 
 export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> & {
   /** A text prompt, or a conversation as model messages. */
@@ -59,7 +60,7 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     abortSignal,
     ...(providerOptions ? { providerOptions } : {}),
   });
-  if (writer) writer.merge(toUIMessageStream({ stream: result.stream, tools }));
+  if (writer) writer.merge(toUIMessageStream({ stream: withoutCustomParts(result.stream), tools }));
   let text = "";
   for await (const part of result.fullStream) {
     if (part.type === "text-delta") {

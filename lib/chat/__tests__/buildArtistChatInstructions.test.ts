@@ -11,3 +11,10 @@ it("scopes the chat to the artist, its tools and [n] citations", () => {
   expect(text).toContain("[n]");
   expect(text).toMatch(/untrusted/i);
 });
+
+it("restricts citations to the current turn, re-reading a source to cite it again", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/numbers restart each turn/i);
+  expect(text).toMatch(/only cite numbers a tool gave you in this turn/i);
+  expect(text).toMatch(/earlier turn, call readSource again/i);
+});

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { convertReadableStreamToArray } from "ai/test";
 
 const { sdkStreamText } = vi.hoisted(() => ({ sdkStreamText: vi.fn() }));
 const { toUIMessageStream } = vi.hoisted(() => ({ toUIMessageStream: vi.fn() }));
@@ -101,14 +102,24 @@ describe("streamText", () => {
     expect(call.abortSignal).toBe(abortSignal);
   });
 
-  it("merges the UI message stream into a writer when given one", async () => {
-    const stream = { tag: "sdk stream" };
+  it("merges the UI message stream, without provider custom parts, into a writer", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: "custom", kind: "anthropic.message_start" });
+        controller.enqueue({ type: "text-delta", id: "t", text: "Hi" });
+        controller.close();
+      },
+    });
     sdkStreamText.mockReturnValue({ ...streamOf([]), stream });
     toUIMessageStream.mockReturnValue("ui stream");
     const writer = { merge: vi.fn(), write: vi.fn(), onError: undefined };
     const tools = { readSource: {} } as never;
     await streamText({ prompt: "hi", tools, writer });
-    expect(toUIMessageStream).toHaveBeenCalledWith({ stream, tools });
+    const sent = toUIMessageStream.mock.calls[0][0];
+    expect(sent.tools).toBe(tools);
+    expect(await convertReadableStreamToArray(sent.stream)).toEqual([
+      { type: "text-delta", id: "t", text: "Hi" },
+    ]);
     expect(writer.merge).toHaveBeenCalledWith("ui stream");
   });
 
