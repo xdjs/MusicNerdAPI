@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { sdkStreamText } = vi.hoisted(() => ({ sdkStreamText: vi.fn() }));
-vi.mock("ai", () => ({ streamText: sdkStreamText }));
+const { toUIMessageStream } = vi.hoisted(() => ({ toUIMessageStream: vi.fn() }));
+vi.mock("ai", () => ({ streamText: sdkStreamText, toUIMessageStream }));
 const { streamText } = await import("@/lib/ai/streamText");
 
 /** What the SDK's streamText returns, reduced to the part the wrapper reads. */
@@ -13,7 +14,10 @@ function streamOf(parts: object[]) {
   };
 }
 
-beforeEach(() => sdkStreamText.mockReset());
+beforeEach(() => {
+  sdkStreamText.mockReset();
+  toUIMessageStream.mockReset();
+});
 
 describe("streamText", () => {
   it("calls onTextDelta with each piece of text in order and resolves the whole text", async () => {
@@ -69,5 +73,36 @@ describe("streamText", () => {
     const call = sdkStreamText.mock.calls[0][0];
     expect(call.model).toBe("google/gemini-2.5-flash-lite");
     expect(call.providerOptions).toBeUndefined();
+  });
+
+  it("passes messages, tools, the stop condition and the abort signal through", async () => {
+    sdkStreamText.mockReturnValue(streamOf([]));
+    const tools = { searchSources: {} } as never;
+    const stopWhen = () => true;
+    const abortSignal = new AbortController().signal;
+    const prompt = [{ role: "user" as const, content: "hi" }];
+    await streamText({ prompt, tools, stopWhen, abortSignal });
+    const call = sdkStreamText.mock.calls[0][0];
+    expect(call.prompt).toBe(prompt);
+    expect(call.tools).toBe(tools);
+    expect(call.stopWhen).toBe(stopWhen);
+    expect(call.abortSignal).toBe(abortSignal);
+  });
+
+  it("merges the UI message stream into a writer when given one", async () => {
+    const stream = { tag: "sdk stream" };
+    sdkStreamText.mockReturnValue({ ...streamOf([]), stream });
+    toUIMessageStream.mockReturnValue("ui stream");
+    const writer = { merge: vi.fn(), write: vi.fn(), onError: undefined };
+    const tools = { readSource: {} } as never;
+    await streamText({ prompt: "hi", tools, writer });
+    expect(toUIMessageStream).toHaveBeenCalledWith({ stream, tools });
+    expect(writer.merge).toHaveBeenCalledWith("ui stream");
+  });
+
+  it("writes no UI stream without a writer", async () => {
+    sdkStreamText.mockReturnValue(streamOf([]));
+    await streamText({ prompt: "hi" });
+    expect(toUIMessageStream).not.toHaveBeenCalled();
   });
 });

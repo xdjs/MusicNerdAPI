@@ -12,3 +12,6 @@ export const MODEL_ASK_DRAFT = "anthropic/claude-sonnet-5.5";
 
 /** Independent public Ask About evidence checker (MusicNerdWeb `MODEL_ASK_CHECKER`). */
 export const MODEL_ASK_CHECKER = "anthropic/claude-sonnet-5.5";
+
+/** Artist chat writer; the same model as the Ask About draft it replaces (xdjs/MusicNerdWeb#1629). */
+export const MODEL_CHAT = "anthropic/claude-sonnet-5.5";
