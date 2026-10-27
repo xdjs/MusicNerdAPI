@@ -12,7 +12,10 @@ import { PDF_PARSE_TIMEOUT_MS } from "@/lib/vaultUpload/const";
 export async function extractPdfText(buffer: Buffer): Promise<string | null> {
   try {
     const result = await Promise.race([
-      pdfParse(buffer),
+      // A plain Uint8Array, not the Buffer: pdf.js copies a Buffer into Node's
+      // shared pool, then reads objects from the pool's start (it ignores
+      // byteOffset), so small PDFs fail with "bad XRef entry".
+      pdfParse(new Uint8Array(buffer)),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("PDF parse timeout")), PDF_PARSE_TIMEOUT_MS),
       ),

@@ -13,7 +13,7 @@ describe("extractPdfText", () => {
   it("returns the trimmed text", async () => {
     pdfParse.mockResolvedValue({ text: "  A short artist-written document.\n" });
     expect(await extractPdfText(Buffer.from("%PDF"))).toBe("A short artist-written document.");
-    expect(pdfParse).toHaveBeenCalledWith(Buffer.from("%PDF"));
+    expect(pdfParse).toHaveBeenCalledWith(new Uint8Array(Buffer.from("%PDF")));
   });
 
   it("is null for an empty or image-only PDF", async () => {
