@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ verify: vi.fn(), user: vi.fn() }));
 vi.mock("@/lib/auth/verifyPrivyAccessToken", () => ({ verifyPrivyAccessToken: m.verify }));
 vi.mock("@/lib/auth/getUserByPrivyId", () => ({ getUserByPrivyId: m.user }));
 const request = (ip?: string, token?: string) =>
-  new Request("https://api.example/api/askArtist", {
+  new Request("https://api.example/api/question", {
     headers: {
       ...(ip ? { "x-real-ip": ip } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
