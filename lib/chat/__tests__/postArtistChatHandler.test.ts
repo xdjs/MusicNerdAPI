@@ -147,6 +147,13 @@ it("sends the model the artist's instructions and the conversation", async () =>
   });
 });
 
+it("asks the model for low effort, so the answer starts sooner", async () => {
+  const model = new MockLanguageModelV4({ doStream: [textStep("Hi.")] });
+  m.model = model;
+  await chunksOf(await post(ask("Who is this?")));
+  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "low" } });
+});
+
 it("answers for an artist without stored sources, citing a web result", async () => {
   m.originals.mockResolvedValue([]);
   m.webSearch.mockResolvedValue([{ url: "https://web.example/", title: "Web", snippet: "s" }]);

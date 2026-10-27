@@ -7,6 +7,7 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { MODEL_FLASH } from "@/lib/ai/const";
+import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 import type { GenerateTextOptions } from "@/lib/ai/generateText";
 
 export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> & {
@@ -39,12 +40,15 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     prompt,
     temperature,
     thinkingBudget,
+    thinkingLevel,
+    anthropicEffort,
     tools,
     stopWhen,
     abortSignal,
     onTextDelta,
     writer,
   } = options;
+  const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   const result = sdkStreamText({
     model,
     instructions,
@@ -53,9 +57,7 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     tools,
     stopWhen,
     abortSignal,
-    ...(thinkingBudget !== undefined
-      ? { providerOptions: { google: { thinkingConfig: { thinkingBudget } } } }
-      : {}),
+    ...(providerOptions ? { providerOptions } : {}),
   });
   if (writer) writer.merge(toUIMessageStream({ stream: result.stream, tools }));
   let text = "";

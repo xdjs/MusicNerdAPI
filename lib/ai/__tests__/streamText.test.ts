@@ -75,6 +75,18 @@ describe("streamText", () => {
     expect(call.providerOptions).toBeUndefined();
   });
 
+  it("passes an Anthropic effort as provider options", async () => {
+    sdkStreamText.mockReturnValue(streamOf([]));
+    await streamText({
+      model: "anthropic/claude-sonnet-5.5",
+      prompt: "hi",
+      anthropicEffort: "low",
+    });
+    expect(sdkStreamText.mock.calls[0][0].providerOptions).toEqual({
+      anthropic: { effort: "low" },
+    });
+  });
+
   it("passes messages, tools, the stop condition and the abort signal through", async () => {
     sdkStreamText.mockReturnValue(streamOf([]));
     const tools = { searchSources: {} } as never;

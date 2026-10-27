@@ -1,5 +1,6 @@
 import { generateText as sdkGenerateText, type Output, type OutputInterface } from "ai";
 import { MODEL_FLASH } from "@/lib/ai/const";
+import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 
 type TextOutput = ReturnType<typeof Output.text>;
 
@@ -46,6 +47,7 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     maxOutputTokens,
     maxRetries,
   } = options;
+  const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   return sdkGenerateText({
     model,
     instructions,
@@ -55,15 +57,6 @@ export function generateText<OUTPUT extends OutputInterface = TextOutput>(
     ...(abortSignal ? { abortSignal } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(maxRetries !== undefined ? { maxRetries } : {}),
-    ...(thinkingBudget !== undefined || thinkingLevel !== undefined || anthropicEffort !== undefined
-      ? {
-          providerOptions: {
-            ...(thinkingBudget !== undefined || thinkingLevel !== undefined
-              ? { google: { thinkingConfig: { thinkingBudget, thinkingLevel } } }
-              : {}),
-            ...(anthropicEffort !== undefined ? { anthropic: { effort: anthropicEffort } } : {}),
-          },
-        }
-      : {}),
+    ...(providerOptions ? { providerOptions } : {}),
   });
 }

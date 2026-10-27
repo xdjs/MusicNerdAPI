@@ -58,6 +58,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
         const cite = createChatCitations(writer);
         await streamText({
           model: MODEL_CHAT,
+          anthropicEffort: "low",
           instructions: buildArtistChatInstructions(name),
           prompt,
           tools: {
