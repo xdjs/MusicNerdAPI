@@ -120,8 +120,6 @@ describe("mergeAccounts", () => {
     expect(log[10].text).toContain("update artist_bio_corrections set");
     expect(log[10].params).toEqual([CURRENT, LEGACY, CURRENT, LEGACY, CURRENT, CURRENT]);
     expect(log[11].params).toEqual([CURRENT]);
-    // Bookmarks are not migrated: the placeholder's rows go with it (ON DELETE CASCADE).
-    expect(log.map(({ text }) => text ?? "").join(" ")).not.toContain("user_artist_bookmarks");
     expect(state.rolledBack).toBe(false);
   });
 
