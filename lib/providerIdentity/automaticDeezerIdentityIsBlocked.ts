@@ -1,6 +1,6 @@
 import type { LinkDecisionRun } from "@/lib/onboarding/types";
 import { getArtistById } from "@/lib/artists/getArtistById";
-import { hasVerifiedDeezerPair } from "@/lib/providerIdentity/hasVerifiedDeezerPair";
+import { hasCorroboratedCatalogPair } from "@/lib/providerIdentity/hasCorroboratedCatalogPair";
 
 /** Automatic guesses need independent exact-pair evidence; explicit confirmations bypass this gate. */
 export async function automaticDeezerIdentityIsBlocked(
@@ -11,7 +11,11 @@ export async function automaticDeezerIdentityIsBlocked(
   try {
     const artist = await getArtistById(run.artistId);
     if (artist?.deezer && artist.deezer !== deezerId) return true;
-    if (!artist?.spotify || !(await hasVerifiedDeezerPair(artist.spotify, deezerId))) return true;
+    if (
+      !artist?.spotify ||
+      !(await hasCorroboratedCatalogPair(artist.spotify, deezerId, artist.name ?? ""))
+    )
+      return true;
     run.deezerWriteEvidence = {
       spotifyId: artist.spotify,
       deezerId,

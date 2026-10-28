@@ -29,6 +29,9 @@ export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSo
         title,
         url: source.url,
         text: source.text.slice(0, MAX_SOURCE_CHARACTERS),
+        publishedAt: source.publishedAt,
+        activityDate: source.activityDate ?? null,
+        retrievedAt: source.retrievedAt,
       };
     },
   });

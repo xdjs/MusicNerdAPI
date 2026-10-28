@@ -49,6 +49,7 @@ describe("advanceResearch", () => {
         "source_extract",
         "question_research",
         "spotify_match",
+        "catalog_match",
       ],
       artistId: "artist-1",
       excludeIds: ["x"],

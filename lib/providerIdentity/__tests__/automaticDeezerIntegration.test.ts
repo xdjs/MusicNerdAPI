@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { writeArtistLink } from "@/lib/vault/writeArtistLink";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -45,6 +46,8 @@ const tables = [
   schema.users,
   schema.artistClaims,
   schema.artistIdMappings,
+  schema.artistMappingExclusions,
+  schema.artistVaultSources,
   schema.artistResearchJobs,
 ];
 const run = (automatic = true) =>
@@ -60,7 +63,7 @@ const stored = async () =>
   (await database.select().from(schema.artists).where(eq(schema.artists.id, artistId)))[0];
 beforeAll(async () => {
   await client.exec(
-    "CREATE ROLE mnweb; CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
+    "CREATE TYPE exclusion_reason AS ENUM ('conflict','name_mismatch','too_ambiguous'); CREATE TYPE source_status AS ENUM ('pending','approved','rejected'); CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE mnweb; CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
   );
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -68,6 +71,18 @@ beforeAll(async () => {
       `CREATE TABLE "${config.name}" (${config.columns.map(c => `"${c.name}" ${c.getSQLType()}`).join(",")}); ALTER TABLE "${config.name}" ENABLE ROW LEVEL SECURITY; CREATE POLICY fixture_app ON "${config.name}" TO mnweb USING (true) WITH CHECK (true); GRANT SELECT, INSERT, UPDATE ON "${config.name}" TO mnweb;`,
     );
   }
+  await client.exec(`CREATE SCHEMA musicnerd_private; GRANT USAGE ON SCHEMA musicnerd_private TO mnweb;
+    CREATE TABLE musicnerd_private.catalog_link_disconnects(artist_id uuid,platform text);
+    REVOKE ALL ON musicnerd_private.catalog_link_disconnects FROM PUBLIC,mnweb;`);
+  await client.exec(
+    readFileSync(
+      new URL(
+        "../../artistLinks/__tests__/fixtures/0058_catalog_automatic_reconnect_guard.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   // Mirrors the Web-owned unique identity contracts; not full migration replay.
   await client.exec(
     "ALTER TABLE artists ADD PRIMARY KEY (id); ALTER TABLE artist_id_mappings ADD FOREIGN KEY (artist_id) REFERENCES artists(id); CREATE UNIQUE INDEX artists_deezer_uniq ON artists(deezer) WHERE deezer IS NOT NULL; CREATE UNIQUE INDEX artist_id_mappings_platform_id_uniq ON artist_id_mappings(platform,platform_id); CREATE UNIQUE INDEX artist_id_mappings_artist_platform_uniq ON artist_id_mappings(artist_id,platform)",
@@ -78,7 +93,7 @@ beforeAll(async () => {
 }, 30000);
 beforeEach(async () => {
   await client.exec(
-    "RESET ROLE; TRUNCATE artists,users,artist_claims,artist_id_mappings,artist_research_jobs",
+    "RESET ROLE; TRUNCATE artists,users,artist_claims,artist_id_mappings,artist_research_jobs,artist_mapping_exclusions,artist_vault_sources,musicnerd_private.catalog_link_disconnects",
   );
   await database
     .insert(schema.artists)
@@ -352,4 +367,33 @@ it("does not reattach a retained own mapping without fresh pair evidence", async
   expect((await client.query("SELECT status FROM artist_research_jobs")).rows).toEqual([
     { status: "pending" },
   ]);
+});
+
+it("does not restore an explicitly excluded catalog after successful corroboration", async () => {
+  await client.exec(
+    `INSERT INTO artist_mapping_exclusions(artist_id,platform,reason) VALUES ('${artistId}','deezer','conflict')`,
+  );
+  expect((await run()).writeRejected).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
+});
+
+it("refuses automatic reconnection after a normal archived disconnect, but preserves explicit confirmation", async () => {
+  await client.exec(
+    `RESET ROLE; INSERT INTO musicnerd_private.catalog_link_disconnects VALUES ('${artistId}','deezer'); SET ROLE mnweb`,
+  );
+  expect((await run()).writeRejected).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
+  expect((await run(false)).written).toEqual(["deezer"]);
+});
+
+it("does not infer a counterpart from a catalog anchor with an unresolved exclusion", async () => {
+  await client.exec("RESET ROLE");
+  await client.query(
+    "INSERT INTO artist_mapping_exclusions(artist_id,platform,reason) VALUES($1,'spotify','conflict')",
+    [artistId],
+  );
+  await client.exec("SET ROLE mnweb");
+  const result = await run();
+  expect(result.writeRejected).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
 });

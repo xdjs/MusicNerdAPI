@@ -14,6 +14,7 @@ import { fetchJson } from "@/lib/networking/fetchJson";
 export async function searchDeezerArtists(
   query: string,
   limit: number,
+  strict = false,
 ): Promise<MusicPlatformArtist[]> {
   if (!query?.trim()) return [];
   const data = await fetchJson(
@@ -21,13 +22,16 @@ export async function searchDeezerArtists(
     { timeoutMs: DEEZER_TIMEOUT_MS },
   );
   if (!data) {
+    if (strict) throw new Error("Deezer search unavailable");
     console.error("[searchDeezerArtists] Search request failed");
     return [];
   }
   if (isDeezerError(data)) {
+    if (strict) throw new Error("Deezer search failed");
     console.error("[searchDeezerArtists] Search error:", data.error);
     return [];
   }
+  if (strict && !Array.isArray(data.data)) throw new Error("Invalid Deezer search response");
   return ((data.data as DeezerArtistPayload[] | undefined) ?? []).map(artist =>
     mapDeezerArtist(artist, null),
   );

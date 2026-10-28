@@ -1,3 +1,7 @@
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
+import { catalogLinkWasDisconnected } from "@/lib/artistLinks/catalogLinkWasDisconnected";
+import { canSaveMusicDestination } from "@/lib/musicLinks/canSaveMusicDestination";
+import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
 import { acquireArtistPlatformWriteLocks } from "@/lib/artistLinks/acquireArtistPlatformWriteLocks";
 import { assertWritableLinkColumn } from "@/lib/artistLinks/assertWritableLinkColumn";
@@ -40,7 +44,24 @@ export async function setArtistLink(
   const identity = columnName === "spotify" || columnName === "deezer";
   const write = async (tx: TransactionDb) => {
     if (identity) await acquireArtistPlatformWriteLocks(tx, artistId, columnName, value);
+    if (evidence) await lockArtistRow(tx, artistId);
     await lockScopedArtistWrite(tx, artistId);
+    if (evidence) {
+      if (await catalogLinkWasDisconnected(tx, artistId, columnName))
+        throw new ArtistLinkConflictError(
+          "This catalog was disconnected; explicit confirmation is required to reconnect",
+        );
+      const url =
+        columnName === "spotify"
+          ? `https://open.spotify.com/artist/${value}`
+          : `https://www.deezer.com/artist/${value}`;
+      if (
+        !(await canSaveMusicDestination(tx, artistId, url, { allowExistingSameDestination: true }))
+      )
+        throw new ArtistLinkConflictError(
+          "Automatic catalog match conflicts with a saved identity or review decision",
+        );
+    }
     return writeArtistLinkColumn(tx, artistId, columnName, value, selfEditUrl, evidence);
   };
   if (transaction) return write(transaction);

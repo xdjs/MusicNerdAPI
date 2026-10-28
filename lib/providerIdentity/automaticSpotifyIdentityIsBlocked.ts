@@ -1,6 +1,6 @@
 import type { LinkDecisionRun } from "@/lib/onboarding/types";
 import { getArtistById } from "@/lib/artists/getArtistById";
-import { hasVerifiedDeezerPair } from "@/lib/providerIdentity/hasVerifiedDeezerPair";
+import { hasCorroboratedCatalogPair } from "@/lib/providerIdentity/hasCorroboratedCatalogPair";
 
 /** Generic discovery cannot attach Spotify from a name or an unverified candidate label. */
 export async function automaticSpotifyIdentityIsBlocked(
@@ -11,7 +11,11 @@ export async function automaticSpotifyIdentityIsBlocked(
   try {
     const artist = await getArtistById(run.artistId);
     if (artist?.spotify && artist.spotify !== spotifyId) return true;
-    if (!artist?.deezer || !(await hasVerifiedDeezerPair(spotifyId, artist.deezer))) return true;
+    if (
+      !artist?.deezer ||
+      !(await hasCorroboratedCatalogPair(spotifyId, artist.deezer, artist.name ?? ""))
+    )
+      return true;
     run.spotifyWriteEvidence = {
       spotifyId,
       deezerId: artist.deezer,

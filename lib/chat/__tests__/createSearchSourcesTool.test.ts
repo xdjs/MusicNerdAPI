@@ -22,6 +22,9 @@ it("ranks stored sources for the query, then lists the rest, from stored text on
     title: "label.example",
     url: "https://label.example/b",
     snippet: "Dutchyyy signed to Night Label in 2024.",
+    publishedAt: null,
+    activityDate: null,
+    retrievedAt: null,
   });
   expect(result.sources.map(s => s.sourceId).sort()).toEqual(["vault:1", "vault:2", "vault:3"]);
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -41,7 +44,7 @@ it("returns at most 8 sources with bounded snippets", async () => {
 
 it("returns no sources for an artist without stored sources", async () => {
   const result = await createSearchSourcesTool([], "Dutchyyy").execute!({ query: "q" }, call);
-  expect(result).toEqual({ sources: [] });
+  expect(result).toMatchObject({ sources: [] });
 });
 
 it("snippets the passage that matches the query, not the page's start", async () => {

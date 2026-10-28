@@ -27,3 +27,41 @@ describe("isrcsFromDeezer", () => {
     expect(await isrcsFromDeezer("1")).toEqual([]);
   });
 });
+
+it("strict matching rejects unavailable, mismatched and uncredited recordings", async () => {
+  fetchJson.mockResolvedValueOnce(null);
+  await expect(isrcsFromDeezer("42", true)).rejects.toThrow();
+  fetchJson
+    .mockResolvedValueOnce({ data: [{ id: 1 }] })
+    .mockResolvedValueOnce({ id: 2, isrc: "USAAA0000001" });
+  await expect(isrcsFromDeezer("42", true)).rejects.toThrow();
+  fetchJson
+    .mockResolvedValueOnce({ data: [{ id: 1 }] })
+    .mockResolvedValueOnce({ id: 1, isrc: "USAAA0000001", artist: { id: 99 } });
+  await expect(isrcsFromDeezer("42", true)).rejects.toThrow();
+});
+
+it("strict matching includes a featured source artist and deduplicates valid ISRCs", async () => {
+  fetchJson
+    .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }] })
+    .mockResolvedValueOnce({
+      id: 1,
+      isrc: "usaaa0000001",
+      artist: { id: 99 },
+      contributors: [{ id: 42, role: "Featured" }],
+    })
+    .mockResolvedValueOnce({ id: 2, isrc: "USAAA0000001", artist: { id: 42 } });
+  expect(await isrcsFromDeezer("42", true)).toEqual(["USAAA0000001"]);
+});
+
+it("does not use producer-only or unspecified contributor roles as artist-credit proof", async () => {
+  for (const role of ["Producer", "Composer", undefined]) {
+    fetchJson.mockResolvedValueOnce({ data: [{ id: 1 }] }).mockResolvedValueOnce({
+      id: 1,
+      isrc: "USAAA0000001",
+      artist: { id: 99 },
+      contributors: [{ id: 42, role }],
+    });
+    await expect(isrcsFromDeezer("42", true)).rejects.toThrow("credit");
+  }
+});

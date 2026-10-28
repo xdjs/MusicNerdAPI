@@ -20,6 +20,6 @@ export async function* tierTwoPlatformSearchStream(
 ): AsyncGenerator<[ProfileDisplayColumn, TierCandidate | null]> {
   const jobs: [ProfileDisplayColumn, Promise<TierCandidate | null>][] = [];
   if (missing.has("spotify")) jobs.push(["spotify", findSpotifyCandidate(artistName, record)]);
-  if (missing.has("deezer")) jobs.push(["deezer", findDeezerCandidate(artistName)]);
+  if (missing.has("deezer")) jobs.push(["deezer", findDeezerCandidate(artistName, record)]);
   yield* settleAsCompleted(jobs);
 }

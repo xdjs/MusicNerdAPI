@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import {
   artists,
@@ -102,6 +102,7 @@ export async function resetClaimBuild(artistId: string) {
         and(
           eq(artistResearchJobs.artistId, artistId),
           inArray(artistResearchJobs.status, ["pending", "running"]),
+          ne(artistResearchJobs.kind, "catalog_match"),
         ),
       )
       .returning({ id: artistResearchJobs.id });

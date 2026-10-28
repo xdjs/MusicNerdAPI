@@ -1,3 +1,4 @@
+import { runCatalogMatch } from "@/lib/catalogMatch/runCatalogMatch";
 import { runInterviewPreparation } from "@/lib/interviewPreparation/runInterviewPreparation";
 import { runSpotifyMatch } from "@/lib/spotifyMatch/runSpotifyMatch";
 import { runQuestionResearch } from "@/lib/questionResearch/runQuestionResearch";
@@ -18,6 +19,8 @@ import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
  */
 export async function runResearchJob(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   switch (job.kind) {
+    case "catalog_match":
+      return runCatalogMatch(job, deadline);
     case "interview_prepare":
       return runInterviewPreparation(job, deadline);
     case "spotify_match":

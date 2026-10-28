@@ -33,7 +33,11 @@ export async function advanceResearch(opts: {
 
   const about = { ran: true, jobId: job.id, kind: job.kind, artistId: job.artistId };
   // Killed mid-slice on every attempt (counted at the claim): stop here.
-  if (job.attempts >= MAX_ATTEMPTS && job.kind !== "spotify_match") {
+  if (
+    job.attempts >= MAX_ATTEMPTS &&
+    job.kind !== "spotify_match" &&
+    job.kind !== "catalog_match"
+  ) {
     const message = `stopped before finishing ${job.attempts} times`;
     try {
       await failSocialJob(job, message);
@@ -51,7 +55,11 @@ export async function advanceResearch(opts: {
     // Identity jobs own their exact-lease checkpoints and public-identity scope.
     // A database failure leaves the lease to expire; generic directory failure
     // handling would incorrectly cancel them merely because a claim arrived.
-    if (job.kind === "spotify_match" || job.kind === "interview_prepare") {
+    if (
+      job.kind === "spotify_match" ||
+      job.kind === "catalog_match" ||
+      job.kind === "interview_prepare"
+    ) {
       console.error("[research] Durable preparation or identity checkpoint failed");
       return {
         ...about,

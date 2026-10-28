@@ -8,11 +8,13 @@ import { fetchJson } from "@/lib/networking/fetchJson";
  * @param deezerArtistId - The Deezer artist id.
  * @returns Distinct ISRCs; empty when Deezer has none.
  */
-export async function isrcsFromDeezer(deezerArtistId: string): Promise<string[]> {
+export async function isrcsFromDeezer(deezerArtistId: string, strict = false): Promise<string[]> {
   const top = await fetchJson(
     `${DEEZER_API}/artist/${encodeURIComponent(deezerArtistId)}/top?limit=${ISRC_MAX_TRACKS}`,
     { timeoutMs: ISRC_FETCH_TIMEOUT_MS },
   );
+  if (strict && (!top || top.error || !Array.isArray(top.data)))
+    throw new Error("Deezer tracks unavailable");
   const tracks = (top?.data as { id?: unknown }[] | undefined) ?? [];
   const ids = tracks
     .map(t => t.id)
@@ -23,8 +25,27 @@ export async function isrcsFromDeezer(deezerArtistId: string): Promise<string[]>
       const track = await fetchJson(`${DEEZER_API}/track/${encodeURIComponent(String(id))}`, {
         timeoutMs: ISRC_FETCH_TIMEOUT_MS,
       });
+      if (strict && (!track || track.error || String(track.id) !== String(id)))
+        throw new Error("Deezer recording unavailable");
+      if (strict) {
+        const contributors = (Array.isArray(track?.contributors) ? track.contributors : []) as {
+          id?: unknown;
+          role?: unknown;
+        }[];
+        const primary = track?.artist as { id?: unknown } | undefined;
+        const credited =
+          String(primary?.id) === deezerArtistId ||
+          contributors.some(
+            artist =>
+              String(artist?.id) === deezerArtistId &&
+              (artist.role === "Main" || artist.role === "Featured"),
+          );
+        if (!credited) throw new Error("Deezer recording does not credit source artist");
+      }
       const isrc = track?.isrc;
-      return typeof isrc === "string" && isrc ? isrc : null;
+      return typeof isrc === "string" && isrc && (!strict || /^[A-Z0-9]{12}$/i.test(isrc))
+        ? isrc.toUpperCase()
+        : null;
     }),
   );
   return [...new Set(isrcs.filter((v): v is string => !!v))];

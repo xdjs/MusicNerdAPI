@@ -71,6 +71,15 @@ describe("shared Spotify request cooldown", () => {
     expect(params).toContain(new Date(now + 120000).toISOString());
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it("pauses the shared app for fifteen minutes after an authentication failure", async () => {
+    execute.mockResolvedValueOnce([]).mockResolvedValueOnce([{ retryAtMs: now + 900000 }]);
+    const transport = vi.fn(async () => new Response("{}", { status: 401 }));
+    const result = await fetchSpotifyResponse("https://api.spotify.com/v1/search", {}, transport);
+    expect(result.status).toBe(401);
+    expect(execute).toHaveBeenCalledTimes(2);
+    const { params } = renderSql(execute.mock.calls[1][0]);
+    expect(params).toContain(new Date(now + 900000).toISOString());
+  });
   it("fails closed if storage cannot be read or written", async () => {
     execute.mockRejectedValue(new Error("store unavailable"));
     const fetch = vi.fn();

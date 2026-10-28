@@ -4,11 +4,12 @@ import type { ScopedWriteDb } from "@/lib/ownership/types";
 import { parseMusicDestination } from "@/lib/musicLinks/parseMusicDestination";
 import { isMusicSource } from "@/lib/musicLinks/isMusicSource";
 
-/** Preserve accepted identities and review decisions inside the source-write transaction. */
+/** Preserve identities and review decisions. Verified canonical attachment may reuse an existing matching source; source intake defaults to deduplication. */
 export async function canSaveMusicDestination(
   writer: ScopedWriteDb,
   artistId: string,
   url: string,
+  options: { allowExistingSameDestination?: boolean } = {},
 ): Promise<boolean> {
   const destination = parseMusicDestination(url);
   if (!destination || destination.kind !== "artist") return true;
@@ -20,7 +21,8 @@ export async function canSaveMusicDestination(
   ) as { artist_id: string; platform_id: string }[];
   const excluded = rowsOf(
     await writer.execute(sql`
-    select reason from artist_mapping_exclusions where artist_id = ${artistId}::uuid and platform = ${destination.platform}
+    select reason from artist_mapping_exclusions where artist_id = ${artistId}::uuid
+      and (platform = ${destination.platform} or (${Boolean(options.allowExistingSameDestination && ["spotify", "deezer"].includes(destination.platform))} and platform in ('spotify','deezer')))
   `),
   );
   const sources = rowsOf(
@@ -64,11 +66,9 @@ export async function canSaveMusicDestination(
   }
   return !sources.some(source => {
     const held = parseMusicDestination(source.url);
-    return (
-      held?.kind === "artist" &&
-      held.platform === destination.platform &&
-      (held.id === destination.id ||
-        (isMusicSource(source) && (source.status === "approved" || source.status === "pending")))
-    );
+    if (held?.kind !== "artist" || held.platform !== destination.platform) return false;
+    if (held.id === destination.id)
+      return !options.allowExistingSameDestination || source.status === "rejected";
+    return isMusicSource(source) && (source.status === "approved" || source.status === "pending");
   });
 }
