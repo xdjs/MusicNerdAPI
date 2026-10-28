@@ -44,3 +44,12 @@ describe("searchDeezerArtists", () => {
     error.mockRestore();
   });
 });
+
+it("strict identity searches distinguish provider failures from empty catalog results", async () => {
+  for (const result of [null, { error: { type: "x", message: "y" } }, {}]) {
+    fetchJson.mockResolvedValueOnce(result);
+    await expect(searchDeezerArtists("Pete Rango", 5, true)).rejects.toThrow();
+  }
+  fetchJson.mockResolvedValueOnce({ data: [] });
+  expect(await searchDeezerArtists("Pete Rango", 5, true)).toEqual([]);
+});

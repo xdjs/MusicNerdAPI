@@ -35,11 +35,6 @@ export interface DeezerArtistPayload {
   nb_album: number;
 }
 
-/** A Spotify artist resolved from a Deezer artist through shared recordings. */
-export interface IsrcSpotifyMatch {
-  spotifyId: string;
-  /** How many of the artist's recordings Spotify also credits them on. */
-  recordings: number;
-  /** True when the name broke a tie rather than the count deciding it. */
-  byName: boolean;
-}
+export type CatalogCounterpartResult =
+  | { status: "verified"; spotifyId: string; deezerId: string; recordings: number }
+  | { status: "not_found" | "ambiguous" | "provider_failure" };

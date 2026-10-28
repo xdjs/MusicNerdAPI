@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({
   searchSpotifyArtists: vi.fn(),
   searchDeezerArtists: vi.fn(),
   getArtistIdMappings: vi.fn(),
-  spotifyArtistFromDeezer: vi.fn(),
+  resolveCatalogCounterpart: vi.fn(),
   webSearch: vi.fn(),
 }));
 vi.mock("@/lib/activity/recordArtistActivity", () => ({ recordArtistActivity: m.record }));
@@ -32,8 +32,8 @@ vi.mock("@/lib/musicPlatform/searchDeezerArtists", () => ({
 vi.mock("@/lib/discovery/getArtistIdMappings", () => ({
   getArtistIdMappings: m.getArtistIdMappings,
 }));
-vi.mock("@/lib/musicPlatform/spotifyArtistFromDeezer", () => ({
-  spotifyArtistFromDeezer: m.spotifyArtistFromDeezer,
+vi.mock("@/lib/musicPlatform/resolveCatalogCounterpart", () => ({
+  resolveCatalogCounterpart: m.resolveCatalogCounterpart,
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
 const { discoverArtistProfilesStream } =
@@ -79,7 +79,7 @@ beforeEach(() => {
   m.searchSpotifyArtists.mockResolvedValue([]);
   m.searchDeezerArtists.mockResolvedValue([]);
   m.getArtistIdMappings.mockResolvedValue([]);
-  m.spotifyArtistFromDeezer.mockResolvedValue(null);
+  m.resolveCatalogCounterpart.mockResolvedValue({ status: "not_found" });
   m.webSearch.mockResolvedValue([]);
   m.getArtistById.mockResolvedValue(BASE_ARTIST);
 });
@@ -174,10 +174,11 @@ describe("discoverArtistProfilesStream", () => {
   });
 
   it("tier 2: resolves Spotify by ISRC from the Deezer id and never searches it by name", async () => {
-    m.spotifyArtistFromDeezer.mockResolvedValueOnce({
+    m.resolveCatalogCounterpart.mockResolvedValueOnce({
       spotifyId: "FROM_ISRC",
       recordings: 3,
-      byName: false,
+      status: "verified",
+      deezerId: "94933462",
     });
     m.extractArtistId.mockImplementation(async (url: string) =>
       url.includes("FROM_ISRC")
@@ -185,7 +186,10 @@ describe("discoverArtistProfilesStream", () => {
         : null,
     );
     const found = await profiles();
-    expect(m.spotifyArtistFromDeezer).toHaveBeenCalledWith("94933462", "Pete Rango");
+    expect(m.resolveCatalogCounterpart).toHaveBeenCalledWith({
+      deezerId: "94933462",
+      artistName: "Pete Rango",
+    });
     expect(found.find(r => r.siteName === "spotify")).toMatchObject({ value: "FROM_ISRC" });
     expect(m.searchSpotifyArtists).not.toHaveBeenCalled();
   });

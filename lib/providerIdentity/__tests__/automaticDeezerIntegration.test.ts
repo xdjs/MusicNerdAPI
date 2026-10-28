@@ -45,6 +45,8 @@ const tables = [
   schema.users,
   schema.artistClaims,
   schema.artistIdMappings,
+  schema.artistMappingExclusions,
+  schema.artistVaultSources,
   schema.artistResearchJobs,
 ];
 const run = (automatic = true) =>
@@ -60,7 +62,7 @@ const stored = async () =>
   (await database.select().from(schema.artists).where(eq(schema.artists.id, artistId)))[0];
 beforeAll(async () => {
   await client.exec(
-    "CREATE ROLE mnweb; CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
+    "CREATE TYPE exclusion_reason AS ENUM ('conflict','name_mismatch','too_ambiguous'); CREATE TYPE source_status AS ENUM ('pending','approved','rejected'); CREATE ROLE mnweb; CREATE TYPE confidence_level AS ENUM ('high','medium','low','manual'); CREATE TYPE claim_status AS ENUM ('pending','approved','rejected')",
   );
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -78,7 +80,7 @@ beforeAll(async () => {
 }, 30000);
 beforeEach(async () => {
   await client.exec(
-    "RESET ROLE; TRUNCATE artists,users,artist_claims,artist_id_mappings,artist_research_jobs",
+    "RESET ROLE; TRUNCATE artists,users,artist_claims,artist_id_mappings,artist_research_jobs,artist_mapping_exclusions,artist_vault_sources",
   );
   await database
     .insert(schema.artists)
@@ -352,4 +354,12 @@ it("does not reattach a retained own mapping without fresh pair evidence", async
   expect((await client.query("SELECT status FROM artist_research_jobs")).rows).toEqual([
     { status: "pending" },
   ]);
+});
+
+it("does not restore an explicitly excluded catalog after successful corroboration", async () => {
+  await client.exec(
+    `INSERT INTO artist_mapping_exclusions(artist_id,platform,reason) VALUES ('${artistId}','deezer','conflict')`,
+  );
+  expect((await run()).writeRejected).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
 });

@@ -1,40 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { spotifyArtistFromDeezer, searchSpotifyArtists } = vi.hoisted(() => ({
-  spotifyArtistFromDeezer: vi.fn(),
+const { resolveCatalogCounterpart, searchSpotifyArtists } = vi.hoisted(() => ({
+  resolveCatalogCounterpart: vi.fn(),
   searchSpotifyArtists: vi.fn(),
 }));
-vi.mock("@/lib/musicPlatform/spotifyArtistFromDeezer", () => ({ spotifyArtistFromDeezer }));
+vi.mock("@/lib/musicPlatform/resolveCatalogCounterpart", () => ({ resolveCatalogCounterpart }));
 vi.mock("@/lib/musicPlatform/searchSpotifyArtists", () => ({ searchSpotifyArtists }));
 const { findSpotifyCandidate } = await import("@/lib/discovery/findSpotifyCandidate");
 
 beforeEach(() => {
-  spotifyArtistFromDeezer.mockReset().mockResolvedValue(null);
+  resolveCatalogCounterpart.mockReset().mockResolvedValue({ status: "not_found" });
   searchSpotifyArtists.mockReset().mockResolvedValue([]);
 });
 
 describe("findSpotifyCandidate", () => {
   it("resolves Spotify from the Deezer id by ISRC before searching by name", async () => {
-    spotifyArtistFromDeezer.mockResolvedValueOnce({
+    resolveCatalogCounterpart.mockResolvedValueOnce({
       spotifyId: "FROM_ISRC",
       recordings: 3,
-      byName: false,
+      status: "verified",
+      deezerId: "94933462",
     });
     expect(await findSpotifyCandidate("Pete Rango", { deezer: "94933462" })).toEqual({
       tier: 2,
       platform: "spotify",
       url: "https://open.spotify.com/artist/FROM_ISRC",
-      reasoning: "Shares 3 recordings (by ISRC) with their Deezer catalogue",
+      reasoning: "Verified across 3 distinct recordings (ISRC) and uncontested artist credits",
     });
-    expect(spotifyArtistFromDeezer).toHaveBeenCalledWith("94933462", "Pete Rango");
+    expect(resolveCatalogCounterpart).toHaveBeenCalledWith({
+      deezerId: "94933462",
+      artistName: "Pete Rango",
+    });
     expect(searchSpotifyArtists).not.toHaveBeenCalled();
   });
 
-  it("says when the name broke the tie, singular", async () => {
-    spotifyArtistFromDeezer.mockResolvedValueOnce({ spotifyId: "X", recordings: 1, byName: true });
-    expect((await findSpotifyCandidate("Pete Rango", { deezer: "1" }))?.reasoning).toBe(
-      "Shares 1 recording (by ISRC) with their Deezer catalogue, name confirmed among the performers",
-    );
+  it("never falls back to name-only matching for an unresolved catalog counterpart", async () => {
+    for (const status of ["ambiguous", "provider_failure", "not_found"]) {
+      resolveCatalogCounterpart.mockResolvedValueOnce({ status });
+      expect(await findSpotifyCandidate("Pete Rango", { deezer: "1" })).toBeNull();
+    }
+    expect(searchSpotifyArtists).not.toHaveBeenCalled();
   });
 
   it("falls back to an exact-name search, and proposes nothing without one", async () => {
@@ -51,7 +56,7 @@ describe("findSpotifyCandidate", () => {
       url: "https://open.spotify.com/artist/BY_NAME",
       reasoning: "Exact name match via Spotify search (652 followers)",
     });
-    expect(spotifyArtistFromDeezer).not.toHaveBeenCalled();
+    expect(resolveCatalogCounterpart).not.toHaveBeenCalled();
     expect(await findSpotifyCandidate("Pete Rango", {})).toBeNull();
   });
 
