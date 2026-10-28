@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { getQuerySnippet } from "@/lib/chat/getQuerySnippet";
 import { getSourceTitle } from "@/lib/chat/getSourceTitle";
 import { getEligibleResearchOriginals } from "@/lib/questionResearch/getEligibleResearchOriginals";
 import { selectResearchReferences } from "@/lib/questionResearch/selectResearchReferences";
@@ -11,7 +12,7 @@ const SNIPPET_CHARS = 300;
 /**
  * The chat's `searchSources` tool: up to 8 of the artist's stored public
  * sources, those matching the query first (the shared original-text ranking),
- * then the rest. Reads stored text only.
+ * then the rest, each with its best-matching passage. Reads stored text only.
  *
  * @param originals - The artist's stored originals (`loadPublicResearchOriginals`).
  * @param artistName - The artist's name, for ranking.
@@ -20,7 +21,7 @@ const SNIPPET_CHARS = 300;
 export function createSearchSourcesTool(originals: ResearchOriginal[], artistName: string) {
   return tool({
     description:
-      "Search the artist's saved sources. Returns up to 8 with a snippet each; read one with readSource before citing it.",
+      "Search the artist's saved sources. Returns up to 8, each with the passage that best matches the query; read one with readSource before citing it.",
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       const request: ResearchRequest = {
@@ -38,7 +39,7 @@ export function createSearchSourcesTool(originals: ResearchOriginal[], artistNam
           sourceId: source.sourceId,
           title: getSourceTitle(source.url),
           url: source.url,
-          snippet: source.text.slice(0, SNIPPET_CHARS),
+          snippet: getQuerySnippet(source.text, query, SNIPPET_CHARS),
         }));
       return { sources };
     },

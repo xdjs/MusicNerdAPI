@@ -43,3 +43,13 @@ it("returns no sources for an artist without stored sources", async () => {
   const result = await createSearchSourcesTool([], "Dutchyyy").execute!({ query: "q" }, call);
   expect(result).toEqual({ sources: [] });
 });
+
+it("snippets the passage that matches the query, not the page's start", async () => {
+  const text = `${"Intro about the band. ".repeat(40)}Dutchyyy formed in Richmond in 1991.`;
+  const searchSources = createSearchSourcesTool(
+    [originalFixture("vault:1", "https://www.news.example/a", text)],
+    "Dutchyyy",
+  );
+  const result = (await searchSources.execute!({ query: "formed Richmond" }, call)) as Found;
+  expect(result.sources[0].snippet).toContain("formed in Richmond in 1991");
+});

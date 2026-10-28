@@ -18,3 +18,20 @@ it("restricts citations to the current turn, re-reading a source to cite it agai
   expect(text).toMatch(/only cite numbers a tool gave you in this turn/i);
   expect(text).toMatch(/earlier turn, call readSource again/i);
 });
+
+it("keeps the answer to what was asked, written only after the tools are done", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/don't write any text until you have finished using tools/i);
+  expect(text).toMatch(/answer only what was asked/i);
+});
+
+it("reads more sources before saying they don't answer", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/read at least three sources/i);
+});
+
+it("states only what a read source says, without a sources list", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/never state facts from searchSources snippets/i);
+  expect(text).toMatch(/don't add a list of sources/i);
+});
