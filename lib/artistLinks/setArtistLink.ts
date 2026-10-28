@@ -1,3 +1,4 @@
+import { catalogLinkWasDisconnected } from "@/lib/artistLinks/catalogLinkWasDisconnected";
 import { canSaveMusicDestination } from "@/lib/musicLinks/canSaveMusicDestination";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import type { CatalogWriteEvidence } from "@/lib/providerIdentity/types";
@@ -44,6 +45,10 @@ export async function setArtistLink(
     if (identity) await acquireArtistPlatformWriteLocks(tx, artistId, columnName, value);
     await lockScopedArtistWrite(tx, artistId);
     if (evidence) {
+      if (await catalogLinkWasDisconnected(tx, artistId, columnName))
+        throw new ArtistLinkConflictError(
+          "This catalog was disconnected; explicit confirmation is required to reconnect",
+        );
       const url =
         columnName === "spotify"
           ? `https://open.spotify.com/artist/${value}`

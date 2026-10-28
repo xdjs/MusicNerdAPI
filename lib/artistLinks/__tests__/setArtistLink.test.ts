@@ -15,6 +15,9 @@ const { writeColumn, locks, lockScoped, scoped, transaction, tx, ownership } = v
     transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
 });
+vi.mock("@/lib/artistLinks/catalogLinkWasDisconnected", () => ({
+  catalogLinkWasDisconnected: vi.fn(async () => false),
+}));
 vi.mock("@/lib/db/db", () => ({ db: { transaction } }));
 vi.mock("@/lib/artistLinks/writeArtistLinkColumn", () => ({ writeArtistLinkColumn: writeColumn }));
 vi.mock("@/lib/artistLinks/acquireArtistPlatformWriteLocks", () => ({

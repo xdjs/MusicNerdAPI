@@ -225,3 +225,79 @@ it("answers 503 when the stored sources cannot be read", async () => {
     error: "Chat is temporarily unavailable. Please try again.",
   });
 });
+
+it("streams the newest saved Instagram evidence and its matching citation through the real SDK loop", async () => {
+  const dated = (
+    id: string,
+    publishedAt: string | null,
+    text: string,
+    url = `https://www.instagram.com/p/${id}/`,
+  ) => ({
+    ...originalFixture(id, url, text),
+    publishedAt,
+  });
+  m.artist.mockResolvedValue({ id: artistId, name: "Pete Rango" });
+  m.originals.mockResolvedValue([
+    ...Array.from({ length: 10 }, (_, i) =>
+      dated(`old${i}`, "2026-01-01T00:00:00Z", "Latest recent Instagram news"),
+    ),
+    dated("fwb", "2026-09-25T00:00:00Z", "FWB Fest was wonderful"),
+    dated(
+      "spotify",
+      "2026-10-01T00:00:00Z",
+      "A newer album",
+      "https://open.spotify.com/album/fixture",
+    ),
+    dated("future", "2099-01-01T00:00:00Z", "Future post"),
+    dated("undated", null, "No date"),
+  ]);
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("searchSources", {
+        query: "latest Instagram",
+        retrieval: "latest",
+        platform: "instagram",
+      }),
+      toolStep("readSource", { sourceId: "fwb" }),
+      textStep(
+        "The newest Instagram post in the saved sources is dated September 25, 2026, about FWB Fest [1].",
+      ),
+    ],
+  });
+  m.model = model;
+  const response = await post(ask("What is Pete Rango's latest Instagram post?"));
+  expect(response.status).toBe(200);
+  const chunks = await chunksOf(response);
+  const outputs = chunks.filter(c => c.type === "tool-output-available").map(c => c.output);
+  expect(outputs[0].sources[0]).toMatchObject({
+    sourceId: "fwb",
+    publishedAt: "2026-09-25T00:00:00Z",
+  });
+  expect(outputs[0].sources.every((s: { url: string }) => s.url.includes("instagram.com"))).toBe(
+    true,
+  );
+  expect(outputs[0].coverage).toContain("stored");
+  expect(outputs[1]).toMatchObject({
+    n: 1,
+    url: "https://www.instagram.com/p/fwb/",
+    text: "FWB Fest was wonderful",
+    publishedAt: "2026-09-25T00:00:00Z",
+  });
+  expect(chunks.filter(c => c.type === "source-url")).toEqual([
+    {
+      type: "source-url",
+      sourceId: "1",
+      url: "https://www.instagram.com/p/fwb/",
+      title: "instagram.com",
+    },
+  ]);
+  expect(
+    chunks
+      .filter(c => c.type === "text-delta")
+      .map(c => c.delta)
+      .join(""),
+  ).toContain("[1]");
+  expect(model.doStreamCalls).toHaveLength(3);
+  expect(m.originals).toHaveBeenCalledTimes(1);
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
