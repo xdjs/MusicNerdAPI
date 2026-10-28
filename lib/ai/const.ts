@@ -7,11 +7,5 @@ export const MODEL_PUBLIC_RESEARCH = "google/gemini-3.8-flash";
 /** Public Ask About intent planning stays separate from answer generation (MusicNerdWeb `MODEL_ASK_PLANNER`). */
 export const MODEL_ASK_PLANNER = "google/gemini-3.8-flash";
 
-/** Independent public Ask About writer (MusicNerdWeb `MODEL_ASK_DRAFT`). */
-export const MODEL_ASK_DRAFT = "anthropic/claude-sonnet-5.5";
-
-/** Independent public Ask About evidence checker (MusicNerdWeb `MODEL_ASK_CHECKER`). */
-export const MODEL_ASK_CHECKER = "anthropic/claude-sonnet-5.5";
-
-/** Artist chat writer; the same model as the Ask About draft it replaces (xdjs/MusicNerdWeb#1629). */
+/** Writes artist chat answers, and Ask About's draft and evidence check until that path is deleted (xdjs/MusicNerdWeb#1629). */
 export const MODEL_CHAT = "anthropic/claude-sonnet-5.5";

@@ -1,5 +1,5 @@
 import { Eval } from "braintrust";
-import { MODEL_ASK_DRAFT, MODEL_CHAT } from "@/lib/ai/const";
+import { MODEL_CHAT } from "@/lib/ai/const";
 import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { experimentName } from "@/lib/evals/experimentName";
@@ -23,12 +23,10 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 const TARGET = process.env.CHAT_EVAL_TARGET || "askArtist";
-/** The model that writes the answer on each target. */
-const MODEL = { askArtist: MODEL_ASK_DRAFT, chat: MODEL_CHAT }[TARGET] ?? TARGET;
 
 Eval("music-nerd", {
-  experimentName: experimentName("chat", MODEL, SHA),
-  metadata: { suite: "chat", model: MODEL, sha: SHA, target: TARGET },
+  experimentName: experimentName("chat", MODEL_CHAT, SHA),
+  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA, target: TARGET },
   // One question at a time, so the timings are not measuring each other.
   maxConcurrency: 1,
   data: () =>
