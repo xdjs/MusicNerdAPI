@@ -81,3 +81,19 @@ it("declines multiple matching Deezer identities and bounded/incomplete searches
     status: "ambiguous",
   });
 });
+it("keeps provider reads sequential and stops immediately on rate limiting", async () => {
+  let active = 0;
+  let peak = 0;
+  m.read.mockImplementation(async (isrc: string) => {
+    active++;
+    peak = Math.max(peak, active);
+    await Promise.resolve();
+    active--;
+    return { isrc, artists: [{ id: spotifyId, name: "Pete Rango" }] };
+  });
+  await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" });
+  expect(peak).toBe(1);
+  m.read.mockClear().mockRejectedValue(new Error("rate limited"));
+  await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" });
+  expect(m.read).toHaveBeenCalledTimes(1);
+});

@@ -28,12 +28,19 @@ export async function isrcsFromDeezer(deezerArtistId: string, strict = false): P
       if (strict && (!track || track.error || String(track.id) !== String(id)))
         throw new Error("Deezer recording unavailable");
       if (strict) {
-        const artists = [
-          track?.artist,
-          ...(Array.isArray(track?.contributors) ? track.contributors : []),
-        ] as { id?: unknown }[];
-        if (!artists.some(artist => String(artist?.id) === deezerArtistId))
-          throw new Error("Deezer recording does not credit source artist");
+        const contributors = (Array.isArray(track?.contributors) ? track.contributors : []) as {
+          id?: unknown;
+          role?: unknown;
+        }[];
+        const primary = track?.artist as { id?: unknown } | undefined;
+        const credited =
+          String(primary?.id) === deezerArtistId ||
+          contributors.some(
+            artist =>
+              String(artist?.id) === deezerArtistId &&
+              (artist.role === "Main" || artist.role === "Featured"),
+          );
+        if (!credited) throw new Error("Deezer recording does not credit source artist");
       }
       const isrc = track?.isrc;
       return typeof isrc === "string" && isrc && (!strict || /^[A-Z0-9]{12}$/i.test(isrc))

@@ -16,6 +16,7 @@ export const PORTED_JOB_KINDS: JobKind[] = [
   "source_extract",
   "question_research",
   "spotify_match",
+  "catalog_match",
 ];
 /** A source search has no cursor, so a slice shorter than this cannot finish one. */
 export const SOURCE_SEARCH_MIN_SLICE_MS = 30_000;

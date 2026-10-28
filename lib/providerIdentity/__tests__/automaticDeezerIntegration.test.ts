@@ -385,3 +385,15 @@ it("refuses automatic reconnection after a normal archived disconnect, but prese
   expect((await stored()).deezer).toBeNull();
   expect((await run(false)).written).toEqual(["deezer"]);
 });
+
+it("does not infer a counterpart from a catalog anchor with an unresolved exclusion", async () => {
+  await client.exec("RESET ROLE");
+  await client.query(
+    "INSERT INTO artist_mapping_exclusions(artist_id,platform,reason) VALUES($1,'spotify','conflict')",
+    [artistId],
+  );
+  await client.exec("SET ROLE mnweb");
+  const result = await run();
+  expect(result.writeRejected).toEqual([url]);
+  expect((await stored()).deezer).toBeNull();
+});

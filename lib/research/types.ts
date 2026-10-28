@@ -7,7 +7,8 @@ export type JobKind =
   | "latest_refresh"
   | "source_extract"
   | "question_research"
-  | "spotify_match";
+  | "spotify_match"
+  | "catalog_match";
 export type JobStatus = "queued" | "pending" | "running" | "done" | "failed";
 
 export interface ResearchJob {

@@ -1,3 +1,4 @@
+import { SpotifyDeferredError } from "@/lib/spotify/SpotifyDeferredError";
 import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
 import { isrcsFromDeezer } from "@/lib/musicPlatform/isrcsFromDeezer";
 import { searchDeezerArtists } from "@/lib/musicPlatform/searchDeezerArtists";
@@ -25,22 +26,21 @@ export async function resolveCatalogCounterpart(input: {
     // Five results may hide further homonyms. Never accept a truncated candidate set.
     if (!input.deezerId && ids.length >= 5) return { status: "ambiguous" };
     let headers: ReturnType<typeof getSpotifyHeaders> | undefined;
-    const results = await Promise.all(
-      [...new Set(ids)].map(async deezerId => {
-        const isrcs = await isrcsFromDeezer(deezerId, true);
-        const matches = await Promise.all(
-          isrcs.map(async isrc =>
-            readSpotifyRecordingMatch(
-              isrc,
-              AbortSignal.timeout(4000),
-              await (headers ??= getSpotifyHeaders()),
-            ),
+    const results = [];
+    for (const deezerId of new Set(ids)) {
+      const isrcs = await isrcsFromDeezer(deezerId, true);
+      const matches = [];
+      for (const isrc of isrcs) {
+        matches.push(
+          await readSpotifyRecordingMatch(
+            isrc,
+            AbortSignal.timeout(4000),
+            await (headers ??= getSpotifyHeaders()),
           ),
         );
-        const result = chooseVerifiedSpotifyMatch(input.artistName, matches);
-        return { ...result, deezerId };
-      }),
-    );
+      }
+      results.push({ ...chooseVerifiedSpotifyMatch(input.artistName, matches), deezerId });
+    }
     const verified = results.filter(
       r => r.status === "verified" && (!input.spotifyId || r.spotifyId === input.spotifyId),
     );
@@ -49,7 +49,13 @@ export async function resolveCatalogCounterpart(input: {
     const match = verified[0];
     if (match?.status === "verified") return { ...match, status: "verified" };
     return { status: "not_found" };
-  } catch {
+  } catch (error) {
+    if (error instanceof SpotifyDeferredError)
+      return {
+        status: "provider_failure",
+        retryAtMs: error.retryAtMs,
+        failureConsumed: error.requested,
+      };
     return { status: "provider_failure" };
   }
 }

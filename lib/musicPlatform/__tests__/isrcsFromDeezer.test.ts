@@ -48,8 +48,20 @@ it("strict matching includes a featured source artist and deduplicates valid ISR
       id: 1,
       isrc: "usaaa0000001",
       artist: { id: 99 },
-      contributors: [{ id: 42 }],
+      contributors: [{ id: 42, role: "Featured" }],
     })
     .mockResolvedValueOnce({ id: 2, isrc: "USAAA0000001", artist: { id: 42 } });
   expect(await isrcsFromDeezer("42", true)).toEqual(["USAAA0000001"]);
+});
+
+it("does not use producer-only or unspecified contributor roles as artist-credit proof", async () => {
+  for (const role of ["Producer", "Composer", undefined]) {
+    fetchJson.mockResolvedValueOnce({ data: [{ id: 1 }] }).mockResolvedValueOnce({
+      id: 1,
+      isrc: "USAAA0000001",
+      artist: { id: 99 },
+      contributors: [{ id: 42, role }],
+    });
+    await expect(isrcsFromDeezer("42", true)).rejects.toThrow("credit");
+  }
 });

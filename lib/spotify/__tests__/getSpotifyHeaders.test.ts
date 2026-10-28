@@ -4,6 +4,10 @@ vi.mock("@/lib/spotify/checkSpotifyCooldown", () => ({
   checkSpotifyCooldown: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/spotify/recordSpotifyCooldown", () => ({
+  recordSpotifyCooldown: vi.fn(async () => Date.now() + 900000),
+}));
+
 const fetchMock = vi.fn();
 
 beforeEach(() => {

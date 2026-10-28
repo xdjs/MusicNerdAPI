@@ -36,5 +36,11 @@ export async function fetchSpotifyResponse(
     const until = await recordSpotifyCooldown(retryAfter);
     throw new SpotifyDeferredError(until, true);
   }
+  if (
+    response.status === 401 ||
+    response.status === 403 ||
+    (target.hostname === "accounts.spotify.com" && response.status === 400)
+  )
+    await recordSpotifyCooldown("900");
   return response;
 }

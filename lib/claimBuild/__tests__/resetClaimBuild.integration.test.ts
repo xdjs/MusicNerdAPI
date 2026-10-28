@@ -23,7 +23,7 @@ beforeAll(async () => {
     CREATE TABLE artist_onboarding_steps (artist_id uuid, step text);
     CREATE TABLE artist_vault_sources (id uuid DEFAULT gen_random_uuid(), artist_id uuid, origin text);
     CREATE TABLE artist_docs (id uuid DEFAULT gen_random_uuid(), artist_id uuid);
-    CREATE TABLE artist_research_jobs (id uuid DEFAULT gen_random_uuid(), artist_id uuid, status text);
+    CREATE TABLE artist_research_jobs (id uuid DEFAULT gen_random_uuid(), artist_id uuid, status text, kind text DEFAULT 'source_search');
     CREATE TABLE artist_id_mappings (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), artist_id uuid,
       platform text, platform_id text, confidence text, source text, reasoning text,
       api_key_hash text, resolved_at timestamptz, created_at timestamptz, updated_at timestamptz);
