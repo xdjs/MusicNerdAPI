@@ -17,6 +17,7 @@ on:
         type: choice
         options:
           - askArtist
+          - chat
         default: askArtist
 
 # One run at a time: the chat suite's timings would measure each other, and every

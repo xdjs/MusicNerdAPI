@@ -16,7 +16,7 @@ Ignore citation markers such as [1]; they are scored elsewhere. Give a one-sente
  * @param input.reference - The hand-checked facts the answer should agree with.
  * @param input.answerable - False when the stored sources cannot answer the question.
  * @param input.answer - The answer text.
- * @returns The judge's verdict.
+ * @returns The judge's verdict; an empty answer scores 0 without a model call.
  */
 export async function judgeAnswer(input: {
   question: string;
@@ -24,6 +24,8 @@ export async function judgeAnswer(input: {
   answerable: boolean;
   answer: string;
 }): Promise<AnswerVerdict> {
+  if (!input.answer.trim())
+    return { relevance: 0, groundedness: 0, reason: "The answer is empty." };
   const result = await generateObject({
     instructions: INSTRUCTIONS,
     schema: answerVerdictSchema,

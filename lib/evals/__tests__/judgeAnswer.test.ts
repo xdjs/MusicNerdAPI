@@ -7,6 +7,18 @@ vi.mock("@/lib/ai/generateObject", () => ({
 const { judgeAnswer } = await import("@/lib/evals/judgeAnswer");
 
 describe("judgeAnswer", () => {
+  it("scores an empty answer 0 without a model call, so the judge can't grade it as grounded", async () => {
+    generateObject.mockClear();
+    const verdict = await judgeAnswer({
+      question: "What is Dutchyyy's favorite food?",
+      reference: "Not in the stored sources.",
+      answerable: false,
+      answer: "  ",
+    });
+    expect(verdict).toEqual({ relevance: 0, groundedness: 0, reason: "The answer is empty." });
+    expect(generateObject).not.toHaveBeenCalled();
+  });
+
   it("asks the gateway model for a verdict on the answer against the hand-checked reference", async () => {
     generateObject.mockResolvedValueOnce({
       output: { relevance: 1, groundedness: 0.8, reason: "ok" },
@@ -35,7 +47,7 @@ describe("judgeAnswer", () => {
       question: "q",
       reference: "Not in the sources.",
       answerable: false,
-      answer: "",
+      answer: "I couldn't find that in the sources.",
     });
     expect(generateObject.mock.calls.at(-1)?.[0].prompt).toContain("cannot answer");
   });

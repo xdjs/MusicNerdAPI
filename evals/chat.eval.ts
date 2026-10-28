@@ -1,5 +1,5 @@
 import { Eval } from "braintrust";
-import { MODEL_ASK_DRAFT } from "@/lib/ai/const";
+import { MODEL_CHAT } from "@/lib/ai/const";
 import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { experimentName } from "@/lib/evals/experimentName";
@@ -15,7 +15,7 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  * from the facts. Questions are hand-checked against staging fixtures' stored sources.
  *
  * `CHAT_EVAL_TARGET` picks the code under test: `askArtist` (today's job relay, the
- * baseline) by default. Runs against the staging database; reads only, apart from the
+ * baseline) by default, or `chat` (the streaming chat endpoint). Runs against the staging database; reads only, apart from the
  * research jobs and allowance rows a real question writes.
  *
  *   pnpm eval evals/chat.eval.ts
@@ -23,12 +23,10 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 const TARGET = process.env.CHAT_EVAL_TARGET || "askArtist";
-/** The model that writes the answer on each target. */
-const MODEL = { askArtist: MODEL_ASK_DRAFT }[TARGET] ?? TARGET;
 
 Eval("music-nerd", {
-  experimentName: experimentName("chat", MODEL, SHA),
-  metadata: { suite: "chat", model: MODEL, sha: SHA, target: TARGET },
+  experimentName: experimentName("chat", MODEL_CHAT, SHA),
+  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA, target: TARGET },
   // One question at a time, so the timings are not measuring each other.
   maxConcurrency: 1,
   data: () =>
