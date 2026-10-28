@@ -123,6 +123,14 @@ describe("streamText", () => {
     expect(writer.merge).toHaveBeenCalledWith("ui stream");
   });
 
+  it("keeps the model's reasoning out of the UI stream", async () => {
+    sdkStreamText.mockReturnValue({ ...streamOf([]), stream: new ReadableStream() });
+    toUIMessageStream.mockReturnValue("ui stream");
+    const writer = { merge: vi.fn(), write: vi.fn(), onError: undefined };
+    await streamText({ prompt: "hi", writer });
+    expect(toUIMessageStream.mock.calls[0][0].sendReasoning).toBe(false);
+  });
+
   it("writes no UI stream without a writer", async () => {
     sdkStreamText.mockReturnValue(streamOf([]));
     await streamText({ prompt: "hi" });

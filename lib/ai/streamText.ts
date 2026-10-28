@@ -60,7 +60,10 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     abortSignal,
     ...(providerOptions ? { providerOptions } : {}),
   });
-  if (writer) writer.merge(toUIMessageStream({ stream: withoutCustomParts(result.stream), tools }));
+  if (writer)
+    writer.merge(
+      toUIMessageStream({ stream: withoutCustomParts(result.stream), tools, sendReasoning: false }),
+    );
   let text = "";
   for await (const part of result.fullStream) {
     if (part.type === "text-delta") {
