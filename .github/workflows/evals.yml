@@ -1,0 +1,49 @@
+name: Evals
+
+# On demand only. Evals spend model tokens, so they run at decision points (a model,
+# prompt or chat-path change), never on every push (MusicNerdWeb docs/evals.md). Pick
+# the branch whose code you want measured.
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Suite to run: a file under evals/, without .eval.ts"
+        type: choice
+        options:
+          - chat
+        default: chat
+
+# One run at a time: the chat suite's timings would measure each other, and every
+# question writes allowance rows on the staging database.
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+
+    env:
+      BRAINTRUST_API_KEY: ${{ secrets.BRAINTRUST_API_KEY }}
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      # The STAGING database: the suite's artist ids are staging ids.
+      SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
+      # The chat keys the hourly question allowance with it and fails closed without it.
+      MUSICNERD_RESEARCH_API_KEY: ${{ secrets.MUSICNERD_RESEARCH_API_KEY }}
+      # The slow path's web search and social research.
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+      # A signed-out question counts against the allowance per IP, read from x-real-ip
+      # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
+      VERCEL: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run suite
+        run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure

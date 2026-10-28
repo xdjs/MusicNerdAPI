@@ -1,19 +1,37 @@
-import { streamText as sdkStreamText } from "ai";
+import {
+  streamText as sdkStreamText,
+  toUIMessageStream,
+  type ModelMessage,
+  type StopCondition,
+  type ToolSet,
+  type UIMessageStreamWriter,
+} from "ai";
 import { MODEL_FLASH } from "@/lib/ai/const";
+import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 import type { GenerateTextOptions } from "@/lib/ai/generateText";
+import { withoutCustomParts } from "@/lib/ai/withoutCustomParts";
 
-export type StreamTextOptions = Omit<GenerateTextOptions, "output"> & {
+export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> & {
+  /** A text prompt, or a conversation as model messages. */
+  prompt: string | ModelMessage[];
+  /** Tools the model may call; omitted means a plain text call. */
+  tools?: ToolSet;
+  /** When a multi-step tool loop stops; omitted means one step. */
+  stopWhen?: StopCondition<ToolSet>;
   /** Called with each piece of text as the model writes it. */
   onTextDelta?: (delta: string) => void;
+  /** A chat response's writer: the call's UI message parts (text, tool steps) are merged into it. */
+  writer?: UIMessageStreamWriter;
 };
 
 /**
  * `generateText` for a call whose text is shown while it's written (the
- * onboarding build popup). Resolves `{ text }` once the stream ends. The SDK's
- * streamText never throws: a failed request arrives as an `error` part, which
- * is rethrown so the call rejects the way `generateText` does.
+ * onboarding build popup, the artist chat). Resolves `{ text }` once the
+ * stream ends. The SDK's streamText never throws: a failed request arrives as
+ * an `error` part, which is rethrown so the call rejects the way
+ * `generateText` does.
  *
- * @param options - The model, prompt, settings and `onTextDelta`.
+ * @param options - The model, prompt, settings, tools, `onTextDelta` and `writer`.
  * @returns The whole text.
  */
 export async function streamText(options: StreamTextOptions): Promise<{ text: string }> {
@@ -23,17 +41,26 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     prompt,
     temperature,
     thinkingBudget,
+    thinkingLevel,
+    anthropicEffort,
+    tools,
+    stopWhen,
+    abortSignal,
     onTextDelta,
+    writer,
   } = options;
+  const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   const result = sdkStreamText({
     model,
     instructions,
     prompt,
     temperature,
-    ...(thinkingBudget !== undefined
-      ? { providerOptions: { google: { thinkingConfig: { thinkingBudget } } } }
-      : {}),
+    tools,
+    stopWhen,
+    abortSignal,
+    ...(providerOptions ? { providerOptions } : {}),
   });
+  if (writer) writer.merge(toUIMessageStream({ stream: withoutCustomParts(result.stream), tools }));
   let text = "";
   for await (const part of result.fullStream) {
     if (part.type === "text-delta") {
