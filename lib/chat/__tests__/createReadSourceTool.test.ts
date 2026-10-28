@@ -18,6 +18,9 @@ it("returns the stored text with its citation number, without fetching the page"
     title: "news.example",
     url: "https://www.news.example/a",
     text: "Stored text.",
+    publishedAt: null,
+    activityDate: null,
+    retrievedAt: null,
   });
   expect(cite).toHaveBeenCalledWith({ url: "https://www.news.example/a", title: "news.example" });
   expect(fetchSpy).not.toHaveBeenCalled();
