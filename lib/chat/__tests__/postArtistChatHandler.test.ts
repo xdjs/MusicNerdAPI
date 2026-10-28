@@ -192,7 +192,7 @@ it("answers 404 for an id that is not a uuid", async () => {
   expect(m.artist).not.toHaveBeenCalled();
 });
 
-it("answers askArtist's 429 when the hourly allowance is spent", async () => {
+it("answers a 429 when the hourly allowance is spent", async () => {
   m.reserve.mockRejectedValue(
     Object.assign(new Error("limit"), {
       status: 429,

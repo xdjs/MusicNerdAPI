@@ -4,7 +4,7 @@ import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { experimentName } from "@/lib/evals/experimentName";
 import { judgeAnswer } from "@/lib/evals/judgeAnswer";
-import { runChatTurn } from "@/lib/evals/runChatTurn";
+import { chatStreamTurn } from "@/lib/evals/chatStreamTurn";
 import { scoreAnswerQuality } from "@/lib/evals/scorers/scoreAnswerQuality";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
@@ -14,19 +14,17 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  * the whole answer takes, whether its citations resolve, and whether it answers the question
  * from the facts. Questions are hand-checked against staging fixtures' stored sources.
  *
- * `CHAT_EVAL_TARGET` picks the code under test: `askArtist` (today's job relay, the
- * baseline) by default, or `chat` (the streaming chat endpoint). Runs against the staging database; reads only, apart from the
- * research jobs and allowance rows a real question writes.
+ * Calls the streaming chat endpoint in process. Runs against the staging database; reads
+ * only, apart from the allowance rows a real question writes.
  *
  *   pnpm eval evals/chat.eval.ts
  */
 
 const SHA = process.env.GITHUB_SHA ?? "local";
-const TARGET = process.env.CHAT_EVAL_TARGET || "askArtist";
 
 Eval("music-nerd", {
   experimentName: experimentName("chat", MODEL_CHAT, SHA),
-  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA, target: TARGET },
+  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA },
   // One question at a time, so the timings are not measuring each other.
   maxConcurrency: 1,
   data: () =>
@@ -36,7 +34,7 @@ Eval("music-nerd", {
       metadata: { key: c.key, artist: c.artistName, note: c.note },
     })),
   task: async (input: ChatCase) => {
-    const turn = await runChatTurn(TARGET, input);
+    const turn = await chatStreamTurn(input);
     console.log(
       `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
     );

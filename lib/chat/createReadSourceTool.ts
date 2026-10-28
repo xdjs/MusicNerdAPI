@@ -2,8 +2,10 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { CiteSource } from "@/lib/chat/createChatCitations";
 import { getSourceTitle } from "@/lib/chat/getSourceTitle";
-import { MAX_ORIGINAL_CHARACTERS } from "@/lib/questionResearch/answerLimits";
 import type { ResearchOriginal } from "@/lib/questionResearch/types";
+
+/** The most of one source the model reads in a step. */
+const MAX_SOURCE_CHARACTERS = 12000;
 
 /**
  * The chat's `readSource` tool: one stored source's text and its citation
@@ -26,7 +28,7 @@ export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSo
         n: cite({ url: source.url, title }),
         title,
         url: source.url,
-        text: source.text.slice(0, MAX_ORIGINAL_CHARACTERS),
+        text: source.text.slice(0, MAX_SOURCE_CHARACTERS),
       };
     },
   });

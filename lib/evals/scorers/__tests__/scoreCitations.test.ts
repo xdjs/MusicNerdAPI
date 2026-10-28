@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 
-// Marker rules are Ask's (POST /api/askArtist): a citation is a number in square
+// Marker rules are the chat's: a citation is a number in square
 // brackets, "[13, 8, 86]" is three, a mixed group keeps its numbers, and
 // "[2026-05-13]" is a date, not a citation.
 

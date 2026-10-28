@@ -23,7 +23,7 @@ import { questionQuotaResponse } from "@/lib/questionResearch/questionQuotaRespo
 import { reserveQuestionPlanning } from "@/lib/questionResearch/reserveQuestionPlanning";
 
 /**
- * One chat turn about an artist: spends one question from askArtist's hourly
+ * One chat turn about an artist: spends one question from the hourly
  * allowance, then streams the answer as an AI SDK UI message stream. The
  * model searches and reads the artist's stored public sources (and the web
  * when they can't answer) and cites them as `[n]`, matching the

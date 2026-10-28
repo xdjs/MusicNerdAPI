@@ -12,16 +12,9 @@ on:
         options:
           - chat
         default: chat
-      target:
-        description: "Chat path under test (CHAT_EVAL_TARGET)"
-        type: choice
-        options:
-          - askArtist
-          - chat
-        default: askArtist
 
 # One run at a time: the chat suite's timings would measure each other, and every
-# question writes research jobs and allowance rows on the staging database.
+# question writes allowance rows on the staging database.
 concurrency:
   group: evals
   cancel-in-progress: false
@@ -35,15 +28,14 @@ jobs:
       AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
       # The STAGING database: the suite's artist ids are staging ids.
       SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
-      # askArtist keys the hourly question allowance with it and fails closed without it.
+      # The chat keys the hourly question allowance with it and fails closed without it.
       MUSICNERD_RESEARCH_API_KEY: ${{ secrets.MUSICNERD_RESEARCH_API_KEY }}
       # The slow path's web search and social research.
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
       # A signed-out question counts against the allowance per IP, read from x-real-ip
-      # only on Vercel; the task sends a documentation address (lib/evals/askArtistTurn.ts).
+      # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      CHAT_EVAL_TARGET: ${{ inputs.target }}
 
     steps:
       - uses: actions/checkout@v4

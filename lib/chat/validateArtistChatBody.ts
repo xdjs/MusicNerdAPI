@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
-import { questionRequestSchema } from "@/lib/questionResearch/questionRequestSchema";
 
 const MAX_MESSAGES = 12;
+const question = z.string().trim().min(1).max(500);
 
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
 const chatBodySchema = z
@@ -29,15 +29,15 @@ const chatBodySchema = z
   .refine(({ messages }) => {
     const last = messages.at(-1);
     if (!last) return false;
-    const question = last.parts.map(part => part.text).join("\n");
-    return last.role === "user" && questionRequestSchema.shape.question.safeParse(question).success;
+    const text = last.parts.map(part => part.text).join("\n");
+    return last.role === "user" && question.safeParse(text).success;
   });
 
 export type ArtistChatBody = z.infer<typeof chatBodySchema>;
 
 /**
  * Reads a chat body: `{ messages: UIMessage[] }` whose last message is the
- * visitor's question (askArtist's 500-character limit). Keeps the last 12
+ * visitor's question, at most 500 characters. Keeps the last 12
  * messages and only their text parts.
  *
  * @param request - The chat request.
