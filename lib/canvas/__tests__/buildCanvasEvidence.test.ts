@@ -94,3 +94,41 @@ it("never begins a passage inside a word and rehydrates its stable boundary", ()
   const offset = Number(item!.id.split("::excerpt:")[1]);
   expect(buildCanvasEvidence(source, offset)).toEqual(item);
 });
+
+it("selects the foreword speaker rather than the preceding first-person preface", () => {
+  const source = {
+    ...originalFixture(
+      "pdf:mixed",
+      "https://example.com/a.pdf#page=1",
+      "Preface (by Artist)\n“I am building something lasting, something that reflects my own life and everything in between.”\nForeword (by Guest Writer)\nThe artist documents a creative life in this archive.",
+    ),
+    pdf: { page: 1, title: "Archive", limitation: "Different labeled speakers." },
+  };
+  const item = buildCanvasEvidence(source, "Who wrote the foreword? Guest Writer or Artist?");
+  expect(item?.text).toContain("Foreword (by Guest Writer)");
+  expect(item?.text).not.toContain("I am building");
+  expect(item?.category).toBe("document");
+});
+it("selects the date and credit lines instead of Bandcamp purchase navigation", () => {
+  const source = originalFixture(
+    "bandcamp:album",
+    "https://artist.bandcamp.com/album/night",
+    "NIGHT | Artist\nBuy Digital Album 10 USD Full Digital Discography 7 releases Get all albums NIGHT and DAY streaming downloads.\nabout\nA new record.\ncredits\nreleased March 5, 2021\nProduced and written Artist\nlicense\nall rights reserved tags electronic",
+  );
+  const item = buildCanvasEvidence(source, "Who produced NIGHT and when was it released?");
+  expect(item?.text).toContain("March 5, 2021");
+  expect(item?.text).toContain("Produced and written Artist");
+  expect(item?.text).not.toContain("USD");
+  expect(item?.title).toBe("NIGHT");
+  expect(item?.date).toBeNull();
+});
+it("retains recording and release distinctions without assigning either to the source date", () => {
+  const source = originalFixture(
+    "pdf:dates",
+    "https://example.com/a.pdf",
+    "2004 Album. CD Vinyl Digital. First solo full-length. Recorded 1997-2002, released July 13, 2004. Produced by the artist and collaborators.",
+  );
+  const item = buildCanvasEvidence(source, "When was Album recorded and released?");
+  expect(item?.text).toContain("Recorded 1997-2002, released July 13, 2004");
+  expect(item?.date).toBeNull();
+});

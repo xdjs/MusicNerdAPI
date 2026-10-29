@@ -1,5 +1,5 @@
 import { getSourceTitle } from "@/lib/chat/getSourceTitle";
-import { getQuerySnippet } from "@/lib/chat/getQuerySnippet";
+import { selectCanvasPassageOffset } from "./selectCanvasPassageOffset";
 import type { CanvasEvidence, CanvasResearchOriginal } from "./const";
 /** Adapt stored source metadata into a readable, bounded excerpt without inventing facts. */
 export function buildCanvasEvidence(
@@ -39,11 +39,10 @@ export function buildCanvasEvidence(
     title = source.pdf.title;
     attribution = "Published Lore PDF · extracted page";
   }
-  const snippet =
+  let offset =
     typeof focus === "number"
-      ? text.slice(Math.max(0, focus), Math.max(0, focus) + 400).trim()
-      : getQuerySnippet(text, focus || title, 400);
-  let offset = Math.max(0, text.indexOf(snippet));
+      ? Math.max(0, focus)
+      : selectCanvasPassageOffset(text, focus || title);
   // Move to a real word boundary, including when rehydrating an older excerpt offset.
   while (
     offset > 0 &&
@@ -53,15 +52,31 @@ export function buildCanvasEvidence(
   )
     offset++;
   while (offset < text.length && /\s/.test(text[offset])) offset++;
-  // Prefer a complete sentence boundary within the leading context, then stop before extraction debris after a sentence.
-  if (typeof focus === "string" && focus) {
-    const lead = text.slice(offset, offset + 80);
-    const boundary = [...lead.matchAll(/[.!?]\s+/g)].at(-1);
-    if (boundary) offset += boundary.index! + boundary[0].length;
-  }
+  const speakerHeading = [...text.matchAll(/(?:Preface|Foreword) \(by [^\n]+/g)]
+    .filter(match => match.index! <= offset)
+    .at(-1);
+  if (typeof focus !== "number" && speakerHeading && offset - speakerHeading.index! < 60)
+    offset = speakerHeading.index!;
+  const leadingFragment = text.slice(offset).match(/^(?:\S+\s+){0,2}\S+[.!?]\s+/);
+  if (typeof focus !== "number" && leadingFragment && !speakerHeading)
+    offset += leadingFragment[0].length;
   const words = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25);
-  const sentenceEnd = words.findIndex((word, index) => index >= 7 && /[.!?][”"']?$/.test(word));
-  const passage = words.slice(0, sentenceEnd >= 0 ? sentenceEnd + 1 : undefined).join(" ");
+  const navigationEnd = words.findIndex(
+    (word, index) => index >= 4 && /^(license|tags|checkout)$/i.test(word),
+  );
+  const bounded = words.slice(0, navigationEnd >= 0 ? navigationEnd : undefined);
+  const lastSentence = bounded.findLastIndex(
+    (word, index) => index >= 7 && /[.!?][”"']?$/.test(word),
+  );
+  const passage = bounded.slice(0, lastSentence >= 0 ? lastSentence + 1 : undefined).join(" ");
+  if (url.hostname.endsWith("bandcamp.com")) {
+    const firstLine = text.split("\n")[0]?.trim();
+    const slug = url.pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ");
+    title =
+      firstLine?.includes(" | ") && firstLine.length < 200
+        ? firstLine.split(" | ")[0]
+        : `Bandcamp · ${slug ?? "artist page"}`;
+  }
   return {
     id:
       focus !== ""
