@@ -35,6 +35,10 @@ export function buildCanvasEvidence(
         : "Instagram · stored caption";
   else if (source.sourceId.startsWith("public_answer:"))
     attribution = "Published interview · question and response";
+  if (source.sourceId.startsWith("public_profile:")) {
+    title = "Music Nerd · public artist introduction";
+    attribution = "Public Music Nerd profile";
+  }
   if (source.pdf) {
     title = source.pdf.title;
     attribution = "Published Lore PDF · extracted page";
@@ -96,6 +100,8 @@ export function buildCanvasEvidence(
     title: url.hostname.endsWith("instagram.com") ? "Instagram · saved post" : title,
     url: source.url,
     text: passage,
+    ...(source.image ? { image: source.image } : {}),
+    ...(url.hostname.endsWith("instagram.com") ? { mediaKind: "instagram" as const } : {}),
     category: source.pdf ? "document" : "source",
     ...(source.pdf ? { page: source.pdf.page } : {}),
     date: source.activityDate ?? source.publishedAt,

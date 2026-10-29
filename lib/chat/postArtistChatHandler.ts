@@ -6,6 +6,7 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { loadCanvasStoredOriginals } from "@/lib/canvas/loadCanvasStoredOriginals";
 import { loadCanvasPublicPdfOriginals } from "@/lib/canvas/loadCanvasPublicPdfOriginals";
 import { settleCanvasPreview } from "@/lib/canvas/settleCanvasPreview";
 import { reserveCanvasPreview } from "@/lib/canvas/reserveCanvasPreview";
@@ -49,7 +50,6 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
       body.canvas &&
       (process.env.VERCEL_ENV !== "preview" ||
         process.env.MUSICNERD_CANVAS_PREVIEW_ENABLED !== "1" ||
-        !canvasSeeds[artistId] ||
         MODEL_CHAT !== "anthropic/claude-sonnet-5.5" ||
         [process.env.SUPABASE_URL, process.env.SUPABASE_DB_CONNECTION].some(value =>
           value?.includes("cbabvmebugudeuylronz"),
@@ -77,7 +77,9 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
         );
       }
     }
-    const storedOriginals = await loadPublicResearchOriginals(artistId);
+    const storedOriginals = body.canvas
+      ? await loadCanvasStoredOriginals(artistId)
+      : await loadPublicResearchOriginals(artistId);
     const publicPdfs = body.canvas
       ? await loadCanvasPublicPdfOriginals(artistId, request.signal)
       : { sources: [], limitations: [] };
@@ -93,7 +95,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               body.canvas,
               originals,
               cite,
-              canvasSeeds[artistId],
+              canvasSeeds[artistId] ?? [],
               publicPdfs.limitations,
               body.messages
                 .at(-1)

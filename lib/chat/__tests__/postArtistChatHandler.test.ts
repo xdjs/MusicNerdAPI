@@ -22,6 +22,9 @@ vi.mock("ai", async importOriginal => {
       actual.streamText({ ...options, model: m.model as never }),
   };
 });
+vi.mock("@/lib/canvas/loadCanvasPublicBio", () => ({
+  loadCanvasPublicBio: vi.fn(async () => null),
+}));
 vi.mock("@/lib/canvas/reserveCanvasPreview", () => ({ reserveCanvasPreview: m.canvasReserve }));
 vi.mock("@/lib/questionResearch/loadResearchArtist", () => ({ loadResearchArtist: m.artist }));
 vi.mock("@/lib/questionResearch/getQuestionVisitorKey", () => ({
@@ -374,6 +377,59 @@ it("composes an unseen combination through the existing mocked model stream", as
       "worldbuilders",
     ]);
     expect(m.reserve).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("generates for an arbitrary artist using only that artist's evidence and existing budget guards", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  vi.stubEnv("MUSICNERD_CANVAS_PREVIEW_ENABLED", "1");
+  try {
+    m.artist.mockResolvedValue({ id: artistId, name: "Third Artist" });
+    m.originals.mockResolvedValue([
+      originalFixture(
+        "vault:third",
+        "https://label.example/third",
+        "Third Artist released a documented work.",
+      ),
+    ]);
+    const canvas = {
+      version: "canvas.v1",
+      sessionId: artistId,
+      turnId: "22222222-2222-4222-8222-222222222222",
+      baseRevision: 0,
+      spec: { blocks: [] },
+      pinnedIds: [],
+      selectedIds: [],
+      focusId: null,
+    };
+    m.model = new MockLanguageModelV4({
+      doStream: [
+        toolStep("readSource", { sourceId: "vault:third" }),
+        toolStep("composeCanvas", {
+          explanation: "I added the artist's documented source without inventing a release date.",
+          blocks: [
+            {
+              id: "third-work",
+              kind: "cards",
+              title: "A documented work",
+              items: ["vault:third"],
+              span: 1,
+            },
+          ],
+        }),
+        textStep("Here is the source."),
+      ],
+    });
+    const response = await post({ ...ask("Explore the documented work"), canvas });
+    expect(response.status).toBe(200);
+    const chunks = await chunksOf(response);
+    const update = chunks.find(c => c.type === "data-canvas")?.data;
+    expect(update.evidence.map((e: { id: string }) => e.id)).toEqual(["vault:third"]);
+    expect(m.canvasReserve).toHaveBeenCalledWith(artistId);
+    expect(m.originals).toHaveBeenCalledWith(artistId);
+    expect(m.webSearch).not.toHaveBeenCalled();
   } finally {
     vi.unstubAllEnvs();
   }

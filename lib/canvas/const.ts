@@ -37,6 +37,7 @@ export type CanvasEvidence = {
   date: string | null;
   dateKind: string;
   image?: string;
+  mediaKind?: "instagram";
   limitation: string;
   page?: number;
   pagePreview?: string;
@@ -62,5 +63,7 @@ export const canvasSeeds: Record<string, CanvasEvidence[]> = {
 };
 
 export type CanvasResearchOriginal = ResearchOriginal & {
+  image?: string;
+  mediaKind?: "instagram";
   pdf?: { page: number; title: string; limitation: string };
 };
