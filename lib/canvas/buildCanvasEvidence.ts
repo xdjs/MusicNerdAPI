@@ -97,7 +97,7 @@ export function buildCanvasEvidence(
       focus !== ""
         ? `${source.sourceId}::excerpt:${typeof focus === "number" ? focus : offset}`
         : source.sourceId,
-    title: url.hostname.endsWith("instagram.com") ? "Instagram · saved post" : title,
+    title: url.hostname.endsWith("instagram.com") ? "Instagram" : title,
     url: source.url,
     text: passage,
     ...(source.image ? { image: source.image } : {}),

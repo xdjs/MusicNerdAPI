@@ -1,6 +1,9 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { getCanvasBootstrap } from "../getCanvasBootstrap";
 import { originalFixture } from "@/lib/chat/__tests__/originalFixture";
+vi.mock("../readCanvasPreviewBudget", () => ({
+  readCanvasPreviewBudget: async () => null,
+}));
 const mocks = vi.hoisted(() => ({ artist: vi.fn(), originals: vi.fn() }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: mocks.artist }));
 vi.mock("../loadCanvasStoredOriginals", () => ({ loadCanvasStoredOriginals: mocks.originals }));

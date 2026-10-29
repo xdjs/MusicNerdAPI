@@ -1,3 +1,5 @@
+import { buildCanvasOrientation } from "./buildCanvasOrientation";
+import { readCanvasPreviewBudget } from "./readCanvasPreviewBudget";
 import { z } from "zod";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -56,7 +58,10 @@ export async function getCanvasBootstrap(id: string) {
     {
       artist: { id, name: artist.name ?? "Artist", profileUrl: `/artist/${id}?view=profile` },
       evidence: allEvidence,
-      introduction: bio ? { text: excerptCanvasIntroduction(bio.text), sourceUrl: bio.url } : null,
+      introduction: bio
+        ? { text: excerptCanvasIntroduction(bio.text), sourceUrl: bio.url, kind: "profile" }
+        : buildCanvasOrientation(artist.name ?? "This artist", candidates),
+      budget: await readCanvasPreviewBudget().catch(() => null),
       openingIds,
       openingQuestion,
       openingSuggestions: openingIds.slice(0, 2).map(sourceId => {
