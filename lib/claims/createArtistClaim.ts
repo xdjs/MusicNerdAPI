@@ -1,6 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { generateReferenceCode } from "@/lib/claims/generateReferenceCode";
 import { db } from "@/lib/db/db";
+import { rowsOf } from "@/lib/db/rowsOf";
 import { artistClaims, artists } from "@/lib/db/schema";
 
 /**
@@ -29,10 +30,11 @@ export async function createArtistClaim(
   });
   if (active) return "claimed";
   const referenceCode = generateReferenceCode();
-  const inserted = await db
-    .insert(artistClaims)
-    .values({ userId, artistId, status: "pending", referenceCode })
-    .onConflictDoNothing()
-    .returning({ id: artistClaims.id });
+  // reference_code isn't in the shared Drizzle schema, which declares only the columns other routes read.
+  const inserted = rowsOf(
+    await db.execute(sql`insert into artist_claims (user_id, artist_id, status, reference_code)
+      values (${userId}::uuid, ${artistId}::uuid, 'pending', ${referenceCode})
+      on conflict do nothing returning id`),
+  );
   return inserted.length ? { referenceCode } : "claimed";
 }

@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
+import { claimColumns } from "@/lib/claims/claimColumns";
+import type { ClaimRow } from "@/lib/claims/types";
 import { db } from "@/lib/db/db";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -28,19 +30,13 @@ const CLAIMANT_TABLES = [
  * @param claimId - The claim.
  * @returns The deleted claim, or undefined when it isn't (or is no longer) approved.
  */
-export async function revokeApprovedClaim(claimId: string) {
+export async function revokeApprovedClaim(claimId: string): Promise<ClaimRow | undefined> {
   return db.transaction(async tx => {
     const [deleted] = rowsOf(
       await tx.execute(sql`delete from artist_claims
         where id = ${claimId}::uuid and status = 'approved'
-        returning id, user_id as "userId", artist_id as "artistId", status, reference_code as "referenceCode"`),
-    ) as Array<{
-      id: string;
-      userId: string;
-      artistId: string;
-      status: string;
-      referenceCode: string | null;
-    }>;
+        returning ${claimColumns}`),
+    ) as ClaimRow[];
     if (!deleted) return undefined;
     const artistId = deleted.artistId;
     await lockArtistRow(tx, artistId);
