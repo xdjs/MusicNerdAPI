@@ -6,6 +6,8 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { loadCanvasPublicPdfOriginals } from "@/lib/canvas/loadCanvasPublicPdfOriginals";
+import { settleCanvasPreview } from "@/lib/canvas/settleCanvasPreview";
 import { reserveCanvasPreview } from "@/lib/canvas/reserveCanvasPreview";
 import { canvasSeeds } from "@/lib/canvas/const";
 import { createCanvasContext } from "@/lib/canvas/createCanvasContext";
@@ -48,6 +50,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
       (process.env.VERCEL_ENV !== "preview" ||
         process.env.MUSICNERD_CANVAS_PREVIEW_ENABLED !== "1" ||
         !canvasSeeds[artistId] ||
+        MODEL_CHAT !== "anthropic/claude-sonnet-5.5" ||
         [process.env.SUPABASE_URL, process.env.SUPABASE_DB_CONNECTION].some(value =>
           value?.includes("cbabvmebugudeuylronz"),
         ))
@@ -63,9 +66,10 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
       throw error;
     }
     await reserveQuestionPlanning(artistId, await getQuestionVisitorKey(request));
+    let canvasReservation: string | undefined;
     if (body.canvas) {
       try {
-        await reserveCanvasPreview(artistId);
+        canvasReservation = await reserveCanvasPreview(artistId);
       } catch {
         return fail(
           "The live preview budget is unavailable or exhausted. Your existing canvas and source links remain usable.",
@@ -73,7 +77,11 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
         );
       }
     }
-    const originals = await loadPublicResearchOriginals(artistId);
+    const storedOriginals = await loadPublicResearchOriginals(artistId);
+    const publicPdfs = body.canvas
+      ? await loadCanvasPublicPdfOriginals(artistId, request.signal)
+      : { sources: [], limitations: [] };
+    const originals = [...storedOriginals, ...publicPdfs.sources];
     const name = artist.name ?? "This artist";
     const prompt = await convertToModelMessages(body.messages);
     const stream = createUIMessageStream({
@@ -81,7 +89,13 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
         const canvas = body.canvas
-          ? createCanvasContext(body.canvas, originals, cite, canvasSeeds[artistId])
+          ? createCanvasContext(
+              body.canvas,
+              originals,
+              cite,
+              canvasSeeds[artistId],
+              publicPdfs.limitations,
+            )
           : undefined;
         await streamText({
           model: MODEL_CHAT,
@@ -111,7 +125,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
                     throw new Error("Canvas context limit reached");
                   return {};
                 },
-                onUsage: (usage: { inputTokens?: number; outputTokens?: number }) => {
+                onUsage: async (usage: { inputTokens?: number; outputTokens?: number }) => {
                   console.info(
                     "[canvas-usage]",
                     JSON.stringify({
@@ -125,6 +139,23 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
                           : null,
                     }),
                   );
+                  if (canvasReservation && !request.signal.aborted) {
+                    try {
+                      const chargedMicros = await settleCanvasPreview(canvasReservation, usage);
+                      if (chargedMicros !== null)
+                        console.info(
+                          "[canvas-budget]",
+                          JSON.stringify({
+                            turnId: body.canvas!.turnId,
+                            settledUsd: chargedMicros / 1_000_000,
+                          }),
+                        );
+                    } catch {
+                      console.warn(
+                        "[canvas-budget] Settlement unavailable; full reservation retained",
+                      );
+                    }
+                  }
                 },
               }
             : {}),

@@ -1,3 +1,4 @@
+import type { ResearchOriginal } from "@/lib/questionResearch/types";
 import { z } from "zod";
 import seed from "./seed.json";
 import dutchSeed from "./dutchSeed.json";
@@ -57,4 +58,8 @@ export const canvasSeed = seed as CanvasEvidence[];
 export const canvasSeeds: Record<string, CanvasEvidence[]> = {
   [CANVAS_ARTIST_ID]: canvasSeed,
   [DUTCH_ARTIST_ID]: dutchSeed as CanvasEvidence[],
+};
+
+export type CanvasResearchOriginal = ResearchOriginal & {
+  pdf?: { page: number; title: string; limitation: string };
 };

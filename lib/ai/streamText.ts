@@ -25,7 +25,7 @@ export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> &
   /** A chat response's writer: the call's UI message parts (text, tool steps) are merged into it. */
   writer?: UIMessageStreamWriter;
   prepareStep?: PrepareStepFunction<ToolSet>;
-  onUsage?: (usage: LanguageModelUsage) => void;
+  onUsage?: (usage: LanguageModelUsage) => void | Promise<void>;
 };
 
 /**
@@ -81,6 +81,6 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
       throw part.error;
     }
   }
-  if (onUsage) onUsage(await result.usage);
+  if (onUsage) await onUsage(await result.usage);
   return { text };
 }

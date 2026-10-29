@@ -64,3 +64,20 @@ it("does not call a provider transcript a caption or hide pending review", () =>
   expect(item?.limitation).toContain("pending review");
   expect(item?.limitation).toContain("extraction is truncated");
 });
+it("retains PDF page and document attribution without inventing an event date", () => {
+  const item = buildCanvasEvidence({
+    ...originalFixture(
+      "public_pdf:test:page:7",
+      "https://example.com/book.pdf#page=7",
+      "An original page passage.",
+    ),
+    pdf: { page: 7, title: "Archive · PDF p. 7", limitation: "Narrator is not the artist." },
+  });
+  expect(item).toMatchObject({
+    page: 7,
+    title: "Archive · PDF p. 7",
+    category: "document",
+    date: null,
+  });
+  expect(item?.limitation).toContain("Narrator is not the artist.");
+});

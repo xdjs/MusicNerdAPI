@@ -1,10 +1,9 @@
 import { getSourceTitle } from "@/lib/chat/getSourceTitle";
 import { getQuerySnippet } from "@/lib/chat/getQuerySnippet";
-import type { ResearchOriginal } from "@/lib/questionResearch/types";
-import type { CanvasEvidence } from "./const";
+import type { CanvasEvidence, CanvasResearchOriginal } from "./const";
 /** Adapt stored source metadata into a readable, bounded excerpt without inventing facts. */
 export function buildCanvasEvidence(
-  source: ResearchOriginal,
+  source: CanvasResearchOriginal,
   focus: string | number = "",
 ): CanvasEvidence | null {
   let url: URL;
@@ -36,6 +35,10 @@ export function buildCanvasEvidence(
         : "Instagram · stored caption";
   else if (source.sourceId.startsWith("public_answer:"))
     attribution = "Published interview · question and response";
+  if (source.pdf) {
+    title = source.pdf.title;
+    attribution = "Published Lore PDF · extracted page";
+  }
   const snippet =
     typeof focus === "number"
       ? text.slice(Math.max(0, focus), Math.max(0, focus) + 400).trim()
@@ -47,7 +50,8 @@ export function buildCanvasEvidence(
     title,
     url: source.url,
     text: passage,
-    category: "source",
+    category: source.pdf ? "document" : "source",
+    ...(source.pdf ? { page: source.pdf.page } : {}),
     date: source.activityDate ?? source.publishedAt,
     dateKind: source.activityDate
       ? source.activityDateKind === "release"
@@ -59,6 +63,7 @@ export function buildCanvasEvidence(
     attribution,
     limitation: [
       "Exact excerpt from stored public source text, limited to 25 words. Post/upload dates do not establish when the music was created. Open the source for full context.",
+      source.pdf?.limitation ?? "",
       source.evidenceKind === "provider_transcript"
         ? "Speaker attribution is unverified; this is a provider transcript, not an artist-authored caption."
         : "",

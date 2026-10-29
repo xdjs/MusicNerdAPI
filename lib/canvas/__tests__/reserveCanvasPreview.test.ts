@@ -16,13 +16,13 @@ afterEach(() => {
 it("serializes the shared count and permits the eighteenth reservation", async () => {
   m.execute
     .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([{ count: 17 }])
-    .mockResolvedValueOnce([]);
-  await reserveCanvasPreview("artist");
+    .mockResolvedValueOnce([{ micros: 17000000 }])
+    .mockResolvedValueOnce([{ id: "reservation" }]);
+  expect(await reserveCanvasPreview("artist")).toBe("reservation");
   expect(m.execute).toHaveBeenCalledTimes(3);
 });
 it("fails closed at the cap and never inserts", async () => {
-  m.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([{ count: 18 }]);
+  m.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([{ micros: 18000000 }]);
   await expect(reserveCanvasPreview("artist")).rejects.toThrow("exhausted");
   expect(m.execute).toHaveBeenCalledTimes(2);
 });
