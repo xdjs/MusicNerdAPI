@@ -90,6 +90,7 @@ it("never begins a passage inside a word and rehydrates its stable boundary", ()
   );
   const item = buildCanvasEvidence(source, 11);
   expect(item?.text).toBe("passage with Evolving Portals and patient listening");
+  expect(item?.id).toBe("pdf:page::excerpt:11");
   const offset = Number(item!.id.split("::excerpt:")[1]);
   expect(buildCanvasEvidence(source, offset)).toEqual(item);
 });

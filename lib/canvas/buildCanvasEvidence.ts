@@ -55,7 +55,10 @@ export function buildCanvasEvidence(
   while (offset < text.length && /\s/.test(text[offset])) offset++;
   const passage = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25).join(" ");
   return {
-    id: focus !== "" ? `${source.sourceId}::excerpt:${offset}` : source.sourceId,
+    id:
+      focus !== ""
+        ? `${source.sourceId}::excerpt:${typeof focus === "number" ? focus : offset}`
+        : source.sourceId,
     title,
     url: source.url,
     text: passage,
