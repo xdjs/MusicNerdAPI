@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   artist: vi.fn(),
   visitor: vi.fn(),
   reserve: vi.fn(),
+  canvasReserve: vi.fn(),
   originals: vi.fn(),
   webSearch: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock("ai", async importOriginal => {
       actual.streamText({ ...options, model: m.model as never }),
   };
 });
+vi.mock("@/lib/canvas/reserveCanvasPreview", () => ({ reserveCanvasPreview: m.canvasReserve }));
 vi.mock("@/lib/questionResearch/loadResearchArtist", () => ({ loadResearchArtist: m.artist }));
 vi.mock("@/lib/questionResearch/getQuestionVisitorKey", () => ({
   getQuestionVisitorKey: m.visitor,
@@ -300,4 +302,75 @@ it("streams the newest saved Instagram evidence and its matching citation throug
   expect(model.doStreamCalls).toHaveLength(3);
   expect(m.originals).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("rejects disabled canvas before loading data or spending quota", async () => {
+  const canvas = {
+    version: "canvas.v1",
+    sessionId: "11111111-1111-4111-8111-111111111111",
+    turnId: "22222222-2222-4222-8222-222222222222",
+    baseRevision: 0,
+    spec: { blocks: [] },
+    pinnedIds: [],
+    selectedIds: [],
+    focusId: null,
+  };
+  const response = await post({ ...ask("Show her career"), canvas });
+  expect(response.status).toBe(503);
+  expect(m.reserve).not.toHaveBeenCalled();
+  expect(m.artist).not.toHaveBeenCalled();
+});
+
+it("composes an unseen combination through the existing mocked model stream", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  vi.stubEnv("MUSICNERD_CANVAS_PREVIEW_ENABLED", "1");
+  try {
+    const canvas = {
+      version: "canvas.v1",
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      turnId: "22222222-2222-4222-8222-222222222222",
+      baseRevision: 7,
+      spec: { blocks: [] },
+      pinnedIds: [],
+      selectedIds: ["past", "out"],
+      focusId: null,
+    };
+    m.model = new MockLanguageModelV4({
+      doStream: [
+        toolStep("composeCanvas", {
+          blocks: [
+            {
+              id: "two-eras",
+              kind: "comparison",
+              title: "Two releases",
+              items: ["past", "out"],
+              span: 2,
+            },
+            { id: "process", kind: "media", title: "Process", items: ["worldbuilders"], span: 1 },
+          ],
+        }),
+        textStep("Here are the selected releases beside her process."),
+      ],
+    });
+    const chunks = await chunksOf(
+      await post(
+        { ...ask("Compare these releases and add process beside them"), canvas },
+        "73488cf7-3d3f-46ac-8cb1-74424c162ed6",
+      ),
+    );
+    const update = chunks.find(c => c.type === "data-canvas")?.data;
+    expect(update.revision).toBe(8);
+    expect(update.nextSpec.blocks.map((b: { kind: string }) => b.kind)).toEqual([
+      "comparison",
+      "media",
+    ]);
+    expect(update.evidence.map((e: { id: string }) => e.id)).toEqual([
+      "past",
+      "out",
+      "worldbuilders",
+    ]);
+    expect(m.reserve).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

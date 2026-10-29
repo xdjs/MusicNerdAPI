@@ -2,6 +2,8 @@ import {
   streamText as sdkStreamText,
   toUIMessageStream,
   type ModelMessage,
+  type PrepareStepFunction,
+  type LanguageModelUsage,
   type StopCondition,
   type ToolSet,
   type UIMessageStreamWriter,
@@ -22,6 +24,8 @@ export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> &
   onTextDelta?: (delta: string) => void;
   /** A chat response's writer: the call's UI message parts (text, tool steps) are merged into it. */
   writer?: UIMessageStreamWriter;
+  prepareStep?: PrepareStepFunction<ToolSet>;
+  onUsage?: (usage: LanguageModelUsage) => void;
 };
 
 /**
@@ -48,6 +52,10 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     abortSignal,
     onTextDelta,
     writer,
+    prepareStep,
+    maxOutputTokens,
+    maxRetries,
+    onUsage,
   } = options;
   const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   const result = sdkStreamText({
@@ -58,6 +66,9 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     tools,
     stopWhen,
     abortSignal,
+    ...(prepareStep ? { prepareStep } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
     ...(providerOptions ? { providerOptions } : {}),
   });
   if (writer) writer.merge(toUIMessageStream({ stream: withoutCustomParts(result.stream), tools }));
@@ -70,5 +81,6 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
       throw part.error;
     }
   }
+  if (onUsage) onUsage(await result.usage);
   return { text };
 }

@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
+import { canvasRequestSchema } from "@/lib/canvas/const";
+
 const MAX_MESSAGES = 12;
 const question = z.string().trim().min(1).max(500);
 
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
 const chatBodySchema = z
   .object({
+    canvas: canvasRequestSchema.optional(),
     messages: z
       .array(
         z.object({
