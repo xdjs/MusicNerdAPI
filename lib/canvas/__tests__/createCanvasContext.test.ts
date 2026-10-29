@@ -37,7 +37,15 @@ it("composes a source outside the curated catalog and rehydrates the exact pinne
       },
     ],
   };
-  expect(await context.composeCanvas.execute!(spec, call)).toMatchObject({ accepted: true });
+  expect(
+    await context.composeCanvas.execute!(
+      {
+        ...spec,
+        explanation: "I added the source passage. The evidence does not establish a date.",
+      },
+      call,
+    ),
+  ).toMatchObject({ accepted: true });
   const first = context.getUpdate()!;
   const next = createCanvasContext(
     { ...request, spec, pinnedIds: ["found"], baseRevision: 1 },
@@ -46,7 +54,15 @@ it("composes a source outside the curated catalog and rehydrates the exact pinne
     [],
   );
   await next.readSource.execute!({ sourceId: source.sourceId, focus: "Background" }, call);
-  expect(await next.composeCanvas.execute!(spec, call)).toMatchObject({ accepted: true });
+  expect(
+    await next.composeCanvas.execute!(
+      {
+        ...spec,
+        explanation: "I added the source passage. The evidence does not establish a date.",
+      },
+      call,
+    ),
+  ).toMatchObject({ accepted: true });
   expect(next.getUpdate()!.evidence).toEqual(first.evidence);
 });
 it("cannot rehydrate evidence belonging to an artist outside the loaded corpus", async () => {
@@ -62,5 +78,32 @@ it("cannot rehydrate evidence belonging to an artist outside the loaded corpus",
     ],
   };
   const context = createCanvasContext({ ...request, spec }, [], vi.fn(), []);
-  expect(await context.composeCanvas.execute!(spec, call)).toMatchObject({ accepted: false });
+  expect(
+    await context.composeCanvas.execute!(
+      {
+        ...spec,
+        explanation: "I added the source passage. The evidence does not establish a date.",
+      },
+      call,
+    ),
+  ).toMatchObject({ accepted: false });
+});
+it("carries the completed explanation when the final allowed step is composition", async () => {
+  const context = createCanvasContext(request, [], vi.fn());
+  await context.composeCanvas.execute!(
+    {
+      blocks: [],
+      explanation: "I cleared the canvas. Available sources do not establish the requested date.",
+    },
+    call,
+  );
+  expect(context.getUpdate()?.explanation).toContain("do not establish");
+});
+it("rejects empty and draft-only completion explanations at the tool boundary", async () => {
+  const context = createCanvasContext(request, [], vi.fn());
+  const schema = context.composeCanvas.inputSchema as import("zod").ZodType;
+  expect(schema.safeParse({ blocks: [], explanation: "" }).success).toBe(false);
+  expect(
+    schema.safeParse({ blocks: [], explanation: "Need the archive PDF passage." }).success,
+  ).toBe(false);
 });

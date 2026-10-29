@@ -53,13 +53,21 @@ export function buildCanvasEvidence(
   )
     offset++;
   while (offset < text.length && /\s/.test(text[offset])) offset++;
-  const passage = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25).join(" ");
+  // Prefer a complete sentence boundary within the leading context, then stop before extraction debris after a sentence.
+  if (typeof focus === "string" && focus) {
+    const lead = text.slice(offset, offset + 80);
+    const boundary = [...lead.matchAll(/[.!?]\s+/g)].at(-1);
+    if (boundary) offset += boundary.index! + boundary[0].length;
+  }
+  const words = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25);
+  const sentenceEnd = words.findIndex((word, index) => index >= 7 && /[.!?][”"']?$/.test(word));
+  const passage = words.slice(0, sentenceEnd >= 0 ? sentenceEnd + 1 : undefined).join(" ");
   return {
     id:
       focus !== ""
         ? `${source.sourceId}::excerpt:${typeof focus === "number" ? focus : offset}`
         : source.sourceId,
-    title,
+    title: url.hostname.endsWith("instagram.com") ? "Instagram · saved post" : title,
     url: source.url,
     text: passage,
     category: source.pdf ? "document" : "source",

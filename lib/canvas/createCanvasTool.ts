@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { tool } from "ai";
 import { specSchema, type CanvasEvidence, type CanvasRequest, type CanvasUpdate } from "./const";
 import { validateCanvasSpec } from "./validateCanvasSpec";
@@ -9,18 +10,30 @@ export function createCanvasTool(
 ) {
   return tool({
     description:
-      "Compose the complete next persistent canvas. Keep stable IDs for existing blocks. Preserve pinned blocks exactly. Use only available evidence IDs. No facts or URLs in this spec. Choose/combine timeline, cards, media, quote and comparison; rearrange based on the visitor and prior canvas. Call once you have read the required sources.",
-    inputSchema: specSchema,
+      "Compose the complete next persistent canvas. Keep stable IDs for existing blocks. Preserve pinned blocks exactly. Use only available evidence IDs. No facts or URLs in this spec. Choose/combine timeline, cards, media, quote and comparison; rearrange based on the visitor and prior canvas. Call once you have read the required sources. Include a completed explanation answering the visitor, describing the change and clearly stating missing evidence. Cite sources using the existing citation numbers. This explanation is displayed even if the step limit ends immediately after this tool. Preserve only relative ordering of pinned objects; remove earlier unpinned objects without filler.",
+    inputSchema: specSchema.extend({
+      explanation: z
+        .string()
+        .trim()
+        .min(20)
+        .max(900)
+        .refine(
+          text =>
+            !/^(need to|need the|let me|I will|I should|searching|reading sources)/i.test(text),
+          "Supply a completed explanation, not a planning note",
+        ),
+    }),
     execute: async value => {
       try {
         const nextSpec = validateCanvasSpec(
-          value,
+          { blocks: value.blocks },
           [...evidence.values()],
           request.pinnedIds,
           request.spec,
         );
         const prior = request.spec.blocks;
         const update: CanvasUpdate = {
+          explanation: value.explanation,
           version: "canvas.v1",
           sessionId: request.sessionId,
           turnId: request.turnId,
