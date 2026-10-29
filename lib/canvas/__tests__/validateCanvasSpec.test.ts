@@ -44,3 +44,25 @@ it("preserves pinned blocks exactly and rejects invalid quote evidence", () => {
     ),
   ).toThrow();
 });
+
+it("rejects moving an otherwise unchanged pinned block", () => {
+  const first = {
+    id: "first",
+    kind: "cards" as const,
+    title: "First",
+    items: ["meds"],
+    span: 1 as const,
+  };
+  const pinned = {
+    id: "pinned",
+    kind: "cards" as const,
+    title: "Pinned",
+    items: ["out"],
+    span: 1 as const,
+  };
+  expect(() =>
+    validateCanvasSpec({ blocks: [pinned, first] }, canvasSeed, ["pinned"], {
+      blocks: [first, pinned],
+    }),
+  ).toThrow("moved");
+});

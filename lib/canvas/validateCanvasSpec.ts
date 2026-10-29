@@ -26,6 +26,11 @@ export function validateCanvasSpec(
     const old = previous.blocks.find(block => block.id === id);
     if (!old || JSON.stringify(old) !== JSON.stringify(spec.blocks.find(block => block.id === id)))
       throw new Error("Pinned block changed");
+    if (
+      previous.blocks.findIndex(block => block.id === id) !==
+      spec.blocks.findIndex(block => block.id === id)
+    )
+      throw new Error("Pinned block moved; preserve its position");
   }
   return spec;
 }
