@@ -338,6 +338,8 @@ it("composes an unseen combination through the existing mocked model stream", as
     m.model = new MockLanguageModelV4({
       doStream: [
         toolStep("composeCanvas", {
+          explanation:
+            "I compared the two releases and added their source-backed context. No unsupported dates were inferred.",
           blocks: [
             {
               id: "two-eras",
@@ -361,6 +363,7 @@ it("composes an unseen combination through the existing mocked model stream", as
     expect(chunks.find(c => c.type === "start")?.messageId).toBe(canvas.turnId);
     const update = chunks.find(c => c.type === "data-canvas")?.data;
     expect(update.revision).toBe(8);
+    expect(update.explanation).toContain("compared the two releases");
     expect(update.nextSpec.blocks.map((b: { kind: string }) => b.kind)).toEqual([
       "comparison",
       "media",
