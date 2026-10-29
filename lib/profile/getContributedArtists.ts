@@ -1,5 +1,6 @@
 import { and, asc, count, eq, exists, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
+import { likePattern } from "@/lib/db/likePattern";
 import { artists, artistSelfEdits, ugcresearch } from "@/lib/db/schema";
 
 /**
@@ -39,10 +40,7 @@ export async function getContributedArtists(
         .where(and(eq(artistSelfEdits.artistId, artists.id), eq(artistSelfEdits.userId, userId))),
     ),
   );
-  const condition = and(
-    eligible,
-    query ? ilike(artists.name, `%${query.replace(/[\\%_]/g, "\\$&")}%`) : undefined,
-  );
+  const condition = and(eligible, query ? ilike(artists.name, likePattern(query)) : undefined);
   const [rows, totals] = await Promise.all([
     db
       .select({ id: artists.id, name: artists.name, customImage: artists.customImage })
