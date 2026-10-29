@@ -63,7 +63,16 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
       throw error;
     }
     await reserveQuestionPlanning(artistId, await getQuestionVisitorKey(request));
-    if (body.canvas) await reserveCanvasPreview(artistId);
+    if (body.canvas) {
+      try {
+        await reserveCanvasPreview(artistId);
+      } catch {
+        return fail(
+          "The live preview budget is unavailable or exhausted. Your existing canvas and source links remain usable.",
+          429,
+        );
+      }
+    }
     const originals = await loadPublicResearchOriginals(artistId);
     const name = artist.name ?? "This artist";
     const prompt = await convertToModelMessages(body.messages);
