@@ -1,6 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { claimColumns } from "@/lib/claims/claimColumns";
+import type { ClaimRow } from "@/lib/claims/types";
 import { db } from "@/lib/db/db";
-import { artistClaims } from "@/lib/db/schema";
+import { rowsOf } from "@/lib/db/rowsOf";
 
 /**
  * Approves or rejects a claim, whatever its current status, as MusicNerdWeb did.
@@ -9,11 +11,15 @@ import { artistClaims } from "@/lib/db/schema";
  * @param status - The new status.
  * @returns The updated claim, or undefined when there is none; throws on a database error.
  */
-export async function setClaimStatus(claimId: string, status: "approved" | "rejected") {
-  const [updated] = await db
-    .update(artistClaims)
-    .set({ status, updatedAt: sql`(now() AT TIME ZONE 'utc'::text)` })
-    .where(eq(artistClaims.id, claimId))
-    .returning();
-  return updated;
+export async function setClaimStatus(
+  claimId: string,
+  status: "approved" | "rejected",
+): Promise<ClaimRow | undefined> {
+  const [claim] = rowsOf(
+    await db.execute(sql`update artist_claims
+      set status = ${status}, updated_at = (now() AT TIME ZONE 'utc'::text)
+      where id = ${claimId}::uuid
+      returning ${claimColumns}`),
+  ) as ClaimRow[];
+  return claim;
 }

@@ -480,13 +480,7 @@ export const artistClaims = pgTable(
     userId: uuid("user_id").notNull(),
     artistId: uuid("artist_id").notNull(),
     status: claimStatus().default("pending").notNull(),
-    referenceCode: text("reference_code"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .default(sql`(now() AT TIME ZONE 'utc'::text)`)
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .default(sql`(now() AT TIME ZONE 'utc'::text)`)
-      .notNull(),
+    // Web also has reference_code, created_at and updated_at; no migrated route reads them.
   },
   table => [
     // Partial unique index: only one active (pending or approved) claim per artist at a time.
