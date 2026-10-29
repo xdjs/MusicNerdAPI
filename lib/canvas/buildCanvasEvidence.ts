@@ -29,7 +29,13 @@ export function buildCanvasEvidence(
       /* Older stored source is plain text. */
     }
     attribution = "InProcess · work description";
-  } else if (url.hostname.endsWith("instagram.com")) attribution = "Instagram · stored caption";
+  } else if (url.hostname.endsWith("instagram.com"))
+    attribution =
+      source.evidenceKind === "provider_transcript"
+        ? "Instagram · stored provider transcript"
+        : "Instagram · stored caption";
+  else if (source.sourceId.startsWith("public_answer:"))
+    attribution = "Published interview · question and response";
   const snippet =
     typeof focus === "number"
       ? text.slice(Math.max(0, focus), Math.max(0, focus) + 400).trim()
@@ -51,7 +57,18 @@ export function buildCanvasEvidence(
         ? "Post/source published"
         : "Publication date unavailable",
     attribution,
-    limitation:
+    limitation: [
       "Exact excerpt from stored public source text, limited to 25 words. Post/upload dates do not establish when the music was created. Open the source for full context.",
+      source.evidenceKind === "provider_transcript"
+        ? "Speaker attribution is unverified; this is a provider transcript, not an artist-authored caption."
+        : "",
+      source.curation === "pending" ? "This stored source is pending review." : "",
+      source.truncated ? "The stored extraction is truncated." : "",
+      source.sourceId.startsWith("public_answer:")
+        ? "Question premises are not artist statements; distinguish the labeled question from the response."
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }

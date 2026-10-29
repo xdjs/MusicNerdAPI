@@ -48,3 +48,19 @@ it("uses a stored release activity date without relabeling it as a post date", (
   expect(item?.date).toBe("2024-03");
   expect(item?.dateKind).toBe("Release date from stored provider record");
 });
+it("does not call a provider transcript a caption or hide pending review", () => {
+  const item = buildCanvasEvidence({
+    ...originalFixture(
+      "social:transcript",
+      "https://www.instagram.com/reel/example/",
+      "Provider transcript text.",
+    ),
+    evidenceKind: "provider_transcript",
+    curation: "pending",
+    truncated: true,
+  });
+  expect(item?.attribution).toBe("Instagram · stored provider transcript");
+  expect(item?.limitation).toContain("Speaker attribution is unverified");
+  expect(item?.limitation).toContain("pending review");
+  expect(item?.limitation).toContain("extraction is truncated");
+});
