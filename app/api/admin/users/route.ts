@@ -15,9 +15,9 @@ export async function OPTIONS() {
 }
 
 /**
- * Users whose wallet or username contains `search`.
+ * Every user, or those whose wallet or username contains `search`.
  *
- * @param request - The request; an admin's Privy token and `?search=`.
+ * @param request - The request; an admin's Privy token and an optional `?search=`.
  * @returns 200 with `{ status, users }`, or an error.
  */
 export async function GET(request: Request) {

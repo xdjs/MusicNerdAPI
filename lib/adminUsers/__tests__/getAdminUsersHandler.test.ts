@@ -25,6 +25,13 @@ describe("getAdminUsersHandler", () => {
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
 
+  it("lists every user without a search", async () => {
+    mock.search.mockResolvedValueOnce([]);
+    const res = await getAdminUsersHandler(request(""));
+    expect(res.status).toBe(200);
+    expect(mock.search).toHaveBeenCalledWith(undefined);
+  });
+
   it("rejects a short search before reading users", async () => {
     const res = await getAdminUsersHandler(request("?search=ab"));
     expect(res.status).toBe(400);
