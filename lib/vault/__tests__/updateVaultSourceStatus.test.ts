@@ -36,6 +36,13 @@ describe("updateVaultSourceStatus", () => {
     expect(queue).toHaveBeenCalledWith(tx, { id: "s1", artistId: "a1" }, "e1");
   });
 
+  it("with an expected status, matches only a source still in that status", async () => {
+    await updateVaultSourceStatus("s1", "approved", "pending");
+    const rendered = renderSql(where.mock.calls[0][0] as SQL);
+    expect(rendered.text).not.toContain('"status" <>');
+    expect(rendered.params).toContain("pending");
+  });
+
   it("records nothing when no row matched", async () => {
     returning.mockResolvedValueOnce([]);
     expect(await updateVaultSourceStatus("s1", "rejected")).toBeUndefined();
