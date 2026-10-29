@@ -6,9 +6,11 @@ const driver = drizzle(client);
 vi.mock("@/lib/db/db", () => ({
   db: {
     transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        execute: async (q: Parameters<typeof driver.execute>[0]) => (await driver.execute(q)).rows,
-      }),
+      driver.transaction(async tx =>
+        fn({
+          execute: async (q: Parameters<typeof driver.execute>[0]) => (await tx.execute(q)).rows,
+        }),
+      ),
   },
 }));
 const { reserveCanvasPreview } = await import("../reserveCanvasPreview");
@@ -50,4 +52,25 @@ it("keeps legacy reservations, settles once, and reuses only confirmed headroom"
     "select trigger from artist_activity_events where action='canvas_preview_settlement'",
   );
   expect(settlements.rows.every(row => row.trigger === "demo_20261029_usd_micro:42000")).toBe(true);
+});
+
+it("admits at most eighteen simultaneous full reservations and never double-settles", async () => {
+  await client.exec("truncate artist_activity_events");
+  const results = await Promise.allSettled(
+    Array.from({ length: 30 }, () => reserveCanvasPreview(artist)),
+  );
+  const accepted = results.filter(
+    (r): r is PromiseFulfilledResult<string> => r.status === "fulfilled",
+  );
+  expect(accepted).toHaveLength(18);
+  expect(results.filter(r => r.status === "rejected")).toHaveLength(12);
+  await Promise.all(
+    Array.from({ length: 10 }, () =>
+      settleCanvasPreview(accepted[0].value, { inputTokens: 10000, outputTokens: 1000 }),
+    ),
+  );
+  const rows = await client.query<{ n: number }>(
+    "select count(*)::int n from artist_activity_events where action='canvas_preview_settlement'",
+  );
+  expect(rows.rows[0].n).toBe(1);
 });

@@ -95,6 +95,11 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               cite,
               canvasSeeds[artistId],
               publicPdfs.limitations,
+              body.messages
+                .at(-1)
+                ?.parts.map(p => p.text)
+                .join("\n") ?? "",
+              name,
             )
           : undefined;
         await streamText({
@@ -113,7 +118,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               : ""),
           prompt,
           tools: {
-            searchSources: createSearchSourcesTool(originals, name),
+            searchSources: canvas?.searchSources ?? createSearchSourcesTool(originals, name),
             readSource: canvas?.readSource ?? createReadSourceTool(originals, cite),
             ...(canvas ? { composeCanvas: canvas.composeCanvas } : {}),
             ...(!canvas ? { webSearch: createWebSearchTool(cite) } : {}),
