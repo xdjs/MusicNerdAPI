@@ -43,14 +43,17 @@ export function buildCanvasEvidence(
   // Keep original text and offsets intact, so citations and old excerpts rehydrate exactly.
   const archiveHeader = source.sourceId.startsWith("public_pdf:dutch-archive:")
     ? text.match(
-        /^\s*(?:\d+\s+)?Dutchyyy vs The Algorithms \(Excerpt\)\s+The Creation of Evolving Portals and Long-Form Art\s+/,
+        /Dutchyyy vs The Algorithms \(Excerpt\)\s+The Creation of Evolving Portals and Long-Form Art\s+/,
       )
     : null;
-  const bodyStart = archiveHeader?.[0].length ?? 0;
+  const headerStart = archiveHeader?.index ?? -1;
+  const bodyStart = headerStart + (archiveHeader?.[0].length ?? 0);
   let offset =
     typeof focus === "number"
       ? Math.max(0, focus)
-      : bodyStart + selectCanvasPassageOffset(text.slice(bodyStart), focus || title);
+      : selectCanvasPassageOffset(text, focus || title);
+  if (typeof focus !== "number" && archiveHeader && offset >= headerStart && offset < bodyStart)
+    offset = bodyStart + selectCanvasPassageOffset(text.slice(bodyStart), focus || title);
   // Move to a real word boundary, including when rehydrating an older excerpt offset.
   while (
     offset > 0 &&

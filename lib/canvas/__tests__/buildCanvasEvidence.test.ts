@@ -138,7 +138,7 @@ it("skips verified repeated archive headings without rewriting the cited passage
     ...originalFixture(
       "public_pdf:dutch-archive:abcdef123456:page:7",
       "https://example.com/archive.pdf#page=7",
-      "Dutchyyy vs The Algorithms (Excerpt)\nThe Creation of Evolving Portals and Long-Form Art\nWhile algorithms encouraged short-form content, Dutchyyy rebelled by focusing on long-form, immersive projects.\nEvolving Portals, an ongoing series of experimental music pieces, defied the norm with hours of creative output that rewarded deep listening and exploration.",
+      "Earlier archival context on the same physical page.\nDutchyyy vs The Algorithms (Excerpt)\nThe Creation of Evolving Portals and Long-Form Art\nWhile algorithms encouraged short-form content, Dutchyyy rebelled by focusing on long-form, immersive projects.\nEvolving Portals, an ongoing series of experimental music pieces, defied the norm with hours of creative output that rewarded deep listening and exploration.",
     ),
     pdf: {
       page: 7,
@@ -155,5 +155,5 @@ it("skips verified repeated archive headings without rewriting the cited passage
   expect(item?.date).toBeNull();
   expect(item?.limitation).toContain("Narration is not artist testimony");
   expect(buildCanvasEvidence(source, Number(item!.id.split("::excerpt:")[1]))).toEqual(item);
-  expect(buildCanvasEvidence(source, 0)?.text).toContain("The Algorithms");
+  expect(buildCanvasEvidence(source, 0)?.text).toContain("Earlier archival context");
 });
