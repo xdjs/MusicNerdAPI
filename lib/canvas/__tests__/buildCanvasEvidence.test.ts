@@ -26,3 +26,25 @@ it("bounds excerpts and rejects non-web source links", () => {
   expect(buildCanvasEvidence(source)?.text.split(/\s+/)).toHaveLength(25);
   expect(buildCanvasEvidence({ ...source, url: "javascript:alert(1)" })).toBeNull();
 });
+it("selects a focused passage and reconstructs it without accepting client text", () => {
+  const source = originalFixture(
+    "vault:focused",
+    "https://example.com",
+    "Unrelated introduction. ".repeat(80) +
+      "Improvisation became a daily practice through recording unfinished ideas and returning to them later.",
+  );
+  const item = buildCanvasEvidence(source, "improvisation daily practice");
+  expect(item?.text).toContain("Improvisation");
+  expect(item?.id).toMatch(/::excerpt:\d+$/);
+  const offset = Number(item!.id.split("::excerpt:")[1]);
+  expect(buildCanvasEvidence(source, offset)).toEqual(item);
+});
+it("uses a stored release activity date without relabeling it as a post date", () => {
+  const item = buildCanvasEvidence({
+    ...originalFixture("latest:release", "https://example.com", "Release metadata"),
+    activityDate: "2024-03",
+    activityDateKind: "release",
+  });
+  expect(item?.date).toBe("2024-03");
+  expect(item?.dateKind).toBe("Release date from stored provider record");
+});

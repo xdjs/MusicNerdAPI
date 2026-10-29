@@ -3,7 +3,10 @@ import { getQuerySnippet } from "@/lib/chat/getQuerySnippet";
 import type { ResearchOriginal } from "@/lib/questionResearch/types";
 import type { CanvasEvidence } from "./const";
 /** Adapt stored source metadata into a readable, bounded excerpt without inventing facts. */
-export function buildCanvasEvidence(source: ResearchOriginal, focus = ""): CanvasEvidence | null {
+export function buildCanvasEvidence(
+  source: ResearchOriginal,
+  focus: string | number = "",
+): CanvasEvidence | null {
   let url: URL;
   try {
     url = new URL(source.url);
@@ -27,19 +30,26 @@ export function buildCanvasEvidence(source: ResearchOriginal, focus = ""): Canva
     }
     attribution = "InProcess · work description";
   } else if (url.hostname.endsWith("instagram.com")) attribution = "Instagram · stored caption";
-  const passage = getQuerySnippet(text, focus || title, 400)
-    .trim()
-    .split(/\s+/)
-    .slice(0, 25)
-    .join(" ");
+  const snippet =
+    typeof focus === "number"
+      ? text.slice(Math.max(0, focus), Math.max(0, focus) + 400).trim()
+      : getQuerySnippet(text, focus || title, 400);
+  const offset = Math.max(0, text.indexOf(snippet));
+  const passage = snippet.trim().split(/\s+/).slice(0, 25).join(" ");
   return {
-    id: source.sourceId,
+    id: focus !== "" ? `${source.sourceId}::excerpt:${offset}` : source.sourceId,
     title,
     url: source.url,
     text: passage,
     category: "source",
-    date: source.publishedAt,
-    dateKind: source.publishedAt ? "Post/source published" : "Publication date unavailable",
+    date: source.activityDate ?? source.publishedAt,
+    dateKind: source.activityDate
+      ? source.activityDateKind === "release"
+        ? "Release date from stored provider record"
+        : "Activity date from stored provider record"
+      : source.publishedAt
+        ? "Post/source published"
+        : "Publication date unavailable",
     attribution,
     limitation:
       "Exact excerpt from stored public source text, limited to 25 words. Post/upload dates do not establish when the music was created. Open the source for full context.",
