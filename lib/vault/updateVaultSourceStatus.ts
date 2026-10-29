@@ -1,5 +1,5 @@
 import { queueApprovedSourceExtraction } from "@/lib/sourceExtraction/queueApprovedSourceExtraction";
-import { and, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { artistVaultSources } from "@/lib/db/schema";
 import type { VaultSource } from "@/lib/vault/types";
@@ -11,18 +11,27 @@ import { withVaultSourceWrite } from "@/lib/vault/withVaultSourceWrite";
  *
  * @param sourceId - The source.
  * @param status - The decision.
+ * @param expectedStatus - When set, only a source still in this status changes.
  * @returns The updated source, or undefined when nothing matched. A failed write throws.
  */
 export async function updateVaultSourceStatus(
   sourceId: string,
   status: "approved" | "rejected",
+  expectedStatus?: "pending",
 ): Promise<VaultSource | undefined> {
   try {
     return await withVaultSourceWrite(sourceId, async (tx, predicate) => {
       const [row] = await tx
         .update(artistVaultSources)
         .set({ status, updatedAt: sql`(now() AT TIME ZONE 'utc'::text)` })
-        .where(and(predicate, ne(artistVaultSources.status, status)))
+        .where(
+          and(
+            predicate,
+            expectedStatus
+              ? eq(artistVaultSources.status, expectedStatus)
+              : ne(artistVaultSources.status, status),
+          ),
+        )
         .returning();
       if (row) {
         const activityId = await recordArtistActivity(
