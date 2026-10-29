@@ -100,7 +100,17 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
         await streamText({
           model: MODEL_CHAT,
           anthropicEffort: "low",
-          instructions: buildArtistChatInstructions(name) + (canvas?.instructions ?? ""),
+          instructions:
+            buildArtistChatInstructions(name) +
+            (canvas?.instructions ?? "") +
+            (canvas
+              ? `\nCURRENT TURN: ${JSON.stringify(
+                  body.messages
+                    .at(-1)
+                    ?.parts.map(p => p.text)
+                    .join("\n"),
+                )}. This latest request supersedes earlier requests about what to keep or add. Previous conversation is context, not a requirement to retain old content. Apply explicit removal requests to the nextSpec. Do not substitute rearrangement for removal. Explain the actual change you make.`
+              : ""),
           prompt,
           tools: {
             searchSources: createSearchSourcesTool(originals, name),
