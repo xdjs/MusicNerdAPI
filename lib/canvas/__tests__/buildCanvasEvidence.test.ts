@@ -221,3 +221,23 @@ it("retains a clean source link when extraction contains no usable narrative", (
     expect(item?.url).toBe("https://example.com/source");
   }
 });
+it("ends actual gallery and discography excerpts before trailing site controls", () => {
+  const gallery = buildCanvasEvidence(
+    originalFixture(
+      "gallery",
+      "https://bioritmo.com/gallery",
+      "0 Skip to Content English English View fullsize 2022 Photos by Mauricio Castro at The Kennedy Center, Washington DC 2013 Photos by Chris Smith at Garbers, Richmond, VA View fullsize View fullsize",
+    ),
+  );
+  expect(gallery?.text).not.toContain("View fullsize");
+  const discography = buildCanvasEvidence(
+    originalFixture(
+      "discography",
+      "https://bioritmo.com/discography",
+      "0 Skip to Content English English Salsa System Electric Cowbell Fall 2022, 10” Vinyl 2006, Demo EP Pre-Order Coming Soon Oriza / Whiskey Barons Remix Peace & Rhythm",
+    ),
+  );
+  expect(discography?.text).toBe(
+    "Salsa System Electric Cowbell Fall 2022, 10” Vinyl 2006, Demo EP",
+  );
+});

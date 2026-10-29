@@ -72,7 +72,10 @@ export function buildCanvasEvidence(
     offset += leadingFragment[0].length;
   const words = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25);
   const navigationEnd = words.findIndex(
-    (word, index) => index >= 4 && /^(license|tags|checkout)$/i.test(word),
+    (word, index) =>
+      index >= 4 &&
+      (/^(license|tags|checkout|pre-order)$/i.test(word) ||
+        (/^view$/i.test(word) && /^fullsize$/i.test(words[index + 1] ?? ""))),
   );
   const bounded = words.slice(0, navigationEnd >= 0 ? navigationEnd : undefined);
   const lastSentence = bounded.findLastIndex(
