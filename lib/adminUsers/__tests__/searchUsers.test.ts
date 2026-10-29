@@ -1,32 +1,40 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { searchUsers } from "@/lib/adminUsers/searchUsers";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { createAdminReadsDatabase, ids } from "@/lib/db/__tests__/adminReadsDatabase";
 
-const mock = vi.hoisted(() => ({
-  select: vi.fn(),
-  from: vi.fn(),
-  where: vi.fn(),
-  orderBy: vi.fn(),
+const test = await createAdminReadsDatabase();
+vi.mock("@/lib/db/db", () => ({
+  get db() {
+    return test.db;
+  },
 }));
-vi.mock("@/lib/db/db", () => ({ db: { select: mock.select } }));
+const { searchUsers } = await import("@/lib/adminUsers/searchUsers");
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mock.select.mockReturnValue({ from: mock.from });
-  mock.from.mockReturnValue({ where: mock.where });
-  mock.where.mockReturnValue({ orderBy: mock.orderBy });
-});
+afterAll(() => test.client.close());
 
 describe("searchUsers", () => {
-  it("returns each matching user's id, username and wallet", async () => {
-    const rows = [{ id: "u1", username: "dutchyyy", wallet: null }];
-    mock.orderBy.mockResolvedValueOnce(rows);
-    expect(await searchUsers("dutch")).toEqual(rows);
-    expect(Object.keys(mock.select.mock.calls[0][0])).toEqual(["id", "username", "wallet"]);
-    expect(mock.where).toHaveBeenCalledTimes(1);
+  it("lists every user with email and role flags, by username", async () => {
+    expect(await searchUsers()).toEqual([
+      {
+        id: ids.admin,
+        username: "admin",
+        email: "admin@example.com",
+        wallet: null,
+        isAdmin: true,
+        isWhiteListed: false,
+        isHidden: false,
+        updatedAt: expect.stringContaining("2026-10-22"),
+      },
+      expect.objectContaining({ id: ids.otherUser, username: "hidden_fan", isHidden: true }),
+      expect.objectContaining({ id: ids.user, username: "salsero", isWhiteListed: true }),
+    ]);
+  });
+
+  it("matches the wallet or username, case-insensitive", async () => {
+    expect((await searchUsers("SALS")).map(u => u.id)).toEqual([ids.user]);
+    expect((await searchUsers("0xab")).map(u => u.id)).toEqual([ids.otherUser]);
   });
 
   it("is empty when nobody matches", async () => {
-    mock.orderBy.mockResolvedValueOnce([]);
     expect(await searchUsers("zzz")).toEqual([]);
   });
 });

@@ -5,9 +5,9 @@ import { authenticateAdmin } from "@/lib/auth/authenticateAdmin";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 /**
- * Handles GET /api/admin/users: users whose wallet or username matches `search`.
+ * Handles GET /api/admin/users: every user, or those whose wallet or username matches `search`.
  *
- * @param request - The request; an admin's Privy token and `?search=`.
+ * @param request - The request; an admin's Privy token and an optional `?search=`.
  * @returns 200 with `{ status, users }`; 400, 401, 403 or 500 with `{ status: "error", error }`.
  */
 export async function getAdminUsersHandler(request: Request): Promise<NextResponse> {
