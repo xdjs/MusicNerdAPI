@@ -49,10 +49,18 @@ export function createCanvasContext(
     description: read.description,
     inputSchema: z.object({ sourceId: z.string().min(1).max(300) }),
     execute: async ({ sourceId }, options) => {
+      const seedSource = canvasSeed.find(item => item.id === sourceId);
+      if (seedSource)
+        return {
+          ...seedSource,
+          evidenceId: seedSource.id,
+          category: seedSource.category,
+          n: cite({ url: seedSource.url, title: seedSource.title }),
+        };
       const result = await read.execute!({ sourceId }, options);
       const source = originals.find(item => item.sourceId === sourceId);
       if (source) register(source);
-      return result;
+      return { ...result, evidenceId: sourceId, category: "source" };
     },
   });
   return {
@@ -61,6 +69,6 @@ export function createCanvasContext(
       candidate = update;
     }),
     getUpdate: () => candidate,
-    instructions: `\nCANVAS PREVIEW: Use composeCanvas to produce a complete nextSpec, not a fixed page mode. Preserve unrelated/pinned blocks and stable IDs. Use prior conversation, focus and selection. Select and combine blocks. Never invent dates, quotes or relationships. Cards display server-owned evidence; titles are short presentation labels, not new factual claims. Unknown requests can be answered honestly without changing the canvas. Seed evidence is a curated public snapshot, not exhaustive/live. Read more using existing tools. Only readSource evidence can be added to the canvas; webSearch may inform prose but is not a canvas source. Current request: ${JSON.stringify(request)}\nTrusted seed: ${JSON.stringify(canvasSeed)}`,
+    instructions: `\nCANVAS PREVIEW: Use composeCanvas to produce a complete nextSpec, not a fixed page mode. Preserve unrelated/pinned blocks and stable IDs. Use prior conversation, focus and selection. Select and combine blocks. Never invent dates, quotes or relationships. Cards display server-owned evidence; titles are short presentation labels, not new factual claims. Unknown requests can be answered honestly without changing the canvas. Seed evidence is a curated public snapshot, not exhaustive/live. Read more using existing tools. Seed evidence is already available for composition; readSource can also read seed IDs. readSource returns evidenceId: use that exact string in items, NEVER the numeric citation n. quote blocks only accept category=quote; use document/cards for source passages, timeline only when date exists, media only for film/process. Only readSource evidence can be added beyond the seed; webSearch may inform prose but is not a canvas source. Current request: ${JSON.stringify(request)}\nTrusted seed: ${JSON.stringify(canvasSeed)}`,
   };
 }

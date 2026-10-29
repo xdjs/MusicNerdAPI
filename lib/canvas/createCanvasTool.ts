@@ -42,11 +42,16 @@ export function createCanvasTool(
         };
         stage(update);
         return { accepted: true, changes: update.changes };
-      } catch {
+      } catch (error) {
         return {
           accepted: false,
-          error:
-            "Invalid composition. Use known evidence IDs, preserve pinned blocks, and match item types.",
+          error: error instanceof Error ? error.message : "Invalid composition",
+          availableEvidence: [...evidence.values()].map(({ id, category, date }) => ({
+            id,
+            category,
+            date,
+          })),
+          help: "Use evidence IDs, not citation numbers. quote requires category quote; source/document passages use document or cards. Keep pinned blocks exactly unchanged.",
         };
       }
     },
