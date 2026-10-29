@@ -8,8 +8,10 @@ export function createEvalBudgetFetch(send: typeof fetch) {
   let reservedMicros = 0;
   let paidRequests = 0;
   let blocked = false;
+  let stopReason: string | undefined;
   const fail = (reason: string): never => {
     blocked = true;
+    stopReason ??= reason;
     throw new Error(`Eval budget guard: ${reason}`);
   };
   const guarded: typeof fetch = async (input, init) => {
@@ -38,8 +40,9 @@ export function createEvalBudgetFetch(send: typeof fetch) {
         if (
           Array.isArray(message.content) &&
           message.content.some(
-            (part: { type?: string }) =>
-              !["text", "tool-call", "tool-result", "reasoning"].includes(part.type ?? ""),
+            (part: { type?: string; kind?: string }) =>
+              !["text", "tool-call", "tool-result", "reasoning"].includes(part.type ?? "") &&
+              !(part.type === "custom" && part.kind === "anthropic.message_start"),
           )
         )
           return fail("non-text input");
@@ -85,6 +88,6 @@ export function createEvalBudgetFetch(send: typeof fetch) {
   };
   return {
     fetch: guarded,
-    snapshot: () => ({ reservedUsd: reservedMicros / 1000000, paidRequests, blocked }),
+    snapshot: () => ({ reservedUsd: reservedMicros / 1000000, paidRequests, blocked, stopReason }),
   };
 }

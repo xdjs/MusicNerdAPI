@@ -8,6 +8,45 @@ const request = (model = "anthropic/claude-sonnet-5.5", text = "question") => ({
 });
 const gateway = "https://ai-gateway.vercel.sh/v4/ai/language-model";
 describe("createEvalBudgetFetch", () => {
+  it("allows the SDK's Anthropic message-start metadata on later tool steps", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("ok"));
+    const guard = createEvalBudgetFetch(send);
+    const init = request();
+    init.body = JSON.stringify({
+      prompt: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "custom",
+              kind: "anthropic.message_start",
+              providerOptions: { anthropic: { id: "synthetic", model: "claude-sonnet-5-5" } },
+            },
+            {
+              type: "tool-call",
+              toolCallId: "t",
+              toolName: "webSearch",
+              input: { query: "artist" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "t",
+              toolName: "webSearch",
+              output: { type: "json", value: { results: [] } },
+            },
+          ],
+        },
+      ],
+    });
+    await guard.fetch(gateway, init);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(guard.snapshot().blocked).toBe(false);
+  });
   it("guards the installed AI SDK Gateway transport without a real provider call", async () => {
     const { generateText } = await import("ai");
     const send = vi.fn().mockResolvedValue(new Response("denied", { status: 400 }));

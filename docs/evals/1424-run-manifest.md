@@ -1,6 +1,6 @@
 # Web #1424: one-run diagnostic manifest
 
-Status: prepared October 29, 2026; not executed. Pete approved the new $5 bound. The eval transport reserves a conservative per-request allowance before egress; validation is required before dispatch. This is a diagnostic run of current chat, not final closure acceptance.
+Status: attempted October 29, 2026; harness failure, no semantic acceptance. Pete approved the new $5 bound. The eval transport reserves a conservative per-request allowance before egress; validation is required before dispatch. This is a diagnostic run of current chat, not final closure acceptance.
 
 ## Code and environment
 
@@ -38,3 +38,11 @@ Review every case for requested-fact accuracy, every material claim's cited supp
 ## Spend preflight
 
 Proposed new limit: $5 combined model/provider usage for this single run. Pete approved this bound. The historical Braintrust display estimated $0.245 for recorded chat usage, but that is neither a full provider invoice nor a hard ceiling for this run. The eval-only transport now reserves text input at one token per UTF-8 byte plus 8,192 framing tokens, at $4/$20 per million input/output for Sonnet and $1/$6 for Flash. These exceed the inspected Gateway catalog rates including regional/cache-write or priority rates. Outputs are limited to 2,048 tokens. Each Tavily call reserves $0.016 (two PAYG credits). Failed requests are never refunded; retries reserve again; requests exceeding the $5 cumulative envelope or 100 provider requests are blocked before sending and latch the guard closed. Unknown models/media/native tools/provider routes are rejected. This conservative ledger is not a provider invoice; report actual available usage separately. No shared settings or new keys. The workflow has a ten-minute timeout. The output ceiling is an eval constraint and truncated/incomplete cases must remain visible. Pricing sources: https://ai-gateway.vercel.sh/v1/models and https://docs.tavily.com/documentation/api-credits, inspected October 29.
+
+## Attempt 1: harness failure (preserved)
+
+[Run 40975550504](https://github.com/xdjs/MusicNerdAPI/actions/runs/40975550504), SHA `024d946a16bf65716bdf221927660548d81b14b9`, ended cancelled. All 11 recorded turns have empty answers and stream errors; no semantic judge calls were sent. One Gateway model request and one Tavily search passed the guard. The next model request included an AI SDK `custom` part with kind `anthropic.message_start`, which the new guard incorrectly rejected as non-text. The guard then latched closed, preventing additional paid requests. The suite continued consuming normal staging question admissions while recording errors; cancellation did not stop those already scheduled records promptly. This is an eval harness defect, not a chat quality result.
+
+Evidence: [failed model input](https://www.braintrust.dev/app/xDJs/p/music-nerd/trace?object_type=experiment&object_id=d09323c9-0abf-4f05-98b6-ca88f25ab2ad&r=dd66492b34aa373e64cd59ebfd14019a&sid=7029398fbafd62c9). Its assistant message visibly includes `type: custom`, `kind: anthropic.message_start`, and Anthropic provider options. Logs show exactly two admitted paid requests and final reserved cost $0.104224. Braintrust displays approximately $0.004 model cost; Tavily search billing is separate and actual invoiced total has not been verified. Preserve the reservation as the conservative consumed allowance, leaving $4.895776 of the original $5 authorization.
+
+Offline correction: allow only that known metadata part, continue rejecting other unknown/media parts, skip later chat admissions once the guard is closed, and leave latency scores unscored on errors (the original run misleadingly showed total-time pass for fast errors). Regression first reproduced the rejection then passed. No second paid run is authorized by this correction; the agreed one-run/no-rerun limit remains.

@@ -44,6 +44,16 @@ Eval("music-nerd", {
       metadata: { key: c.key, artist: c.artistName, note: c.note },
     })),
   task: async (input: ChatCase) => {
+    // A latched guard must not consume further question-admission rows or SDK retries.
+    if (budget.snapshot().blocked)
+      return {
+        answer: "",
+        sources: [],
+        evidence: [],
+        firstTextMs: 0,
+        totalMs: 0,
+        error: `Not attempted: ${budget.snapshot().stopReason}`,
+      };
     const turn = await chatStreamTurn(input);
     console.log(
       `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
@@ -51,8 +61,12 @@ Eval("music-nerd", {
     return turn;
   },
   scores: [
-    ({ output }) => scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
-    ({ output }) => scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),
+    ({ output }) =>
+      output.error
+        ? null
+        : scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
+    ({ output }) =>
+      output.error ? null : scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),
     // An unanswerable question is right to cite nothing, so citations are not scored there.
     ({ output, expected }) =>
       expected.answerable
