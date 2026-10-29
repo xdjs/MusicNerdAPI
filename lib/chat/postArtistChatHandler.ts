@@ -68,6 +68,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     const name = artist.name ?? "This artist";
     const prompt = await convertToModelMessages(body.messages);
     const stream = createUIMessageStream({
+      ...(body.canvas ? { generateId: () => body.canvas!.turnId } : {}),
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
         const canvas = body.canvas

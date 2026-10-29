@@ -358,6 +358,7 @@ it("composes an unseen combination through the existing mocked model stream", as
         "73488cf7-3d3f-46ac-8cb1-74424c162ed6",
       ),
     );
+    expect(chunks.find(c => c.type === "start")?.messageId).toBe(canvas.turnId);
     const update = chunks.find(c => c.type === "data-canvas")?.data;
     expect(update.revision).toBe(8);
     expect(update.nextSpec.blocks.map((b: { kind: string }) => b.kind)).toEqual([
