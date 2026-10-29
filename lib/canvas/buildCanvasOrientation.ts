@@ -11,7 +11,7 @@ export function buildCanvasOrientation(name: string, evidence: CanvasEvidence[])
       !!item && all.findIndex(entry => entry?.id === item.id) === index,
   );
   const text = lead
-    ? `${work ? `A good way into ${name} is ${work.title}.` : `Let’s begin with ${name} through ${lead.title}.`} ${lead.text}${quote && quote.id !== lead.id ? ` There’s a personal reason to explore further: ${quote.attribution} writes, “${quote.text}”` : ""}`
+    ? `${work ? `A good way into ${name} is ${work.title}.` : `Let’s begin with ${name} through ${lead.title}.`} ${lead.text}${quote && quote.id !== lead.id ? ` There’s a personal reason to explore further, too: “${quote.text}” (${quote.attribution}).` : ""}`
     : `There’s not enough public material here for me to introduce ${name} reliably yet. We can start with their profile links and follow the work from there.`;
   return {
     text,
