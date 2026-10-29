@@ -11,7 +11,7 @@ export async function readCanvasPreviewBudget() {
     where r.action='canvas_preview_reservation' and r.trigger='demo_20261029_usd1'`);
   const used = Number(row?.micros);
   if (!Number.isSafeInteger(used) || used < 0) return null;
-  const expiresAt = "2026-10-29T16:00:00Z";
+  const expiresAt = "2026-10-30T04:00:00Z";
   return {
     reservedOrSettledUsd: used / 1_000_000,
     remainingUsd: Math.max(0, 18 - used / 1_000_000),

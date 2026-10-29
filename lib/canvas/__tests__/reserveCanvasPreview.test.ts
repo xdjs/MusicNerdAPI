@@ -31,7 +31,7 @@ it("never accesses a production database or expired window", async () => {
   await expect(reserveCanvasPreview("artist")).rejects.toThrow();
   expect(m.transaction).not.toHaveBeenCalled();
   vi.stubEnv("VERCEL_ENV", "preview");
-  vi.mocked(Date.now).mockReturnValue(Date.parse("2026-10-30T00:00:00Z"));
+  vi.mocked(Date.now).mockReturnValue(Date.parse("2026-10-30T04:00:00Z"));
   await expect(reserveCanvasPreview("artist")).rejects.toThrow();
   expect(m.transaction).not.toHaveBeenCalled();
 });

@@ -7,7 +7,7 @@ it("reports conservative headroom without inserting or reserving", async () => {
   execute.mockResolvedValue([{ micros: 10678153 }]);
   const result = await readCanvasPreviewBudget();
   expect(result?.remainingUsd).toBeCloseTo(7.321847);
-  expect(result?.expiresAt).toBe("2026-10-29T16:00:00Z");
+  expect(result?.expiresAt).toBe("2026-10-30T04:00:00Z");
   expect(execute).toHaveBeenCalledTimes(1);
 });
 it("does not report capacity from an invalid ledger", async () => {

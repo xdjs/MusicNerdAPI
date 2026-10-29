@@ -4,7 +4,7 @@ import { db } from "@/lib/db/db";
 export async function reserveCanvasPreview(artistId: string): Promise<string> {
   if (process.env.VERCEL_ENV !== "preview" || process.env.MUSICNERD_CANVAS_PREVIEW_ENABLED !== "1")
     throw new Error("Canvas preview disabled");
-  if (Date.now() >= Date.parse("2026-10-29T16:00:00Z"))
+  if (Date.now() >= Date.parse("2026-10-30T04:00:00Z"))
     throw new Error("Demo budget window closed");
   return db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('canvas-demo-20261029-budget'))`);

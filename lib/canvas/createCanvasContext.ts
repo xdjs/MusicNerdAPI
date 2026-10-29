@@ -133,7 +133,10 @@ export function createCanvasContext(
           }
         : await read.execute!({ sourceId: originalId }, options);
       if (!source) return result;
-      const item = register(source, focus ?? (passageId ? Number(passageId[2]) : ""));
+      const item = register(
+        source,
+        focus ?? (passageId ? Number(passageId[2]) : source.pdf ? currentQuestion : ""),
+      );
       if (!item) return { error: "This source cannot be displayed safely." };
       return {
         ...result,

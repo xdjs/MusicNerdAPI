@@ -157,3 +157,21 @@ it("skips verified repeated archive headings without rewriting the cited passage
   expect(buildCanvasEvidence(source, Number(item!.id.split("::excerpt:")[1]))).toEqual(item);
   expect(buildCanvasEvidence(source, 0)?.text).toContain("Earlier archival context");
 });
+
+it("does not select an archive footer just because the document title matches it", () => {
+  const source = {
+    ...originalFixture(
+      "public_pdf:dutch-archive:hash:page:14",
+      "https://example.com/a.pdf#page=14",
+      "Chapter I (2015-2016) began with the intention to write his next album.\nIn June 2023, he released all 283 minutes of the DailyRambles series.\nAlthough he never intended to make this vulnerable body of\n54\nDutchyyyDutchyyy -vs- The Algorithms",
+    ),
+    pdf: {
+      page: 14,
+      title: "Dutchyyy vs The Algorithms — published archive excerpt · PDF p. 14",
+      limitation: "Archive narration, not artist testimony.",
+    },
+  };
+  expect(buildCanvasEvidence(source)?.text).toContain("Chapter I");
+  expect(buildCanvasEvidence(source)?.text).not.toContain("Algorithms");
+  expect(buildCanvasEvidence(source, "June 2023 released")?.text).toContain("June 2023");
+});
