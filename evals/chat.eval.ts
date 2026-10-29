@@ -3,9 +3,8 @@ import { MODEL_CHAT } from "@/lib/ai/const";
 import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { experimentName } from "@/lib/evals/experimentName";
-import { judgeAnswer } from "@/lib/evals/judgeAnswer";
+import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
 import { chatStreamTurn } from "@/lib/evals/chatStreamTurn";
-import { scoreAnswerQuality } from "@/lib/evals/scorers/scoreAnswerQuality";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 
@@ -24,7 +23,7 @@ const SHA = process.env.GITHUB_SHA ?? "local";
 
 Eval("music-nerd", {
   experimentName: experimentName("chat", MODEL_CHAT, SHA),
-  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA },
+  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA, rubric: "cited-evidence-v1" },
   // One question at a time, so the timings are not measuring each other.
   maxConcurrency: 1,
   data: () =>
@@ -51,14 +50,19 @@ Eval("music-nerd", {
             output.sources.map(s => s.n),
           )
         : null,
-    async ({ input, output, expected }) =>
-      scoreAnswerQuality(
-        await judgeAnswer({
-          question: input.question,
-          reference: expected.reference,
-          answerable: expected.answerable,
-          answer: output.answer,
-        }),
-      ),
+    async ({ input, output, expected }) => {
+      const result = await judgeCitedAnswer({
+        question: input.question,
+        reference: expected.reference,
+        answerable: expected.answerable,
+        turn: output,
+      });
+      const metadata = { reason: result.verdict?.reason ?? result.unscoredReason };
+      return [
+        { name: "evidence_scorable", score: result.verdict ? 1 : 0, metadata },
+        { name: "answer_relevance", score: result.verdict?.relevance ?? null, metadata },
+        { name: "source_groundedness", score: result.verdict?.groundedness ?? null, metadata },
+      ];
+    },
   ],
 });

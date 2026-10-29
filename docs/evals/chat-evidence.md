@@ -1,0 +1,15 @@
+# Chat evidence eval (Web #1424)
+
+Extend the existing 11-case runner; do not change the dataset, runtime chat tools, source eligibility, PDF handling or the API contract. API #106 owns public PDF retrieval and page citations on separate branches. Its failures remain explicit dependencies, not passing abstentions.
+
+The old `answer_groundedness` judges against a short reference. Preserve its historical results. The new `source_groundedness` uses the exact successful readSource/webSearch tool outputs observed in the stream, matched by citation number AND URL. Store a SHA-256 of each passage and the tool call id with the eval output. These hashes identify bytes seen by the model, not a database revision or proof that the publisher's statement is true. Web snippets remain snippets, not independently fetched full originals. Never refetch a current page to pretend it is the source used in an older answer.
+
+Capture only known source-reading outputs; searchSources snippets are discovery, not read passages. If a future document tool returns binary content or page references, add an explicit adapter after its contract is known. Missing/mismatched evidence, a stream error or more than 96,000 characters of cited captured evidence makes the semantic result unscored; never silently truncate evidence or fall back to the short reference and label that source-grounding.
+
+One model judge call replaces the old judge call per successful turn. It scores requested-part coverage and claim support, treating quoted evidence as untrusted data. Correct additional facts are permitted when the cited passage supports them. A valid citation number alone is insufficient. Preserve speaker, edition, role, dates and qualifications. A safe unnecessary refusal fails an answerable case. An insufficient-evidence answer must not claim a corpus-wide absence from a small retrieved subset. Model scores assist review; they do not certify correctness.
+
+This runner still executes real model/provider calls and writes allowance rows on staging. Do not run it merely to test the plumbing. Focused tests use synthetic streams and a mocked judge with zero provider/database calls. Before a live run, freeze cases/expected passages, record exact code and rubric version, and agree a concrete spend/attempt bound. No retries to chase a pass; blocked/unscored cases remain visible. A current run does not regrade old results.
+
+Historical review: GitHub run 40611342814 records 11 case timings and aggregate scores but has no downloadable per-case artifact. Answers/reasons are in the restricted Braintrust experiment `chat · anthropic/claude-sonnet-5.5 · 649b7b1`; full row inspection is pending access.
+
+Additional proposed coverage after reviewing those rows: exact work/role/date qualification, ambiguous speaker attribution, and a two-turn exclusion/comparison sequence. Do not invent new gold answers before checking actual eligible evidence. The existing Dutchyyy alias and on-chain cases claim PDF support; API #106 must be accounted for before interpreting them.

@@ -29,6 +29,22 @@ describe("chatStreamTurn", () => {
       streamOf([
         { type: "tool-input-available", toolCallId: "t", toolName: "readSource", input: {} },
         { type: "source-url", sourceId: "1", url: "https://a.example", title: "A" },
+        {
+          type: "tool-output-available",
+          toolCallId: "t",
+          output: { n: 1, url: "https://a.example", text: "Born in Richmond." },
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "discover",
+          toolName: "searchSources",
+          input: {},
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "discover",
+          output: { n: 2, url: "https://b.example", text: "Discovery only" },
+        },
         { type: "text-start", id: "x" },
         { type: "text-delta", id: "x", delta: "Born in Richmond " },
         { type: "text-delta", id: "x", delta: "[1]." },
@@ -46,6 +62,14 @@ describe("chatStreamTurn", () => {
     expect(request.headers.get("x-real-ip")).toBe("192.0.2.1");
     expect(turn.answer).toBe("Born in Richmond [1].");
     expect(turn.sources).toEqual([{ n: 1, title: "A", url: "https://a.example" }]);
+    expect(turn.evidence).toHaveLength(1);
+    expect(turn.evidence?.[0]).toMatchObject({
+      n: 1,
+      url: "https://a.example",
+      text: "Born in Richmond.",
+      tool: "readSource",
+      toolCallId: "t",
+    });
     expect(turn.firstTextMs).toBeLessThan(turn.totalMs);
     expect(turn.error).toBeUndefined();
   });
