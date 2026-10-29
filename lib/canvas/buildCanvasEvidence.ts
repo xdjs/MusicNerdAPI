@@ -39,10 +39,18 @@ export function buildCanvasEvidence(
     title = source.pdf.title;
     attribution = "Published Lore PDF · extracted page";
   }
+  // Skip this verified archive's repeated page/section heading only for new selection.
+  // Keep original text and offsets intact, so citations and old excerpts rehydrate exactly.
+  const archiveHeader = source.sourceId.startsWith("public_pdf:dutch-archive:")
+    ? text.match(
+        /^\s*(?:\d+\s+)?Dutchyyy vs The Algorithms \(Excerpt\)\s+The Creation of Evolving Portals and Long-Form Art\s+/,
+      )
+    : null;
+  const bodyStart = archiveHeader?.[0].length ?? 0;
   let offset =
     typeof focus === "number"
       ? Math.max(0, focus)
-      : selectCanvasPassageOffset(text, focus || title);
+      : bodyStart + selectCanvasPassageOffset(text.slice(bodyStart), focus || title);
   // Move to a real word boundary, including when rehydrating an older excerpt offset.
   while (
     offset > 0 &&

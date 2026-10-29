@@ -132,3 +132,28 @@ it("retains recording and release distinctions without assigning either to the s
   expect(item?.text).toContain("Recorded 1997-2002, released July 13, 2004");
   expect(item?.date).toBeNull();
 });
+
+it("skips verified repeated archive headings without rewriting the cited passage or old offsets", () => {
+  const source = {
+    ...originalFixture(
+      "public_pdf:dutch-archive:abcdef123456:page:7",
+      "https://example.com/archive.pdf#page=7",
+      "Dutchyyy vs The Algorithms (Excerpt)\nThe Creation of Evolving Portals and Long-Form Art\nWhile algorithms encouraged short-form content, Dutchyyy rebelled by focusing on long-form, immersive projects.\nEvolving Portals, an ongoing series of experimental music pieces, defied the norm with hours of creative output that rewarded deep listening and exploration.",
+    ),
+    pdf: {
+      page: 7,
+      title: "Published archive · PDF p. 7",
+      limitation: "Narration is not artist testimony.",
+    },
+  };
+  const item = buildCanvasEvidence(source, "Evolving Portals archive passage");
+  expect(item?.text).not.toContain("The Algorithms");
+  expect(item?.text).not.toContain("The Creation");
+  expect(item?.text).toContain("Evolving Portals");
+  expect(source.text.replace(/\s+/g, " ")).toContain(item!.text);
+  expect(item!.text.split(/\s+/).length).toBeLessThanOrEqual(25);
+  expect(item?.date).toBeNull();
+  expect(item?.limitation).toContain("Narration is not artist testimony");
+  expect(buildCanvasEvidence(source, Number(item!.id.split("::excerpt:")[1]))).toEqual(item);
+  expect(buildCanvasEvidence(source, 0)?.text).toContain("The Algorithms");
+});
