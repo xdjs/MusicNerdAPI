@@ -81,3 +81,15 @@ it("retains PDF page and document attribution without inventing an event date", 
   });
   expect(item?.limitation).toContain("Narrator is not the artist.");
 });
+
+it("never begins a passage inside a word and rehydrates its stable boundary", () => {
+  const source = originalFixture(
+    "pdf:page",
+    "https://example.com",
+    "opening extraordinary passage with Evolving Portals and patient listening",
+  );
+  const item = buildCanvasEvidence(source, 11);
+  expect(item?.text).toBe("passage with Evolving Portals and patient listening");
+  const offset = Number(item!.id.split("::excerpt:")[1]);
+  expect(buildCanvasEvidence(source, offset)).toEqual(item);
+});

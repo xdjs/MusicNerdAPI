@@ -43,8 +43,17 @@ export function buildCanvasEvidence(
     typeof focus === "number"
       ? text.slice(Math.max(0, focus), Math.max(0, focus) + 400).trim()
       : getQuerySnippet(text, focus || title, 400);
-  const offset = Math.max(0, text.indexOf(snippet));
-  const passage = snippet.trim().split(/\s+/).slice(0, 25).join(" ");
+  let offset = Math.max(0, text.indexOf(snippet));
+  // Move to a real word boundary, including when rehydrating an older excerpt offset.
+  while (
+    offset > 0 &&
+    offset < text.length &&
+    /\S/.test(text[offset - 1]) &&
+    /\S/.test(text[offset])
+  )
+    offset++;
+  while (offset < text.length && /\s/.test(text[offset])) offset++;
+  const passage = (text.slice(offset).match(/\S+/g) ?? []).slice(0, 25).join(" ");
   return {
     id: focus !== "" ? `${source.sourceId}::excerpt:${offset}` : source.sourceId,
     title,
