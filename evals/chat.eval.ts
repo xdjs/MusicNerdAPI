@@ -1,3 +1,4 @@
+import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_CHAT } from "@/lib/ai/const";
 import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
@@ -19,11 +20,21 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  *   pnpm eval evals/chat.eval.ts
  */
 
+const budget = createEvalBudgetFetch(globalThis.fetch);
+globalThis.fetch = budget.fetch;
+
 const SHA = process.env.GITHUB_SHA ?? "local";
 
 Eval("music-nerd", {
   experimentName: experimentName("chat", MODEL_CHAT, SHA),
-  metadata: { suite: "chat", model: MODEL_CHAT, sha: SHA, rubric: "cited-evidence-v1" },
+  metadata: {
+    suite: "chat",
+    model: MODEL_CHAT,
+    sha: SHA,
+    rubric: "cited-evidence-v1",
+    budgetUsd: 5,
+    maxOutputTokens: 2048,
+  },
   // One question at a time, so the timings are not measuring each other.
   maxConcurrency: 1,
   data: () =>

@@ -1,6 +1,6 @@
 # Web #1424: one-run diagnostic manifest
 
-Status: prepared October 29, 2026; not executed. Budget approval and enforceable spend controls are pending. This is a diagnostic run of current chat, not final closure acceptance.
+Status: prepared October 29, 2026; not executed. Pete approved the new $5 bound. The eval transport reserves a conservative per-request allowance before egress; validation is required before dispatch. This is a diagnostic run of current chat, not final closure acceptance.
 
 ## Code and environment
 
@@ -37,4 +37,4 @@ Review every case for requested-fact accuracy, every material claim's cited supp
 
 ## Spend preflight
 
-Proposed new limit: $5 combined model/provider usage for this single run. Approval is pending. The historical Braintrust display estimated $0.245 for recorded chat usage, but that is neither a full provider invoice nor a hard ceiling for this run. The current runner has no dollar-budget guard and chat generation has no explicit output-token ceiling. Do not dispatch while representing the proposed $5 maximum as enforced. Establish a bounded mechanism or get an explicit revised execution agreement first; do not silently change shared gateway settings or create a new API key.
+Proposed new limit: $5 combined model/provider usage for this single run. Pete approved this bound. The historical Braintrust display estimated $0.245 for recorded chat usage, but that is neither a full provider invoice nor a hard ceiling for this run. The eval-only transport now reserves text input at one token per UTF-8 byte plus 8,192 framing tokens, at $4/$20 per million input/output for Sonnet and $1/$6 for Flash. These exceed the inspected Gateway catalog rates including regional/cache-write or priority rates. Outputs are limited to 2,048 tokens. Each Tavily call reserves $0.016 (two PAYG credits). Failed requests are never refunded; retries reserve again; requests exceeding the $5 cumulative envelope or 100 provider requests are blocked before sending and latch the guard closed. Unknown models/media/native tools/provider routes are rejected. This conservative ledger is not a provider invoice; report actual available usage separately. No shared settings or new keys. The workflow has a ten-minute timeout. The output ceiling is an eval constraint and truncated/incomplete cases must remain visible. Pricing sources: https://ai-gateway.vercel.sh/v1/models and https://docs.tavily.com/documentation/api-credits, inspected October 29.
