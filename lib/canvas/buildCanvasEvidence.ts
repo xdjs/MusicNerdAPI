@@ -1,3 +1,5 @@
+import { projectCanvasSourceText } from "./projectCanvasSourceText";
+import { findCanvasBodyStart } from "./findCanvasBodyStart";
 import { getSourceTitle } from "@/lib/chat/getSourceTitle";
 import { selectCanvasPassageOffset } from "./selectCanvasPassageOffset";
 import type { CanvasEvidence, CanvasResearchOriginal } from "./const";
@@ -13,22 +15,11 @@ export function buildCanvasEvidence(
     return null;
   }
   if (!["http:", "https:"].includes(url.protocol)) return null;
-  let text = source.text;
-  let title = getSourceTitle(source.url);
-  let attribution = "Stored public source";
-  if (url.hostname.endsWith("inprocess.world")) {
-    try {
-      const metadata: unknown = JSON.parse(source.text);
-      if (metadata && typeof metadata === "object") {
-        const value = metadata as Record<string, unknown>;
-        if (typeof value.description === "string") text = value.description;
-        if (typeof value.title === "string") title = value.title.slice(0, 200);
-      }
-    } catch {
-      /* Older stored source is plain text. */
-    }
-    attribution = "InProcess · work description";
-  } else if (url.hostname.endsWith("instagram.com"))
+  const projected = projectCanvasSourceText(source.text, source.url);
+  const text = projected.text;
+  let title = projected.title ?? getSourceTitle(source.url);
+  let attribution = projected.attribution ?? "Stored public source";
+  if (url.hostname.endsWith("instagram.com"))
     attribution =
       source.evidenceKind === "provider_transcript"
         ? "Instagram · stored provider transcript"
@@ -39,6 +30,8 @@ export function buildCanvasEvidence(
     title = "Music Nerd · public artist introduction";
     attribution = "Public Music Nerd profile";
   }
+  if (!projected.title && /\/(discography|gallery)\/?$/.test(url.pathname))
+    title = url.pathname.includes("discography") ? "Discography" : "Photo gallery";
   if (source.pdf) {
     title = source.pdf.title;
     attribution = "Published Lore PDF · extracted page";
@@ -58,6 +51,8 @@ export function buildCanvasEvidence(
       : selectCanvasPassageOffset(text, focus || (source.pdf ? "" : title));
   if (typeof focus !== "number" && archiveHeader && offset >= headerStart && offset < bodyStart)
     offset = bodyStart + selectCanvasPassageOffset(text.slice(bodyStart), focus || title);
+  if (!source.pdf && !projected.metadata && typeof focus !== "number")
+    offset = Math.max(offset, findCanvasBodyStart(text));
   // Move to a real word boundary, including when rehydrating an older excerpt offset.
   while (
     offset > 0 &&
@@ -83,7 +78,9 @@ export function buildCanvasEvidence(
   const lastSentence = bounded.findLastIndex(
     (word, index) => index >= 7 && /[.!?][”"']?$/.test(word),
   );
-  const passage = bounded.slice(0, lastSentence >= 0 ? lastSentence + 1 : undefined).join(" ");
+  const passage = projected.metadata
+    ? projected.text
+    : bounded.slice(0, lastSentence >= 0 ? lastSentence + 1 : undefined).join(" ");
   if (url.hostname.endsWith("bandcamp.com")) {
     const firstLine = text.split("\n")[0]?.trim();
     const slug = url.pathname.split("/").filter(Boolean).at(-1)?.replace(/-/g, " ");
@@ -114,7 +111,11 @@ export function buildCanvasEvidence(
         : "Publication date unavailable",
     attribution,
     limitation: [
-      "Exact excerpt from stored public source text, limited to 25 words. Post/upload dates do not establish when the music was created. Open the source for full context.",
+      !passage
+        ? "No readable passage is available in this stored extraction. Open the original source for context."
+        : projected.metadata
+          ? "Labeled fields from stored provider metadata, not an artist quotation. Missing artist names are not inferred from account IDs. Provider release dates do not establish recording dates."
+          : "Exact excerpt from stored public source text, limited to 25 words. Post/upload dates do not establish when the music was created. Open the source for full context.",
       source.pdf?.limitation ?? "",
       source.evidenceKind === "provider_transcript"
         ? "Speaker attribution is unverified; this is a provider transcript, not an artist-authored caption."

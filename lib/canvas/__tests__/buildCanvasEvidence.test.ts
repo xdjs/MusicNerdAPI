@@ -175,3 +175,49 @@ it("does not select an archive footer just because the document title matches it
   expect(buildCanvasEvidence(source)?.text).not.toContain("Algorithms");
   expect(buildCanvasEvidence(source, "June 2023 released")?.text).toContain("June 2023");
 });
+
+it("shows the observed provider record as labeled facts with provider attribution", () => {
+  const item = buildCanvasEvidence({
+    ...originalFixture(
+      "release:bio",
+      "https://www.deezer.com/album/6733078",
+      JSON.stringify({
+        provider: "deezer",
+        artist_account: "416544",
+        id: "6733078",
+        title: "Salsa System (EP)",
+        release_type: "ep",
+        release_date: "2006-01-01",
+      }),
+    ),
+    activityDate: "2006-01-01",
+    activityDateKind: "release",
+  });
+  expect(item?.title).toBe("Salsa System (EP)");
+  expect(item?.text).toContain("Type: EP");
+  expect(item?.text).not.toContain("artist_account");
+  expect(item?.limitation).toContain("not an artist quotation");
+  expect(item?.dateKind).toBe("Release date from stored provider record");
+});
+it("uses clear page purpose and navigation-free exact text for Bio Ritmo, with stable rehydration", () => {
+  const source = originalFixture(
+    "web:discography",
+    "https://www.bioritmo.com/discography",
+    "0 Skip to Content English English Salsa System Electric Cowbell Fall 2022, 10” Vinyl 2006, Demo EP Pre-Order Coming Soon Oriza / Whiskey Barons Remix",
+  );
+  const item = buildCanvasEvidence(source, "Salsa System");
+  expect(item?.title).toBe("Discography");
+  expect(item?.text).toMatch(/^Salsa System/);
+  expect(source.text).toContain(item!.text);
+  expect(buildCanvasEvidence(source, Number(item!.id.split("::excerpt:")[1]))).toEqual(item);
+});
+it("retains a clean source link when extraction contains no usable narrative", () => {
+  for (const text of [
+    "0 Skip to Content English English View fullsize",
+    '{"unknown":"opaque storage data"}',
+  ]) {
+    const item = buildCanvasEvidence(originalFixture("empty", "https://example.com/source", text));
+    expect(item?.text).toBe("");
+    expect(item?.url).toBe("https://example.com/source");
+  }
+});

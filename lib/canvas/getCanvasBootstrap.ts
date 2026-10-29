@@ -1,3 +1,4 @@
+import { buildCanvasOpening } from "./buildCanvasOpening";
 import { buildCanvasOrientation } from "./buildCanvasOrientation";
 import { readCanvasPreviewBudget } from "./readCanvasPreviewBudget";
 import { z } from "zod";
@@ -35,25 +36,7 @@ export async function getCanvasBootstrap(id: string) {
   const allEvidence = [...seed, ...evidence];
   const bio = originals.find(source => source.sourceId === `public_profile:${id}`);
   const candidates = allEvidence.filter(item => !item.id.startsWith("public_profile:"));
-  const work = candidates.find(item => item.category === "release" || item.image);
-  const document = candidates.find(item => item.category === "document" && item.id !== work?.id);
-  const social = candidates.find(item => item.mediaKind === "instagram" && item.id !== work?.id);
-  const openingIds = [
-    ...new Set(
-      [work?.id, document?.id, social?.id, ...candidates.map(item => item.id)].filter(
-        (value): value is string => !!value,
-      ),
-    ),
-  ].slice(0, 3);
-  const openingQuestion = !candidates.length
-    ? "I don’t have enough saved source material to tell this artist’s story yet. Want to start with their profile links?"
-    : document
-      ? work
-        ? `Want to start with ${work.title}, or follow the story in the archive?`
-        : "Want to explore the artist’s archive together?"
-      : social
-        ? "Would you like to explore recent posts, or find a listening starting point?"
-        : "Would you like a listening starting point, or a closer look at the story around these sources?";
+  const opening = buildCanvasOpening(candidates);
   return Response.json(
     {
       artist: { id, name: artist.name ?? "Artist", profileUrl: `/artist/${id}?view=profile` },
@@ -62,15 +45,7 @@ export async function getCanvasBootstrap(id: string) {
         ? { text: excerptCanvasIntroduction(bio.text), sourceUrl: bio.url, kind: "profile" }
         : buildCanvasOrientation(artist.name ?? "This artist", candidates),
       budget: await readCanvasPreviewBudget().catch(() => null),
-      openingIds,
-      openingQuestion,
-      openingSuggestions: openingIds.slice(0, 2).map(sourceId => {
-        const item = allEvidence.find(entry => entry.id === sourceId)!;
-        return {
-          label: `Explore ${item.title}`.slice(0, 80),
-          prompt: `Help me explore ${item.title} (${item.url}). What can we learn about ${artist.name ?? "this artist"} from this source?`,
-        };
-      }),
+      ...opening,
       sourceCount: originals.length,
       coverage: unavailable
         ? "Saved sources are temporarily unavailable."

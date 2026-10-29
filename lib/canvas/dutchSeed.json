@@ -1,5 +1,17 @@
 [
   {
+    "id": "dutch-identities",
+    "title": "An artist across aliases",
+    "text": "The artist\u2019s discography connects Dutchyyy with the MC/rapper alias Dutchmassive and the earlier producer alias Dutchy.",
+    "url": "https://cbabvmebugudeuylronz.supabase.co/storage/v1/object/public/vault-files/efff5473-fa9f-4eba-b137-16ffb79f15d8/1788879108516_dutch_discography_timeline.pdf#page=1",
+    "category": "identity",
+    "date": null,
+    "dateKind": "Aliases reported by the artist\u2019s discography",
+    "page": 1,
+    "attribution": "Dutchyyy \u00b7 Lore discography",
+    "limitation": "Public Lore PDF. Document claim, not independent verification. PDF page numbering is shown; recording, release and upload dates are distinct."
+  },
+  {
     "id": "dutch-preface",
     "title": "Why preserve the work?",
     "text": "Archiving my life on-chain is a way to ensure that my story isn\u2019t erased.",
