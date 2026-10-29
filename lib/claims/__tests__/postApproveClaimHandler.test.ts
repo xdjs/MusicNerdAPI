@@ -6,14 +6,12 @@ const m = vi.hoisted(() => ({
   auth: vi.fn(),
   set: vi.fn(),
   work: vi.fn(),
-  email: vi.fn(),
   label: vi.fn(),
   discord: vi.fn(),
 }));
 vi.mock("@/lib/auth/authenticateAdmin", () => ({ authenticateAdmin: m.auth }));
 vi.mock("@/lib/claims/setClaimStatus", () => ({ setClaimStatus: m.set }));
 vi.mock("@/lib/claims/startClaimApprovalWork", () => ({ startClaimApprovalWork: m.work }));
-vi.mock("@/lib/claims/emailClaimApproved", () => ({ emailClaimApproved: m.email }));
 vi.mock("@/lib/claims/userLabel", () => ({ userLabel: m.label }));
 vi.mock("@/lib/discord/sendDiscordMessage", () => ({ sendDiscordMessage: m.discord }));
 
@@ -35,13 +33,12 @@ beforeEach(() => {
 });
 
 describe("postApproveClaimHandler", () => {
-  it("approves, starts the work, emails the claimant and tells the team", async () => {
+  it("approves, starts the work and tells the team", async () => {
     const res = await postApproveClaimHandler(req(), ID);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
     expect(m.set).toHaveBeenCalledWith(ID, "approved");
     expect(m.work).toHaveBeenCalledWith(claim, "admin");
-    expect(m.email).toHaveBeenCalledWith(claim);
     expect(m.discord).toHaveBeenCalledWith(
       "Claim APPROVED: MN-ABCD | Artist ID: a1 | Approved by: admin@example.test",
     );

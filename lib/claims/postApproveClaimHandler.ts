@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { authenticateAdmin } from "@/lib/auth/authenticateAdmin";
-import { emailClaimApproved } from "@/lib/claims/emailClaimApproved";
 import { setClaimStatus } from "@/lib/claims/setClaimStatus";
 import { startClaimApprovalWork } from "@/lib/claims/startClaimApprovalWork";
 import { userLabel } from "@/lib/claims/userLabel";
@@ -10,8 +9,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 /**
  * Handles POST /api/admin/claims/{id}/approve: approves the claim, starts its
- * research, interview preparation and page build, emails the claimant and
- * tells the team. The approval stands when follow-up work fails; the response
+ * research, interview preparation and page build, and tells the team. The approval stands when follow-up work fails; the response
  * carries a warning instead.
  *
  * @param request - The request; an admin's Privy token.
@@ -32,7 +30,6 @@ export async function postApproveClaimHandler(request: Request, id: string): Pro
         { status: 404, headers },
       );
     const warning = await startClaimApprovalWork(claim, auth.userId);
-    await emailClaimApproved(claim);
     await sendDiscordMessage(
       `Claim APPROVED: ${claim.referenceCode} | Artist ID: ${claim.artistId} | Approved by: ${await userLabel(auth.userId)}`,
     );
