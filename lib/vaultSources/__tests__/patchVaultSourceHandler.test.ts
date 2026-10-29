@@ -62,6 +62,13 @@ describe("patchVaultSourceHandler", () => {
     expect(mock.refresh).not.toHaveBeenCalled();
   });
 
+  it("leaves the type alone when the decision is a 409", async () => {
+    mock.status.mockResolvedValueOnce(undefined);
+    const res = await call({ status: "rejected", expectedStatus: "pending", type: "video" });
+    expect(res.status).toBe(409);
+    expect(mock.type).not.toHaveBeenCalled();
+  });
+
   it("changes the type without a Lore refresh", async () => {
     expect((await call({ type: "interview" })).status).toBe(200);
     expect(mock.type).toHaveBeenCalledWith("s1", "interview");

@@ -33,7 +33,6 @@ export async function patchVaultSourceHandler(
     if (body instanceof NextResponse) return body;
     const { artistId, userId, claimId } = auth;
 
-    if (body.type) await updateVaultSourceType(auth.sourceId, body.type);
     if (body.status) {
       const { status, expectedStatus } = body;
       const updated = await withArtistOperation(
@@ -48,6 +47,8 @@ export async function patchVaultSourceHandler(
         );
       await queueSourceChangeRefresh(artistId, claimId, userId);
     }
+    // After the decision, so a 409 changes nothing.
+    if (body.type) await updateVaultSourceType(auth.sourceId, body.type);
     return NextResponse.json({ status: "ok" }, { status: 200, headers });
   } catch (error) {
     console.error("[knowledge/sources] Could not update source", error);
