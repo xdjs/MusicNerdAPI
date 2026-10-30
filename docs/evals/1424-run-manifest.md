@@ -1,6 +1,6 @@
 # Web #1424: one-run diagnostic manifest
 
-Status: attempted October 29, 2026; harness failure, no semantic acceptance. Pete approved the new $5 bound. The eval transport reserves a conservative per-request allowance before egress; validation is required before dispatch. This is a diagnostic run of current chat, not final closure acceptance.
+Status: approved replacement completed October 29, 2026; [results and remaining gaps](1424-diagnostic-result.md). Attempt 1 remains preserved below. No semantic closure acceptance. Pete approved the new $5 bound. The eval transport reserves a conservative per-request allowance before egress; validation is required before dispatch. This is a diagnostic run of current chat, not final closure acceptance.
 
 ## Code and environment
 
@@ -50,3 +50,5 @@ Offline correction: allow only that known metadata part, continue rejecting othe
 ## Replacement attempt authorized
 
 Pete explicitly approved one replacement attempt after reviewing the harness failure. The runner carries forward 104,224 microdollars ($0.104224), leaving $4.895776 under the same original $5 ceiling. Same 11 cases, same runtime base and rubric, corrected harness; no quota resets, production changes or PDF-branch edits. Record the replacement SHA and run ID at dispatch.
+
+Replacement result: run `40979660918`, code `89f689f`, completed all 11 cases. See [the result report](1424-diagnostic-result.md) for exact scores, manual exceptions, latency and the $3.709448 combined conservative reservation. No further paid rerun authorized.
