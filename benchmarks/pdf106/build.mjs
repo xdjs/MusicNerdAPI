@@ -14,6 +14,10 @@ await build({
     {
       name: "observe-real-sdk",
       setup(b) {
+        b.onResolve({ filter: /^next\/(server|headers|cache)$/ }, args => ({
+          path: require.resolve(args.path),
+          external: true,
+        }));
         b.onResolve({ filter: /^ai$/ }, () => ({ path: "observer", namespace: "pdf106" }));
         b.onResolve({ filter: /^pdf106-real-ai$/ }, () => ({ path: realAi, external: true }));
         b.onLoad({ filter: /.*/, namespace: "pdf106" }, () => ({

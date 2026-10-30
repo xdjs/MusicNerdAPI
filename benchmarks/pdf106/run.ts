@@ -53,8 +53,20 @@ try {
     )
       throw new Error("Public source snapshot changed between cohorts");
   }
-} catch {
+} catch (failure) {
+  const known = [
+    "Database target is not the verified staging project",
+    "Staging artist identity mismatch",
+    "Public gold PDF unavailable",
+    "Public gold PDF changed",
+    "Baseline preflight missing",
+    "Public source snapshot changed between cohorts",
+  ];
+  const message = failure instanceof Error ? failure.message : "";
+  const code = (failure as { code?: unknown })?.code;
   save(`${cohort}-blocked.json`, {
+    detail: known.includes(message) ? message : "Configuration/database/public-source read failed",
+    code: typeof code === "string" && /^[A-Z_0-9]{1,40}$/.test(code) ? code : undefined,
     reason:
       "Staging identity, configuration or frozen public source preflight failed; no questions submitted by this cohort",
   });
