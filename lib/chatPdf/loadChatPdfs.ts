@@ -9,6 +9,8 @@ export async function loadChatPdfs(
   artistId: string,
   sourceId?: string,
   query = "",
+  exactTitle = false,
+  mentionedIn?: string,
 ): Promise<ChatPdf[]> {
   const terms = [
     ...new Set(
@@ -39,6 +41,9 @@ export async function loadChatPdfs(
       and v.file_path ~ '^[a-zA-Z0-9_. -]+(/[a-zA-Z0-9_. -]+)+$'
       and not exists (select 1 from unnest(string_to_array(v.file_path, '/')) segment where segment in ('.','..'))
       and (${sourceId ?? null}::uuid is null or v.id=${sourceId ?? null}::uuid)
+      and (${exactTitle}=false or ${title}=lower(${query})
+        or (${mentionedIn ?? null}::text is not null and ${title} like '%.pdf'
+          and position(${title} in lower(${mentionedIn ?? ""})) > 0))
     order by (case when ${title}=lower(${query}) then 1 else 0 end) desc,
       (${rank}) desc, v.id limit 32`);
 }

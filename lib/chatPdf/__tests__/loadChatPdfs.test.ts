@@ -121,3 +121,76 @@ it("fails closed across transactional claim/source deletion and source rejection
   await client.exec("update artist_vault_sources set status='rejected',updated_at=now()");
   await expect(second.assertCurrent()).rejects.toThrow("publication changed");
 });
+
+it("matches exact names before the cap and refuses duplicate names and ineligible named sources", async () => {
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  await client.exec("delete from artist_vault_sources; delete from artist_claims");
+  await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
+  for (let i = 1; i <= 40; i++) {
+    const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+    const path = `${artist}/document-${i}.pdf`;
+    await client.query(
+      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      [
+        sid,
+        artist,
+        path,
+        i >= 39 ? "unique.pdf" : `document-${i}.pdf`,
+        `https://public.example/vault-files/${path}`,
+      ],
+    );
+  }
+  const context = { toolCallId: "n", messages: [], context: {} };
+  const session = () =>
+    createChatPdfTools(artist, vi.fn().mockReturnValue(1), undefined, "Read unique.pdf");
+  read.mockClear();
+  expect(await loadChatPdfs(artist, undefined, "UNIQUE.pdf", true)).toHaveLength(2);
+  expect(
+    await session().tools.readNamedPdf.execute!({ filename: "unique.pdf" }, context),
+  ).toHaveProperty("error");
+  expect(read).not.toHaveBeenCalled();
+  await client.query("delete from artist_vault_sources where id=$1", [
+    "00000000-0000-4000-8000-000000000039",
+  ]);
+  read.mockResolvedValue({ bytes: Buffer.from("%PDF-test"), pages: 1, hash: "hash" });
+  expect(
+    await session().tools.readNamedPdf.execute!({ filename: "unique.pdf" }, context),
+  ).toMatchObject({ pages: 1 });
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(await loadChatPdfs(artist, undefined, "unique", true)).toHaveLength(0);
+  expect(await loadChatPdfs(id, undefined, "unique.pdf", true)).toHaveLength(0);
+  for (const statement of [
+    "update artist_claims set status='rejected'",
+    "update artist_claims set status='approved'; update artist_vault_sources set status='pending'",
+    "update artist_vault_sources set status='approved',url='https://private.example/file.pdf'",
+  ]) {
+    await client.exec(statement);
+    read.mockClear();
+    expect(
+      await session().tools.readNamedPdf.execute!({ filename: "unique.pdf" }, context),
+    ).toHaveProperty("error");
+    expect(read).not.toHaveBeenCalled();
+  }
+});
+
+it("does not select a shorter filename inside an explicitly named longer eligible filename", async () => {
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  await client.exec("delete from artist_vault_sources; update artist_claims set status='approved'");
+  for (const [sid, title] of [
+    [id, "my archive.pdf"],
+    ["00000000-0000-4000-8000-000000000003", "archive.pdf"],
+  ]) {
+    const path = `${artist}/${title}`;
+    await client.query(
+      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      [sid, artist, path, title, `https://public.example/vault-files/${path}`],
+    );
+  }
+  const context = { toolCallId: "n", messages: [], context: {} };
+  read.mockClear();
+  for (const filename of ["archive.pdf", "my archive.pdf"]) {
+    const tools = createChatPdfTools(artist, vi.fn(), undefined, "Read my archive.pdf").tools;
+    expect(await tools.readNamedPdf.execute!({ filename }, context)).toHaveProperty("error");
+  }
+  expect(read).not.toHaveBeenCalled();
+});

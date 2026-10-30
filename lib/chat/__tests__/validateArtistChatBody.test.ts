@@ -91,3 +91,21 @@ it("does not replay previous PDF answers as evidence after access can change", a
   );
   expect(JSON.stringify(result)).not.toContain("Revoked fact");
 });
+it("does not replay previous named PDF answers as evidence after access can change", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "pdf",
+          role: "assistant",
+          parts: [
+            { type: "tool-readNamedPdf", state: "output-available" },
+            { type: "text", text: "Revoked fact [1]." },
+          ],
+        },
+        user("What does that PDF say?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(result)).not.toContain("Revoked fact");
+});

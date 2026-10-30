@@ -112,3 +112,129 @@ it("caps concurrent reads and never fetches the same document twice in a turn", 
   ]);
   expect(m.read).toHaveBeenCalledTimes(1);
 });
+
+it("reads one exact filename explicitly present in the latest question without discovery roundtrip", async () => {
+  const session = createChatPdfTools(
+    "artist",
+    vi.fn().mockReturnValue(1),
+    undefined,
+    "What does archive.pdf say?",
+  );
+  const output = await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context);
+  expect(output).toMatchObject({ n: 1, pages: 2, sourceId: pdf.id });
+  expect(m.load).toHaveBeenNthCalledWith(
+    1,
+    "artist",
+    undefined,
+    "archive.pdf",
+    true,
+    "What does archive.pdf say?",
+  );
+  expect(m.read).toHaveBeenCalledTimes(1);
+});
+
+it("refuses inferred filenames, substrings, missing and ambiguous matches without reading", async () => {
+  for (const question of [
+    "What is his latest release?",
+    "Read notarchive.pdf please",
+    "Read archive.pdfx",
+    "Read archive.pdf.exe",
+  ]) {
+    const session = createChatPdfTools("artist", vi.fn(), undefined, question);
+    expect(
+      await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+    ).toHaveProperty("error");
+  }
+  expect(m.load).not.toHaveBeenCalled();
+  for (const rows of [[], [pdf, { ...pdf, id: "22222222-2222-4222-8222-222222222222" }]]) {
+    m.load.mockResolvedValue(rows);
+    const session = createChatPdfTools("artist", vi.fn(), undefined, "Read archive.pdf");
+    expect(
+      await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+    ).toHaveProperty("error");
+  }
+  expect(m.read).not.toHaveBeenCalled();
+});
+
+it("rejects named-file claim/content races before storage and revocation after storage", async () => {
+  for (const after of [[], [{ ...pdf, claimId: "c2" }], [{ ...pdf, revision: "v2" }]]) {
+    m.load.mockReset().mockResolvedValueOnce([pdf]).mockResolvedValue(after);
+    const session = createChatPdfTools("artist", vi.fn(), undefined, "Read archive.pdf");
+    expect(
+      await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+    ).toHaveProperty("error");
+  }
+  expect(m.read).not.toHaveBeenCalled();
+  m.load
+    .mockReset()
+    .mockResolvedValueOnce([pdf])
+    .mockResolvedValueOnce([pdf])
+    .mockResolvedValue([]);
+  const cite = vi.fn();
+  const session = createChatPdfTools("artist", cite, undefined, "Read archive.pdf");
+  expect(
+    await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+  ).toHaveProperty("error");
+  expect(cite).not.toHaveBeenCalled();
+});
+
+it("shares duplicate/read quota and revalidates named-file bytes at conversion and next step", async () => {
+  const session = createChatPdfTools(
+    "artist",
+    vi.fn().mockReturnValue(1),
+    undefined,
+    "Read archive.pdf",
+  );
+  const output = await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context);
+  await session.tools.searchPdfSources.execute!({ query: "archive.pdf" }, context);
+  expect(await session.tools.readPdfSource.execute!({ sourceId: pdf.id }, context)).toHaveProperty(
+    "error",
+  );
+  expect(m.read).toHaveBeenCalledTimes(1);
+  m.load.mockResolvedValue([]);
+  const converted = await session.tools.readNamedPdf.toModelOutput!({
+    output: output as InferToolOutput<typeof session.tools.readNamedPdf>,
+    input: { filename: "archive.pdf" },
+    toolCallId: "n",
+  });
+  expect(JSON.stringify(converted)).not.toContain('"type":"file"');
+  await expect(session.assertCurrent()).rejects.toThrow("publication changed");
+});
+
+it("keeps the two-read cap shared across named reads and the two-step fallback", async () => {
+  const files = [
+    pdf,
+    { ...pdf, id: "22222222-2222-4222-8222-222222222222", title: "second.pdf" },
+    { ...pdf, id: "33333333-3333-4333-8333-333333333333", title: "third.pdf" },
+  ];
+  m.load.mockImplementation(async (_artist, id, query, exact) =>
+    id ? files.filter(f => f.id === id) : exact ? files.filter(f => f.title === query) : files,
+  );
+  const session = createChatPdfTools(
+    "artist",
+    vi.fn().mockReturnValue(1),
+    undefined,
+    "Read archive.pdf",
+  );
+  await session.tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context);
+  await session.tools.searchPdfSources.execute!({ query: "second" }, context);
+  await session.tools.readPdfSource.execute!({ sourceId: files[1].id }, context);
+  expect(
+    await session.tools.readPdfSource.execute!({ sourceId: files[2].id }, context),
+  ).toHaveProperty("error");
+  expect(m.read).toHaveBeenCalledTimes(2);
+});
+
+it("fetches a named original only once across concurrent calls", async () => {
+  const tools = createChatPdfTools(
+    "artist",
+    vi.fn().mockReturnValue(1),
+    undefined,
+    "Read archive.pdf",
+  ).tools;
+  await Promise.all([
+    tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+    tools.readNamedPdf.execute!({ filename: "archive.pdf" }, context),
+  ]);
+  expect(m.read).toHaveBeenCalledTimes(1);
+});

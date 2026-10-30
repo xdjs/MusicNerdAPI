@@ -15,7 +15,9 @@ const chatBodySchema = z
           role: z.enum(["user", "assistant"]),
           // Tool, source and step parts are the client's record of earlier turns; only their text is context.
           parts: z.array(z.looseObject({ type: z.string() })).transform(parts =>
-            parts.some(part => part.type === "tool-readPdfSource")
+            parts.some(
+              part => part.type === "tool-readPdfSource" || part.type === "tool-readNamedPdf",
+            )
               ? []
               : parts.flatMap(part => {
                   const text = textPart.safeParse(part);

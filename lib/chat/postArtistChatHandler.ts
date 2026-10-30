@@ -57,7 +57,15 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
-        const pdf = createChatPdfTools(artistId, cite, request.signal);
+        const pdf = createChatPdfTools(
+          artistId,
+          cite,
+          request.signal,
+          body.messages
+            .at(-1)!
+            .parts.map(part => part.text)
+            .join("\n"),
+        );
         await streamText({
           model: MODEL_CHAT,
           anthropicEffort: "low",
