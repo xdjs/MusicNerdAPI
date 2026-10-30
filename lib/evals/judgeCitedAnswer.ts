@@ -40,17 +40,24 @@ export async function judgeCitedAnswer(input: {
       verdict: null,
       unscoredReason: "Cited evidence exceeds the 96000-character judge limit.",
     };
-  const result = await generateObject({
-    instructions: INSTRUCTIONS,
-    schema: answerVerdictSchema,
-    temperature: 0,
-    prompt: JSON.stringify({
-      question: input.question,
-      reference: input.reference,
-      answerable: input.answerable,
-      answer: turn.answer,
-      evidence,
-    }),
-  });
-  return { verdict: result.output };
+  try {
+    const result = await generateObject({
+      instructions: INSTRUCTIONS,
+      schema: answerVerdictSchema,
+      temperature: 0,
+      prompt: JSON.stringify({
+        question: input.question,
+        reference: input.reference,
+        answerable: input.answerable,
+        answer: turn.answer,
+        evidence,
+      }),
+    });
+    return { verdict: result.output };
+  } catch {
+    return {
+      verdict: null,
+      unscoredReason: "Judge request failed; semantic scores are unavailable.",
+    };
+  }
 }

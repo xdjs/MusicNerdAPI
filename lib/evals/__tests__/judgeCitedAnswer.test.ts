@@ -27,7 +27,9 @@ const input = () => ({
   answerable: true,
   turn: turn(),
 });
-beforeEach(() => generateObject.mockReset());
+beforeEach(() => {
+  generateObject.mockReset();
+});
 describe("judgeCitedAnswer", () => {
   it("uses the exact captured passage in one judge call", async () => {
     generateObject.mockResolvedValue({
@@ -53,6 +55,14 @@ describe("judgeCitedAnswer", () => {
       expect(generateObject).not.toHaveBeenCalled();
     },
   );
+  it("records a judge failure as unscored without retrying or leaking provider details", async () => {
+    generateObject.mockRejectedValue(new Error("private provider response"));
+    expect(await judgeCitedAnswer(input())).toEqual({
+      verdict: null,
+      unscoredReason: "Judge request failed; semantic scores are unavailable.",
+    });
+    expect(generateObject).toHaveBeenCalledTimes(1);
+  });
   it("fails an empty answer without paying a judge", async () => {
     const x = input();
     x.turn.answer = "";

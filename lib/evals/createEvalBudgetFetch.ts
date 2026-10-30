@@ -34,7 +34,15 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
     if (blocked) return fail("run already stopped");
     if (typeof init?.body !== "string" || init.method !== "POST")
       return fail("unexpected request shape");
-    const body = JSON.parse(init.body) as Record<string, unknown>;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(init.body);
+    } catch {
+      return fail("invalid JSON body");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return fail("invalid request body");
+    const body = parsed as Record<string, unknown>;
     let reservation: number;
     if (url.hostname === "ai-gateway.vercel.sh" && url.pathname.endsWith("/language-model")) {
       const model = new Headers(init.headers).get("ai-language-model-id");
@@ -47,8 +55,9 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
           Array.isArray(message.content) &&
           message.content.some(
             (part: { type?: string; kind?: string }) =>
-              !["text", "tool-call", "tool-result", "reasoning"].includes(part.type ?? "") &&
-              !(part.type === "custom" && part.kind === "anthropic.message_start"),
+              !part ||
+              (!["text", "tool-call", "tool-result", "reasoning"].includes(part.type ?? "") &&
+                !(part.type === "custom" && part.kind === "anthropic.message_start")),
           )
         )
           return fail("non-text input");

@@ -8,6 +8,17 @@ const request = (model = "anthropic/claude-sonnet-5.5", text = "question") => ({
 });
 const gateway = "https://ai-gateway.vercel.sh/v4/ai/language-model";
 describe("createEvalBudgetFetch", () => {
+  it.each(["{", "null", "[]", '{"prompt":[{"content":[null]}]}'])(
+    "latches malformed request bodies closed: %s",
+    async body => {
+      const send = vi.fn();
+      const guard = createEvalBudgetFetch(send);
+      await expect(guard.fetch(gateway, { ...request(), body })).rejects.toThrow();
+      expect(guard.snapshot().blocked).toBe(true);
+      await expect(guard.fetch(gateway, request())).rejects.toThrow("run already stopped");
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
   it("carries prior reservations forward and rejects invalid balances", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send, 104224);
