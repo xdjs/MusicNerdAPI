@@ -1,4 +1,5 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
+import { readChatEvidence } from "@/lib/evals/readChatEvidence";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { postArtistChatHandler } from "@/lib/chat/postArtistChatHandler";
 
@@ -45,6 +46,7 @@ export async function chatStreamTurn(
     return {
       answer: "",
       sources: [],
+      evidence: [],
       firstTextMs: ms,
       totalMs: ms,
       error: `${response.status} ${message}`,
@@ -55,6 +57,8 @@ export async function chatStreamTurn(
   let firstText: number | undefined;
   let error: string | undefined;
   const sources: ChatTurn["sources"] = [];
+  const evidence: NonNullable<ChatTurn["evidence"]> = [];
+  const toolNames = new Map<string, string>();
   const reader = parseJsonEventStream({
     stream: response.body,
     schema: uiMessageChunkSchema,
@@ -62,9 +66,18 @@ export async function chatStreamTurn(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (!value.success) continue;
+    if (!value.success) {
+      error = "Malformed UI stream chunk.";
+      continue;
+    }
     const chunk = value.value;
-    if (chunk.type === "text-delta") {
+    if (chunk.type === "tool-input-available" || chunk.type === "tool-input-start") {
+      toolNames.set(chunk.toolCallId, chunk.toolName);
+    } else if (chunk.type === "tool-output-available") {
+      evidence.push(
+        ...readChatEvidence(toolNames.get(chunk.toolCallId) ?? "", chunk.toolCallId, chunk.output),
+      );
+    } else if (chunk.type === "text-delta") {
       firstText ??= clock.now();
       answer += chunk.delta;
     } else if (chunk.type === "source-url") {
@@ -77,6 +90,7 @@ export async function chatStreamTurn(
   return {
     answer,
     sources,
+    evidence,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
     totalMs,
     ...(error ? { error } : {}),

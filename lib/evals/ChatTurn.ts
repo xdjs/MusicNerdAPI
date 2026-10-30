@@ -1,3 +1,5 @@
+import type { ChatEvidence } from "@/lib/evals/ChatEvidence";
+
 /** One chat turn as the suite scores it, whichever target produced it. */
 export type ChatTurn = {
   answer: string;
@@ -5,6 +7,8 @@ export type ChatTurn = {
   sources: { n: number; title: string; url: string }[];
   /** From the question being sent to the first answer text the client could show. */
   firstTextMs: number;
+  /** Exact public tool passages seen by the model; absent on historical turns. */
+  evidence?: ChatEvidence[];
   /** From the question being sent to the finished answer. */
   totalMs: number;
   /** Set when the turn ended in an error response instead of an answer. */
