@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
+import { readChatEvidence } from "@/lib/evals/readChatEvidence";
 const generateObject = vi.fn();
 vi.mock("@/lib/ai/generateObject", () => ({
   generateObject: (...a: unknown[]) => generateObject(...a),
@@ -31,6 +32,58 @@ beforeEach(() => {
   generateObject.mockReset();
 });
 describe("judgeCitedAnswer", () => {
+  it("does not repair a misplaced citation with support from an uncited result", async () => {
+    // Minimized public excerpts from experiment 89f689f, bio-ritmo-singer.
+    // This checks evidence binding, not the mocked judge's semantic accuracy.
+    const x = input();
+    x.turn.answer = "Rei Alvarez is a native of Puerto Rico [4].";
+    x.turn.sources = [
+      { n: 2, title: "Bio Ritmo", url: "https://www.bioritmo.com" },
+      { n: 4, title: "Bio Ritmo - Wikipedia", url: "https://en.wikipedia.org/wiki/Bio_Ritmo" },
+    ];
+    x.turn.evidence = readChatEvidence("webSearch", "historical-search", {
+      results: [
+        {
+          ...x.turn.sources[0],
+          snippet: "salsa rhythms of Alvarez and Negron’s native Puerto Rico.",
+        },
+        { ...x.turn.sources[1], snippet: "Rei Alvarez: vocals, guiro (original member)" },
+      ],
+    });
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 0, reason: "Fixture verdict; not a model evaluation." },
+    });
+    await judgeCitedAnswer(x);
+    const evidence = JSON.parse(generateObject.mock.calls[0][0].prompt).evidence;
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0]).toMatchObject({ n: 4, url: x.turn.sources[1].url });
+    expect(evidence[0].text).not.toContain("Puerto Rico");
+  });
+
+  it("carries original publication metadata through capture into the judge request", async () => {
+    // Exact date from experiment 89f689f, dutchyyy-onchain readSource [1].
+    const x = input();
+    x.turn.answer = "In a September 2024 post, he discussed archiving his work [1].";
+    x.turn.sources = [
+      { n: 1, title: "Instagram", url: "https://www.instagram.com/p/DAE8WJESb04/" },
+    ];
+    x.turn.evidence = readChatEvidence("readSource", "historical-read", {
+      ...x.turn.sources[0],
+      text: "using tech that felt like a more permanent solution than legacy internet",
+      publishedAt: "2024-09-19T00:24:56Z",
+      activityDate: null,
+      retrievedAt: null,
+    });
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 1, reason: "Fixture verdict; not a model evaluation." },
+    });
+    await judgeCitedAnswer(x);
+    expect(JSON.parse(generateObject.mock.calls[0][0].prompt).evidence[0]).toMatchObject({
+      publishedAt: "2024-09-19T00:24:56Z",
+      activityDate: null,
+      retrievedAt: null,
+    });
+  });
   it("uses the exact captured passage in one judge call", async () => {
     generateObject.mockResolvedValue({
       output: { relevance: 1, groundedness: 1, reason: "Supported by [1]." },

@@ -35,3 +35,12 @@ it("states only what a read source says, without a sources list", () => {
   expect(text).toMatch(/never state facts from searchSources snippets/i);
   expect(text).toMatch(/don't add a list of sources/i);
 });
+
+it("checks each clause against its attached source instead of borrowing nearby evidence", () => {
+  const text = buildArtistChatInstructions("Artist");
+  expect(text).toContain("check each factual clause against the exact source bearing its [n]");
+  expect(text).toContain("Split clauses when different sources support them");
+  expect(text).toContain("read that original before using the fact, or leave the fact out");
+  expect(text).toContain("A list of names alone does not establish lead, guest or co-star roles");
+  expect(text).toContain("a date in a URL is not an event date");
+});
