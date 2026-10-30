@@ -15,10 +15,12 @@ const chatBodySchema = z
           role: z.enum(["user", "assistant"]),
           // Tool, source and step parts are the client's record of earlier turns; only their text is context.
           parts: z.array(z.looseObject({ type: z.string() })).transform(parts =>
-            parts.flatMap(part => {
-              const text = textPart.safeParse(part);
-              return text.success ? [{ type: "text" as const, text: text.data.text }] : [];
-            }),
+            parts.some(part => part.type === "tool-readPdfSource")
+              ? []
+              : parts.flatMap(part => {
+                  const text = textPart.safeParse(part);
+                  return text.success ? [{ type: "text" as const, text: text.data.text }] : [];
+                }),
           ),
         }),
       )
@@ -31,7 +33,10 @@ const chatBodySchema = z
     if (!last) return false;
     const text = last.parts.map(part => part.text).join("\n");
     return last.role === "user" && question.safeParse(text).success;
-  });
+  })
+  .transform(({ messages }) => ({
+    messages: messages.filter(message => message.role !== "assistant" || message.parts.length > 0),
+  }));
 
 export type ArtistChatBody = z.infer<typeof chatBodySchema>;
 

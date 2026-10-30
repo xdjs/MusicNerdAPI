@@ -13,6 +13,7 @@ import { createChatCitations } from "@/lib/chat/createChatCitations";
 import { createReadSourceTool } from "@/lib/chat/createReadSourceTool";
 import { createSearchSourcesTool } from "@/lib/chat/createSearchSourcesTool";
 import { createWebSearchTool } from "@/lib/chat/createWebSearchTool";
+import { createChatPdfTools } from "@/lib/chatPdf/createChatPdfTools";
 import { validateArtistChatBody } from "@/lib/chat/validateArtistChatBody";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -56,12 +57,15 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
+        const pdf = createChatPdfTools(artistId, cite, request.signal);
         await streamText({
           model: MODEL_CHAT,
           anthropicEffort: "low",
           instructions: buildArtistChatInstructions(name),
           prompt,
+          beforeStep: pdf.assertCurrent,
           tools: {
+            ...pdf.tools,
             searchSources: createSearchSourcesTool(originals, name),
             readSource: createReadSourceTool(originals, cite),
             webSearch: createWebSearchTool(cite),

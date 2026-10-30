@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - chat
+          - pdf106-paired
         default: chat
 
 # One run at a time: the chat suite's timings would measure each other, and every
@@ -21,6 +22,7 @@ concurrency:
 
 jobs:
   eval:
+    if: inputs.suite == 'chat'
     runs-on: ubuntu-latest
 
     env:
@@ -47,3 +49,62 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run suite
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
+
+  pdf106-paired:
+    if: inputs.suite == 'pdf106-paired'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
+      MUSICNERD_RESEARCH_API_KEY: ${{ secrets.MUSICNERD_RESEARCH_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+      VERCEL: "1"
+      PDF106_OUTPUT: ${{ runner.temp }}/pdf106-results
+    steps:
+      - name: Refuse automatic reruns of a spending job
+        run: test "${{ github.run_attempt }}" = "1"
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: e4054a4783ab3cf7dfdadf91d7285a54adf3c734
+          path: baseline
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked dependencies and identical observer
+        run: |
+          pnpm --dir baseline install --frozen-lockfile
+          pnpm --dir candidate install --frozen-lockfile
+          mkdir -p baseline/benchmarks
+          cp -R candidate/benchmarks/pdf106 baseline/benchmarks/pdf106
+      - name: Baseline eight planned answers
+        working-directory: baseline
+        env:
+          PDF106_COHORT: baseline
+        run: |
+          node benchmarks/pdf106/build.mjs
+          node .next/pdf106-run.mjs
+      - name: Candidate eight planned answers
+        working-directory: candidate
+        env:
+          PDF106_COHORT: candidate
+        run: |
+          node benchmarks/pdf106/build.mjs
+          node .next/pdf106-run.mjs
+      - name: Retain sanitized evidence even on partial failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf106-paired-${{ github.run_id }}
+          path: ${{ runner.temp }}/pdf106-results
+          if-no-files-found: warn
+          retention-days: 7

@@ -22,6 +22,8 @@ export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> &
   onTextDelta?: (delta: string) => void;
   /** A chat response's writer: the call's UI message parts (text, tool steps) are merged into it. */
   writer?: UIMessageStreamWriter;
+  /** Revalidate revocable tool evidence immediately before each model step. */
+  beforeStep?: () => Promise<void>;
 };
 
 /**
@@ -48,6 +50,7 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     abortSignal,
     onTextDelta,
     writer,
+    beforeStep,
   } = options;
   const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   const result = sdkStreamText({
@@ -55,6 +58,14 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     instructions,
     prompt,
     temperature,
+    ...(beforeStep
+      ? {
+          prepareStep: async () => {
+            await beforeStep();
+            return {};
+          },
+        }
+      : {}),
     tools,
     stopWhen,
     abortSignal,
