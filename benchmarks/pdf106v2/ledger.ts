@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 export type Ledger = {
-  version: 3;
+  version: 4;
   manifest: string;
   attempts: { id: string; outcome: "started" | "completed" | "failed"; detail?: string }[];
   modelRequests: number;
@@ -20,12 +20,12 @@ export function ledger(file: string, manifest: string) {
   const read = (): Ledger => {
     const s: Ledger = existsSync(file)
       ? JSON.parse(readFileSync(file, "utf8"))
-      : { version: 3, manifest, attempts: [], modelRequests: 0, webRequests: 0, halted: false };
+      : { version: 4, manifest, attempts: [], modelRequests: 0, webRequests: 0, halted: false };
     if (
-      s.version !== 3 ||
+      s.version !== 4 ||
       s.manifest !== manifest ||
       !Array.isArray(s.attempts) ||
-      s.attempts.length > 3
+      s.attempts.length > 4
     )
       throw Error("Ledger mismatch");
     return s;
@@ -48,7 +48,7 @@ export function ledger(file: string, manifest: string) {
       if (
         s.halted ||
         s.attempts.some(a => a.outcome === "started") ||
-        s.attempts.length >= 3 ||
+        s.attempts.length >= 4 ||
         s.attempts.some(a => a.id === id)
       )
         throw Error("No replacement or excess submissions");
@@ -71,7 +71,7 @@ export function ledger(file: string, manifest: string) {
       if (
         s.halted ||
         !s.attempts.some(a => a.outcome === "started") ||
-        s[field] >= (kind === "model" ? 18 : 0)
+        s[field] >= (kind === "model" ? 24 : 0)
       )
         throw Error("Egress limit");
       s[field]++;

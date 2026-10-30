@@ -80,7 +80,25 @@ export function boundedFetch(send: typeof fetch, budget: ReturnType<typeof ledge
       )
         return deny("Unapproved provider options");
       budget.egress("model");
-      return send(input, init);
+      const timing = {
+        requestMs: Math.round(performance.now() - runtime.startedAt),
+        fileParts: files,
+      } as (typeof runtime.transport)[number];
+      runtime.transport.push(timing);
+      const response = await send(input, init);
+      timing.responseHeadersMs = Math.round(performance.now() - runtime.startedAt);
+      if (!response.body) return response;
+      return new Response(
+        response.body.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              timing.firstRawChunkMs ??= Math.round(performance.now() - runtime.startedAt);
+              controller.enqueue(chunk);
+            },
+          }),
+        ),
+        { status: response.status, statusText: response.statusText, headers: response.headers },
+      );
     }
     if (url.hostname === "api.tavily.com" && url.pathname === "/search" && !runtime.synthetic) {
       budget.egress("web");

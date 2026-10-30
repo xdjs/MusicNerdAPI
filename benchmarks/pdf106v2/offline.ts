@@ -28,7 +28,7 @@ const finish = (kind: "stop" | "tool-calls") => ({
 });
 try {
   const budget = ledger(join(dir, "ledger.json"), "offline-manifest");
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     assert.equal(budget.reserve(`case-${i}`), i + 1);
     budget.finish(`case-${i}`, false);
   }
@@ -173,6 +173,10 @@ try {
   }
   check(sent === 1);
   check(transport.read().modelRequests === 1);
+  const timing = runtime.transport.at(-1)!;
+  check(timing.fileParts === 1);
+  check(timing.responseHeadersMs! >= timing.requestMs);
+  check(timing.firstRawChunkMs! >= timing.responseHeadersMs!);
   await fixture.close();
   writeFileSync(
     "../pdf-chat-eval/acceptance-v2/harness-offline.json",

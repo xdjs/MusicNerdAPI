@@ -22,6 +22,13 @@ export function documentBytes(id: string) {
   return bytes;
 }
 export const runtime = {
+  startedAt: 0,
+  transport: [] as {
+    requestMs: number;
+    fileParts: number;
+    responseHeadersMs?: number;
+    firstRawChunkMs?: number;
+  }[],
   synthetic: false,
   allowedDoc: undefined as string | undefined,
   db: undefined as

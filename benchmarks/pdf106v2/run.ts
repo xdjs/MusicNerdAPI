@@ -14,18 +14,24 @@ import { sanitize } from "../pdf106/sanitize";
 import { runtime, setupFixture, ARTIST, DOCUMENTS, setFixtureDirectory } from "./runtime";
 import { ledger } from "./ledger";
 import { boundedFetch } from "./network";
-// No workflow invokes this while approval is pending. Explicit CLI selection is also required.
+// Only the explicitly approved, fixed four-answer workflow invokes this runner.
 const args = process.argv.slice(2);
 const option = (k: string) => args[args.indexOf(k) + 1];
 if (
-  !args.includes("--approved-live-v2") ||
+  !args.includes("--approved-four-paired") ||
   !args.includes("--output") ||
-  !args.includes("--fixtures")
+  !args.includes("--fixtures") ||
+  !args.includes("--cohort") ||
+  !args.includes("--case")
 )
-  throw Error("Explicit newly approved three-answer run/output/fixtures required");
-const cohort = "candidate";
-if (args.includes("--cohort")) throw Error("Cohort selection disabled: candidate-only");
-const pins = { candidate: "3b6d96283c0123573881d22807feac6e0aa39061" };
+  throw Error("Explicit approved four-answer comparison/output/fixtures/cohort/case required");
+const cohort = option("--cohort");
+const selectedCase = option("--case");
+const pins = {
+  baseline: "277e8ebadb9c55c10a11f2d774afafa9a8c276d8",
+  candidate: "4fa7c2f02030a17256452fde4508548b2f793e43",
+};
+if (!(cohort in pins)) throw Error("Unknown cohort");
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (sha !== pins[cohort as keyof typeof pins]) throw Error("Application pin changed");
 setFixtureDirectory(resolve(option("--fixtures")));
@@ -35,31 +41,42 @@ const pdfCases = JSON.parse(readFileSync("benchmarks/pdf106v2/fixtures/cases.jso
   doc: string;
   extracted: boolean;
 }[];
-const cases = pdfCases;
+const cases = pdfCases.slice(0, 2);
 if (
-  cases.length !== 3 ||
-  cases.map(c => c.key).join(",") !== "pdf-alias,pdf-qualified-preservation,pdf-blank-corrections"
+  cases.length !== 2 ||
+  cases.map(c => c.key).join(",") !== "pdf-alias,pdf-qualified-preservation"
 )
-  throw Error("Expected exactly three frozen PDF cases");
+  throw Error("Expected exactly two frozen PDF questions");
+const order = [
+  "baseline:pdf-alias:once",
+  "candidate:pdf-alias:once",
+  "candidate:pdf-qualified-preservation:once",
+  "baseline:pdf-qualified-preservation:once",
+];
+const selected = cases.find(c => c.key === selectedCase);
+if (!selected) throw Error("Unknown question");
+const selectedId = `${cohort}:${selectedCase}:once`;
 const manifest = {
-  version: 3,
+  version: 4,
   pins,
   cases,
   documents: DOCUMENTS,
   cap: 2048,
-  answers: 3,
+  answers: 4,
+  order,
   stepsPerAnswer: 6,
-  modelEgress: 18,
+  modelEgress: 24,
   webEgress: 0,
 };
 const manifestHash = createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
 const dir = resolve(option("--output"));
 mkdirSync(dir, { recursive: true });
-// Retain the exclusive cohort marker permanently: a crash/unknown outcome cannot be rerun.
-const lock = openSync(join(dir, `${cohort}.started`), "wx", 0o600);
+// Retain each exclusive case marker: a crash/unknown outcome cannot be rerun.
+const lock = openSync(join(dir, `${cohort}-${selectedCase}.started`), "wx", 0o600);
 closeSync(lock);
 const budget = ledger(join(dir, "ledger.json"), manifestHash);
-if (budget.read().halted) throw Error("Run halted");
+if (budget.read().halted || order[budget.read().attempts.length] !== selectedId)
+  throw Error("Run halted or order mismatch");
 const secrets = Object.entries(process.env)
   .filter(([k]) => /KEY|TOKEN|SECRET|CONNECTION/.test(k))
   .map(([, v]) => v ?? "");
@@ -70,10 +87,10 @@ const originalFetch = globalThis.fetch;
 console.error = () => console.log("[eval] application error withheld");
 console.warn = () => console.log("[eval] warning withheld");
 // Existing originals are hash-verified locally by setupFixture before each counted answer.
-// No real staging source or allowance read is needed for this candidate-only isolated run.
+// Answer execution uses isolated source and allowance rows on both application pins.
 globalThis.fetch = boundedFetch(originalFetch, budget);
 try {
-  for (const c of cases)
+  for (const c of [selected])
     for (const repetition of ["once"]) {
       const id = `${cohort}:${c.key}:${repetition}`;
       if (budget.read().halted) break;
@@ -81,6 +98,8 @@ try {
       runtime.allowedDoc = c.doc ?? undefined;
       const count = budget.reserve(id);
       const start = performance.now();
+      runtime.startedAt = start;
+      runtime.transport = [];
       const controller = new AbortController();
       const chunks: { ms: number; text: string }[] = [];
       const sources: unknown[] = [];
@@ -98,7 +117,10 @@ try {
               if (e.toolName) event.tool = e.toolName;
               if (e.type === "finish-step") event.usage = e.usage;
               if (e.type === "finish") event.totalUsage = e.totalUsage;
-              if (e.type === "tool-result" && e.toolName === "readPdfSource") {
+              if (
+                e.type === "tool-result" &&
+                (e.toolName === "readPdfSource" || e.toolName === "readNamedPdf")
+              ) {
                 const o = (e.output ?? e.result) as Record<string, unknown>;
                 event.pdf = {
                   sourceId: o?.sourceId,
@@ -110,6 +132,7 @@ try {
               }
               if (
                 [
+                  "text-delta",
                   "tool-call",
                   "tool-result",
                   "tool-error",
@@ -210,6 +233,7 @@ try {
         events,
         fixtureReads: [...runtime.fixtureReads],
         syntheticWebAttempts: runtime.syntheticWebAttempts,
+        transport: runtime.transport,
         completeMs: Math.round(performance.now() - start),
         maxOutputTokens: 2048,
         firstSubstantiveMs: "manual passage-level timing review required",
@@ -228,12 +252,10 @@ try {
   globalThis.fetch = originalFetch;
 }
 const submitted = new Set(budget.read().attempts.map(a => a.id));
-save(`${cohort}-coverage.json`, {
-  planned: 3,
-  submitted: [...submitted].filter(id => id.startsWith(cohort + ":")).length,
-  unrun: cases
-    .flatMap(c => ["once"].map(r => `${cohort}:${c.key}:${r}`))
-    .filter(id => !submitted.has(id)),
+save("coverage.json", {
+  planned: 4,
+  submitted: submitted.size,
+  unrun: order.filter(id => !submitted.has(id)),
   halted: budget.read().halted,
 });
 process.exit(budget.read().halted ? 1 : 0);
