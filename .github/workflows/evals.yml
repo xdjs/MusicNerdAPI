@@ -25,6 +25,7 @@ jobs:
   eval:
     if: inputs.suite == 'chat'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     env:
       BRAINTRUST_API_KEY: ${{ secrets.BRAINTRUST_API_KEY }}
