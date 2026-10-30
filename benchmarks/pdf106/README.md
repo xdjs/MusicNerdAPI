@@ -14,5 +14,4 @@ Report all timings and observed maxima, not a stable p95 from this sample. Asses
 
 Offline checks: `pnpm exec vitest run benchmarks/pdf106`; `node benchmarks/pdf106/build.mjs benchmarks/pdf106/observerCheck.ts && node .next/pdf106-run.mjs`. The latter uses a scripted model and no network. The build uses the already locked esbuild dependency of Braintrust; no application provider or configuration changes.
 
-
 Manual `pdf106-pete-smoke` is the authorized remaining-eight substitution. It seeds the ledger with the eight normal answers already submitted in run40980832613, runs only two neutral Pete Rango PDF questions twice per cohort, and preserves application pins e4054a4/f9344be. The latest branch supplies only the identical observer/adapter. Preflight verifies the approved claim, exact source ID and PDF byte hash each time. This is a mechanism smoke test, not Dutchyyy factual/page acceptance. No source changes, paid judge, or replacement calls.
