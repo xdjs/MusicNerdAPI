@@ -4,8 +4,14 @@
  * Rates include headroom over the October 29 Gateway catalog and Tavily PAYG rates.
  * This is a reservation ledger, not a provider invoice. No shared settings change.
  */
-export function createEvalBudgetFetch(send: typeof fetch) {
-  let reservedMicros = 0;
+export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 0) {
+  if (
+    !Number.isSafeInteger(priorReservedMicros) ||
+    priorReservedMicros < 0 ||
+    priorReservedMicros > 5000000
+  )
+    throw new Error("Invalid prior eval reservation");
+  let reservedMicros = priorReservedMicros;
   let paidRequests = 0;
   let blocked = false;
   let stopReason: string | undefined;

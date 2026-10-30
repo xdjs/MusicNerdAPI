@@ -20,7 +20,8 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  *   pnpm eval evals/chat.eval.ts
  */
 
-const budget = createEvalBudgetFetch(globalThis.fetch);
+// Carry attempt 1 forward under Pete's original $5 ceiling (run 40975550504).
+const budget = createEvalBudgetFetch(globalThis.fetch, 104224);
 globalThis.fetch = budget.fetch;
 
 const SHA = process.env.GITHUB_SHA ?? "local";
@@ -33,6 +34,7 @@ Eval("music-nerd", {
     sha: SHA,
     rubric: "cited-evidence-v1",
     budgetUsd: 5,
+    priorReservedUsd: 0.104224,
     maxOutputTokens: 2048,
   },
   // One question at a time, so the timings are not measuring each other.

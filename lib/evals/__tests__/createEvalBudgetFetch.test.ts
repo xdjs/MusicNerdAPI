@@ -8,6 +8,21 @@ const request = (model = "anthropic/claude-sonnet-5.5", text = "question") => ({
 });
 const gateway = "https://ai-gateway.vercel.sh/v4/ai/language-model";
 describe("createEvalBudgetFetch", () => {
+  it("carries prior reservations forward and rejects invalid balances", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("ok"));
+    const guard = createEvalBudgetFetch(send, 104224);
+    expect(guard.snapshot().reservedUsd).toBe(0.104224);
+    await guard.fetch("https://api.tavily.com/search", {
+      method: "POST",
+      body: JSON.stringify({ query: "artist" }),
+    });
+    expect(guard.snapshot().reservedUsd).toBe(0.120224);
+    await expect(createEvalBudgetFetch(send, 4999999).fetch(gateway, request())).rejects.toThrow(
+      "exhausted",
+    );
+    for (const invalid of [-1, NaN, 0.1, 5000001])
+      expect(() => createEvalBudgetFetch(send, invalid)).toThrow();
+  });
   it("allows the SDK's Anthropic message-start metadata on later tool steps", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);
