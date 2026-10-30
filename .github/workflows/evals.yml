@@ -13,6 +13,7 @@ on:
           - chat
           - pdf106-paired
           - pdf106-pete-smoke
+          - pdf106-three-originals
         default: chat
 
 # One run at a time: the chat suite's timings would measure each other, and every
@@ -114,5 +115,61 @@ jobs:
         with:
           name: pdf106-paired-${{ github.run_id }}
           path: ${{ github.workspace }}/pdf106-results
+          if-no-files-found: warn
+          retention-days: 7
+
+  pdf106-three-originals:
+    if: inputs.suite == 'pdf106-three-originals'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse spending job reruns
+        run: test "${{ github.run_attempt }}" = "1"
+      - uses: actions/checkout@v4
+        with:
+          path: adapter
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+          ref: 3b6d96283c0123573881d22807feac6e0aa39061
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pinned candidate and isolated adapter
+        run: |
+          pnpm --dir candidate install --frozen-lockfile
+          cp -R adapter/benchmarks/pdf106v2 candidate/benchmarks/pdf106v2
+          mkdir -p pdf-chat-eval/acceptance-v2 pdf106-three-results
+      - name: Read and verify the two existing original PDFs
+        working-directory: candidate
+        env:
+          SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
+        run: node benchmarks/pdf106v2/download-originals.mjs ../evidence
+      - name: Verify offline boundaries and serialization
+        working-directory: candidate
+        run: |
+          pnpm exec vitest run benchmarks/pdf106v2/__tests__
+          node benchmarks/pdf106v2/build.mjs benchmarks/pdf106v2/offline.ts
+          node .next/pdf106v2-run.mjs
+      - name: Run exactly three approved candidate questions
+        working-directory: candidate
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        run: |
+          node benchmarks/pdf106v2/build.mjs
+          node .next/pdf106v2-run.mjs --approved-live-v2 --output ../pdf106-three-results --fixtures ../evidence
+      - name: Retain sanitized evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf106-three-${{ github.run_id }}
+          path: |
+            pdf106-three-results
+            pdf-chat-eval/acceptance-v2/harness-offline.json
           if-no-files-found: warn
           retention-days: 7

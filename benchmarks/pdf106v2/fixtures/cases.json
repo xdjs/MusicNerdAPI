@@ -1,0 +1,34 @@
+[
+  {
+    "key": "pdf-alias",
+    "doc": "00000000-0000-4000-8000-000000000107",
+    "question": "In dutch_discography_timeline.pdf, what alias and catalog identifier are associated with the 2001 Nowledge Of Self release We’re Here Now? Cite the original PDF and physical page.",
+    "page": 2,
+    "gold": ["The Chill Factor", "LE060"],
+    "extracted": false
+  },
+  {
+    "key": "pdf-qualified-preservation",
+    "doc": "00000000-0000-4000-8000-000000000108",
+    "question": "In the preface of Dutchyyy VS The Algorithms (short)_compressed.pdf, which three aspects of his work does Dutchyyy want to survive disappearing platforms, and what qualification does he use? Cite the original PDF and distinguish its physical page from the printed number.",
+    "page": 1,
+    "printedPage": 41,
+    "gold": [
+      "music",
+      "context",
+      "lore",
+      "In theory",
+      "Dutchyyy preface, not Sound of Fractures foreword"
+    ],
+    "extracted": true
+  },
+  {
+    "key": "pdf-blank-corrections",
+    "doc": "00000000-0000-4000-8000-000000000107",
+    "question": "On physical page 13 of dutch_discography_timeline.pdf, under the heading 1998–2001 — Equilibrium Era, what correction has actually been filled in? Cite that page. If the section is blank, say so; do not infer a correction from entries elsewhere.",
+    "page": 13,
+    "gold": ["No correction filled in; blank notes section"],
+    "scope": "Absence only in this inspected section, not a claim about the entire PDF",
+    "extracted": false
+  }
+]
