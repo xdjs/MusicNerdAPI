@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { reserveAttempt } from "../reserveAttempt";
 import { sanitize } from "../sanitize";
-import { CASES } from "../cases";
+import { CASES, SMOKE_CASES, PRIOR_ATTEMPTS } from "../cases";
 it("retains attempts across cohorts, rejects repeats and the seventeenth submission", () => {
   const dir = mkdtempSync(join(tmpdir(), "pdf106-"));
   try {
@@ -27,4 +27,26 @@ it("freezes two normal and two PDF cases: twice per cohort totals sixteen", () =
   expect(CASES.filter(c => c.key.startsWith("normal"))).toHaveLength(2);
   expect(CASES.filter(c => c.key.startsWith("pdf"))).toHaveLength(2);
   expect(CASES.length * 2 * 2).toBe(16);
+});
+
+it("smoke mode has only two PDF questions and carries forward eight spent attempts", () => {
+  expect(SMOKE_CASES).toHaveLength(2);
+  expect(
+    SMOKE_CASES.every(c => c.key.startsWith("pdf-smoke") && c.artistName === "Pete Rango"),
+  ).toBe(true);
+  expect(new Set(PRIOR_ATTEMPTS).size).toBe(8);
+  const dir = mkdtempSync(join(tmpdir(), "pdf106-smoke-"));
+  try {
+    const file = join(dir, "ledger.json");
+    writeFileSync(file, JSON.stringify(PRIOR_ATTEMPTS));
+    let count = 8;
+    for (const cohort of ["baseline", "candidate"])
+      for (const c of SMOKE_CASES)
+        for (const repeat of ["first", "repeated"])
+          expect(reserveAttempt(file, `${cohort}:${c.key}:${repeat}`)).toBe(++count);
+    expect(count).toBe(16);
+    expect(() => reserveAttempt(file, "replacement")).toThrow();
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
 });

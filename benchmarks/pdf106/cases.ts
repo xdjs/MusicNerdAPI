@@ -1,5 +1,5 @@
 /** Frozen diagnostic cases: first/repeated is not a guarantee of provider cache state. */
-export const CASES = [
+export const ORIGINAL_CASES = [
   {
     key: "normal-origin",
     artistId: "aab92f80-f9e1-4299-aa33-7dd85c8de5d3",
@@ -28,3 +28,29 @@ export const CASES = [
   },
 ] as const;
 export const BASELINE = "e4054a4783ab3cf7dfdadf91d7285a54adf3c734";
+
+export const SMOKE_CASES = [
+  {
+    key: "pdf-smoke-artist",
+    artistId: "50f23458-df64-4381-8042-7333e8b64531",
+    artistName: "Pete Rango",
+    question:
+      "Read the original saved 1618-pete-rango-pdf-extraction-test.pdf. What artist name is written inside it? Cite the original PDF and physical page if supported. Do not substitute profile biography or infer the answer from the filename.",
+  },
+  {
+    key: "pdf-smoke-label",
+    artistId: "50f23458-df64-4381-8042-7333e8b64531",
+    artistName: "Pete Rango",
+    question:
+      "Read the original saved 1618-pete-rango-pdf-extraction-test.pdf. What exact test label, including issue number, is written inside it? Cite the original PDF and physical page if supported. If you cannot read it, say so rather than infer the text from its filename.",
+  },
+] as const;
+export const SMOKE = process.env.PDF106_MODE === "pete-smoke";
+export const CASES = SMOKE ? SMOKE_CASES : ORIGINAL_CASES;
+export const PRIOR_ATTEMPTS = ORIGINAL_CASES.filter(c => c.key.startsWith("normal"))
+  .flatMap(c => ["first", "repeated"].map(r => `baseline:${c.key}:${r}`))
+  .concat(
+    ORIGINAL_CASES.filter(c => c.key.startsWith("normal")).flatMap(c =>
+      ["first", "repeated"].map(r => `candidate:${c.key}:${r}`),
+    ),
+  );

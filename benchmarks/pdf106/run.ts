@@ -3,7 +3,7 @@ import { resolve, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { postArtistChatHandler } from "@/lib/chat/postArtistChatHandler";
 import { MODEL_CHAT } from "@/lib/ai/const";
-import { CASES, BASELINE } from "./cases";
+import { CASES, BASELINE, SMOKE, PRIOR_ATTEMPTS } from "./cases";
 import { preflight } from "./preflight";
 import { reserveAttempt } from "./reserveAttempt";
 import { sanitize } from "./sanitize";
@@ -14,6 +14,9 @@ const dir = resolve(process.env.PDF106_OUTPUT ?? "");
 if (!["baseline", "candidate"].includes(cohort ?? "") || !process.env.PDF106_OUTPUT)
   throw new Error("Explicit benchmark cohort/output required");
 mkdirSync(dir, { recursive: true });
+// Carry forward the eight already submitted answers; this phase cannot spend more than eight.
+if (SMOKE && !existsSync(join(dir, "attempts.json")))
+  writeFileSync(join(dir, "attempts.json"), JSON.stringify(PRIOR_ATTEMPTS), { mode: 0o600 });
 const secrets = Object.entries(process.env)
   .filter(([k]) => /KEY|TOKEN|SECRET|CONNECTION/.test(k))
   .map(([, v]) => v ?? "");
