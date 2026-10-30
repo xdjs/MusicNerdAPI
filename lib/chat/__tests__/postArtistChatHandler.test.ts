@@ -139,6 +139,47 @@ it("streams tool steps, a source-url per read source and text citing it", async 
   expect(m.webSearch).not.toHaveBeenCalled();
 });
 
+it("renders contextual source differences without a follow-up generation or invented roles", async () => {
+  m.originals.mockResolvedValue([
+    originalFixture(
+      "vault:1",
+      "https://review.example/a",
+      "Record A\n\n1977\n\nThis review calls it their first collaboration.",
+    ),
+    originalFixture(
+      "vault:2",
+      "https://review.example/b",
+      "Song B\n\n1975\n\nBoth musicians recorded this album.\n\nTheir billing is not specified.",
+    ),
+  ]);
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("readSource", { sourceId: "vault:1" }),
+      toolStep("readSource", { sourceId: "vault:2" }),
+      toolStep("showSourceDifferences", {
+        sources: [
+          { sourceId: "vault:1", anchor: "first collaboration" },
+          { sourceId: "vault:2", anchor: "Both musicians" },
+        ],
+      }),
+    ],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What was their first album?")));
+  const text = chunks
+    .filter(c => c.type === "text-delta")
+    .map(c => c.delta)
+    .join("");
+  expect(text).toContain("1977");
+  expect(text).toContain("1975");
+  expect(text).toContain("Their billing is not specified.");
+  expect(text).toContain("[1]");
+  expect(text).toContain("[2]");
+  expect(text).not.toContain("guest");
+  expect(model.doStreamCalls).toHaveLength(3);
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
+
 it("sends the model the artist's instructions and the conversation", async () => {
   const model = new MockLanguageModelV4({ doStream: [textStep("Hi.")] });
   m.model = model;

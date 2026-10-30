@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { extractVaultText } from "@/lib/sourceExtraction/extractVaultText";
 
 describe("extractVaultText", () => {
+  it("retains a section title and adjacent year with its contextual paragraph", () => {
+    // Characterization of the current extractor, not a reproduction of the
+    // historical stored-source loss observed during Web #1424 acceptance.
+    const html = `<article><h2>Song section</h2><div><span>1975</span></div><p>The album names both performers, but does not establish their billing.</p></article>`;
+    expect(extractVaultText(html).text).toBe(
+      "Song section\n\n1975\n\nThe album names both performers, but does not establish their billing.",
+    );
+  });
   it("uses the article instead of unrelated recommendations and quoted HTML attributes", () => {
     const html = `<html><body><nav>Account settings</nav><article><h1>An artist interview</h1><p data-show="x > 1">I arranged <em>this</em> song &amp; kept its ending.</p><p>But that was only a demo.</p></article><section>Another artist won an award.</section></body></html>`;
     expect(extractVaultText(html)).toEqual({
