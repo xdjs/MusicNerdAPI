@@ -11,6 +11,8 @@ const m = vi.hoisted(() => ({
   reserve: vi.fn(),
   originals: vi.fn(),
   webSearch: vi.fn(),
+  pdfLoad: vi.fn(),
+  pdfRead: vi.fn(),
 }));
 vi.mock("ai", async importOriginal => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -32,6 +34,8 @@ vi.mock("@/lib/questionResearch/loadPublicResearchOriginals", () => ({
   loadPublicResearchOriginals: m.originals,
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
+vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdfLoad }));
+vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: m.pdfRead }));
 const { postArtistChatHandler } = await import("@/lib/chat/postArtistChatHandler");
 
 const artistId = "11111111-1111-4111-8111-111111111111";
@@ -88,6 +92,7 @@ async function chunksOf(response: Response) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.pdfLoad.mockResolvedValue([]);
   m.artist.mockResolvedValue({ id: artistId, name: "Dutchyyy" });
   m.visitor.mockResolvedValue("f".repeat(64));
   m.reserve.mockResolvedValue(undefined);
@@ -299,5 +304,86 @@ it("streams the newest saved Instagram evidence and its matching citation throug
   ).toContain("[1]");
   expect(model.doStreamCalls).toHaveLength(3);
   expect(m.originals).toHaveBeenCalledTimes(1);
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("passes selected original PDF bytes through the real SDK model loop, never through client tool output", async () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+  m.pdfLoad.mockResolvedValue([
+    {
+      id,
+      title: "archive.pdf",
+      url: "https://public.example/archive.pdf",
+      path: "a/archive.pdf",
+      size: 100,
+      revision: "v1",
+      claimId: "c1",
+    },
+  ]);
+  m.pdfRead.mockResolvedValue({
+    bytes: Buffer.from("%PDF-synthetic-original"),
+    pages: 2,
+    hash: "sha",
+  });
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("searchPdfSources", { query: "archive.pdf" }),
+      toolStep("readPdfSource", { sourceId: id }),
+      textStep("The document says Cedar ([1], page 2)."),
+    ],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What does archive.pdf say?")));
+  expect(model.doStreamCalls).toHaveLength(3);
+  const prompt = JSON.stringify(model.doStreamCalls[2].prompt);
+  expect(prompt).toContain("application/pdf");
+  expect(prompt).toContain(Buffer.from("%PDF-synthetic-original").toString("base64"));
+  expect(JSON.stringify(chunks)).not.toContain(
+    Buffer.from("%PDF-synthetic-original").toString("base64"),
+  );
+  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+    { url: "https://public.example/archive.pdf" },
+  ]);
+  expect(m.pdfRead).toHaveBeenCalledTimes(1);
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("reads an explicitly named original in one tool call and two real SDK steps without exposing bytes", async () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+  m.pdfLoad.mockResolvedValue([
+    {
+      id,
+      title: "archive.pdf",
+      url: "https://public.example/archive.pdf",
+      path: "a/archive.pdf",
+      size: 100,
+      revision: "v1",
+      claimId: "c1",
+    },
+  ]);
+  m.pdfRead.mockResolvedValue({
+    bytes: Buffer.from("%PDF-synthetic-original"),
+    pages: 2,
+    hash: "sha",
+  });
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("readNamedPdf", { filename: "archive.pdf" }),
+      textStep("The document says Cedar ([1], page 2)."),
+    ],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What does archive.pdf say?")));
+  expect(model.doStreamCalls).toHaveLength(2);
+  const prompt = JSON.stringify(model.doStreamCalls[1].prompt);
+  expect(prompt).toContain("application/pdf");
+  expect(prompt).toContain(Buffer.from("%PDF-synthetic-original").toString("base64"));
+  expect(JSON.stringify(chunks)).not.toContain(
+    Buffer.from("%PDF-synthetic-original").toString("base64"),
+  );
+  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+    { url: "https://public.example/archive.pdf" },
+  ]);
+  expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
 });
