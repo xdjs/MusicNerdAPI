@@ -1,5 +1,6 @@
 import { generateObject } from "@/lib/ai/generateObject";
 import { answerVerdictSchema, type AnswerVerdict } from "@/lib/evals/answerVerdictSchema";
+import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
 const INSTRUCTIONS = `Grade a fan answer with relevance and groundedness from 0 to 1.
@@ -22,7 +23,10 @@ export async function judgeCitedAnswer(input: {
   if (!turn.answer.trim())
     return { verdict: { relevance: 0, groundedness: 0, reason: "The answer is empty." } };
   if (!turn.evidence) return { verdict: null, unscoredReason: "Evidence capture is absent." };
-  const cited = [...new Set([...turn.answer.matchAll(/\[(\d+)\]/g)].map(m => Number(m[1])))];
+  const cited = scoreCitations(
+    turn.answer,
+    turn.sources.map(s => s.n),
+  ).metadata.cited;
   for (const n of cited) {
     const sources = turn.sources.filter(s => s.n === n);
     if (sources.length !== 1 || !turn.evidence.some(e => e.n === n && e.url === sources[0].url)) {

@@ -55,6 +55,18 @@ describe("judgeCitedAnswer", () => {
       expect(generateObject).not.toHaveBeenCalled();
     },
   );
+  it("uses the same grouped citation syntax as citation integrity scoring", async () => {
+    const x = input();
+    x.turn.answer = "Label X [1, 2]. Date [2026-05-13].";
+    expect(await judgeCitedAnswer(x)).toMatchObject({ verdict: null });
+    expect(generateObject).not.toHaveBeenCalled();
+    x.turn.answer = "Label X [1, Artist Doc]. Date [2026-05-13].";
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 1, reason: "Supported" },
+    });
+    await judgeCitedAnswer(x);
+    expect(JSON.parse(generateObject.mock.calls[0][0].prompt).evidence).toEqual(x.turn.evidence);
+  });
   it("records a judge failure as unscored without retrying or leaking provider details", async () => {
     generateObject.mockRejectedValue(new Error("private provider response"));
     expect(await judgeCitedAnswer(input())).toEqual({
