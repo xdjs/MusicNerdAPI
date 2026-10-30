@@ -16,23 +16,15 @@ const MAX_SOURCE_CHARACTERS = 12000;
  * @param cite - The turn's citation numbering.
  * @returns The tool.
  */
-export function createReadSourceTool(
-  originals: ResearchOriginal[],
-  cite: CiteSource,
-  onRead?: (id: string, text: string, truncated: boolean) => void,
-) {
+export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSource) {
   return tool({
-    description: "Read a saved source found by searchSources. Cite it in the answer as [n].",
+    description:
+      "Read a saved source found by searchSources. Cite it in the answer as [n]. Coverage describes only the stored text, which may itself be an excerpt; truncated means this read omitted its tail. Do not infer a missing fact is absent from the original document.",
     inputSchema: z.object({ sourceId: z.string().min(1).max(300) }),
     execute: async ({ sourceId }) => {
       const source = originals.find(original => original.sourceId === sourceId);
       if (!source) return { error: "Unknown sourceId. Use an id from searchSources." };
       const title = getSourceTitle(source.url);
-      onRead?.(
-        sourceId,
-        source.text.slice(0, MAX_SOURCE_CHARACTERS),
-        source.text.length > MAX_SOURCE_CHARACTERS,
-      );
       return {
         n: cite({ url: source.url, title }),
         title,
@@ -41,6 +33,11 @@ export function createReadSourceTool(
         publishedAt: source.publishedAt,
         activityDate: source.activityDate ?? null,
         retrievedAt: source.retrievedAt,
+        coverage: {
+          returnedChars: Math.min(source.text.length, MAX_SOURCE_CHARACTERS),
+          storedChars: source.text.length,
+          truncated: source.text.length > MAX_SOURCE_CHARACTERS,
+        },
       };
     },
   });

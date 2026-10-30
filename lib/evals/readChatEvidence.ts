@@ -9,13 +9,14 @@ export function readChatEvidence(
 ): ChatEvidence[] {
   if (!output || typeof output !== "object") return [];
   const record = output as Record<string, unknown>;
-  if (tool !== "readSource" && tool !== "webSearch") return [];
-  const candidates =
-    tool === "readSource" ? [record] : Array.isArray(record.results) ? record.results : [];
+  if (tool !== "readSource" && tool !== "webSearch" && tool !== "readWebSource") return [];
+  if (tool === "readWebSource" && record.status !== "ready") return [];
+  const isRead = tool === "readSource" || tool === "readWebSource";
+  const candidates = isRead ? [record] : Array.isArray(record.results) ? record.results : [];
   return candidates.flatMap(candidate => {
     if (!candidate || typeof candidate !== "object") return [];
     const row = candidate as Record<string, unknown>;
-    const text = tool === "readSource" ? row.text : row.snippet;
+    const text = isRead ? row.text : row.snippet;
     if (
       typeof row.n !== "number" ||
       !Number.isInteger(row.n) ||
@@ -34,7 +35,14 @@ export function readChatEvidence(
         tool,
         toolCallId,
         sha256: createHash("sha256").update(text).digest("hex"),
-        ...(tool === "readSource"
+        ...(tool === "readWebSource"
+          ? {
+              ...(typeof row.sourceId === "string" ? { sourceId: row.sourceId } : {}),
+              ...(typeof row.requestedUrl === "string" ? { requestedUrl: row.requestedUrl } : {}),
+              ...(typeof row.truncated === "boolean" ? { truncated: row.truncated } : {}),
+            }
+          : {}),
+        ...(isRead
           ? Object.fromEntries(
               ["publishedAt", "activityDate", "retrievedAt"]
                 .filter(key => row[key] === null || typeof row[key] === "string")

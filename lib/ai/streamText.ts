@@ -17,7 +17,7 @@ export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> &
   /** Tools the model may call; omitted means a plain text call. */
   tools?: ToolSet;
   /** When a multi-step tool loop stops; omitted means one step. */
-  stopWhen?: StopCondition<ToolSet> | StopCondition<ToolSet>[];
+  stopWhen?: StopCondition<ToolSet>;
   /** Called with each piece of text as the model writes it. */
   onTextDelta?: (delta: string) => void;
   /** A chat response's writer: the call's UI message parts (text, tool steps) are merged into it. */

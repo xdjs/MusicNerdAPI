@@ -10,9 +10,9 @@ import { MODEL_CHAT } from "@/lib/ai/const";
 import { streamText } from "@/lib/ai/streamText";
 import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
 import { createChatCitations } from "@/lib/chat/createChatCitations";
-import { createChatConflictFallback } from "@/lib/chat/createChatConflictFallback";
+import { createReadSourceTool } from "@/lib/chat/createReadSourceTool";
 import { createSearchSourcesTool } from "@/lib/chat/createSearchSourcesTool";
-import { createWebSearchTool } from "@/lib/chat/createWebSearchTool";
+import { createChatWebTools } from "@/lib/chat/createChatWebTools";
 import { createChatPdfTools } from "@/lib/chatPdf/createChatPdfTools";
 import { validateArtistChatBody } from "@/lib/chat/validateArtistChatBody";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
@@ -57,7 +57,6 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
-        const conflict = createChatConflictFallback(originals, cite, writer);
         const pdf = createChatPdfTools(
           artistId,
           cite,
@@ -76,13 +75,12 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
           tools: {
             ...pdf.tools,
             searchSources: createSearchSourcesTool(originals, name),
-            readSource: conflict.readSource,
-            showSourceDifferences: conflict.showSourceDifferences,
-            webSearch: createWebSearchTool(cite),
+            readSource: createReadSourceTool(originals, cite),
+            ...createChatWebTools(cite, request.signal),
           },
-          stopWhen: [isStepCount(6), conflict.stop],
+          stopWhen: isStepCount(6),
           abortSignal: request.signal,
-          writer: conflict.writer,
+          writer,
         }).catch(error => {
           // The merged stream has already sent the client its error part.
           console.error("[chat] stream failed", error);

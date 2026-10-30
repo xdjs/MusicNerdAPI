@@ -9,9 +9,18 @@ import { isPublicAddress } from "@/lib/sourceExtraction/isPublicAddress";
 import type { FetchedSource } from "@/lib/sourceExtraction/types";
 
 /** Bounded public HTML fetch with DNS pinning and independent redirect validation. */
-export async function fetchSourceText(input: string, budgetMs: number): Promise<FetchedSource> {
+export async function fetchSourceText(
+  input: string,
+  budgetMs: number,
+  signal?: AbortSignal,
+): Promise<FetchedSource> {
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), Math.max(1, Math.min(15_000, budgetMs)));
+  const budget = Math.max(1, Math.min(15_000, budgetMs));
+  const deadline = Date.now() + budget;
+  const cancel = () => abort.abort();
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  const timer = setTimeout(cancel, budget);
   let httpStatus: number | null = null;
   const result = (
     status: FetchedSource["status"],
@@ -24,8 +33,10 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
     ...extra,
   });
   try {
+    abort.signal.throwIfAborted();
     let url = new URL(input);
     for (let hop = 0; hop <= 3; hop++) {
+      abort.signal.throwIfAborted();
       const host = url.hostname.replace(/^\[|\]$/g, "");
       if (
         !["http:", "https:"].includes(url.protocol) ||
@@ -111,7 +122,13 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
       } catch {
         return result("unsupported");
       }
+      abort.signal.throwIfAborted();
+      if (Date.now() >= deadline) return result("unavailable");
       const extracted = extractVaultText(html);
+      // Parsing is bounded by response bytes, but synchronous work cannot be interrupted.
+      // Never release evidence after its budget even if the timer could not run during parsing.
+      abort.signal.throwIfAborted();
+      if (Date.now() >= deadline) return result("unavailable");
       if (!extracted.text) return result("empty");
       // A challenge page is content from the gate, never artist evidence.
       if (
@@ -121,12 +138,16 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
         extracted.text.length < 5000
       )
         return result("blocked");
+      const publishedAt = extractPublicationDate(html);
+      const ogImage = extractOgImage(html);
+      abort.signal.throwIfAborted();
+      if (Date.now() >= deadline) return result("unavailable");
       return result("ready", {
         text: extracted.text,
         truncated: extracted.truncated,
         resolvedUrl: url.href,
-        publishedAt: extractPublicationDate(html),
-        ogImage: extractOgImage(html),
+        publishedAt,
+        ogImage,
       });
     }
     return result("unavailable");
@@ -134,5 +155,6 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
     return result("unavailable");
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
 }

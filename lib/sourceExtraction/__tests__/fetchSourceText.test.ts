@@ -103,3 +103,60 @@ it("returns the final page image from the same safe HTML response without anothe
   });
   expect(mocks.request).toHaveBeenCalledTimes(2);
 });
+
+it("does not resolve DNS or connect when the caller already cancelled", async () => {
+  const abort = new AbortController();
+  abort.abort();
+  expect((await fetchSourceText("https://artist.example", 5000, abort.signal)).status).toBe(
+    "unavailable",
+  );
+  expect(mocks.lookup).not.toHaveBeenCalled();
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+it("cancels an outstanding DNS lookup on caller abort", async () => {
+  const abort = new AbortController();
+  mocks.lookup.mockImplementation(() => {
+    queueMicrotask(() => abort.abort());
+    return new Promise(() => {});
+  });
+  expect((await fetchSourceText("https://artist.example", 5000, abort.signal)).status).toBe(
+    "unavailable",
+  );
+  expect(mocks.request).not.toHaveBeenCalled();
+});
+it("propagates caller abort to the pinned HTTP request", async () => {
+  const abort = new AbortController();
+  let connectionSignal: AbortSignal | undefined;
+  mocks.request.mockImplementation((_url, options) => {
+    connectionSignal = options.signal;
+    const req = new EventEmitter() as EventEmitter & { end: () => void };
+    options.signal.addEventListener("abort", () => req.emit("error", new Error("aborted")), {
+      once: true,
+    });
+    req.end = () => queueMicrotask(() => abort.abort());
+    return req;
+  });
+  expect((await fetchSourceText("https://artist.example", 5000, abort.signal)).status).toBe(
+    "unavailable",
+  );
+  expect(connectionSignal?.aborted).toBe(true);
+});
+
+it("does not release ready evidence when metadata parsing crosses the deadline", async () => {
+  response(
+    200,
+    '<article>Original release credits and their qualifications.</article><meta property="og:image" content="https://cdn.example/a.jpg">',
+  );
+  // Initial deadline, before text parsing, after text parsing, then metadata completion.
+  const clock = vi
+    .spyOn(Date, "now")
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValue(6000);
+  try {
+    expect((await fetchSourceText("https://artist.example", 5000)).status).toBe("unavailable");
+  } finally {
+    clock.mockRestore();
+  }
+});

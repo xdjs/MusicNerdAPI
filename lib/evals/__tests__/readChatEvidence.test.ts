@@ -56,3 +56,31 @@ describe("readChatEvidence", () => {
     expect(readChatEvidence("readSource", "x", { error: "denied" })).toEqual([]);
   });
 });
+
+it("captures a ready web original with redirect provenance, exact text, dates and truncation", () => {
+  const output = {
+    status: "ready",
+    sourceId: "web:opaque",
+    n: 2,
+    url: "https://label.example/final",
+    requestedUrl: "https://label.example/old",
+    text: "Album credits\n\nIn theory, not guaranteed.",
+    publishedAt: null,
+    retrievedAt: "2026-10-30T00:00:00Z",
+    truncated: true,
+    evidenceScope: "public_web_page",
+  };
+  expect(readChatEvidence("readWebSource", "web-read", output)).toEqual(
+    [
+      {
+        ...output,
+        tool: "readWebSource",
+        toolCallId: "web-read",
+        sha256: createHash("sha256").update(output.text).digest("hex"),
+      },
+    ].map(({ status: _status, evidenceScope: _scope, ...evidence }) => evidence),
+  );
+  expect(readChatEvidence("readWebSource", "failure", { ...output, status: "blocked" })).toEqual(
+    [],
+  );
+});

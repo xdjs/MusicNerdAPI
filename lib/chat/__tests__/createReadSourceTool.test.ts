@@ -21,6 +21,7 @@ it("returns the stored text with its citation number, without fetching the page"
     publishedAt: null,
     activityDate: null,
     retrievedAt: null,
+    coverage: { returnedChars: 12, storedChars: 12, truncated: false },
   });
   expect(cite).toHaveBeenCalledWith({ url: "https://www.news.example/a", title: "news.example" });
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -42,4 +43,18 @@ it("cites nothing for an unknown source", async () => {
     error: "Unknown sourceId. Use an id from searchSources.",
   });
   expect(cite).not.toHaveBeenCalled();
+});
+
+it("reports a partial stored read without implying complete original-document coverage", async () => {
+  const text = "Section heading\n\n1975\n\n" + "Context. ".repeat(2000);
+  const read = createReadSourceTool(
+    [originalFixture("vault:1", "https://a.example/", text)],
+    () => 2,
+  );
+  const result = await read.execute!({ sourceId: "vault:1" }, call);
+  expect(result).toMatchObject({
+    n: 2,
+    text: text.slice(0, 12000),
+    coverage: { returnedChars: 12000, storedChars: text.length, truncated: true },
+  });
 });

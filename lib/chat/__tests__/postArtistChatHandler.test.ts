@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   reserve: vi.fn(),
   originals: vi.fn(),
   webSearch: vi.fn(),
+  webRead: vi.fn(),
   pdfLoad: vi.fn(),
   pdfRead: vi.fn(),
 }));
@@ -34,9 +35,11 @@ vi.mock("@/lib/questionResearch/loadPublicResearchOriginals", () => ({
   loadPublicResearchOriginals: m.originals,
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
+vi.mock("@/lib/sourceExtraction/fetchSourceText", () => ({ fetchSourceText: m.webRead }));
 vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdfLoad }));
 vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: m.pdfRead }));
 const { postArtistChatHandler } = await import("@/lib/chat/postArtistChatHandler");
+const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
 
 const artistId = "11111111-1111-4111-8111-111111111111";
 const usage = {
@@ -136,47 +139,6 @@ it("streams tool steps, a source-url per read source and text citing it", async 
   // The source part arrives before the answer that cites it.
   expect(types.indexOf("source-url")).toBeLessThan(types.indexOf("text-delta"));
   expect(m.reserve).toHaveBeenCalledWith(artistId, "f".repeat(64));
-  expect(m.webSearch).not.toHaveBeenCalled();
-});
-
-it("renders contextual source differences without a follow-up generation or invented roles", async () => {
-  m.originals.mockResolvedValue([
-    originalFixture(
-      "vault:1",
-      "https://review.example/a",
-      "Record A\n\n1977\n\nThis review calls it their first collaboration.",
-    ),
-    originalFixture(
-      "vault:2",
-      "https://review.example/b",
-      "Song B\n\n1975\n\nBoth musicians recorded this album.\n\nTheir billing is not specified.",
-    ),
-  ]);
-  const model = new MockLanguageModelV4({
-    doStream: [
-      toolStep("readSource", { sourceId: "vault:1" }),
-      toolStep("readSource", { sourceId: "vault:2" }),
-      toolStep("showSourceDifferences", {
-        sources: [
-          { sourceId: "vault:1", anchor: "first collaboration" },
-          { sourceId: "vault:2", anchor: "Both musicians" },
-        ],
-      }),
-    ],
-  });
-  m.model = model;
-  const chunks = await chunksOf(await post(ask("What was their first album?")));
-  const text = chunks
-    .filter(c => c.type === "text-delta")
-    .map(c => c.delta)
-    .join("");
-  expect(text).toContain("1977");
-  expect(text).toContain("1975");
-  expect(text).toContain("Their billing is not specified.");
-  expect(text).toContain("[1]");
-  expect(text).toContain("[2]");
-  expect(text).not.toContain("guest");
-  expect(model.doStreamCalls).toHaveLength(3);
   expect(m.webSearch).not.toHaveBeenCalled();
 });
 
@@ -427,4 +389,128 @@ it("reads an explicitly named original in one tool call and two real SDK steps w
   ]);
   expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("reads a discovered original through the real SDK loop, preserving final citation and exact evidence", async () => {
+  m.webSearch.mockResolvedValue([
+    {
+      url: "https://label.example/release",
+      title: "Release",
+      snippet: "A full album collaboration.",
+    },
+  ]);
+  m.webRead.mockResolvedValue({
+    status: "ready",
+    text: "Original release credits. A full album, after an earlier track.",
+    resolvedUrl: "https://label.example/final",
+    capturedAt: "2026-10-30T00:00:00Z",
+    publishedAt: null,
+    truncated: false,
+  });
+  let step = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async options => {
+      switch (step++) {
+        case 0:
+          return toolStep("readSource", { sourceId: "vault:1" });
+        case 1:
+          return toolStep("webSearch", { query: "Artist album first collaboration label credits" });
+        case 2: {
+          const prompt = JSON.parse(JSON.stringify(options.prompt));
+          const output = prompt
+            .filter((p: { role: string }) => p.role === "tool")
+            .flatMap((p: { content: unknown[] }) => p.content)
+            .find((p: { toolName: string }) => p.toolName === "webSearch").output.value;
+          expect(output.results[0].sourceId).toMatch(/^web:/);
+          return toolStep("readWebSource", { sourceId: output.results[0].sourceId });
+        }
+        default:
+          expect(JSON.stringify(options.prompt)).toContain("Original release credits.");
+          return textStep("The label distinguishes the full album from an earlier track [3].");
+      }
+    },
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What was the first album together?")));
+  expect(chunks.filter(c => c.type === "tool-input-available").map(c => c.toolName)).toEqual([
+    "readSource",
+    "webSearch",
+    "readWebSource",
+  ]);
+  expect(chunks.filter(c => c.type === "source-url").at(-1)).toMatchObject({
+    sourceId: "3",
+    url: "https://label.example/final",
+  });
+  expect(
+    chunks.find(c => c.type === "tool-output-available" && c.toolCallId === "call-readWebSource")
+      .output,
+  ).toMatchObject({
+    status: "ready",
+    n: 3,
+    requestedUrl: "https://label.example/release",
+    url: "https://label.example/final",
+    text: "Original release credits. A full album, after an earlier track.",
+  });
+  expect(m.webRead).toHaveBeenCalledWith(
+    "https://label.example/release",
+    5000,
+    expect.any(AbortSignal),
+  );
+  expect(model.doStreamCalls).toHaveLength(4);
+  step = 0;
+  const captured = await chatStreamTurn({
+    artistId,
+    question: "What was the first album together?",
+  });
+  expect(captured.error).toBeUndefined();
+  expect(captured.evidence?.find(e => e.tool === "readWebSource")).toMatchObject({
+    n: 3,
+    url: "https://label.example/final",
+    requestedUrl: "https://label.example/release",
+    text: "Original release credits. A full album, after an earlier track.",
+    truncated: false,
+  });
+});
+
+it("delivers answer text before generation finishes without an extra verifier", async () => {
+  let complete!: () => void;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: "text-start", id: "t" });
+      controller.enqueue({ type: "text-delta", id: "t", delta: "Early answer." });
+      complete = () => {
+        controller.enqueue({ type: "text-end", id: "t" });
+        controller.enqueue(finish("stop"));
+        controller.close();
+      };
+    },
+  });
+  const model = new MockLanguageModelV4({ doStream: async () => ({ stream }) });
+  m.model = model;
+  const response = await post(ask("Who is this?"));
+  const reader = response.body!.getReader();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const early = (async () => {
+      let text = "";
+      while (!text.includes("Early answer.")) {
+        const next = await reader.read();
+        if (next.done) throw Error("Ended before text");
+        text += new TextDecoder().decode(next.value);
+      }
+      return text;
+    })();
+    const observed = await Promise.race([
+      early,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(Error("Text buffered until finish")), 1000);
+      }),
+    ]);
+    expect(observed).toContain("Early answer.");
+    expect(model.doStreamCalls).toHaveLength(1);
+  } finally {
+    clearTimeout(timer);
+    complete();
+    await reader.cancel();
+  }
 });
