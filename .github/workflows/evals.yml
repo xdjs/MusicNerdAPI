@@ -63,7 +63,7 @@ jobs:
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
       VERCEL: "1"
-      PDF106_OUTPUT: ${{ runner.temp }}/pdf106-results
+      PDF106_OUTPUT: ${{ github.workspace }}/pdf106-results
     steps:
       - name: Refuse automatic reruns of a spending job
         run: test "${{ github.run_attempt }}" = "1"
@@ -105,6 +105,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pdf106-paired-${{ github.run_id }}
-          path: ${{ runner.temp }}/pdf106-results
+          path: ${{ github.workspace }}/pdf106-results
           if-no-files-found: warn
           retention-days: 7
