@@ -37,5 +37,5 @@ export interface DeezerArtistPayload {
 
 export type CatalogCounterpartResult =
   | { status: "verified"; spotifyId: string; deezerId: string; recordings: number }
-  | { status: "not_found" | "ambiguous" }
+  | { status: "not_found" | "ambiguous" | "incomplete_search" }
   | { status: "provider_failure"; retryAtMs?: number; failureConsumed?: boolean };
