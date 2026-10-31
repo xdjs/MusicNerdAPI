@@ -13,7 +13,6 @@ const m = vi.hoisted(() => ({
   webSearch: vi.fn(),
   pdfLoad: vi.fn(),
   pdfRead: vi.fn(),
-  lookup: vi.fn(),
 }));
 vi.mock("ai", async importOriginal => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -35,9 +34,6 @@ vi.mock("@/lib/questionResearch/loadPublicResearchOriginals", () => ({
   loadPublicResearchOriginals: m.originals,
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
-vi.mock("@/lib/chatEvidence/lookupPreviewGeneration", () => ({
-  lookupPreviewGeneration: m.lookup,
-}));
 vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdfLoad }));
 vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: m.pdfRead }));
 const { postArtistChatHandler } = await import("@/lib/chat/postArtistChatHandler");
@@ -97,7 +93,6 @@ async function chunksOf(response: Response) {
 beforeEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
-  m.lookup.mockRejectedValue(new Error("Unavailable fixture receipt"));
   m.pdfLoad.mockResolvedValue([]);
   m.artist.mockResolvedValue({ id: artistId, name: "Dutchyyy" });
   m.visitor.mockResolvedValue("f".repeat(64));
@@ -641,11 +636,6 @@ it.each([
       url: `https://archive.example/source-${index}`,
     }));
     m.originals.mockResolvedValue(sources);
-    const accounting = new Map<string, unknown>();
-    m.lookup.mockImplementation(async id => {
-      if (!completeAccounting) throw new Error("Unavailable");
-      return accounting.get(id);
-    });
     let step = 0;
     const model = new MockLanguageModelV4({
       doStream: async options => {
@@ -665,22 +655,6 @@ it.each([
                 : null;
         // Scripted usage scaled with the actual prepared input, not a live tokenizer.
         const input = Math.ceil(Buffer.byteLength(JSON.stringify(options)) / 3);
-        accounting.set(`gen_test_${step}`, {
-          id: `gen_test_${step}`,
-          model: "anthropic/claude-sonnet-5.5",
-          provider_name: "anthropic",
-          streamed: true,
-          finish_reason: action ? "tool-calls" : "stop",
-          native_tokens_prompt: input,
-          native_tokens_completion: 80,
-          native_tokens_reasoning: 20,
-          native_tokens_cached: 0,
-          native_tokens_cache_creation: 0,
-          billable_web_search_calls: 0,
-          total_cost: 0.0001,
-          surcharge_cost: 0,
-          gateway_cost: 0.0001,
-        });
         const providerMetadata = completeAccounting
           ? {
               gateway: {
@@ -735,14 +709,14 @@ it.each([
       }),
     );
     const receipts = chunks.filter(c => c.type === "data-preview-budget").map(c => c.data);
-    if (completeAccounting && !selects) {
+    if (!selects) {
       expect(receipts.at(-1)).toMatchObject({ phase: "complete" });
       expect(chunks.some(c => c.type === "data-evidence-passage")).toBe(false);
       expect(chunks).toContainEqual({
         type: "data-evidence-status",
         data: { code: "validation_failed" },
       });
-    } else if (completeAccounting) {
+    } else {
       expect(step).toBe(4);
       expect(receipts.at(-1)).toMatchObject({ phase: "complete", attempts: 4 });
       expect(receipts.at(-1).reservedUsd).toBeLessThan(0.15);
@@ -761,10 +735,6 @@ it.each([
       expect(chunks.filter(c => c.type === "source-url")).toMatchObject([{ url: sources[0].url }]);
       expect(chunks.some(c => c.type === "text-delta")).toBe(false);
       expect(m.originals.mock.calls.length).toBeGreaterThanOrEqual(4); // load, two reads, selection reauthorization
-    } else {
-      expect(receipts.at(-1)).toMatchObject({ phase: "stopped", reason: "accounting_unavailable" });
-      expect(chunks.some(c => c.type === "data-evidence-passage")).toBe(false);
-      expect(receipts.some(c => c.tool === "selectPassage")).toBe(false);
     }
     expect(m.webSearch).not.toHaveBeenCalled();
     expect(m.pdfRead).not.toHaveBeenCalled();
@@ -796,5 +766,4 @@ it("terminates after validated selection with real message lifecycle and no four
     phase: "complete",
     attempts: 3,
   });
-  expect(m.lookup).not.toHaveBeenCalled();
 });

@@ -120,7 +120,7 @@ it("retains reservations and fails closed when usage is absent", async () => {
     expect.objectContaining({ phase: "stopped", reason: "usage_missing" }),
   );
 });
-it("counts schemas and growing tool history on every step without refunding low actual usage", async () => {
+it("counts schemas and growing tool history on every step while settling completed usage", async () => {
   const receipts: Record<string, unknown>[] = [];
   const guard = createPreviewEvidenceBudget(x => receipts.push(x));
   let n = 0;
@@ -128,7 +128,7 @@ it("counts schemas and growing tool history on every step without refunding low 
     doStream: async () => ({
       stream: simulateReadableStream({
         chunks: [
-          { type: "tool-call", toolCallId: `t${++n}`, toolName: "read", input: "{}" },
+          { type: "tool-call", toolCallId: `t${++n}`, toolName: "readSource", input: "{}" },
           { ...finish, finishReason: { unified: "tool-calls", raw: undefined } },
         ],
       }),
@@ -138,7 +138,7 @@ it("counts schemas and growing tool history on every step without refunding low 
     model: wrapLanguageModel({ model, middleware: guard.middleware }),
     prompt: "Read evidence",
     tools: {
-      read: tool({
+      readSource: tool({
         description: "Complete evidence",
         inputSchema: z.object({}),
         execute: async () => "界".repeat(1500),
@@ -150,13 +150,14 @@ it("counts schemas and growing tool history on every step without refunding low 
   });
   await result.consumeStream();
   expect(n).toBeGreaterThan(1);
-  expect(n).toBeLessThan(6);
+  expect(n).toBe(6);
   const reservations = receipts.filter(x => x.phase === "reserved");
   expect(Number(reservations[1].preparedBytes)).toBeGreaterThan(
     Number(reservations[0].preparedBytes) + 4500,
   );
   expect(Number(reservations.at(-1)!.reservedUsd)).toBeLessThanOrEqual(0.15);
-  expect(receipts.at(-1)).toMatchObject({ phase: "stopped", reason: "reservation_limit" });
+  guard.finish();
+  expect(receipts.at(-1)).toMatchObject({ phase: "complete" });
 });
 it.each(["length", "error"] as const)("stops after an abnormal %s finish", async reason => {
   const guard = createPreviewEvidenceBudget(() => {});
@@ -200,82 +201,9 @@ it("latches reconciliation capture failure so another generation cannot start", 
   expect(model.doStreamCalls).toHaveLength(1);
 });
 
-it("reproduces the live two-step reservation totals and captures the first rejected third-step size", async () => {
+it("admits realistic multi-source history with token estimates alone", async () => {
   const receipts: Record<string, unknown>[] = [];
   const guard = createPreviewEvidenceBudget(x => receipts.push(x));
-  let calls = 0;
-  // Exact observed byte counts and usage; synthetic padding is NOT the missing
-  // model/tool transcript. 9869 is the derived minimum rejected third-step size.
-  const invoke = async (bytes: number, input: number, output: number) => {
-    const params = { maxOutputTokens: 1024, prompt: "" };
-    params.prompt = "x".repeat(bytes - Buffer.byteLength(JSON.stringify(params)));
-    expect(Buffer.byteLength(JSON.stringify(params))).toBe(bytes);
-    const result = await guard.middleware.wrapStream!({
-      params,
-      doStream: async () => {
-        calls++;
-        return {
-          stream: simulateReadableStream({
-            chunks: [
-              {
-                ...finish,
-                usage: {
-                  ...finish.usage,
-                  inputTokens: { ...finish.usage.inputTokens, total: input },
-                  outputTokens: { ...finish.usage.outputTokens, total: output },
-                },
-              },
-            ],
-          }),
-        };
-      },
-    } as never);
-    const reader = result.stream.getReader();
-    while (!(await reader.read()).done) {
-      /* drain the scripted provider */
-    }
-  };
-  await invoke(2555, 1137, 62);
-  await invoke(7843, 3203, 342);
-  await expect(invoke(9869, 0, 0)).rejects.toThrow("Preview evidence budget stopped");
-  expect(calls).toBe(2);
-  expect(receipts.at(-1)).toMatchObject({
-    phase: "stopped",
-    reason: "reservation_limit",
-    attempts: 2,
-    reconciled: 2,
-    reservedUsd: 0.0863016,
-    observedUpperEstimateUsd: 0.02354,
-    nextStep: 3,
-    preparedBytes: 9869,
-    inputTokenEstimate: 11917,
-    outputTokens: 1024,
-    nextReservationUsd: 0.0636988,
-    remainingReservationUsd: 0.0636984,
-  });
-});
-
-it("looks up completed steps only when necessary to admit realistic multi-source history", async () => {
-  const receipts: Record<string, unknown>[] = [];
-  const guard = createPreviewEvidenceBudget(
-    x => receipts.push(x),
-    async id => ({
-      id,
-      model: "anthropic/claude-sonnet-5.5",
-      provider_name: "anthropic",
-      streamed: true,
-      finish_reason: "tool-calls",
-      native_tokens_prompt: 10,
-      native_tokens_completion: 2,
-      native_tokens_reasoning: 0,
-      native_tokens_cached: 0,
-      native_tokens_cache_creation: 0,
-      billable_web_search_calls: 0,
-      total_cost: 0.00001,
-      surcharge_cost: 0,
-      gateway_cost: 0.00001,
-    }),
-  );
   let calls = 0;
   const model = new MockLanguageModelV4({
     doStream: async () => ({
@@ -319,7 +247,9 @@ it("looks up completed steps only when necessary to admit realistic multi-source
   expect(receipts.filter(x => x.phase === "reconciled")).toHaveLength(4);
   expect(receipts.at(-1)).toMatchObject({ phase: "complete" });
   expect(Number(receipts.at(-1)!.reservedUsd)).toBeLessThan(0.15);
-  expect(receipts.some(x => x.phase === "settled")).toBe(true);
+  expect(
+    receipts.filter(x => x.phase === "reconciled").every(x => x.accounting === "estimated_usage"),
+  ).toBe(true);
 });
 
 const accountedFinish = {
@@ -397,7 +327,7 @@ it("records selection attempted versus rejected without arguments or source cont
   ]);
 });
 
-it("retains a repeated generation receipt and emits completion only once", async () => {
+it("retains a repeated generation reservation and never emits successful completion", async () => {
   const receipts: Record<string, unknown>[] = [];
   const guard = createPreviewEvidenceBudget(x => receipts.push(x));
   const model = new MockLanguageModelV4({
@@ -413,8 +343,8 @@ it("retains a repeated generation receipt and emits completion only once", async
   guard.finish();
   guard.finish();
   expect(receipts.filter(x => x.phase === "reconciled").map(x => x.accounting)).toEqual([
-    "reservation_retained",
-    "reservation_retained",
+    "estimated_usage",
   ]);
-  expect(receipts.filter(x => x.phase === "complete")).toHaveLength(1);
+  expect(receipts.filter(x => x.phase === "complete")).toHaveLength(0);
+  expect(receipts.at(-1)).toMatchObject({ reason: "duplicate_generation" });
 });
