@@ -496,42 +496,69 @@ it("fails closed when the model emits prose instead of a valid selection", async
   expect(chunks.some(c => c.type === "source-url")).toBe(false);
 });
 
-it("streams a validated selection before the model's final step completes", async () => {
+it("streams the first validated selection while another same-step selection is pending", async () => {
   let release!: () => void;
+  let released = false;
   const gate = new Promise<void>(resolve => {
     release = resolve;
+  });
+  const source = originalFixture(
+    "vault:1",
+    "https://label.example/a",
+    "Dutchyyy signed to Night Label.",
+  );
+  let loads = 0;
+  m.originals.mockImplementation(async () => {
+    if (++loads === 5) await gate;
+    return [source];
   });
   let step = 0;
   m.model = new MockLanguageModelV4({
     doStream: async options => {
       step++;
       if (step === 1) return toolStep("searchSources", { query: "label" });
-      if (step === 2) return toolStep("readSource", { sourceId: "vault:1" });
-      if (step === 3)
-        return toolStep("selectPassage", {
-          passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
-        });
-      await gate;
-      return textStep("Never display this conclusion.");
+      const ids = [...JSON.stringify(options.prompt).matchAll(/"passageId":"([^"]+)"/g)].map(
+        x => x[1],
+      );
+      if (step > 3) throw new Error("Unexpected generation after selection");
+      return {
+        stream: simulateReadableStream({
+          chunks: [
+            ...[0, 1].map(i => ({
+              type: "tool-call" as const,
+              toolCallId: `${step}-${i}`,
+              toolName: step === 2 ? "readSource" : "selectPassage",
+              input: JSON.stringify(step === 2 ? { sourceId: "vault:1" } : { passageId: ids[i] }),
+            })),
+            finish("tool-calls"),
+          ],
+        }),
+      };
     },
   });
   const response = await post({ ...ask("What label?"), responseMode: "source_passages" });
   const reader = response.body!.getReader();
-  let received = "";
   const decoder = new TextDecoder();
+  let received = "";
   try {
     while (!received.includes("Dutchyyy signed to Night Label.")) {
       const chunk = await reader.read();
-      if (chunk.done) throw new Error("No passage emitted");
+      if (chunk.done) throw new Error("Missing passage");
       received += decoder.decode(chunk.value);
     }
-    expect(received).not.toContain("Never display");
+    expect(released).toBe(false);
+    expect(received).not.toContain('"type":"finish"');
   } finally {
+    released = true;
     release();
   }
-  while (!(await reader.read()).done) {
-    /* drain */
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    received += decoder.decode(chunk.value);
   }
+  expect(received.match(/"type":"data-evidence-passage"/g)).toHaveLength(2);
+  expect(step).toBe(3);
 });
 
 it("latches a malformed selection before later valid selections in the actual SDK loop", async () => {
@@ -716,8 +743,8 @@ it.each([
         data: { code: "validation_failed" },
       });
     } else if (completeAccounting) {
-      expect(step).toBe(5);
-      expect(receipts.at(-1)).toMatchObject({ phase: "complete", attempts: 5 });
+      expect(step).toBe(4);
+      expect(receipts.at(-1)).toMatchObject({ phase: "complete", attempts: 4 });
       expect(receipts.at(-1).reservedUsd).toBeLessThan(0.15);
       expect(chunks.filter(c => c.type === "data-evidence-passage")).toHaveLength(1);
       expect(chunks.find(c => c.type === "data-evidence-passage").data.text).toContain(
@@ -743,3 +770,31 @@ it.each([
     expect(m.pdfRead).not.toHaveBeenCalled();
   },
 );
+
+it("terminates after validated selection with real message lifecycle and no fourth admission", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  let step = 0;
+  m.model = new MockLanguageModelV4({
+    doStream: async options => {
+      step++;
+      if (step === 1) return toolStep("searchSources", { query: "label" });
+      if (step === 2) return toolStep("readSource", { sourceId: "vault:1" });
+      if (step === 3)
+        return toolStep("selectPassage", {
+          passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
+        });
+      throw new Error("Unexpected fourth generation");
+    },
+  });
+  const chunks = await chunksOf(
+    await post({ ...ask("What label?"), responseMode: "source_passages" }),
+  );
+  expect(step).toBe(3);
+  expect(chunks[0]).toMatchObject({ type: "start", messageId: expect.any(String) });
+  expect(chunks.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
+  expect(chunks.filter(c => c.type === "data-preview-budget").at(-1).data).toMatchObject({
+    phase: "complete",
+    attempts: 3,
+  });
+  expect(m.lookup).not.toHaveBeenCalled();
+});

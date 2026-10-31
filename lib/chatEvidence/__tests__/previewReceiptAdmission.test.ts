@@ -117,3 +117,27 @@ it("bounds an unresponsive lookup and never settles its late completion", async 
   expect(s.events.some(x => x.phase === "settled")).toBe(false);
   expect(s.calls()).toBe(2);
 });
+it("reports current safe lookup category without stale HTTP status or raw details", async () => {
+  let attempt = 0;
+  const s = await setup(async () => {
+    attempt++;
+    throw Object.assign(
+      new Error("private response body and credential"),
+      attempt === 1
+        ? { receiptCode: "receipt_http", httpStatus: 503 }
+        : { receiptCode: "receipt_json" },
+    );
+  });
+  await expect(s.invoke(13000)).rejects.toThrow();
+  expect(s.events.at(-1)).toMatchObject({
+    reason: "accounting_unavailable",
+    lookupFailure: "receipt_json",
+  });
+  expect(s.events.at(-1)).not.toHaveProperty("lookupHttpStatus");
+  expect(JSON.stringify(s.events)).not.toContain("private response");
+});
+it("distinguishes exact receipt identity mismatch from a lookup transport failure", async () => {
+  const s = await setup(async () => receipt("wrong_id"));
+  await expect(s.invoke(13000)).rejects.toThrow();
+  expect(s.events.at(-1)).toMatchObject({ lookupFailure: "receipt_identity" });
+});

@@ -8,8 +8,14 @@ export function getPreviewSettlement(
     output: number;
     finishReason: string;
   },
+  invalid?: (code: "receipt_shape" | "receipt_identity" | "receipt_usage" | "receipt_cost") => void,
 ) {
-  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return null;
+  const reject = (code: Parameters<NonNullable<typeof invalid>>[0]) => {
+    invalid?.(code);
+    return null;
+  };
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt))
+    return reject("receipt_shape");
   const r = receipt as Record<string, unknown>;
   const whole = (x: unknown): x is number =>
     typeof x === "number" && Number.isSafeInteger(x) && x >= 0;
@@ -25,7 +31,7 @@ export function getPreviewSettlement(
     r.streamed !== true ||
     r.finish_reason !== step.finishReason
   )
-    return null;
+    return reject("receipt_identity");
   const tokens = [
     r.native_tokens_prompt,
     r.native_tokens_completion,
@@ -42,7 +48,7 @@ export function getPreviewSettlement(
     (r.native_tokens_cached as number) + (r.native_tokens_cache_creation as number) > step.input ||
     r.billable_web_search_calls !== 0
   )
-    return null;
+    return reject("receipt_usage");
   const inference = dollars(r.total_cost);
   const surcharge = dollars(r.surcharge_cost);
   const total = dollars(r.gateway_cost);
@@ -52,10 +58,10 @@ export function getPreviewSettlement(
     total === null ||
     Math.abs(total - inference - surcharge) > 2
   )
-    return null;
+    return reject("receipt_cost");
   // All input includes cache writes at the conservative upper rate; output
   // includes reasoning once. Preserve external charges, never discount them.
   const estimate = step.input * 4400 + step.output * 11000;
   const settlement = Math.max(total, estimate + surcharge);
-  return Number.isSafeInteger(settlement) ? settlement : null;
+  return Number.isSafeInteger(settlement) ? settlement : reject("receipt_cost");
 }

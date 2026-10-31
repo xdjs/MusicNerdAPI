@@ -4,6 +4,12 @@ import { createGateway } from "ai";
 export async function lookupPreviewGeneration(id: string, signal: AbortSignal): Promise<unknown> {
   let receipt: unknown;
   let requested = false;
+  let receiptCode = "receipt_client";
+  let httpStatus: number | undefined;
+  const fail = (code: string): never => {
+    receiptCode = code;
+    throw new Error("Historical receipt unavailable");
+  };
   const client = createGateway({
     fetch: async (input, init) => {
       const url = new URL(String(input));
@@ -14,9 +20,11 @@ export async function lookupPreviewGeneration(id: string, signal: AbortSignal): 
         url.searchParams.get("id") !== id ||
         (init?.method ?? "GET").toUpperCase() !== "GET"
       )
-        throw new Error("Lookup scope rejected");
+        fail("receipt_scope");
       requested = true;
+      receiptCode = "receipt_network";
       const response = await fetch(input, { ...init, signal, redirect: "error" });
+      receiptCode = "receipt_read";
       const reader = response.body?.getReader();
       const chunks: Uint8Array[] = [];
       let length = 0;
@@ -27,7 +35,7 @@ export async function lookupPreviewGeneration(id: string, signal: AbortSignal): 
             const { done, value } = await reader.read();
             if (done) break;
             length += value.byteLength;
-            if (length > 16384) throw new Error("Oversized accounting receipt");
+            if (length > 16384) fail("receipt_oversized");
             chunks.push(value);
           }
         } catch (error) {
@@ -43,10 +51,43 @@ export async function lookupPreviewGeneration(id: string, signal: AbortSignal): 
         body.set(chunk, offset);
         offset += chunk.byteLength;
       }
-      if (response.ok) receipt = JSON.parse(new TextDecoder().decode(body)).data;
+      if (!response.ok) {
+        httpStatus = response.status;
+        fail("receipt_http");
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(body));
+      } catch {
+        fail("receipt_json");
+      }
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !("data" in parsed) ||
+        !parsed.data ||
+        typeof parsed.data !== "object"
+      )
+        fail("receipt_shape");
+      receipt = (parsed as { data: unknown }).data;
+      receiptCode = "receipt_sdk_schema";
       return new Response(body, { status: response.status, headers: response.headers });
     },
   });
-  await client.getGenerationInfo({ id });
+  try {
+    await client.getGenerationInfo({ id });
+  } catch {
+    throw Object.assign(
+      new Error(
+        receiptCode === "receipt_oversized"
+          ? "Oversized accounting receipt"
+          : "Historical receipt unavailable",
+      ),
+      {
+        receiptCode: signal.aborted ? "receipt_aborted" : receiptCode,
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+      },
+    );
+  }
   return receipt;
 }

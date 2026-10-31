@@ -52,7 +52,7 @@ export function createPreviewEvidenceBudget(
       throw new Error("Preview budget capture failed");
     }
   };
-  const stop = (reason: string, details: Record<string, number> = {}): never => {
+  const stop = (reason: string, details: Record<string, number | string> = {}): never => {
     failed = true;
     emit({ phase: "stopped", reason, attempts, reconciled, ...details });
     throw new Error("Preview evidence budget stopped");
@@ -91,6 +91,8 @@ export function createPreviewEvidenceBudget(
           ? AbortSignal.any([deadline, params.abortSignal])
           : deadline;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let lookupFailure = "receipt_unavailable";
+        let lookupHttpStatus: number | undefined;
         try {
           const reconcile = async () => {
             for (const prior of [...unsettled]) {
@@ -98,9 +100,37 @@ export function createPreviewEvidenceBudget(
               let value: unknown;
               for (let attempt = 0; attempt < 2; attempt++) {
                 try {
+                  lookupFailure = "receipt_unavailable";
+                  lookupHttpStatus = undefined;
                   value = await lookup(prior.generationId, signal);
                   break;
-                } catch {
+                } catch (error) {
+                  if (error && typeof error === "object") {
+                    const detail = error as { receiptCode?: unknown; httpStatus?: unknown };
+                    if (
+                      [
+                        "receipt_client",
+                        "receipt_scope",
+                        "receipt_network",
+                        "receipt_read",
+                        "receipt_oversized",
+                        "receipt_http",
+                        "receipt_json",
+                        "receipt_shape",
+                        "receipt_sdk_schema",
+                        "receipt_aborted",
+                      ].includes(String(detail.receiptCode))
+                    )
+                      lookupFailure = String(detail.receiptCode);
+                    if (
+                      lookupFailure === "receipt_http" &&
+                      typeof detail.httpStatus === "number" &&
+                      Number.isInteger(detail.httpStatus) &&
+                      detail.httpStatus >= 100 &&
+                      detail.httpStatus <= 599
+                    )
+                      lookupHttpStatus = detail.httpStatus;
+                  }
                   if (attempt || signal.aborted) throw new Error("Receipt unavailable");
                   // At most one readiness retry. The shared deadline bounds this wait.
                   await new Promise<void>((resolve, reject) => {
@@ -117,7 +147,9 @@ export function createPreviewEvidenceBudget(
                 }
               }
               if (signal.aborted || failed) throw new Error("Cancelled lookup");
-              const settlement = getPreviewSettlement(value, prior);
+              const settlement = getPreviewSettlement(value, prior, code => {
+                lookupFailure = code;
+              });
               if (settlement === null) throw new Error("Receipt mismatch");
               if (settlement > prior.reservation) return stop("reservation_underestimated");
               const next = reserved - prior.reservation + settlement;
@@ -147,7 +179,15 @@ export function createPreviewEvidenceBudget(
           if (failed) throw new Error("Preview evidence budget stopped");
           return stop(
             params.abortSignal?.aborted ? "accounting_aborted" : "accounting_unavailable",
-            { elapsedMs: Math.ceil(performance.now() - started) },
+            {
+              elapsedMs: Math.ceil(performance.now() - started),
+              lookupFailure: params.abortSignal?.aborted
+                ? "receipt_aborted"
+                : deadline.aborted
+                  ? "receipt_deadline"
+                  : lookupFailure,
+              ...(lookupHttpStatus === undefined ? {} : { lookupHttpStatus }),
+            },
           );
         } finally {
           clearTimeout(timer);

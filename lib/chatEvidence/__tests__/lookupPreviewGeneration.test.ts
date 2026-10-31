@@ -63,3 +63,27 @@ it.each([200, 503])("cancels oversized %s bodies during reading", async status =
     mock.mockRestore();
   }
 });
+it.each([401, 404, 503])("retains only safe HTTP diagnostics for %s", async status => {
+  const mock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("private error body", { status }));
+  try {
+    await expect(
+      lookupPreviewGeneration("gen_x", new AbortController().signal),
+    ).rejects.toMatchObject({ receiptCode: "receipt_http", httpStatus: status });
+  } finally {
+    mock.mockRestore();
+  }
+});
+it("classifies malformed JSON without exposing its body", async () => {
+  const mock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("private invalid json"));
+  try {
+    await expect(
+      lookupPreviewGeneration("gen_x", new AbortController().signal),
+    ).rejects.toMatchObject({ receiptCode: "receipt_json" });
+  } finally {
+    mock.mockRestore();
+  }
+});

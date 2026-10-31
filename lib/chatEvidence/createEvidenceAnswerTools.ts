@@ -137,6 +137,8 @@ export function createEvidenceAnswerTools(options: {
         },
       }),
     },
+    // Evaluated by the SDK after every tool in the completed step has resolved.
+    shouldStop: () => failed || selected.size > 0,
     invalidate: fail,
     finish: async (error = false) => {
       await queue;
