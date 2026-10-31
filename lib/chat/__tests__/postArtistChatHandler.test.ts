@@ -91,6 +91,7 @@ async function chunksOf(response: Response) {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
   m.pdfLoad.mockResolvedValue([]);
   m.artist.mockResolvedValue({ id: artistId, name: "Dutchyyy" });
@@ -100,6 +101,25 @@ beforeEach(() => {
     originalFixture("vault:1", "https://label.example/a", "Dutchyyy signed to Night Label."),
     originalFixture("vault:2", "https://blog.example/b", "An interview about synthesizers."),
   ]);
+});
+
+it("applies the estimated budget only to Preview evidence mode and captures actual SDK receipts", async () => {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  m.model = new MockLanguageModelV4({ doStream: async () => textStep("Hidden text") });
+  const chunks = await chunksOf(
+    await post({ ...ask("What label?"), responseMode: "source_passages" }),
+  );
+  const receipts = chunks.filter(c => c.type === "data-preview-budget");
+  expect(receipts.map(c => c.data.phase)).toEqual(["reserved", "reconciled", "complete"]);
+  expect(receipts.every(c => c.transient)).toBe(true);
+  expect((m.model as MockLanguageModelV4).doStreamCalls[0].providerOptions?.gateway).toEqual({
+    only: ["anthropic"],
+  });
+  const normal = await chunksOf(await post(ask("Hi")));
+  expect(normal.some(c => c.type === "data-preview-budget")).toBe(false);
+  vi.stubEnv("VERCEL_ENV", "production");
+  const prod = await chunksOf(await post({ ...ask("Hi"), responseMode: "source_passages" }));
+  expect(prod.some(c => c.type === "data-preview-budget")).toBe(false);
 });
 
 it("streams tool steps, a source-url per read source and text citing it", async () => {
@@ -532,36 +552,43 @@ it("latches a malformed selection before later valid selections in the actual SD
   expect(JSON.stringify(chunks)).not.toContain("Dutchyyy signed");
 });
 
-it("renders retained album evidence verbatim instead of the captured unsupported guest/billing bridge", async () => {
-  const { default: original } =
-    await import("../../chatEvidence/__tests__/fixtures/retained-album-source.json");
-  m.originals.mockResolvedValue([original]);
-  let step = 0;
-  m.model = new MockLanguageModelV4({
-    doStream: async options => {
-      step++;
-      if (step === 1) return toolStep("searchSources", { query: "first collaboration" });
-      if (step === 2) return toolStep("readSource", { sourceId: original.sourceId });
-      if (step === 3)
-        return toolStep("selectPassage", {
-          passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
-        });
-      return textStep(
-        "They appeared as guests on a Lavoe-led record before being billed as co-leads [999].",
-      );
-    },
-  });
-  const chunks = await chunksOf(
-    await post({ ...ask("What was their first album together?"), responseMode: "source_passages" }),
-  );
-  const text = chunks
-    .filter(c => c.type === "data-evidence-passage")
-    .map(c => c.data.text)
-    .join("");
-  expect(text).toContain("12 July 2025");
-  expect(text).toContain("It was the first collaboration between Willie Colón");
-  expect(text).not.toMatch(/Lavoe-led|billed as co-leads|999/);
-  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
-    { url: original.url, sourceId: "1" },
-  ]);
-});
+it.each(["development", "preview"])(
+  "renders retained album evidence verbatim without the unsupported bridge in %s",
+  async environment => {
+    vi.stubEnv("VERCEL_ENV", environment);
+    const { default: original } =
+      await import("../../chatEvidence/__tests__/fixtures/retained-album-source.json");
+    m.originals.mockResolvedValue([original]);
+    let step = 0;
+    m.model = new MockLanguageModelV4({
+      doStream: async options => {
+        step++;
+        if (step === 1) return toolStep("searchSources", { query: "first collaboration" });
+        if (step === 2) return toolStep("readSource", { sourceId: original.sourceId });
+        if (step === 3)
+          return toolStep("selectPassage", {
+            passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
+          });
+        return textStep(
+          "They appeared as guests on a Lavoe-led record before being billed as co-leads [999].",
+        );
+      },
+    });
+    const chunks = await chunksOf(
+      await post({
+        ...ask("What was their first album together?"),
+        responseMode: "source_passages",
+      }),
+    );
+    const text = chunks
+      .filter(c => c.type === "data-evidence-passage")
+      .map(c => c.data.text)
+      .join("");
+    expect(text).toContain("12 July 2025");
+    expect(text).toContain("It was the first collaboration between Willie Colón");
+    expect(text).not.toMatch(/Lavoe-led|billed as co-leads|999/);
+    expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+      { url: original.url, sourceId: "1" },
+    ]);
+  },
+);

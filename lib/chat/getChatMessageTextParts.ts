@@ -6,7 +6,7 @@ const passage = z.object({
 });
 
 /** Keep bounded prior passage wording as untrusted context, never an evidence grant. */
-export function getChatMessageTextParts(parts: { type: string; [key: string]: unknown }[]) {
+export function getChatMessageTextParts(parts: { [key: string]: unknown; type: string }[]) {
   if (parts.some(part => part.type === "tool-readPdfSource" || part.type === "tool-readNamedPdf"))
     return [];
   if (parts.some(part => part.type.startsWith("data-evidence-"))) {

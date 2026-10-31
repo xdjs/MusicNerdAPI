@@ -1,4 +1,11 @@
-import { isStepCount, streamText, type ModelMessage, type UIMessageStreamWriter } from "ai";
+import {
+  isStepCount,
+  streamText,
+  wrapLanguageModel,
+  type ModelMessage,
+  type UIMessageStreamWriter,
+} from "ai";
+import { createPreviewEvidenceBudget } from "./createPreviewEvidenceBudget";
 import { MODEL_CHAT } from "@/lib/ai/const";
 import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 import { createEvidenceAnswerTools } from "./createEvidenceAnswerTools";
@@ -16,6 +23,12 @@ export async function streamEvidenceSelections(options: {
   if (options.signal.aborted) return;
   options.writer.write({ type: "data-evidence-mode", data: { version: 1 } });
   const state = createEvidenceAnswerTools(options);
+  const budget =
+    process.env.VERCEL_ENV === "preview"
+      ? createPreviewEvidenceBudget(data =>
+          options.writer.write({ type: "data-preview-budget", data, transient: true }),
+        )
+      : undefined;
   let failed = false;
   try {
     const result = streamText({
@@ -27,6 +40,20 @@ export async function streamEvidenceSelections(options: {
       providerOptions: buildProviderOptions({ anthropicEffort: "low" }),
       maxOutputTokens: 1024,
       maxRetries: 0,
+      // Preview experiment only. Count after SDK prompt/schema preparation;
+      // this does not change the ordinary handler or production path.
+      prepareStep: budget
+        ? ({ model }) => ({
+            model: wrapLanguageModel({
+              model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+              middleware: budget.middleware,
+            }),
+            providerOptions: {
+              ...buildProviderOptions({ anthropicEffort: "low" }),
+              gateway: { only: ["anthropic"] },
+            },
+          })
+        : undefined,
       stopWhen: isStepCount(6),
       abortSignal: options.signal,
     });
@@ -37,8 +64,9 @@ export async function streamEvidenceSelections(options: {
         break;
       }
     }
+    budget?.finish();
   } catch {
     failed = true;
   }
-  await state.finish(failed);
+  await state.finish(failed || budget?.failed());
 }
