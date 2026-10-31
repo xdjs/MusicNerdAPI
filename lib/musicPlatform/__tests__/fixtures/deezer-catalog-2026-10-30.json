@@ -1,0 +1,782 @@
+[
+  {
+    "query": "Pete Rango",
+    "response": {
+      "total": 22,
+      "data": [
+        {
+          "id": 94933462,
+          "name": "Pete Rango"
+        },
+        {
+          "id": 160275,
+          "name": "Peter & The Test Tube Babies"
+        },
+        {
+          "id": 456059,
+          "name": "Peter Nagy"
+        },
+        {
+          "id": 7104,
+          "name": "Peter Andre"
+        },
+        {
+          "id": 798990,
+          "name": "Peter Van Hoesen"
+        },
+        {
+          "id": 1519447,
+          "name": "Peter A.G."
+        },
+        {
+          "id": 146691082,
+          "name": "Pete Bang"
+        },
+        {
+          "id": 377163851,
+          "name": "Peter Nolan"
+        },
+        {
+          "id": 151930,
+          "name": "Peter Lang"
+        },
+        {
+          "id": 98210702,
+          "name": "Péter Nagy"
+        },
+        {
+          "id": 132956542,
+          "name": "Peter Ingo"
+        },
+        {
+          "id": 3081461,
+          "name": "Pete Rann"
+        },
+        {
+          "id": 80535312,
+          "name": "Peter Napo"
+        },
+        {
+          "id": 4348681,
+          "name": "Peter Yang"
+        },
+        {
+          "id": 193968177,
+          "name": "pé de frango"
+        },
+        {
+          "id": 2613451,
+          "name": "Pete Cannon"
+        },
+        {
+          "id": 1231612,
+          "name": "Pete Rugolo"
+        },
+        {
+          "id": 99060,
+          "name": "Pete Candoli"
+        },
+        {
+          "id": 1155727,
+          "name": "Pete Rugolo & His Orchestra"
+        },
+        {
+          "id": 304970,
+          "name": "Pete Rugolo Orchestra"
+        },
+        {
+          "id": 378324,
+          "name": "Pete Rugolo and His Orchestra"
+        },
+        {
+          "id": 10077222,
+          "name": "Pete Santos"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Dame Atlas",
+    "response": {
+      "total": 2,
+      "data": [
+        {
+          "id": 362004652,
+          "name": "Dame Atlas"
+        },
+        {
+          "id": 5824618,
+          "name": "deM atlaS"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Aaron Doh",
+    "response": {
+      "total": 29,
+      "next": "https://api.deezer.com/search/artist?q=Aaron%20Doh&limit=25&index=25",
+      "data": [
+        {
+          "id": 14959631,
+          "name": "Aaron Doh"
+        },
+        {
+          "id": 371400301,
+          "name": "Aaron Kos"
+        },
+        {
+          "id": 325070121,
+          "name": "Aaron Rowe"
+        },
+        {
+          "id": 62677272,
+          "name": "Saronde"
+        },
+        {
+          "id": 4559327,
+          "name": "Aaron Lohr"
+        },
+        {
+          "id": 67861632,
+          "name": "Aaronon"
+        },
+        {
+          "id": 130029652,
+          "name": "Aaron Dior"
+        },
+        {
+          "id": 355010342,
+          "name": "Aäron Koch"
+        },
+        {
+          "id": 5433834,
+          "name": "Aaron Cox"
+        },
+        {
+          "id": 4691718,
+          "name": "Aaron Loy"
+        },
+        {
+          "id": 1021434,
+          "name": "Aaron D."
+        },
+        {
+          "id": 4790412,
+          "name": "Aaronson"
+        },
+        {
+          "id": 330777,
+          "name": "Aaron D"
+        },
+        {
+          "id": 798848,
+          "name": "Aaron Decay"
+        },
+        {
+          "id": 6463787,
+          "name": "Aaron Cole"
+        },
+        {
+          "id": 13866051,
+          "name": "Aaron Dolan"
+        },
+        {
+          "id": 7416,
+          "name": "Aaron Copland"
+        },
+        {
+          "id": 120105282,
+          "name": "Aaron Dembski-Bowden"
+        },
+        {
+          "id": 395590191,
+          "name": "Aaron Coxx"
+        },
+        {
+          "id": 4420484,
+          "name": "Aaron Dessner"
+        },
+        {
+          "id": 5300457,
+          "name": "Aaron Cohen"
+        },
+        {
+          "id": 4555185,
+          "name": "Aaron Davis"
+        },
+        {
+          "id": 9085068,
+          "name": "Aaron Bodden"
+        },
+        {
+          "id": 4510451,
+          "name": "Aaron Diehl"
+        },
+        {
+          "id": 1400951,
+          "name": "Aaron Diaz"
+        }
+      ]
+    }
+  },
+  {
+    "query": "LATASHA",
+    "response": {
+      "total": 118,
+      "next": "https://api.deezer.com/search/artist?q=LATASHA&limit=25&index=25",
+      "data": [
+        {
+          "id": 5336037,
+          "name": "LATASHÁ"
+        },
+        {
+          "id": 1688338,
+          "name": "Latasha Lee"
+        },
+        {
+          "id": 10452069,
+          "name": "Kalash Criminel"
+        },
+        {
+          "id": 179187387,
+          "name": "La Hasba22"
+        },
+        {
+          "id": 453638,
+          "name": "Lhasa De Sela"
+        },
+        {
+          "id": 123403292,
+          "name": "O kannalha"
+        },
+        {
+          "id": 265647482,
+          "name": "LATACHE1.7"
+        },
+        {
+          "id": 159452,
+          "name": "The Last Shadow Puppets"
+        },
+        {
+          "id": 1304545,
+          "name": "Latisha"
+        },
+        {
+          "id": 1332545,
+          "name": "La Casta"
+        },
+        {
+          "id": 12422546,
+          "name": "LaHasna"
+        },
+        {
+          "id": 5674702,
+          "name": "LaKesha"
+        },
+        {
+          "id": 420976312,
+          "name": "LaHashe"
+        },
+        {
+          "id": 320902921,
+          "name": "La Tasya"
+        },
+        {
+          "id": 54424732,
+          "name": "Lakisha"
+        },
+        {
+          "id": 204498107,
+          "name": "Lateasha"
+        },
+        {
+          "id": 83719732,
+          "name": "La Taché"
+        },
+        {
+          "id": 10270242,
+          "name": "La Macha"
+        },
+        {
+          "id": 11177994,
+          "name": "La Tabla"
+        },
+        {
+          "id": 11048428,
+          "name": "La Stasia"
+        },
+        {
+          "id": 170049,
+          "name": "RuPaul with Latasha Spencer"
+        },
+        {
+          "id": 5240751,
+          "name": "Latasha Jordan"
+        },
+        {
+          "id": 112286482,
+          "name": "LaTasha Shemwell"
+        },
+        {
+          "id": 1228088,
+          "name": "Katasha"
+        },
+        {
+          "id": 10743824,
+          "name": "Latasha Alcindor"
+        }
+      ]
+    }
+  },
+  {
+    "query": "DUTCHYYY",
+    "response": {
+      "total": 8,
+      "data": [
+        {
+          "id": 63751082,
+          "name": "Dutchyyy"
+        },
+        {
+          "id": 6167212,
+          "name": "Dutchboy"
+        },
+        {
+          "id": 7118685,
+          "name": "Dutchy"
+        },
+        {
+          "id": 212810617,
+          "name": "dutchyhook"
+        },
+        {
+          "id": 4679520,
+          "name": "Dutch Symphony Orchestra"
+        },
+        {
+          "id": 15080379,
+          "name": "Dutchy DoBad"
+        },
+        {
+          "id": 49378902,
+          "name": "Sam Dutchy"
+        },
+        {
+          "id": 121380132,
+          "name": "DMG Dutchy"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Björk",
+    "response": {
+      "total": 100,
+      "next": "https://api.deezer.com/search/artist?q=Bj%C3%B6rk&limit=25&index=25",
+      "data": [
+        {
+          "id": 804103,
+          "name": "Björk & Toffe"
+        },
+        {
+          "id": 630,
+          "name": "Björk"
+        },
+        {
+          "id": 7262,
+          "name": "Brant Bjork"
+        },
+        {
+          "id": 56920662,
+          "name": "Jon Bjork"
+        },
+        {
+          "id": 5204979,
+          "name": "Björk Guðmundsdóttir"
+        },
+        {
+          "id": 271413432,
+          "name": "Brant Bjork Trio"
+        },
+        {
+          "id": 628590,
+          "name": "Hera Björk"
+        },
+        {
+          "id": 14367873,
+          "name": "Brant Bjork & The Bros"
+        },
+        {
+          "id": 166251507,
+          "name": "Eva Björg Ægisdóttir"
+        },
+        {
+          "id": 77958522,
+          "name": "Elyanna"
+        },
+        {
+          "id": 121601452,
+          "name": "Björk van Heelen"
+        },
+        {
+          "id": 4376370,
+          "name": "Maggie Bjorklund"
+        },
+        {
+          "id": 112949052,
+          "name": "Anine Bjørk"
+        },
+        {
+          "id": 84367622,
+          "name": "Bjørk Stellar"
+        },
+        {
+          "id": 371496901,
+          "name": "bjørk"
+        },
+        {
+          "id": 333032,
+          "name": "Harald Björk"
+        },
+        {
+          "id": 4131071,
+          "name": "Bjork (Karaoke)"
+        },
+        {
+          "id": 1641219,
+          "name": "Torgny Bjork"
+        },
+        {
+          "id": 87106972,
+          "name": "Jonas Bjork"
+        },
+        {
+          "id": 368570072,
+          "name": "Bjørk Bang"
+        },
+        {
+          "id": 7058831,
+          "name": "María Björk"
+        },
+        {
+          "id": 181190127,
+          "name": "Sunna Björk"
+        },
+        {
+          "id": 183270327,
+          "name": "Amanda Björk"
+        },
+        {
+          "id": 2777681,
+          "name": "Sven Björk"
+        },
+        {
+          "id": 126368772,
+          "name": "Loona Björk"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Sigur Rós",
+    "response": {
+      "total": 3,
+      "data": [
+        {
+          "id": 1417,
+          "name": "Sigur Rós"
+        },
+        {
+          "id": 412348451,
+          "name": "Sigur Ros"
+        },
+        {
+          "id": 172710677,
+          "name": "Rob Sigurd"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Radiohead",
+    "response": {
+      "total": 7,
+      "data": [
+        {
+          "id": 399,
+          "name": "Radiohead"
+        },
+        {
+          "id": 53477202,
+          "name": "DJ Radiohead"
+        },
+        {
+          "id": 215702,
+          "name": "Robert Glasper"
+        },
+        {
+          "id": 12189436,
+          "name": "Radio Head"
+        },
+        {
+          "id": 14009761,
+          "name": "Radiohead Tribute Band"
+        },
+        {
+          "id": 4674537,
+          "name": "Radiodread"
+        },
+        {
+          "id": 1103116,
+          "name": "Radioroad West"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Phoenix",
+    "response": {
+      "total": 101,
+      "next": "https://api.deezer.com/search/artist?q=Phoenix&limit=25&index=25",
+      "data": [
+        {
+          "id": 5160573,
+          "name": "Phoenix"
+        },
+        {
+          "id": 15,
+          "name": "Phoenix"
+        },
+        {
+          "id": 94546282,
+          "name": "Phoenix"
+        },
+        {
+          "id": 63702212,
+          "name": "Phoenix"
+        },
+        {
+          "id": 11259736,
+          "name": "Phoenix"
+        },
+        {
+          "id": 7003253,
+          "name": "Phoen!x"
+        },
+        {
+          "id": 63703172,
+          "name": "Phoenix"
+        },
+        {
+          "id": 4795305,
+          "name": "Nick Phoenix"
+        },
+        {
+          "id": 1175856,
+          "name": "The Phoenix"
+        },
+        {
+          "id": 1893261,
+          "name": "Moe Phoenix"
+        },
+        {
+          "id": 2263,
+          "name": "Joaquin Phoenix"
+        },
+        {
+          "id": 7963162,
+          "name": "Phoenix Moon"
+        },
+        {
+          "id": 7506302,
+          "name": "PHOENIX RDC"
+        },
+        {
+          "id": 391823,
+          "name": "Crippled Black Phoenix"
+        },
+        {
+          "id": 9056170,
+          "name": "Mavi Phoenix"
+        },
+        {
+          "id": 270087042,
+          "name": "Phoenix Consort"
+        },
+        {
+          "id": 13455607,
+          "name": "Phoenix Movement"
+        },
+        {
+          "id": 2422001,
+          "name": "Dark Phoenix"
+        },
+        {
+          "id": 58972822,
+          "name": "Phoenix James"
+        },
+        {
+          "id": 81521102,
+          "name": "Perfectly Imperfect"
+        },
+        {
+          "id": 5376539,
+          "name": "Ensemble Phoenix Munich"
+        },
+        {
+          "id": 5455988,
+          "name": "Dana Jean Phoenix"
+        },
+        {
+          "id": 317793,
+          "name": "The Phoenix Foundation"
+        },
+        {
+          "id": 12184518,
+          "name": "David Phoenix"
+        },
+        {
+          "id": 246984642,
+          "name": "Thomas Bergersen & Nick Phoenix"
+        }
+      ]
+    }
+  },
+  {
+    "query": "Common",
+    "response": {
+      "total": 100,
+      "next": "https://api.deezer.com/search/artist?q=Common&limit=25&index=25",
+      "data": [
+        {
+          "id": 238,
+          "name": "Common"
+        },
+        {
+          "id": 96725112,
+          "name": "Common Saints"
+        },
+        {
+          "id": 3789311,
+          "name": "Common Kings"
+        },
+        {
+          "id": 5605846,
+          "name": "The Common Linnets"
+        },
+        {
+          "id": 130028602,
+          "name": "Common Tribe"
+        },
+        {
+          "id": 195192647,
+          "name": "One Common"
+        },
+        {
+          "id": 15142,
+          "name": "Common Market"
+        },
+        {
+          "id": 78486,
+          "name": "Common People"
+        },
+        {
+          "id": 11348,
+          "name": "Common Rider"
+        },
+        {
+          "id": 182206197,
+          "name": "Common Gathering"
+        },
+        {
+          "id": 6140630,
+          "name": "Common Hymnal"
+        },
+        {
+          "id": 1480813,
+          "name": "The Common People"
+        },
+        {
+          "id": 164357647,
+          "name": "The Common Ground Ensemble"
+        },
+        {
+          "id": 175710337,
+          "name": "Common Insight"
+        },
+        {
+          "id": 12725813,
+          "name": "Common Enemies"
+        },
+        {
+          "id": 12590276,
+          "name": "Our Common Collapse"
+        },
+        {
+          "id": 1103358,
+          "name": "Rachel Reid"
+        },
+        {
+          "id": 98512532,
+          "name": "Orbury Common"
+        },
+        {
+          "id": 14099247,
+          "name": "The Boston Common"
+        },
+        {
+          "id": 10622307,
+          "name": "The Common Chaps"
+        },
+        {
+          "id": 4752316,
+          "name": "The Common"
+        },
+        {
+          "id": 4752310,
+          "name": "Common Children"
+        },
+        {
+          "id": 405272,
+          "name": "Common Sense"
+        },
+        {
+          "id": 79702792,
+          "name": "Link Common"
+        },
+        {
+          "id": 103733,
+          "name": "Common Rotation"
+        }
+      ]
+    }
+  },
+  {
+    "query": "東京事変",
+    "response": {
+      "total": 3,
+      "data": [
+        {
+          "id": 384298,
+          "name": "Tokyo Incidents"
+        },
+        {
+          "id": 57460332,
+          "name": "Touhou Jihen"
+        },
+        {
+          "id": 198384027,
+          "name": "Incidents Tokyo"
+        }
+      ]
+    }
+  },
+  {
+    "query": "MusicNerdNoSuchArtist1649",
+    "response": {
+      "total": 0,
+      "data": []
+    }
+  }
+]

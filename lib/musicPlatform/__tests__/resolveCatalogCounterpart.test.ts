@@ -12,7 +12,9 @@ vi.mock("@/lib/musicPlatform/isrcsFromDeezer", () => ({ isrcsFromDeezer: m.isrcs
 vi.mock("@/lib/spotifyMatch/readSpotifyRecordingMatch", () => ({
   readSpotifyRecordingMatch: m.read,
 }));
-vi.mock("@/lib/musicPlatform/searchDeezerArtists", () => ({ searchDeezerArtists: m.search }));
+vi.mock("@/lib/musicPlatform/discoverDeezerCatalogCandidates", () => ({
+  discoverDeezerCatalogCandidates: m.search,
+}));
 const spotifyId = "3DmaZbBPnKSGnxYRpHobss";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -22,7 +24,7 @@ beforeEach(() => {
     isrc,
     artists: [{ id: spotifyId, name: "Pete Rango" }],
   }));
-  m.search.mockResolvedValue([{ platformId: "94933462", name: "Pete Rango" }]);
+  m.search.mockResolvedValue({ status: "complete", ids: ["94933462"] });
 });
 it("resolves Deezer to Spotify with independent recordings", async () => {
   expect(
@@ -72,14 +74,16 @@ it("requires two distinct recordings and declines collaborator ties", async () =
   ).toEqual({ status: "ambiguous" });
 });
 it("declines multiple matching Deezer identities and bounded/incomplete searches", async () => {
-  m.search.mockResolvedValue([{ platformId: "1" }, { platformId: "2" }]);
+  m.search.mockResolvedValue({ status: "complete", ids: ["1", "2"] });
   expect(await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" })).toEqual({
     status: "ambiguous",
   });
-  m.search.mockResolvedValue(Array.from({ length: 5 }, (_, i) => ({ platformId: String(i + 1) })));
+  m.search.mockResolvedValue({ status: "incomplete_search" });
+  m.isrcs.mockClear();
   expect(await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" })).toEqual({
-    status: "ambiguous",
+    status: "incomplete_search",
   });
+  expect(m.isrcs).not.toHaveBeenCalled();
 });
 it("keeps provider reads sequential and stops immediately on rate limiting", async () => {
   let active = 0;
@@ -96,4 +100,26 @@ it("keeps provider reads sequential and stops immediately on rate limiting", asy
   m.read.mockClear().mockRejectedValue(new Error("rate limited"));
   await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" });
   expect(m.read).toHaveBeenCalledTimes(1);
+});
+
+it("does not verify incomplete Spotify credits or unavailable candidate discovery", async () => {
+  m.read.mockResolvedValue({
+    isrc: "USAAA0000001",
+    artists: [{ id: spotifyId, name: "Pete Rango" }],
+    incomplete: true,
+  });
+  expect(await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" })).toEqual({
+    status: "ambiguous",
+  });
+  m.search.mockRejectedValue(new Error("Invalid provider response"));
+  expect(await resolveCatalogCounterpart({ spotifyId, artistName: "Pete Rango" })).toEqual({
+    status: "provider_failure",
+  });
+});
+it("does not use candidate discovery for an explicit Deezer ID", async () => {
+  m.search.mockRejectedValue(new Error("unavailable"));
+  expect(
+    await resolveCatalogCounterpart({ spotifyId, deezerId: "94933462", artistName: "Pete Rango" }),
+  ).toMatchObject({ status: "verified" });
+  expect(m.search).not.toHaveBeenCalled();
 });

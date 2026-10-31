@@ -1,7 +1,7 @@
 import { SpotifyDeferredError } from "@/lib/spotify/SpotifyDeferredError";
 import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
 import { isrcsFromDeezer } from "@/lib/musicPlatform/isrcsFromDeezer";
-import { searchDeezerArtists } from "@/lib/musicPlatform/searchDeezerArtists";
+import { discoverDeezerCatalogCandidates } from "@/lib/musicPlatform/discoverDeezerCatalogCandidates";
 import { readSpotifyRecordingMatch } from "@/lib/spotifyMatch/readSpotifyRecordingMatch";
 import { chooseVerifiedSpotifyMatch } from "@/lib/spotifyMatch/chooseVerifiedSpotifyMatch";
 import type { CatalogCounterpartResult } from "@/lib/musicPlatform/types";
@@ -20,11 +20,11 @@ export async function resolveCatalogCounterpart(input: {
   )
     return { status: "not_found" };
   try {
-    const ids = input.deezerId
-      ? [input.deezerId]
-      : (await searchDeezerArtists(input.artistName, 5, true)).map(a => a.platformId);
-    // Five results may hide further homonyms. Never accept a truncated candidate set.
-    if (!input.deezerId && ids.length >= 5) return { status: "ambiguous" };
+    const candidates = input.deezerId
+      ? { status: "complete" as const, ids: [input.deezerId] }
+      : await discoverDeezerCatalogCandidates(input.artistName);
+    if (candidates.status === "incomplete_search") return candidates;
+    const ids = candidates.ids;
     let headers: ReturnType<typeof getSpotifyHeaders> | undefined;
     const results = [];
     for (const deezerId of new Set(ids)) {
