@@ -10,7 +10,7 @@ beforeEach(() => {
 
 describe("tierFourWebSearchStream", () => {
   it("runs one search per missing handle platform with one query, never Spotify or Deezer", async () => {
-    const out = [];
+    const out: [string, unknown][] = [];
     for await (const x of tierFourWebSearchStream(
       "Pete Rango",
       null,
@@ -23,4 +23,27 @@ describe("tierFourWebSearchStream", () => {
       "Pete Rango music artist",
     ]);
   });
+});
+
+it("yields successful platforms before rejecting a required partial search", async () => {
+  const failure = new Error("quota");
+  searchPlatformCandidates.mockImplementation(async (platform: string) => {
+    if (platform === "instagram") throw failure;
+    return [];
+  });
+  const out: [string, unknown][] = [];
+  const collect = async () => {
+    for await (const result of tierFourWebSearchStream(
+      "P",
+      null,
+      new Set(["instagram", "x"]),
+      true,
+    ))
+      out.push(result);
+  };
+  await expect(collect()).rejects.toBe(failure);
+  expect(out).toEqual([
+    ["instagram", null],
+    ["x", []],
+  ]);
 });

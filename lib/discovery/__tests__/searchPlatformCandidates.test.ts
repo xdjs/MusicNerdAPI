@@ -48,3 +48,10 @@ describe("searchPlatformCandidates", () => {
     error.mockRestore();
   });
 });
+
+it("requests strict provider errors for a required search", async () => {
+  const failure = new Error("Web search failed (tavily: http_432)");
+  webSearch.mockRejectedValueOnce(failure);
+  await expect(searchPlatformCandidates("x", "q", "P", true)).rejects.toBe(failure);
+  expect(webSearch).toHaveBeenCalledWith("q", expect.objectContaining({ throwOnError: true }));
+});

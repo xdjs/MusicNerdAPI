@@ -13,25 +13,32 @@ import type { MusicPlatformArtist } from "@/lib/musicPlatform/types";
  * @param artistName - The resolved name.
  * @param enrichment - Their platform data, for a genre in the query.
  * @param missing - Columns still to find.
+ * @param requireComplete - Report failure after retaining successful platform results.
  * @yields `[platform, candidates]` for each searched platform.
  */
 export async function* tierFourWebSearchStream(
   artistName: string,
   enrichment: MusicPlatformArtist | null,
   missing: Set<ProfileDisplayColumn>,
+  requireComplete = false,
 ): AsyncGenerator<[ProfileDisplayColumn, TierCandidate[] | null]> {
   const platforms = (Object.keys(HANDLE_BASED_PLATFORM_DOMAINS) as ProfileDisplayColumn[]).filter(
     p => missing.has(p),
   );
   if (platforms.length === 0) return;
   const query = buildTierFourQuery(artistName, enrichment);
+  const failures: unknown[] = [];
   yield* settleAsCompleted(
     platforms.map(
       platform =>
-        [platform, searchPlatformCandidates(platform, query, artistName)] as [
-          ProfileDisplayColumn,
-          Promise<TierCandidate[]>,
-        ],
+        [
+          platform,
+          searchPlatformCandidates(platform, query, artistName, requireComplete).catch(error => {
+            failures.push(error);
+            throw error;
+          }),
+        ] as [ProfileDisplayColumn, Promise<TierCandidate[]>],
     ),
   );
+  if (requireComplete && failures.length > 0) throw failures[0];
 }

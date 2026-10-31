@@ -18,7 +18,7 @@ vi.mock("@/lib/onboarding/confirmOnboardingStep", () => ({ confirmOnboardingStep
 const { autoBuildSources } = await import("@/lib/onboarding/autoBuildSources");
 
 async function run(provisional: string[] = [], discovered = new Map()) {
-  const events = [];
+  const events: import("@/lib/onboarding/types").TurnEvent[] = [];
   const gen = autoBuildSources("a1", provisional, discovered);
   for (;;) {
     const step = await gen.next();
@@ -74,6 +74,7 @@ describe("autoBuildSources", () => {
     const { events, result } = await run(["instagram"], new Map([["instagram", guessed]]));
     expect(m.search).toHaveBeenCalledWith("a1", {
       deadline: expect.any(Number),
+      requireComplete: true,
       provisionalSiteNames: ["instagram"],
       onSaved: expect.any(Function),
     });
@@ -110,15 +111,22 @@ describe("autoBuildSources", () => {
     expect(result.citable).toBe(1);
   });
 
-  it("keeps going when the search fails or a source can't be approved", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    m.search.mockRejectedValueOnce(new Error("tavily"));
+  it("rejects a failed search without approving or confirming, then can retry", async () => {
+    const failure = new Error("Web search failed (tavily: http_432)");
+    m.search.mockRejectedValueOnce(failure);
+    await expect(run()).rejects.toBe(failure);
+    expect(m.status).not.toHaveBeenCalled();
+    expect(m.confirm).not.toHaveBeenCalled();
+    await run();
+    expect(m.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the existing best-effort approval behavior after a successful search", async () => {
     m.status.mockRejectedValueOnce(new Error("pool"));
     const { events } = await run();
     expect(m.status).toHaveBeenCalledTimes(2);
     expect(m.confirm).toHaveBeenCalledWith("a1", "vault");
     expect(events.at(-1)).toMatchObject({ kind: "progress", done: true });
-    error.mockRestore();
   });
 
   it("says it looked when nothing was pending", async () => {
@@ -132,4 +140,55 @@ describe("autoBuildSources", () => {
     });
     expect(result.citable).toBe(0);
   });
+});
+
+it("retains a streamed partial source on failure and approves it on retry", async () => {
+  const failure = new Error("Web search failed (tavily: http_432)");
+  m.search.mockImplementationOnce(async (_a, options) => {
+    options.onSaved(pending[0]);
+    throw failure;
+  });
+  const events: import("@/lib/onboarding/types").TurnEvent[] = [];
+  const collect = async () => {
+    for await (const event of autoBuildSources("a1", [], new Map())) events.push(event);
+  };
+  await expect(collect()).rejects.toBe(failure);
+  expect(events).toContainEqual({
+    kind: "source",
+    source: { title: "One", url: "https://a.com/1", ogImage: null },
+  });
+  expect(m.confirm).not.toHaveBeenCalled();
+  expect(m.status).not.toHaveBeenCalled();
+  await run();
+  expect(m.status).toHaveBeenCalledWith("p1", "approved");
+});
+
+it("does not confirm at the old timeout boundary or hide a later provider failure", async () => {
+  vi.useFakeTimers();
+  try {
+    let rejectSearch!: (reason: Error) => void;
+    m.search.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSearch = reject;
+        }),
+    );
+    const result = run();
+    const rejected = expect(result).rejects.toThrow("late quota failure");
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(m.confirm).not.toHaveBeenCalled();
+    rejectSearch(new Error("late quota failure"));
+    await rejected;
+    expect(m.confirm).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not confirm when the consumer cancels after a partial source", async () => {
+  const stage = autoBuildSources("a1", [], new Map());
+  await stage.next();
+  expect((await stage.next()).value).toMatchObject({ kind: "source" });
+  await stage.return({ citable: 0 });
+  expect(m.confirm).not.toHaveBeenCalled();
 });

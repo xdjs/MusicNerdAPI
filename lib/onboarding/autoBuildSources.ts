@@ -1,6 +1,5 @@
 import { getAllLinks } from "@/lib/artists/getAllLinks";
 import { getArtistById } from "@/lib/artists/getArtistById";
-import { waitAtMost } from "@/lib/async/waitAtMost";
 import { yieldWhileRunning } from "@/lib/async/yieldWhileRunning";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import { adoptedProfiles } from "@/lib/onboarding/adoptedProfiles";
@@ -16,7 +15,7 @@ import { updateVaultSourceStatus } from "@/lib/vault/updateVaultSourceStatus";
 import { pluralize } from "@/lib/text/pluralize";
 
 /**
- * Auto-build stage 2: search the web for sources, bounded at 45 s, streaming
+ * Auto-build stage 2: search the web for sources with a 45 s discovery deadline, streaming
  * each as it's saved. Then report the links the search adopted, ask about a
  * guessed account it replaced, and approve everything pending. Approval is safe:
  * only machine-verified text makes a source citable, so a namesake stays an
@@ -40,21 +39,16 @@ export async function* autoBuildSources(
   };
   const beforeSearch = (await getArtistById(artistId).catch(() => undefined)) as
     Record<string, unknown> | undefined;
-  try {
-    // A source saved after the budget is dropped: nothing is listening any more.
-    yield* yieldWhileRunning<TurnEvent, unknown>(emit =>
-      waitAtMost(
-        searchAndPopulateVault(artistId, {
-          deadline: Date.now() + VAULT_DISCOVERY_BUDGET_MS,
-          provisionalSiteNames,
-          onSaved: source => emit({ kind: "source", source: toSourceView(source) }),
-        }),
-        VAULT_DISCOVERY_BUDGET_MS,
-      ),
-    );
-  } catch (e) {
-    console.error("[onboarding] auto-build source discovery failed:", e);
-  }
+  // Await settlement: a budget race would hide a late provider failure and confirm
+  // the stage while discovery is still running. The search checks its own deadline.
+  yield* yieldWhileRunning<TurnEvent, unknown>(emit =>
+    searchAndPopulateVault(artistId, {
+      deadline: Date.now() + VAULT_DISCOVERY_BUDGET_MS,
+      requireComplete: true,
+      provisionalSiteNames,
+      onSaved: source => emit({ kind: "source", source: toSourceView(source) }),
+    }),
+  );
   const afterSearch = (await getArtistById(artistId).catch(() => undefined)) as
     Record<string, unknown> | undefined;
   const urlmap = await getAllLinks().catch(() => []);

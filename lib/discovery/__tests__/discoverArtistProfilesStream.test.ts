@@ -285,3 +285,19 @@ describe("discoverArtistProfilesStream", () => {
     warn.mockRestore();
   });
 });
+
+it("propagates quota failures through the real discovery tiers for auto-builds", async () => {
+  const failure = new Error("Web search failed (tavily: http_432)");
+  m.webSearch.mockRejectedValue(failure);
+  await expect(collect(discoverArtistProfilesStream("a1", { requireComplete: true }))).rejects.toBe(
+    failure,
+  );
+  expect(m.webSearch).toHaveBeenCalledTimes(TIER3_PLATFORMS.length);
+  for (const [, options] of m.webSearch.mock.calls) expect(options.throwOnError).toBe(true);
+});
+
+it("completes required discovery when all searches successfully return no matches", async () => {
+  await expect(
+    collect(discoverArtistProfilesStream("a1", { requireComplete: true })),
+  ).resolves.toBeInstanceOf(Array);
+});

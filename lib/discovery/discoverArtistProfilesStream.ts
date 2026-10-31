@@ -23,14 +23,15 @@ import type { MusicPlatformArtist } from "@/lib/musicPlatform/types";
  * the artist confirms first.
  *
  * `DISCOVERY_BUDGET_MS` is checked between tiers: past it, the stream just
- * stops. Never throws once the activity is recorded; a failure ends the stream
- * with whatever was found.
+ * stops. Required searches propagate provider failures after streaming partial results.
  *
  * @param artistId - The artist.
+ * @param options - Whether provider failures must propagate to an auto-build.
  * @yields searching/checked pairs, found profiles, and unreachable platforms last.
  */
 export async function* discoverArtistProfilesStream(
   artistId: string,
+  options: { requireComplete?: boolean } = {},
 ): AsyncGenerator<DiscoveryEvent> {
   await recordArtistActivity(artistId, "profile_discovery");
   const startedAt = Date.now();
@@ -39,6 +40,7 @@ export async function* discoverArtistProfilesStream(
     artist = await getArtistById(artistId);
   } catch (e) {
     console.error(`[profileDiscovery] getArtistById failed for ${artistId}:`, e);
+    if (options.requireComplete) throw e;
     return;
   }
   if (!artist) return;
@@ -57,6 +59,7 @@ export async function* discoverArtistProfilesStream(
     urlmapRows.map(l => [l.siteName, l]),
   );
   const run: DiscoveryRun = {
+    requireComplete: options.requireComplete,
     artistId,
     record,
     missing,
