@@ -1,3 +1,4 @@
+import { streamEvidenceSelections } from "@/lib/chatEvidence/streamEvidenceSelections";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -56,6 +57,17 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     const prompt = await convertToModelMessages(body.messages);
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
+        if (body.responseMode === "source_passages") {
+          await streamEvidenceSelections({
+            originals,
+            artistName: name,
+            signal: request.signal,
+            reload: () => loadPublicResearchOriginals(artistId),
+            writer,
+            prompt,
+          });
+          return;
+        }
         const cite = createChatCitations(writer);
         const pdf = createChatPdfTools(
           artistId,

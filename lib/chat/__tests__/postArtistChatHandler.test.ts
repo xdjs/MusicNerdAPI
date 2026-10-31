@@ -387,3 +387,181 @@ it("reads an explicitly named original in one tool call and two real SDK steps w
   expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
 });
+
+const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
+
+it("keeps model-visible source dates in eval evidence through the production handler and real SDK", async () => {
+  m.originals.mockResolvedValue([
+    {
+      ...originalFixture("dated", "https://archive.example/post", "Preserving an archive."),
+      publishedAt: "2024-09-19T00:24:56.000Z",
+      activityDate: null,
+      retrievedAt: "2026-10-17T02:35:26.550Z",
+    },
+  ]);
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("readSource", { sourceId: "dated" }),
+      textStep("The post was published in September 2024 [1]."),
+    ],
+  });
+  m.model = model;
+  const turn = await chatStreamTurn({ artistId, question: "When was the archive post published?" });
+  expect(turn.error).toBeUndefined();
+  const packet = JSON.stringify(model.doStreamCalls[1].prompt);
+  expect(packet).toContain("2024-09-19T00:24:56.000Z");
+  expect(packet).toContain("2026-10-17T02:35:26.550Z");
+  expect(turn.evidence?.[0]).toMatchObject({
+    n: 1,
+    url: "https://archive.example/post",
+    publishedAt: "2024-09-19T00:24:56.000Z",
+    activityDate: null,
+    retrievedAt: "2026-10-17T02:35:26.550Z",
+  });
+  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "low" } });
+  expect(model.doStreamCalls[0].temperature).toBeUndefined();
+  expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain("Base every claim");
+});
+
+it("enforces passage-only output through the real SDK even when the model adds unsupported roles", async () => {
+  let step = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async options => {
+      step++;
+      if (step === 1) return toolStep("searchSources", { query: "label" });
+      if (step === 2) return toolStep("readSource", { sourceId: "vault:1" });
+      if (step === 3) {
+        const serialized = JSON.stringify(options.prompt);
+        const passageId = serialized.match(/"passageId":"([^"]+)"/)?.[1];
+        expect(passageId).toBeTruthy();
+        return toolStep("selectPassage", { passageId });
+      }
+      return textStep("They were guest vocalists, billed as co-leads [999].");
+    },
+  });
+  m.model = model;
+  const chunks = await chunksOf(
+    await post({ ...ask("What label?"), responseMode: "source_passages" }),
+  );
+  const text = chunks
+    .filter(c => c.type === "data-evidence-passage")
+    .map(c => c.data.text)
+    .join("");
+  expect(text).toContain("Dutchyyy signed to Night Label.");
+  expect(text).not.toMatch(/guest|co-leads|999/);
+  expect(chunks.filter(c => c.type.startsWith("tool-"))).toEqual([]);
+  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+    { sourceId: "1", url: "https://label.example/a" },
+  ]);
+  expect(m.pdfLoad).not.toHaveBeenCalled();
+  expect(m.webSearch).not.toHaveBeenCalled();
+  expect(model.doStreamCalls[0].maxOutputTokens).toBe(1024);
+});
+
+it("fails closed when the model emits prose instead of a valid selection", async () => {
+  m.model = new MockLanguageModelV4({ doStream: [textStep("Invented billing [1].")] });
+  const chunks = await chunksOf(
+    await post({ ...ask("What album?"), responseMode: "source_passages" }),
+  );
+  expect(chunks).toContainEqual({
+    type: "data-evidence-status",
+    data: { code: "validation_failed" },
+  });
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+  expect(chunks.some(c => c.type === "source-url")).toBe(false);
+});
+
+it("streams a validated selection before the model's final step completes", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  let step = 0;
+  m.model = new MockLanguageModelV4({
+    doStream: async options => {
+      step++;
+      if (step === 1) return toolStep("searchSources", { query: "label" });
+      if (step === 2) return toolStep("readSource", { sourceId: "vault:1" });
+      if (step === 3)
+        return toolStep("selectPassage", {
+          passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
+        });
+      await gate;
+      return textStep("Never display this conclusion.");
+    },
+  });
+  const response = await post({ ...ask("What label?"), responseMode: "source_passages" });
+  const reader = response.body!.getReader();
+  let received = "";
+  const decoder = new TextDecoder();
+  try {
+    while (!received.includes("Dutchyyy signed to Night Label.")) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error("No passage emitted");
+      received += decoder.decode(chunk.value);
+    }
+    expect(received).not.toContain("Never display");
+  } finally {
+    release();
+  }
+  while (!(await reader.read()).done) {
+    /* drain */
+  }
+});
+
+it("latches a malformed selection before later valid selections in the actual SDK loop", async () => {
+  let step = 0;
+  let passageId: string | undefined;
+  m.model = new MockLanguageModelV4({
+    doStream: async options => {
+      step++;
+      if (step === 1) return toolStep("searchSources", { query: "label" });
+      if (step === 2) return toolStep("readSource", { sourceId: "vault:1" });
+      if (step === 3) {
+        passageId = JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1];
+        return toolStep("selectPassage", { passageId, prose: "Invented role" });
+      }
+      if (step === 4) return toolStep("selectPassage", { passageId });
+      return textStep("Invented conclusion");
+    },
+  });
+  const chunks = await chunksOf(
+    await post({ ...ask("What label?"), responseMode: "source_passages" }),
+  );
+  expect(chunks.some(c => c.type === "source-url")).toBe(false);
+  expect(JSON.stringify(chunks)).not.toContain("Dutchyyy signed");
+});
+
+it("renders retained album evidence verbatim instead of the captured unsupported guest/billing bridge", async () => {
+  const { default: original } =
+    await import("../../chatEvidence/__tests__/fixtures/retained-album-source.json");
+  m.originals.mockResolvedValue([original]);
+  let step = 0;
+  m.model = new MockLanguageModelV4({
+    doStream: async options => {
+      step++;
+      if (step === 1) return toolStep("searchSources", { query: "first collaboration" });
+      if (step === 2) return toolStep("readSource", { sourceId: original.sourceId });
+      if (step === 3)
+        return toolStep("selectPassage", {
+          passageId: JSON.stringify(options.prompt).match(/"passageId":"([^"]+)"/)?.[1],
+        });
+      return textStep(
+        "They appeared as guests on a Lavoe-led record before being billed as co-leads [999].",
+      );
+    },
+  });
+  const chunks = await chunksOf(
+    await post({ ...ask("What was their first album together?"), responseMode: "source_passages" }),
+  );
+  const text = chunks
+    .filter(c => c.type === "data-evidence-passage")
+    .map(c => c.data.text)
+    .join("");
+  expect(text).toContain("12 July 2025");
+  expect(text).toContain("It was the first collaboration between Willie Colón");
+  expect(text).not.toMatch(/Lavoe-led|billed as co-leads|999/);
+  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+    { url: original.url, sourceId: "1" },
+  ]);
+});

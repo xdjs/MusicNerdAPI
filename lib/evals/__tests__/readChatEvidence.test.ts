@@ -36,3 +36,29 @@ describe("readChatEvidence", () => {
     expect(readChatEvidence("readSource", "x", { error: "denied" })).toEqual([]);
   });
 });
+
+it("preserves only actual read date metadata, never inferring dates for snippets", () => {
+  const row = {
+    n: 1,
+    url: "https://source.example/2024/post",
+    text: "Archive note",
+    publishedAt: "2024-09-19",
+    activityDate: null,
+    retrievedAt: "2026-10-17",
+  };
+  expect(readChatEvidence("readSource", "read", row)[0]).toMatchObject({
+    publishedAt: row.publishedAt,
+    activityDate: null,
+    retrievedAt: row.retrievedAt,
+  });
+  expect(
+    readChatEvidence("readSource", "read", {
+      ...row,
+      publishedAt: 2024,
+      retrievedAt: undefined,
+    })[0],
+  ).not.toHaveProperty("publishedAt");
+  expect(
+    readChatEvidence("webSearch", "search", { results: [{ ...row, snippet: row.text }] })[0],
+  ).not.toHaveProperty("publishedAt");
+});
