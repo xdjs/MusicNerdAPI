@@ -12,18 +12,21 @@ import { webSearch } from "@/lib/search/webSearch";
  * @param platform - The platform to search.
  * @param query - The search query.
  * @param artistName - The resolved name.
- * @returns The candidates; never throws.
+ * @param requireComplete - Propagate provider failures for an auto-build.
+ * @returns The candidates; best-effort unless completion is required.
  */
 export async function searchPlatformCandidates(
   platform: ProfileDisplayColumn,
   query: string,
   artistName: string,
+  requireComplete = false,
 ): Promise<TierCandidate[]> {
   const domain = HANDLE_BASED_PLATFORM_DOMAINS[platform]!;
   try {
     const results = await webSearch(query, {
       includeDomains: [domain],
       maxResults: WEB_SEARCH_MAX_RESULTS,
+      ...(requireComplete ? { throwOnError: true } : {}),
     });
     const out: TierCandidate[] = [];
     for (const result of results) {
@@ -39,6 +42,7 @@ export async function searchPlatformCandidates(
     return out;
   } catch (e) {
     console.error(`[profileDiscovery] tier4 (${platform}) web search failed:`, e);
+    if (requireComplete) throw e;
     return [];
   }
 }

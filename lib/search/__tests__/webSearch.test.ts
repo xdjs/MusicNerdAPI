@@ -60,14 +60,19 @@ describe("webSearch", () => {
     );
   });
 
-  it("turns a provider failure into [] or, when asked, an error", async () => {
-    vi.stubEnv("TAVILY_API_KEY", "tvly-k");
-    const webSearch = await load();
-    tavily.mockResolvedValueOnce({ results: [], error: "http_429" });
-    expect(await webSearch("q")).toEqual([]);
-    tavily.mockResolvedValueOnce({ results: [], error: "http_429" });
-    await expect(webSearch("q", { throwOnError: true })).rejects.toThrow("Web search failed");
-  });
+  it.each(["http_429", "http_432"])(
+    "preserves %s as failure instead of a successful empty search",
+    async error => {
+      vi.stubEnv("TAVILY_API_KEY", "tvly-k");
+      const webSearch = await load();
+      tavily.mockResolvedValueOnce({ results: [], error });
+      expect(await webSearch("q")).toEqual([]);
+      tavily.mockResolvedValueOnce({ results: [], error });
+      await expect(webSearch("q", { throwOnError: true })).rejects.toThrow(
+        `Web search failed (tavily: ${error})`,
+      );
+    },
+  );
 
   it("treats a provider that throws as a failure named threw", async () => {
     vi.stubEnv("TAVILY_API_KEY", "tvly-k");

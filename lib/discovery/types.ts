@@ -68,6 +68,8 @@ export interface ValidationContext {
 
 /** One discovery run's shared state, passed through the tiers. */
 export interface DiscoveryRun {
+  /** Auto-builds must distinguish provider failure from no matches. */
+  requireComplete?: boolean;
   artistId: string;
   record: Record<string, unknown>;
   /** Columns still to find; each tier removes what it proposes. */

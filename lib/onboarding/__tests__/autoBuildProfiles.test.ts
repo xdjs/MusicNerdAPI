@@ -75,10 +75,10 @@ describe("autoBuildProfiles", () => {
     expect(result.provisionalSiteNames).toEqual([]);
   });
 
-  it("still queues the scrape and confirms when discovery finds nothing or fails", async () => {
+  it("confirms a successful empty discovery", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     m.discover.mockImplementationOnce(async function* () {
-      throw new Error("boom");
+      return;
     });
     const { events } = await run();
     expect(m.apply).not.toHaveBeenCalled();
@@ -92,4 +92,21 @@ describe("autoBuildProfiles", () => {
     expect(m.confirm).toHaveBeenCalledWith("a1", "profiles");
     error.mockRestore();
   });
+});
+
+it("retains partial profiles but rejects discovery failure without confirming", async () => {
+  const failure = new Error("Web search failed (tavily: http_432)");
+  m.discover.mockImplementationOnce(async function* () {
+    yield { kind: "found", profile: ig };
+    yield { kind: "found", profile: x };
+    throw failure;
+  });
+  await expect(run()).rejects.toBe(failure);
+  expect(m.discover).toHaveBeenCalledWith("a1", { requireComplete: true });
+  expect(m.apply).toHaveBeenCalledWith("a1", [{ url: x.profileUrl }], [], { verifyIdentity: true });
+  expect(m.confirm).not.toHaveBeenCalled();
+  expect(m.queue).not.toHaveBeenCalled();
+  const { result } = await run();
+  expect(result.provisionalSiteNames).toEqual(["instagram"]);
+  expect(m.confirm).toHaveBeenCalledTimes(1);
 });

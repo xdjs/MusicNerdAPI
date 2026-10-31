@@ -31,6 +31,7 @@ export async function* webSearchEvents(
     artistName,
     enrichment,
     run.missing,
+    run.requireComplete,
   )) {
     for (const candidate of candidates ?? []) {
       const found = await acceptCandidate(run, candidate);

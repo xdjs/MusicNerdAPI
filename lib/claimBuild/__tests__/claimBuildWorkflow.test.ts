@@ -66,3 +66,15 @@ describe("claimBuildWorkflow", () => {
     expect(m.step).not.toHaveBeenCalled();
   });
 });
+
+it("stops on source failure, releases the build hook, and resumes without rebuilding profiles", async () => {
+  m.step.mockResolvedValueOnce("profiles").mockResolvedValueOnce("vault");
+  m.sources.mockRejectedValueOnce(new Error("quota"));
+  await expect(claimBuildWorkflow("a1", ownership)).rejects.toThrow("quota");
+  expect(m.about).not.toHaveBeenCalled();
+  expect(m.dispose).toHaveBeenCalledTimes(1);
+  await expect(claimBuildWorkflow("a1", ownership)).resolves.toEqual({ built: true });
+  expect(m.profiles).toHaveBeenCalledTimes(1);
+  expect(m.sources).toHaveBeenLastCalledWith("a1", ownership, []);
+  expect(m.about).toHaveBeenCalledTimes(1);
+});

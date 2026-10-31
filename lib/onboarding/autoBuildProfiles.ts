@@ -29,8 +29,9 @@ export async function* autoBuildProfiles(
   const discovered: DiscoveredProfile[] = [];
   /** "We found nothing there" and "they wouldn't tell us" are different sentences. */
   const unreachable: string[] = [];
+  const failures: unknown[] = [];
   try {
-    for await (const event of discoverArtistProfilesStream(artistId)) {
+    for await (const event of discoverArtistProfilesStream(artistId, { requireComplete: true })) {
       if (event.kind === "found") {
         discovered.push(event.profile);
         yield { kind: "candidate", profile: event.profile };
@@ -38,7 +39,7 @@ export async function* autoBuildProfiles(
       if (event.kind === "unreachable") unreachable.push(event.displayName);
     }
   } catch (e) {
-    console.error("[onboarding] auto-build discovery failed:", e);
+    failures.push(e);
   }
 
   let provisionalSiteNames: string[] = [];
@@ -47,6 +48,9 @@ export async function* autoBuildProfiles(
     const primaries: DiscoveredProfile[] = [];
     const byPlatform = new Map<string, DiscoveredProfile[]>();
     for (const p of discovered) {
+      // A failed stage cannot return the metadata that lets source search revisit
+      // guesses. Defer those writes until discovery can finish successfully.
+      if (failures.length > 0 && p.provisional) continue;
       const group = byPlatform.get(p.siteName);
       if (group) group.push(p);
       else {
@@ -77,6 +81,8 @@ export async function* autoBuildProfiles(
   }
 
   if (unreachable.length > 0) yield { kind: "unreachable", platforms: unreachable };
+  // Keep verified partial links, but leave this stage retryable after a failed search.
+  if (failures.length > 0) throw failures[0];
   await queueSocialIngest(artistId, {});
   yield {
     kind: "progress",
