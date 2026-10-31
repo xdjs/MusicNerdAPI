@@ -4,6 +4,24 @@ import { isStepCount, simulateReadableStream, streamText, tool, wrapLanguageMode
 import { z } from "zod";
 import { createPreviewEvidenceBudget } from "../createPreviewEvidenceBudget";
 
+const completeAccounting = {
+  gateway: {
+    generationId: "gen_test",
+    cost: "0.00001",
+    gatewayCost: "0.00001",
+    routing: {
+      modelAttemptCount: 1,
+      totalProviderAttemptCount: 1,
+      modelAttempts: [
+        {
+          success: true,
+          providerAttemptCount: 1,
+          providerAttempts: [{ success: true, provider: "anthropic" }],
+        },
+      ],
+    },
+  },
+};
 const finish = {
   type: "finish" as const,
   finishReason: { unified: "stop" as const, raw: undefined },
@@ -180,4 +198,223 @@ it("latches reconciliation capture failure so another generation cannot start", 
   }).consumeStream();
   expect(guard.failed()).toBe(true);
   expect(model.doStreamCalls).toHaveLength(1);
+});
+
+it("reproduces the live two-step reservation totals and captures the first rejected third-step size", async () => {
+  const receipts: Record<string, unknown>[] = [];
+  const guard = createPreviewEvidenceBudget(x => receipts.push(x));
+  let calls = 0;
+  // Exact observed byte counts and usage; synthetic padding is NOT the missing
+  // model/tool transcript. 9869 is the derived minimum rejected third-step size.
+  const invoke = async (bytes: number, input: number, output: number) => {
+    const params = { maxOutputTokens: 1024, prompt: "" };
+    params.prompt = "x".repeat(bytes - Buffer.byteLength(JSON.stringify(params)));
+    expect(Buffer.byteLength(JSON.stringify(params))).toBe(bytes);
+    const result = await guard.middleware.wrapStream!({
+      params,
+      doStream: async () => {
+        calls++;
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              {
+                ...finish,
+                usage: {
+                  ...finish.usage,
+                  inputTokens: { ...finish.usage.inputTokens, total: input },
+                  outputTokens: { ...finish.usage.outputTokens, total: output },
+                },
+              },
+            ],
+          }),
+        };
+      },
+    } as never);
+    const reader = result.stream.getReader();
+    while (!(await reader.read()).done) {
+      /* drain the scripted provider */
+    }
+  };
+  await invoke(2555, 1137, 62);
+  await invoke(7843, 3203, 342);
+  await expect(invoke(9869, 0, 0)).rejects.toThrow("Preview evidence budget stopped");
+  expect(calls).toBe(2);
+  expect(receipts.at(-1)).toMatchObject({
+    phase: "stopped",
+    reason: "reservation_limit",
+    attempts: 2,
+    reconciled: 2,
+    reservedUsd: 0.0863016,
+    observedUpperEstimateUsd: 0.02354,
+    nextStep: 3,
+    preparedBytes: 9869,
+    inputTokenEstimate: 11917,
+    outputTokens: 1024,
+    nextReservationUsd: 0.0636988,
+    remainingReservationUsd: 0.0636984,
+  });
+});
+
+it("looks up completed steps only when necessary to admit realistic multi-source history", async () => {
+  const receipts: Record<string, unknown>[] = [];
+  const guard = createPreviewEvidenceBudget(
+    x => receipts.push(x),
+    async id => ({
+      id,
+      model: "anthropic/claude-sonnet-5.5",
+      provider_name: "anthropic",
+      streamed: true,
+      finish_reason: "tool-calls",
+      native_tokens_prompt: 10,
+      native_tokens_completion: 2,
+      native_tokens_reasoning: 0,
+      native_tokens_cached: 0,
+      native_tokens_cache_creation: 0,
+      billable_web_search_calls: 0,
+      total_cost: 0.00001,
+      surcharge_cost: 0,
+      gateway_cost: 0.00001,
+    }),
+  );
+  let calls = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [
+          { type: "tool-call", toolCallId: `t${++calls}`, toolName: "readSource", input: "{}" },
+          {
+            ...finish,
+            providerMetadata: {
+              gateway: { ...completeAccounting.gateway, generationId: `gen_${calls}` },
+            },
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+              outputTokens: { total: 2, text: 2, reasoning: 0 },
+            },
+            finishReason: { unified: "tool-calls", raw: undefined },
+          },
+        ],
+      }),
+    }),
+  });
+  await streamText({
+    model: wrapLanguageModel({ model, middleware: guard.middleware }),
+    prompt: "Compare the eight ranked saved sources and select context",
+    tools: {
+      readSource: tool({
+        inputSchema: z.object({}),
+        execute: async () =>
+          Array.from({ length: 8 }, (_, i) => ({
+            title: `Source ${i}`,
+            passage: "Evidence. ".repeat(35),
+          })),
+      }),
+    },
+    maxOutputTokens: 1024,
+    maxRetries: 0,
+    stopWhen: isStepCount(4),
+  }).consumeStream();
+  guard.finish();
+  expect(calls).toBe(4);
+  expect(receipts.filter(x => x.phase === "reconciled")).toHaveLength(4);
+  expect(receipts.at(-1)).toMatchObject({ phase: "complete" });
+  expect(Number(receipts.at(-1)!.reservedUsd)).toBeLessThan(0.15);
+  expect(receipts.some(x => x.phase === "settled")).toBe(true);
+});
+
+const accountedFinish = {
+  ...finish,
+  providerMetadata: completeAccounting,
+  usage: {
+    inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 2, text: 2, reasoning: 0 },
+  },
+};
+it.each(["duplicate", "late_error", "aborted", "abnormal", "capture"])(
+  "does not release a reservation on %s",
+  async scenario => {
+    const receipts: Record<string, unknown>[] = [];
+    const controller = new AbortController();
+    const guard = createPreviewEvidenceBudget(x => {
+      if (scenario === "capture" && x.phase === "reconciled") throw new Error("capture");
+      receipts.push(x);
+    });
+    const chunks: unknown[] =
+      scenario === "duplicate"
+        ? [accountedFinish, accountedFinish]
+        : scenario === "late_error"
+          ? [accountedFinish, { type: "error" as const, error: new Error("private") }]
+          : scenario === "abnormal"
+            ? [{ ...accountedFinish, finishReason: { unified: "length" as const, raw: undefined } }]
+            : [accountedFinish];
+    const result = await guard.middleware.wrapStream!({
+      params: { maxOutputTokens: 1024, prompt: [], abortSignal: controller.signal },
+      doStream: async () => ({ stream: simulateReadableStream({ chunks }) }),
+    } as never);
+    if (scenario === "aborted") controller.abort();
+    const reader = result.stream.getReader();
+    await expect(
+      (async () => {
+        while (!(await reader.read()).done) {}
+      })(),
+    ).rejects.toThrow();
+    expect(guard.failed()).toBe(true);
+    expect(receipts.filter(x => x.phase === "reconciled")).toHaveLength(0);
+    expect(receipts.at(-1)!.reservedUsd).toBe(receipts[0].reservedUsd);
+  },
+);
+it("retains a cancelled stream and blocks concurrent admission", async () => {
+  const receipts: Record<string, unknown>[] = [];
+  const guard = createPreviewEvidenceBudget(x => receipts.push(x));
+  let calls = 0;
+  const invoke = () =>
+    guard.middleware.wrapStream!({
+      params: { maxOutputTokens: 1024, prompt: [] },
+      doStream: async () => {
+        calls++;
+        return { stream: new ReadableStream() };
+      },
+    } as never);
+  const first = await invoke();
+  await expect(invoke()).rejects.toThrow();
+  await first.stream.cancel();
+  guard.finish();
+  expect(calls).toBe(1);
+  expect(guard.failed()).toBe(true);
+  expect(receipts.at(-1)!.reservedUsd).toBe(receipts[0].reservedUsd);
+});
+it("records selection attempted versus rejected without arguments or source content", () => {
+  const receipts: Record<string, unknown>[] = [];
+  const guard = createPreviewEvidenceBudget(x => receipts.push(x));
+  guard.recordTool("selectPassage", "called");
+  guard.recordTool("selectPassage", "returned", { status: "unavailable", secret: "PRIVATE" });
+  guard.recordTool("readSource", "returned", { passageId: "PRIVATE", context: "PRIVATE" });
+  expect(JSON.stringify(receipts)).not.toContain("PRIVATE");
+  expect(receipts.map(x => [x.tool, x.stage, x.outcome])).toEqual([
+    ["selectPassage", "called", "unclassified"],
+    ["selectPassage", "returned", "unavailable"],
+    ["readSource", "returned", "passage_available"],
+  ]);
+});
+
+it("retains a repeated generation receipt and emits completion only once", async () => {
+  const receipts: Record<string, unknown>[] = [];
+  const guard = createPreviewEvidenceBudget(x => receipts.push(x));
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({ stream: simulateReadableStream({ chunks: [accountedFinish] }) }),
+  });
+  for (let i = 0; i < 2; i++)
+    await streamText({
+      model: wrapLanguageModel({ model, middleware: guard.middleware }),
+      prompt: "x",
+      maxOutputTokens: 1024,
+      maxRetries: 0,
+    }).consumeStream();
+  guard.finish();
+  guard.finish();
+  expect(receipts.filter(x => x.phase === "reconciled").map(x => x.accounting)).toEqual([
+    "reservation_retained",
+    "reservation_retained",
+  ]);
+  expect(receipts.filter(x => x.phase === "complete")).toHaveLength(1);
 });

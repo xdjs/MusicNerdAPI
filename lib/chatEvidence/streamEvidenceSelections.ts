@@ -58,7 +58,12 @@ export async function streamEvidenceSelections(options: {
       abortSignal: options.signal,
     });
     for await (const part of result.fullStream) {
-      if (part.type === "tool-error") state.invalidate();
+      if (part.type === "tool-call") budget?.recordTool(part.toolName, "called");
+      if (part.type === "tool-result") budget?.recordTool(part.toolName, "returned", part.output);
+      if (part.type === "tool-error") {
+        budget?.recordTool(part.toolName, "error");
+        state.invalidate();
+      }
       if (part.type === "error") {
         failed = true;
         break;
