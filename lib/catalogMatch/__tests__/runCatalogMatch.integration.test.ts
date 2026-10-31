@@ -112,7 +112,7 @@ for (const reverse of [false, true])
     await runCatalogMatch(job, Date.now() + 30000);
     expect(m.resolve).toHaveBeenCalledTimes(1);
   });
-for (const outcome of ["not_found", "ambiguous"])
+for (const outcome of ["not_found", "ambiguous", "incomplete_search"])
   it(`persists ${outcome} without inventing a link or replaying`, async () => {
     const job = await start();
     m.resolve.mockResolvedValue({ status: outcome });
