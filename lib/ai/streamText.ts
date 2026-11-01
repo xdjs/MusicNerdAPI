@@ -2,6 +2,7 @@ import {
   streamText as sdkStreamText,
   toUIMessageStream,
   type ModelMessage,
+  type LanguageModel,
   type StopCondition,
   type ToolSet,
   type UIMessageStreamWriter,
@@ -11,7 +12,10 @@ import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 import type { GenerateTextOptions } from "@/lib/ai/generateText";
 import { withoutCustomParts } from "@/lib/ai/withoutCustomParts";
 
-export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt"> & {
+export type StreamTextOptions = Omit<GenerateTextOptions, "output" | "prompt" | "model"> & {
+  model?: LanguageModel;
+  /** Explicit evaluator stream retries; omitted preserves SDK default. */
+  streamRetries?: number;
   /** A text prompt, or a conversation as model messages. */
   prompt: string | ModelMessage[];
   /** Tools the model may call; omitted means a plain text call. */
@@ -51,6 +55,9 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     onTextDelta,
     writer,
     beforeStep,
+    maxRetries,
+    maxOutputTokens,
+    streamRetries,
   } = options;
   const providerOptions = buildProviderOptions({ thinkingBudget, thinkingLevel, anthropicEffort });
   const result = sdkStreamText({
@@ -58,6 +65,9 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     instructions,
     prompt,
     temperature,
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(streamRetries !== undefined ? { streamRetries } : {}),
     ...(beforeStep
       ? {
           prepareStep: async () => {

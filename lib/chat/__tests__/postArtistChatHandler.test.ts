@@ -387,3 +387,38 @@ it("reads an explicitly named original in one tool call and two real SDK steps w
   expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
 });
+
+const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
+
+it("keeps model-visible source dates in eval evidence through the production handler and real SDK", async () => {
+  m.originals.mockResolvedValue([
+    {
+      ...originalFixture("dated", "https://archive.example/post", "Preserving an archive."),
+      publishedAt: "2024-09-19T00:24:56.000Z",
+      activityDate: null,
+      retrievedAt: "2026-10-17T02:35:26.550Z",
+    },
+  ]);
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("readSource", { sourceId: "dated" }),
+      textStep("The post was published in September 2024 [1]."),
+    ],
+  });
+  m.model = model;
+  const turn = await chatStreamTurn({ artistId, question: "When was the archive post published?" });
+  expect(turn.error).toBeUndefined();
+  const packet = JSON.stringify(model.doStreamCalls[1].prompt);
+  expect(packet).toContain("2024-09-19T00:24:56.000Z");
+  expect(packet).toContain("2026-10-17T02:35:26.550Z");
+  expect(turn.evidence?.[0]).toMatchObject({
+    n: 1,
+    url: "https://archive.example/post",
+    publishedAt: "2024-09-19T00:24:56.000Z",
+    activityDate: null,
+    retrievedAt: "2026-10-17T02:35:26.550Z",
+  });
+  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "low" } });
+  expect(model.doStreamCalls[0].temperature).toBeUndefined();
+  expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain("Base every claim");
+});

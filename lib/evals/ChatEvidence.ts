@@ -6,4 +6,8 @@ export type ChatEvidence = {
   tool: "readSource" | "webSearch";
   toolCallId: string;
   sha256: string;
+  /** Exact readSource metadata; never inferred from text or URLs. */
+  publishedAt?: string | null;
+  activityDate?: string | null;
+  retrievedAt?: string | null;
 };
