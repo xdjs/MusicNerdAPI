@@ -7,10 +7,10 @@
   "instructionsSha256": "a257b80c00005ea56efef8f6459e96b369fca8f5ae7131d24cd406d0e74754ff",
   "toolSchemasSha256": "27ad0e14d8a0a9f23113060a7150eb9145c25098e6252acab40a3e8459dad52f",
   "files": {
-    ".github/workflows/evals.yml": "a011c760f670470e2400c8ba9604beaf88efa8284e6c084bb93dd0a9d5cd36e9",
+    ".github/workflows/evals.yml": "897a501ce7e2d6a6d60b4caa60fa668322db8f41200b2d42bc82f26f079f31fd",
     "docs/evals/chat-evidence.md": "6a0a587fe88a0d28da24ed16ecadd7ebb7429ae8ec270836e21b5465191ce427",
     "docs/evals/ordinary-chat-offline-trace.md": "b1af17dece66c0208f67df074248ec111d546247e567a519d3ae808675dbb341",
-    "evals/chat.eval.ts": "471347c78adaa2fe4f37e2431dd4ab0b3678d208639acf475c429bb7b66fb1a6",
+    "evals/chat.eval.ts": "67e55de728f1591fcdfabafa0b4c706a8d5c37169d9a9814e37509684343b4ef",
     "lib/ai/__tests__/streamText.test.ts": "e1162f0c7501b281e81a7e3deeda511e81da03076c3e02909bb8cbbb1e78de93",
     "lib/ai/buildProviderOptions.ts": "9ac143b444a5c9861203a94618e92e7ccae7f947c4f4f458847f3673f8704548",
     "lib/ai/const.ts": "cfabfb5aa39d36ef024fb93eb98377fdd0f3b092b0932c1e9b71cc06bdcf5221",
@@ -44,6 +44,7 @@
     "lib/questionResearch/loadPublicResearchOriginals.ts": "bffa4b8bf400901e4d322240312145750fc7fd38a1dda620c3cfa12868a3eca7",
     "lib/questionResearch/reserveQuestionPlanning.ts": "dcc0badbba212d6af118519f341b2101c2a14ec8eb2c10c0239ca68e1f74a0b7",
     "lib/questionResearch/selectResearchReferences.ts": "af10c91e7bc7fddd7665424d5842382b5cb59a9205278d77da659dbdc9b10d46",
-    "pnpm-lock.yaml": "73de90da037ebe048ea55d2a04662e4d16b81f1c3424d458d3cdffccbb49bd32"
+    "pnpm-lock.yaml": "73de90da037ebe048ea55d2a04662e4d16b81f1c3424d458d3cdffccbb49bd32",
+    "lib/evals/__tests__/chatEvalCompilation.test.ts": "7e57e565541526c2f821f6e8e3ce1c49bd1790e7da2cf579060204c1869fb281"
   }
 }

@@ -22,13 +22,15 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 
 // Explicit opt-in only. The ordinary multi-case suite below stays unchanged.
 if (process.env.CHAT_SINGLE_MANIFEST) {
-  const { runSingleGuardedChatTurn } = await import("@/lib/evals/runSingleGuardedChatTurn");
   Eval("music-nerd", {
     experimentName: experimentName("chat-single", MODEL_CHAT, process.env.GITHUB_SHA ?? "local"),
     isPublic: false,
     maxConcurrency: 1,
     data: () => [{ input: process.env.CHAT_SINGLE_MANIFEST! }],
-    task: async path => runSingleGuardedChatTurn(path),
+    task: async path => {
+      const { runSingleGuardedChatTurn } = await import("@/lib/evals/runSingleGuardedChatTurn");
+      return runSingleGuardedChatTurn(path);
+    },
     scores: [],
   });
 } else {

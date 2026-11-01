@@ -113,7 +113,11 @@ jobs:
           pnpm eval evals/chat.eval.ts --no-progress-bars --terminate-on-failure > "$RUNNER_TEMP/chat-single-console.log" 2>&1
           status=$?
           set -e
-          echo "Single-case executor finished. Inspect the private Braintrust experiment; workflow success is not answer acceptance."
+          if [ "$status" -ne 0 ]; then
+            echo "::error::CHAT_SINGLE_EXECUTOR_FAILED exit=$status; raw stderr withheld."
+          else
+            echo "Single-case executor finished. Inspect the private Braintrust experiment; workflow success is not answer acceptance."
+          fi
           exit "$status"
 
   pdf106-paired:
