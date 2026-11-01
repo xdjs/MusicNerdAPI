@@ -2,7 +2,7 @@
   "enabled": true,
   "artistId": "ddba2de8-117e-4e90-8d56-ef61b4b858ae",
   "artistName": "Willie Colón",
-  "question": "What was the first album Willie Colón made with Rubén Blades?",
+  "question": "Using only the sources already saved on Willie Colón’s Music Nerd page, what was the first album he made with Rubén Blades? Cite the sources you read. Do not search the web.",
   "stagingOriginSha256": "f8350d3631d8e76f00b601c021cd2ee682d40ab01d27c78da1d2bb644ab16c13",
   "instructionsSha256": "a257b80c00005ea56efef8f6459e96b369fca8f5ae7131d24cd406d0e74754ff",
   "toolSchemasSha256": "27ad0e14d8a0a9f23113060a7150eb9145c25098e6252acab40a3e8459dad52f",
