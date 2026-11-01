@@ -148,3 +148,22 @@ it("malformed connection never includes credential input in its error", async ()
   expect(m.turn).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it.each(["", " \n\t"])(
+  "reports first text as unavailable for a nonsubstantive answer %j",
+  async answer => {
+    const path = setup();
+    m.turn.mockResolvedValue({
+      answer,
+      sources: [],
+      firstTextMs: 8144,
+      totalMs: 8144,
+      error: "Aborted UI stream.",
+    });
+    const result = await runSingleGuardedChatTurn(path);
+    expect(result.firstTextMs).toBeNull();
+    expect(result.totalMs).toBe(8144);
+    expect(result.error).toBe("Aborted UI stream.");
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);

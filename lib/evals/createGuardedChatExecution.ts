@@ -60,8 +60,21 @@ export function createGuardedChatExecution({
   const toolCounts = new Map<string, number>();
   const abort = new AbortController();
   const fail = (reason: string): never => {
+    const firstFailure = !failed;
     failed = true;
     failureReason ??= reason;
+    if (firstFailure) {
+      const value = { reason: failureReason, calls, toolExecutions };
+      const size = Buffer.byteLength(JSON.stringify({ kind: "guard-failure", value }));
+      if (bytes + size <= manifest.maxCaptureBytes) {
+        bytes += size;
+        try {
+          record("guard-failure", value);
+        } catch {
+          /* Preserve the original failure. */
+        }
+      }
+    }
     abort.abort();
     throw new Error(failureReason);
   };
@@ -100,7 +113,8 @@ export function createGuardedChatExecution({
             Array.isArray(message.content) &&
             message.content.some(
               part =>
-                !["text", "tool-call", "tool-result", "reasoning"].includes(part.type) ||
+                (!["text", "tool-call", "tool-result", "reasoning"].includes(part.type) &&
+                  !(part.type === "custom" && part.kind === "anthropic.message_start")) ||
                 (part.type === "tool-result" &&
                   part.output.type === "content" &&
                   part.output.value.some(item => item.type !== "text")),

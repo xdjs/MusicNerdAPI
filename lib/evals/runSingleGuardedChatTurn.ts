@@ -179,6 +179,7 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
   // Returned only to the existing private Braintrust project, never public logs/artifacts.
   return {
     ...turn,
+    firstTextMs: turn.answer.trim().length ? turn.firstTextMs : null,
     diagnostic: {
       records,
       ledgerBytes: bytes,

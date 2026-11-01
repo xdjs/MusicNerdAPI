@@ -27,9 +27,15 @@ if (process.env.CHAT_SINGLE_MANIFEST) {
     isPublic: false,
     maxConcurrency: 1,
     data: () => [{ input: process.env.CHAT_SINGLE_MANIFEST! }],
-    task: async path => {
+    task: async (path, { span }) => {
       const { runSingleGuardedChatTurn } = await import("@/lib/evals/runSingleGuardedChatTurn");
-      return runSingleGuardedChatTurn(path);
+      const result = await runSingleGuardedChatTurn(path);
+      if (result.error || !result.answer.trim()) {
+        span.log({ output: result });
+        await span.flush();
+        throw new Error("single_chat_terminal_failed");
+      }
+      return result;
     },
     scores: [],
   });

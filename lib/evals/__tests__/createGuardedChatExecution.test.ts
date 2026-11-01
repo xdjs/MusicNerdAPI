@@ -487,3 +487,87 @@ it("blocks nested PDF tool-result content before the next model forward", async 
   expect(model.doStreamCalls).toHaveLength(1);
   expect(external).not.toHaveBeenCalled();
 });
+
+it("preserves Anthropic message-start metadata through a real SDK tool transition", async () => {
+  const metadata = {
+    anthropic: {
+      id: "msg_fixture",
+      model: "claude-sonnet-5-5",
+      usage: { input_tokens: 2717, output_tokens: 20 },
+    },
+  };
+  const model: MockLanguageModelV4 = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () =>
+      model.doStreamCalls.length === 1
+        ? {
+            stream: simulateReadableStream<ModelPart>({
+              chunks: [
+                { type: "custom", kind: "anthropic.message_start", providerMetadata: metadata },
+                {
+                  type: "tool-call",
+                  toolCallId: "web",
+                  toolName: "webSearch",
+                  input: '{"query":"recorded query"}',
+                },
+                { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_use" }, usage },
+              ],
+            }),
+          }
+        : result(),
+  });
+  const { execute } = setup(model, { toolLimits: { webSearch: 2 } });
+  await expect(
+    execute({
+      model: MODEL_CHAT,
+      prompt: "q",
+      stopWhen: isStepCount(6),
+      tools: {
+        webSearch: tool({
+          inputSchema: z.object({ query: z.string() }),
+          execute: async () => ({ results: [{ snippet: "Full captured text" }] }),
+        }),
+      },
+    }),
+  ).resolves.toEqual({ text: "Answer." });
+  expect(model.doStreamCalls).toHaveLength(2);
+  expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain("anthropic.message_start");
+  expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain("Full captured text");
+  expect(external).not.toHaveBeenCalled();
+});
+
+it("rejects unknown custom content and retains the specific guard reason", async () => {
+  const model = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () => ({
+      stream: simulateReadableStream<ModelPart>({
+        chunks: [
+          { type: "custom", kind: "other.unpriced", providerMetadata: {} },
+          { type: "tool-call", toolCallId: "t", toolName: "searchSources", input: '{"query":"q"}' },
+          { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, usage },
+        ],
+      }),
+    }),
+  });
+  const { execute } = setup(model);
+  await expect(
+    execute({
+      model: MODEL_CHAT,
+      prompt: "q",
+      stopWhen: isStepCount(6),
+      tools: {
+        searchSources: tool({
+          inputSchema: z.object({ query: z.string() }),
+          execute: async () => ({ sources: [] }),
+        }),
+      },
+    }),
+  ).rejects.toThrow("eval_nontext_input");
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+    reason: "eval_nontext_input",
+    calls: 1,
+    toolExecutions: 1,
+  });
+  expect(external).not.toHaveBeenCalled();
+});
