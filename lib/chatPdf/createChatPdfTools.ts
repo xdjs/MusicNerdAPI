@@ -21,7 +21,7 @@ export function createChatPdfTools(
   signal?: AbortSignal,
   question = "",
 ) {
-  const discovered = new Set<string>();
+  const discovered = new Map<string, ChatPdf>();
   const attempted = new Set<string>();
   const reads = new Map<string, { source: ChatPdf; bytes: Buffer }>();
   let attempts = 0;
@@ -30,6 +30,7 @@ export function createChatPdfTools(
       return { error: "PDF unavailable or read limit reached" };
     attempted.add(sourceId);
     try {
+      expected ??= discovered.get(sourceId);
       const source = (await loadChatPdfs(artistId, sourceId))[0];
       if (!source || (expected && JSON.stringify(source) !== JSON.stringify(expected)))
         return { error: "PDF unavailable" };
@@ -104,7 +105,7 @@ export function createChatPdfTools(
         const matches = await loadChatPdfs(artistId, undefined, filename, true, question);
         if (matches.length !== 1 || matches[0].title.toLowerCase() !== filename.toLowerCase())
           return { error: "No unique eligible exact filename; use PDF discovery without guessing" };
-        discovered.add(matches[0].id);
+        discovered.set(matches[0].id, matches[0]);
         return read(matches[0].id, matches[0]);
       },
       toModelOutput,
@@ -112,17 +113,17 @@ export function createChatPdfTools(
 
     searchPdfSources: tool({
       description:
-        "Find approved public original PDFs for this artist by document name or topic. Metadata only; readPdfSource before answering. Only use for document/PDF questions.",
+        "Search approved public PDFs by filename or topics in stored extracted text, including ordinary artist questions. Returns navigation metadata, not evidence; readPdfSource before answering or citing. Missing extraction does not exclude an eligible PDF.",
       inputSchema: z.object({ query: z.string().min(1).max(300) }),
       execute: async ({ query }) => {
         const sources = await loadChatPdfs(artistId, undefined, query);
         return {
           sources: sources.slice(0, 8).map(s => {
-            discovered.add(s.id);
+            discovered.set(s.id, s);
             return { sourceId: s.id, title: s.title, url: s.url };
           }),
           coverage:
-            "Up to 8 matching public PDF titles; absence here is not proof a fact does not exist.",
+            "Up to 8 eligible public PDFs ranked by title and stored extracted-text matches. Extraction can be incomplete or stale; read the original PDF for claims and page citations. Absence is not proof a fact does not exist.",
         };
       },
     }),

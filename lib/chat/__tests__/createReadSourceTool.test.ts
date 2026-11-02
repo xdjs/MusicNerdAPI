@@ -61,7 +61,7 @@ it("transports a late ranked window into an exact bounded read with heading and 
   const { locator, snippet } = discovered.sources[0];
   expect(locator.start).toBeGreaterThan(12000);
   expect(snippet).toContain("Dub sessions");
-  expect(snippet.length).toBeLessThanOrEqual(300);
+  expect(snippet.length).toBeLessThanOrEqual(800);
   const result = (await createReadSourceTool([source], () => 2).execute!(
     { sourceId: source.sourceId, locator },
     call,

@@ -39,7 +39,7 @@ it("returns at most 8 sources with bounded snippets", async () => {
     call,
   )) as Found;
   expect(result.sources).toHaveLength(8);
-  for (const source of result.sources) expect(source.snippet.length).toBeLessThanOrEqual(300);
+  for (const source of result.sources) expect(source.snippet.length).toBeLessThanOrEqual(800);
 });
 
 it("returns no sources for an artist without stored sources", async () => {
@@ -108,7 +108,7 @@ it("preserves the scorer's short-term witness in the bounded discovery snippet",
   )) as Found;
   expect(discovered.sources[0].sourceId).toBe("vault:late");
   expect(discovered.sources[0].snippet).toContain("Dub sessions");
-  expect(discovered.sources[0].snippet.length).toBeLessThanOrEqual(300);
+  expect(discovered.sources[0].snippet.length).toBeLessThanOrEqual(800);
   // Tests deterministic context transport, not autonomous source selection.
 });
 
@@ -134,4 +134,26 @@ it("leaves latest/platform selection on its existing chronological path without 
   expect(result.sources.map(s => s.sourceId)).toEqual(["new", "old"]);
   expect(result.sources.every(s => !("locator" in s))).toBe(true);
   expect(result.sources.every(s => s.snippet.length <= 300)).toBe(true);
+});
+
+it("preserves governing headings and qualifications from the ranked window", async () => {
+  const text =
+    "Unrelated chronology. ".repeat(100) +
+    "\n1975 — Early sessions\n" +
+    "Context and qualifications. ".repeat(9) +
+    "Mara recorded this session with Sol; this is not a joint billing claim.\n1976 — Next section\n";
+  const result = (await createSearchSourcesTool(
+    [originalFixture("vault:context", "https://example.com/context", text)],
+    "Mara",
+  ).execute!({ query: "Mara Sol session" }, call)) as {
+    sources: {
+      snippet: string;
+      locator: { start: number; end: number };
+      snippetWindow: { start: number; end: number };
+    }[];
+  };
+  const source = result.sources[0];
+  expect(source.snippet).toBe(text.slice(source.snippetWindow.start, source.snippetWindow.end));
+  expect(source.snippet).toContain("1975 — Early sessions");
+  expect(source.snippet).toContain("not a joint billing claim");
 });
