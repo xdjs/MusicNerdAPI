@@ -34,7 +34,11 @@ import { reserveQuestionPlanning } from "@/lib/questionResearch/reserveQuestionP
  * @param artistId - The artist's id from the path.
  * @returns The stream, or a 400, 404, 429 or 503 error.
  */
-export async function postArtistChatHandler(request: Request, artistId: string) {
+export async function postArtistChatHandler(
+  request: Request,
+  artistId: string,
+  executeStream: typeof streamText = streamText,
+) {
   const headers = { ...getCorsHeaders(), "Cache-Control": "private, no-store" };
   const fail = (error: string, status: number) =>
     NextResponse.json({ status: "error", error }, { status, headers });
@@ -66,7 +70,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
             .parts.map(part => part.text)
             .join("\n"),
         );
-        await streamText({
+        await executeStream({
           model: MODEL_CHAT,
           anthropicEffort: "low",
           instructions: buildArtistChatInstructions(name),

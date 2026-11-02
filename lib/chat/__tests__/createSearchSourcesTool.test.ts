@@ -17,7 +17,7 @@ it("ranks stored sources for the query, then lists the rest, from stored text on
   const fetchSpy = vi.spyOn(globalThis, "fetch");
   const searchSources = createSearchSourcesTool(originals, "Dutchyyy");
   const result = (await searchSources.execute!({ query: "Night Label" }, call)) as Found;
-  expect(result.sources[0]).toEqual({
+  expect(result.sources[0]).toMatchObject({
     sourceId: "vault:2",
     title: "label.example",
     url: "https://label.example/b",
@@ -39,7 +39,7 @@ it("returns at most 8 sources with bounded snippets", async () => {
     call,
   )) as Found;
   expect(result.sources).toHaveLength(8);
-  for (const source of result.sources) expect(source.snippet.length).toBeLessThanOrEqual(300);
+  for (const source of result.sources) expect(source.snippet.length).toBeLessThanOrEqual(800);
 });
 
 it("returns no sources for an artist without stored sources", async () => {
@@ -55,4 +55,105 @@ it("snippets the passage that matches the query, not the page's start", async ()
   );
   const result = (await searchSources.execute!({ query: "formed Richmond" }, call)) as Found;
   expect(result.sources[0].snippet).toContain("formed in Richmond in 1991");
+});
+
+it("ranks distinct sources before the cap independently of incoming database order", async () => {
+  const relevant = Array.from({ length: 6 }, (_, i) =>
+    originalFixture(
+      `vault:relevant-${i}`,
+      `https://relevant.example/${i}`,
+      `Session credits feature Mara Sol on synthesizer. ${"Background. ".repeat(i)}`,
+    ),
+  );
+  const unrelated = Array.from({ length: 8 }, (_, i) =>
+    originalFixture(
+      `vault:unrelated-${i}`,
+      `https://unrelated.example/${i}`,
+      "Merchandise and concert parking information.",
+    ),
+  );
+  const sources = [...unrelated, ...relevant];
+  const query = { query: "Mara Sol synthesizer session credits" };
+  const ids = async (rows: typeof sources) =>
+    ((await createSearchSourcesTool(rows, "Artist").execute!(query, call)) as Found).sources.map(
+      s => s.sourceId,
+    );
+  const forward = await ids(sources);
+  expect(forward).toEqual(await ids([...sources].reverse()));
+  for (const source of relevant) expect(forward).toContain(source.sourceId);
+  expect(forward).toHaveLength(8);
+});
+
+it("preserves the scorer's short-term witness in the bounded discovery snippet", async () => {
+  const { searchArtistKnowledge } = await import("@/lib/knowledge/searchArtistKnowledge");
+  const { createResearchKnowledgeSnapshot } =
+    await import("@/lib/questionResearch/createResearchKnowledgeSnapshot");
+  const rows = [
+    originalFixture(
+      "vault:late",
+      "https://example.com/late",
+      "Background notes. ".repeat(300) + "Dub sessions supplied the recording context.",
+    ),
+  ];
+  const ranked = searchArtistKnowledge(
+    createResearchKnowledgeSnapshot(rows, "Artist"),
+    { operation: "search", query: "dub", limit: 8, maxChars: 12800 },
+    { maxPassagesPerSource: 1 },
+  );
+  expect(ranked.passages[0].start).toBeGreaterThan(0);
+  expect(ranked.passages[0].text).toContain("Dub sessions");
+  const discovered = (await createSearchSourcesTool(rows, "Artist").execute!(
+    { query: "dub" },
+    call,
+  )) as Found;
+  expect(discovered.sources[0].sourceId).toBe("vault:late");
+  expect(discovered.sources[0].snippet).toContain("Dub sessions");
+  expect(discovered.sources[0].snippet.length).toBeLessThanOrEqual(800);
+  // Tests deterministic context transport, not autonomous source selection.
+});
+
+it("leaves latest/platform selection on its existing chronological path without locators", async () => {
+  const rows = [
+    {
+      ...originalFixture("old", "https://instagram.com/p/old", "Older activity"),
+      publishedAt: "2025-01-01",
+    },
+    {
+      ...originalFixture("new", "https://instagram.com/p/new", "Newer activity"),
+      publishedAt: "2026-01-01",
+    },
+    {
+      ...originalFixture("other", "https://label.example/release", "Latest other platform"),
+      publishedAt: "2026-02-01",
+    },
+  ];
+  const result = (await createSearchSourcesTool(rows, "Artist").execute!(
+    { query: "latest", retrieval: "latest", platform: "instagram" },
+    call,
+  )) as Found;
+  expect(result.sources.map(s => s.sourceId)).toEqual(["new", "old"]);
+  expect(result.sources.every(s => !("locator" in s))).toBe(true);
+  expect(result.sources.every(s => s.snippet.length <= 300)).toBe(true);
+});
+
+it("preserves governing headings and qualifications from the ranked window", async () => {
+  const text =
+    "Unrelated chronology. ".repeat(100) +
+    "\n1975 — Early sessions\n" +
+    "Context and qualifications. ".repeat(9) +
+    "Mara recorded this session with Sol; this is not a joint billing claim.\n1976 — Next section\n";
+  const result = (await createSearchSourcesTool(
+    [originalFixture("vault:context", "https://example.com/context", text)],
+    "Mara",
+  ).execute!({ query: "Mara Sol session" }, call)) as {
+    sources: {
+      snippet: string;
+      locator: { start: number; end: number };
+      snippetWindow: { start: number; end: number };
+    }[];
+  };
+  const source = result.sources[0];
+  expect(source.snippet).toBe(text.slice(source.snippetWindow.start, source.snippetWindow.end));
+  expect(source.snippet).toContain("1975 — Early sessions");
+  expect(source.snippet).toContain("not a joint billing claim");
 });

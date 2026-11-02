@@ -11,10 +11,17 @@ on:
         type: choice
         options:
           - chat
+          - chat-single
           - pdf106-paired
           - pdf106-pete-smoke
           - pdf106-four-paired
         default: chat
+      candidate_sha:
+        description: "Exact approved commit for chat-single (unused by other suites)"
+        type: string
+      manifest_sha256:
+        description: "Exact approved single-case manifest hash (unused by other suites)"
+        type: string
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -24,9 +31,11 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-single'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
 
     env:
       BRAINTRUST_API_KEY: ${{ secrets.BRAINTRUST_API_KEY }}
@@ -43,15 +52,73 @@ jobs:
       VERCEL: "1"
 
     steps:
+      - name: Refuse single-case reruns or unpinned execution
+        if: inputs.suite == 'chat-single'
+        env:
+          EXPECTED_SHA: ${{ inputs.candidate_sha }}
+          MANIFEST_SHA: ${{ inputs.manifest_sha256 }}
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "${#MANIFEST_SHA}" = "64"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
+        if: inputs.suite == 'chat'
         with:
           node-version: 24
           cache: pnpm
+      - uses: actions/setup-node@v4
+        if: inputs.suite == 'chat-single'
+        with:
+          node-version: 24
       - run: pnpm install --frozen-lockfile
       - name: Run suite
+        if: inputs.suite == 'chat'
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
+      - name: Run one guarded ordinary-chat case
+        if: inputs.suite == 'chat-single'
+        env:
+          CHAT_SINGLE_MANIFEST: evals/chat-single-manifest.json
+          CHAT_SINGLE_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          CHAT_SINGLE_EXPECTED_SHA: ${{ inputs.candidate_sha }}
+        shell: bash
+        run: |
+          # Public origin derived only within this job; never print the connection.
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          try {
+            const u = new URL(process.env.SUPABASE_DB_CONNECTION);
+            const direct = /^db\.([a-z0-9]{20})\.supabase\.co$/.exec(u.hostname);
+            const pooled = /\.([a-z0-9]{20})$/.exec(decodeURIComponent(u.username));
+            const ref = direct?.[1] ?? pooled?.[1];
+            if (!ref) throw new Error('Unsupported staging connection format');
+            appendFileSync(process.env.GITHUB_ENV, `SUPABASE_URL=https://${ref}.supabase.co\n`);
+          } catch {
+            console.error('Staging origin derivation failed; no configuration values emitted.');
+            process.exit(1);
+          }
+          JS
+          # GITHUB_ENV applies to subsequent steps, so run in the next step.
+      - name: Execute single case with private evidence only
+        if: inputs.suite == 'chat-single'
+        env:
+          CHAT_SINGLE_MANIFEST: evals/chat-single-manifest.json
+          CHAT_SINGLE_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          CHAT_SINGLE_EXPECTED_SHA: ${{ inputs.candidate_sha }}
+        shell: bash
+        run: |
+          umask 077
+          set +e
+          pnpm eval evals/chat.eval.ts --no-progress-bars --terminate-on-failure > "$RUNNER_TEMP/chat-single-console.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::CHAT_SINGLE_EXECUTOR_FAILED exit=$status; raw stderr withheld."
+          else
+            echo "Single-case executor finished. Inspect the private Braintrust experiment; workflow success is not answer acceptance."
+          fi
+          exit "$status"
 
   pdf106-paired:
     if: inputs.suite == 'pdf106-paired' || inputs.suite == 'pdf106-pete-smoke'

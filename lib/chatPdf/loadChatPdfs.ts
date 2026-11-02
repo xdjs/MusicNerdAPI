@@ -4,7 +4,7 @@ import { getPublicUrl } from "@/lib/storage/getPublicUrl";
 import { VAULT_BUCKET } from "@/lib/storage/const";
 import { MAX_CHAT_PDF_BYTES, type ChatPdf } from "@/lib/chatPdf/types";
 
-/** Filter eligibility and rank titles before bounding metadata; never expand the shared corpus. */
+/** Filter eligibility and rank titles plus stored extraction before bounding metadata; never expand the shared corpus. */
 export async function loadChatPdfs(
   artistId: string,
   sourceId?: string,
@@ -12,24 +12,30 @@ export async function loadChatPdfs(
   exactTitle = false,
   mentionedIn?: string,
 ): Promise<ChatPdf[]> {
+  // Keep short non-Latin topics; punctuation is not query syntax. The public
+  // tool already caps queries at 300 characters; also bound direct loader calls.
   const terms = [
     ...new Set(
       query
+        .slice(0, 300)
         .toLowerCase()
-        .split(/\W+/)
-        .filter(t => t.length > 2),
+        .match(/[\p{L}\p{N}][\p{L}\p{M}\p{N}]*/gu) ?? [],
     ),
   ].slice(0, 16);
   const title = sql`lower(coalesce(v.title, v.file_name, 'PDF'))`;
   const rank = terms.length
     ? sql.join(
-        terms.map(term => sql`case when position(${term} in ${title}) > 0 then 1 else 0 end`),
+        terms.map(
+          term =>
+            sql`case when position(${term} in ${title}) > 0 or position(${term} in lower(coalesce(v.extracted_text, ''))) > 0 then 1 else 0 end`,
+        ),
         sql` + `,
       )
     : sql`cast(0 as integer)`;
+  // The extraction digest detects changes since discovery, not agreement with PDF bytes.
   return db.execute<ChatPdf>(sql`
     select v.id, coalesce(v.title, v.file_name, 'PDF') as title, v.url, v.file_path as path,
-      v.file_size as size, coalesce(v.updated_at, v.created_at)::text as revision,
+      v.file_size as size, coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) as revision,
       c.id::text as "claimId"
     from artist_vault_sources v
     join artist_claims c on c.artist_id=v.artist_id and c.status='approved'

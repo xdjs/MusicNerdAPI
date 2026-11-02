@@ -129,3 +129,18 @@ describe("streamText", () => {
     expect(toUIMessageStream).not.toHaveBeenCalled();
   });
 });
+
+it("forwards explicit stream limits and leaves omitted limits absent", async () => {
+  sdkStreamText.mockReturnValue(streamOf([]));
+  await streamText({ prompt: "q" });
+  const normal = sdkStreamText.mock.calls[0][0];
+  expect(Object.hasOwn(normal, "maxRetries")).toBe(false);
+  expect(Object.hasOwn(normal, "maxOutputTokens")).toBe(false);
+  expect(Object.hasOwn(normal, "streamRetries")).toBe(false);
+  await streamText({ prompt: "q", maxRetries: 0, maxOutputTokens: 128, streamRetries: 0 });
+  expect(sdkStreamText.mock.calls[1][0]).toMatchObject({
+    maxRetries: 0,
+    maxOutputTokens: 128,
+    streamRetries: 0,
+  });
+});

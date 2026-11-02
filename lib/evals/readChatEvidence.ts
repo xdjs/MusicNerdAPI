@@ -34,6 +34,13 @@ export function readChatEvidence(
         tool,
         toolCallId,
         sha256: createHash("sha256").update(text).digest("hex"),
+        ...(tool === "readSource"
+          ? Object.fromEntries(
+              ["publishedAt", "activityDate", "retrievedAt"]
+                .filter(key => row[key] === null || typeof row[key] === "string")
+                .map(key => [key, row[key]]),
+            )
+          : {}),
       },
     ];
   });
