@@ -11,7 +11,11 @@ export type PublicArtistAbout = {
 /** What `generateArtistBio` answers: the About now saved, or why it was kept. */
 export type GeneratedBio =
   | { httpStatus: 200; bio: string | null; pinned?: true; message?: string }
-  | { httpStatus: 404 | 408 | 409 | 500; error: string; code?: "LORE_REQUIRED" };
+  | {
+      httpStatus: 404 | 408 | 409 | 500;
+      error: string;
+      code?: "LORE_REQUIRED" | "LORE_PREPARING" | "LORE_PREPARATION_FAILED";
+    };
 
 /** What `updateArtistBio` answers, in MusicNerdWeb's result shape. */
 export type BioUpdateResult = {

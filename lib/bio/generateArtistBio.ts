@@ -1,20 +1,20 @@
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
 import { hasPinnedBio } from "@/lib/bio/hasPinnedBio";
+import { prepareAboutLore } from "@/lib/bio/prepareAboutLore";
 import { persistArtistBio } from "@/lib/bio/persistArtistBio";
 import { sanitizeBioText } from "@/lib/bio/sanitizeBioText";
 import type { GeneratedBio } from "@/lib/bio/types";
 import { generateAboutFromDoc } from "@/lib/lore/generateAboutFromDoc";
-import { getArtistDocStrict } from "@/lib/lore/getArtistDocStrict";
 import { stripCitationMarkers } from "@/lib/lore/stripCitationMarkers";
 import type { DocSource } from "@/lib/lore/types";
 import type { ArtistWriteAuth } from "@/lib/ownership/types";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
 /**
- * Rewrites the About from the stored Lore document and saves it. The About is
- * a projection of stored Lore: this never discovers or fetches sources. A
- * pinned bio is returned unchanged; without a Lore document nothing is written.
+ * Prepares missing or pending Lore from saved eligible material, then rewrites
+ * About. This never starts source discovery/extraction or onboarding. A pinned
+ * bio is returned unchanged, and preparation failures preserve the saved About.
  *
  * @param artistId - The artist.
  * @param auth - The acting user and the claim read before authorization.
@@ -34,15 +34,8 @@ export async function generateArtistBio(
         pinned: true,
         message: "Bio is pinned. Unpin it before regenerating.",
       };
-    // Strict read: a database failure is an error, not an empty document.
-    const doc = await getArtistDocStrict(artistId);
-    if (!doc?.content.trim())
-      return {
-        httpStatus: 409,
-        code: "LORE_REQUIRED",
-        error:
-          "Build your Lore document before generating About. Your existing About has been kept.",
-      };
+    const doc = await prepareAboutLore(artistId, auth);
+    if ("error" in doc) return doc;
     const draft = await generateAboutFromDoc(
       artist.name ?? "Artist",
       doc.content,

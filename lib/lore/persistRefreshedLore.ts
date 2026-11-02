@@ -3,6 +3,8 @@ import { db } from "@/lib/db/db";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { artistDocs, artistResearchJobs } from "@/lib/db/schema";
 import type { LoreSummary } from "@/lib/lore/types";
+import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
+import type { ArtistWriteAuth } from "@/lib/ownership/types";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
@@ -17,6 +19,7 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @param expectedClaimId - The claim captured before the sources were read.
  * @param jobId - The lore_refresh job, when a job is writing.
  * @param loreSummary - The inventory overview: null clears it, undefined keeps the last good one.
+ * @param auth - The explicit editor when preparation comes from About.
  * @returns True when written; false when ownership or the job changed.
  */
 export async function persistRefreshedLore(
@@ -26,9 +29,11 @@ export async function persistRefreshedLore(
   expectedClaimId: string | null,
   jobId?: string,
   loreSummary?: LoreSummary | null,
+  auth?: ArtistWriteAuth,
 ): Promise<boolean> {
   return db.transaction(async tx => {
     await lockArtistRow(tx, artistId);
+    if (auth) await authorizeLockedArtistWrite(tx, artistId, { ...auth, expectedClaimId });
     const claim = await findApprovedClaim(tx, artistId);
     if ((claim?.id ?? null) !== expectedClaimId) return false;
     if (jobId) {

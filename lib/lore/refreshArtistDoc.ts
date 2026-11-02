@@ -5,7 +5,9 @@ import { getArtistDoc } from "@/lib/lore/getArtistDoc";
 import { persistRefreshedLore } from "@/lib/lore/persistRefreshedLore";
 import { synthesizeArtistDoc } from "@/lib/lore/synthesizeArtistDoc";
 import { toSourceList } from "@/lib/lore/toSourceList";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import type { DocRefresh } from "@/lib/lore/types";
+import type { ArtistWriteAuth } from "@/lib/ownership/types";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
@@ -17,11 +19,17 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @param options.createIfMissing - Write a document even when the artist has none yet.
  * @param options.jobId - The lore_refresh job doing the write; the write is skipped if it is gone.
  * @param options.expectedClaimId - The claim the job was queued under; read now when omitted.
+ * @param options.auth - The explicit editor, reauthorized when saving.
  * @returns "rebuilt", "no-document" (none exists), "no-material" (no citable sources yet), "cancelled" or "failed".
  */
 export async function refreshArtistDoc(
   artistId: string,
-  options: { createIfMissing?: boolean; jobId?: string; expectedClaimId?: string | null } = {},
+  options: {
+    createIfMissing?: boolean;
+    jobId?: string;
+    expectedClaimId?: string | null;
+    auth?: ArtistWriteAuth;
+  } = {},
 ): Promise<DocRefresh> {
   try {
     const claimId =
@@ -34,11 +42,22 @@ export async function refreshArtistDoc(
       synthesizeArtistDoc(artistId),
       generateLoreSummary(artistId),
     ]);
-    if (!(await persistRefreshedLore(artistId, doc, sources, claimId, options.jobId, summary)))
+    if (
+      !(await persistRefreshedLore(
+        artistId,
+        doc,
+        sources,
+        claimId,
+        options.jobId,
+        summary,
+        options.auth,
+      ))
+    )
       return "cancelled";
     console.log(`[refreshArtistDoc] Rebuilt doc for ${artistId} from ${sources.length} sources`);
     return "rebuilt";
   } catch (e) {
+    if (e instanceof OwnershipChangedError) return "cancelled";
     console.error("[refreshArtistDoc] Failed:", e);
     return "failed";
   }

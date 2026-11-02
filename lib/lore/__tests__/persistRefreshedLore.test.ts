@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const authorize = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
+  authorizeLockedArtistWrite: authorize,
+}));
+
 const { tx, values, upsert } = vi.hoisted(() => {
   const upsert = vi.fn();
   const values = vi.fn(() => ({ onConflictDoUpdate: upsert }));
@@ -15,6 +20,7 @@ const { persistRefreshedLore } = await import("@/lib/lore/persistRefreshedLore")
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authorize.mockReset();
   tx.execute.mockResolvedValue([]);
   tx.query.artistClaims.findFirst.mockResolvedValue({ id: "current-claim" });
   tx.query.artistResearchJobs.findFirst.mockResolvedValue({ id: "j1" });
@@ -75,4 +81,21 @@ describe("persistRefreshedLore", () => {
       expect(upsert.mock.calls[0][0].set.loreSummary).toEqual(summary);
     },
   );
+});
+
+it("reauthorizes the editor under the write lock before publishing Lore", async () => {
+  const auth = { userId: "editor", expectedClaimId: "current-claim" };
+  await persistRefreshedLore("a1", "Doc", [], "current-claim", "j1", undefined, auth);
+  expect(authorize).toHaveBeenCalledWith(tx, "a1", auth);
+  expect(authorize.mock.invocationCallOrder[0]).toBeLessThan(values.mock.invocationCallOrder[0]);
+});
+it("does not write Lore when the editor lost authorization", async () => {
+  authorize.mockRejectedValue(new Error("revoked"));
+  await expect(
+    persistRefreshedLore("a1", "Doc", [], "current-claim", "j1", undefined, {
+      userId: "editor",
+      expectedClaimId: "current-claim",
+    }),
+  ).rejects.toThrow("revoked");
+  expect(values).not.toHaveBeenCalled();
 });
