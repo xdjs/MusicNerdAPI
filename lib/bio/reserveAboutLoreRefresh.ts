@@ -5,6 +5,7 @@ import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { rowsOf } from "@/lib/db/rowsOf";
 import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
 import type { ArtistWriteAuth } from "@/lib/ownership/types";
+import { isCitableSource } from "@/lib/sources/isCitableSource";
 import { MAX_ATTEMPTS } from "@/lib/research/const";
 
 /** Reserve only an ordinary pending Lore rebuild, sharing the cron worker's live slot and lease. */
@@ -43,10 +44,24 @@ export async function reserveAboutLoreRefresh(
     }
     const docs = rowsOf(
       await tx.execute(sql`
-      select content from artist_docs where artist_id=${artistId}::uuid limit 1
+      select content,sources from artist_docs where artist_id=${artistId}::uuid limit 1
     `),
-    ) as { content: string }[];
-    if (docs[0]?.content?.trim()) return { status: "ready" };
+    ) as { content: string; sources: { kind: string; url: string | null }[] | null }[];
+    if (docs[0]?.content?.trim()) {
+      const sources = rowsOf(
+        await tx.execute(sql`
+        select url,extracted_text as "extractedText",file_path as "filePath",status
+        from artist_vault_sources where artist_id=${artistId}::uuid and status='approved'
+      `),
+      ) as { url: string; extractedText: string | null; filePath: string | null; status: string }[];
+      const recorded = new Set(
+        (docs[0].sources ?? []).filter(s => s.kind === "vault").map(s => s.url),
+      );
+      // Extraction can finish after the submission's original refresh has
+      // settled. A newly citable source must not be silently omitted then.
+      if (!sources.some(source => isCitableSource(source) && !recorded.has(source.url)))
+        return { status: "ready" };
+    }
     const activityId = await recordArtistActivity(
       artistId,
       "lore_refresh",

@@ -31,7 +31,8 @@ beforeAll(async () => {
     create table artists(id uuid primary key);
     create table users(id uuid primary key,is_admin boolean,email text,username text,username_needs_confirmation boolean,username_prompted_at timestamptz,wallet text,privy_user_id text,created_at timestamptz,updated_at timestamptz,legacy_id integer,is_white_listed boolean,is_super_admin boolean,is_hidden boolean,legacy_link_dismissed boolean,accepted_ugc_count integer);
     create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text,reference_code text,created_at timestamptz,updated_at timestamptz);
-    create table artist_docs(artist_id uuid primary key,content text);
+    create table artist_docs(artist_id uuid primary key,content text,sources jsonb default '[]');
+    create table artist_vault_sources(artist_id uuid,url text,extracted_text text,file_path text,status text);
     create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
     create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text,status text default 'pending',claimed_at timestamptz,state jsonb,activity_id uuid,attempts integer default 0,created_at timestamptz default now(),updated_at timestamptz default now());
     create unique index live_jobs on artist_research_jobs(artist_id,kind) where status in ('pending','running');
@@ -40,7 +41,7 @@ beforeAll(async () => {
   `);
 }, 30000);
 beforeEach(async () => {
-  await client.exec(`delete from artist_research_jobs; delete from artist_docs; delete from artist_claims; delete from artist_activity_events;
+  await client.exec(`delete from artist_research_jobs; delete from artist_vault_sources; delete from artist_docs; delete from artist_claims; delete from artist_activity_events;
     insert into artist_claims(id,artist_id,user_id,status) values('${claim}','${artist}','${owner}','approved');`);
 });
 afterAll(async () => client.close());
@@ -59,12 +60,14 @@ it("reserves exactly one Lore job for a new artist, with editor attribution", as
   ).toEqual([{ actor_user_id: owner, trigger: "about_editor" }]);
 });
 it("reuses current Lore without creating a job", async () => {
-  await client.query("insert into artist_docs values($1,'Current Lore')", [artist]);
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+    artist,
+  ]);
   expect(await reserveAboutLoreRefresh(artist, auth)).toEqual({ status: "ready" });
   expect((await client.query("select * from artist_research_jobs")).rows).toEqual([]);
 });
 it("reuses a queued refresh even when an old document exists, preserving requestedAt", async () => {
-  await client.query("insert into artist_docs values($1,'Old Lore')", [artist]);
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Old Lore')", [artist]);
   await client.query(
     "insert into artist_research_jobs(artist_id,kind,state) values($1,'lore_refresh',$2)",
     [artist, JSON.stringify({ claimId: claim, requestedAt: "new-source" })],
@@ -112,3 +115,29 @@ it("permits an authorized admin to prepare an unclaimed newly added artist", asy
   ]);
   await client.exec(`update users set is_admin=false where id='${owner}'`);
 });
+
+it("rebuilds existing Lore when a newly readable approved source is absent from its manifest", async () => {
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Old Lore')", [artist]);
+  await client.query(
+    "insert into artist_vault_sources values($1,'https://example.org/new',$2,null,'approved')",
+    [artist, "Readable verified source. ".repeat(30)],
+  );
+  expect(await reserveAboutLoreRefresh(artist, auth)).toMatchObject({ status: "acquired" });
+});
+it.each(["pending", "rejected", "unreadable"])(
+  "does not rebuild for an ineligible %s source",
+  async state => {
+    await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+      artist,
+    ]);
+    await client.query(
+      "insert into artist_vault_sources values($1,'https://example.org/new',$2,null,$3)",
+      [
+        artist,
+        state === "unreadable" ? null : "Readable source. ".repeat(30),
+        state === "unreadable" ? "approved" : state,
+      ],
+    );
+    expect(await reserveAboutLoreRefresh(artist, auth)).toEqual({ status: "ready" });
+  },
+);
