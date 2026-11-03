@@ -1,3 +1,4 @@
+import { prepareUrlReceipt } from "./prepareUrlReceipt";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
@@ -79,6 +80,12 @@ async function visible(role = "anon") {
 }
 it("preserves SELECT star fields for public/authenticated/inherited clients and trusted raw reads", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   for (const role of ["anon", "authenticated", "inherited_anon"]) {
     expect(await visible(role)).toEqual([
       { id: artist, name: "Synthetic artist", bio: "Public biography" },
@@ -106,6 +113,12 @@ it("preserves SELECT star fields for public/authenticated/inherited clients and 
 });
 it("withdraws dynamically after source moderation/privacy/content changes and stale old-writer edits", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   for (const change of ["status='rejected'", "publication='private'", "extracted_text='Changed'"]) {
     await pg.exec(`update artist_vault_sources set ${change}`);
     expect((await visible())[0]).toMatchObject({ bio: null });
@@ -123,6 +136,12 @@ it("withdraws dynamically after source moderation/privacy/content changes and st
 });
 it("matches JavaScript revisions for nulls, quotes, Unicode, whitespace and escapes", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   for (const text of ["ordinary", 'quote" backslash\\ newline\n\t', "Björk 😀 \u2028", "\b\f\r"]) {
     await pg.query("update artist_vault_sources set extracted_text=$1", [text]);
     const [{ revision }] = (
@@ -135,6 +154,12 @@ it("matches JavaScript revisions for nulls, quotes, Unicode, whitespace and esca
 });
 it("preserves claim-gated legacy and rejects unknown lineage and unsupported subset evidence", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   await pg.exec("delete from mn_private.artist_bio_provenance");
   expect((await visible())[0]).toMatchObject({ bio: null });
   await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
@@ -157,6 +182,12 @@ it("preserves claim-gated legacy and rejects unknown lineage and unsupported sub
 });
 it("rechecks immutable trust and claim revocation without broadening contributor access", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   await pg.query("update artist_vault_sources set publication='inherit',activity_id=$1", [event]);
   const p = provenance();
   p.sources[0].revision = vaultSourceRevision({
@@ -214,6 +245,12 @@ it("rejects leftover column grants instead of claiming the raw path is closed", 
 
 it("rejects invalid URL ports/hosts and JS whitespace/placeholder bios", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   for (const url of [
     "https://example.org:999999/lore",
     "https://999.999.999.999/lore",
@@ -241,6 +278,12 @@ it("rejects invalid URL ports/hosts and JS whitespace/placeholder bios", async (
 });
 it("serializes real date evidence independently of session DateStyle", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   await pg.exec(
     "update artist_vault_sources set published_at='2026-11-03';set datestyle='SQL,DMY'",
   );
@@ -254,6 +297,12 @@ it("serializes real date evidence independently of session DateStyle", async () 
 
 it("matches the application for claimed evidence kinds, empty manifests and source-id validation", async () => {
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
   const cases: unknown[] = [
     { ...provenance(), claimId: claim, sources: [] },
@@ -284,9 +333,14 @@ it("matches the application for claimed evidence kinds, empty manifests and sour
     { ...provenance(), claimId: claim, sources: [{ id: 1, kind: "interview" }] },
   ];
   for (const p of cases) {
-    await pg.query("update mn_private.artist_bio_provenance set provenance=$1", [
-      JSON.stringify(p),
-    ]);
+    await pg.transaction(async tx => {
+      for (const item of (p as { sources?: { url?: unknown }[] }).sources ?? []) {
+        if (typeof item.url === "string") await prepareUrlReceipt(tx, item.url);
+      }
+      await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+        JSON.stringify(p),
+      ]);
+    });
     expect((await visible())[0]).toMatchObject({
       bio: projectSavedPublicBio({
         bio: "Public biography",
@@ -295,40 +349,6 @@ it("matches the application for claimed evidence kinds, empty manifests and sour
         evidence: [source],
       }),
     });
-  }
-});
-it("compares supported URL cases to the actual JS validator and fails closed for unsupported encodings", async () => {
-  await pg.exec(migration);
-  const supported = [
-    "https://example.org/lore",
-    "HTTP://Example.org:8080/lore?ref=home&lang=en#clip",
-    "https://example.org/path%20name?title=two%20words",
-    "https://example.org:0/",
-    "https://example.org?ToKeN=x",
-    "https://example.org?api_key=x",
-    "https://example.org?signature=x",
-    "https://user:pass@example.org/path",
-    "ftp://example.org/path",
-    "https://example.org:99999/",
-    "HTTPS://example.org:99999/",
-    "https://999.999.999.999/",
-  ];
-  for (const url of supported) {
-    const [{ safe }] = (
-      await pg.query<{ safe: boolean }>("select mn_projection.safe_url($1) safe", [url])
-    ).rows;
-    expect(safe, url).toBe(publicKnowledgeUrl(url) !== null);
-  }
-  for (const url of [
-    "https://example.org?%74oken=x",
-    "https://example.org?%72ef=home",
-    "https://xn--bcher-kva.example/",
-    "https://例え.example/",
-  ]) {
-    const [{ safe }] = (
-      await pg.query<{ safe: boolean }>("select mn_projection.safe_url($1) safe", [url])
-    ).rows;
-    expect(safe).toBe(false);
   }
 });
 
@@ -356,5 +376,180 @@ it("blocks NOINHERIT login members that could SET ROLE into a raw reader", async
   await pg.exec("rollback");
   expect((await pg.query("select to_regclass('mn_public.artists') as view")).rows).toEqual([
     { view: null },
+  ]);
+});
+
+it("uses exact application WHATWG receipts across IDNA, IP, encodings and secrets", async () => {
+  await pg.exec(migration);
+  const longUrl =
+    "https://example.org/" +
+    Array.from({ length: 400 }, (_, i) =>
+      createHash("sha256").update(`long-url-${i}`).digest("hex"),
+    ).join("");
+  expect(longUrl.length).toBeGreaterThan(10_000);
+  const urls = [
+    longUrl,
+    "https://example.org/lore",
+    "HTTP://Example.org:8080/lore?ref=home&lang=en#clip",
+    "https://example.org/path%20name?title=two%20words",
+    "https://example.org:0/",
+    "https://example.org?ToKeN=x",
+    "https://example.org?api_key=x",
+    "https://example.org?signature=x",
+    "https://user:pass@example.org/path",
+    "https://user@example.org",
+    "https://%75ser@example.org",
+    "ftp://example.org/path",
+    "https://example.org:99999/",
+    "https://999.999.999.999/",
+    "https://example.org?%74oken=x",
+    "https://example.org?%72ef=home",
+    "https://example.org?API%2DKEY=x",
+    "https://xn--bcher-kva.example/",
+    "https://例え.example/",
+    "https://bücher.example/",
+    "https://127.0.0.1/",
+    "http://0x7f000001/",
+    "http://2130706433/",
+    "https://[::1]/",
+    "https://[2001:db8::1]/",
+    "https://[nope]/",
+    "https://xn--.org/",
+    "https://localhost/",
+    " https://example.org/path \n",
+    "https://exa\tmple.org/",
+    "https://example.org/a b",
+    "https:\\example.org\\path",
+    "https://example.org?ref=token",
+    "https://example.org?mysecret=x",
+    "https://example.org?api+key=x",
+    "https://example.org?%2574oken=x",
+    "https://example.org?%ZZ=x",
+    "https://example.org/#token=not-query",
+    "javascript:alert(1)",
+    "data:text/plain,hello",
+    "not a URL",
+  ];
+  for (const url of urls) {
+    const accepted = publicKnowledgeUrl(url) !== null;
+    await pg.transaction(async tx => {
+      await tx.exec("set local role mnweb");
+      expect(await prepareUrlReceipt(tx, url), url).toBe(accepted);
+      await tx.query("update artist_vault_sources set url=$1", [url]);
+      const p = provenance();
+      p.sources[0].url = url;
+      p.sources[0].revision = vaultSourceRevision({ ...source, url });
+      await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+        JSON.stringify(p),
+      ]);
+    });
+    expect((await visible())[0], url).toMatchObject({ bio: accepted ? "Public biography" : null });
+    const { rows } = await pg.query<{ count: number }>(
+      "select count(*)::integer as count from mn_private.public_url_receipts where url=$1",
+      [url],
+    );
+    expect(rows[0].count, url).toBe(accepted ? 1 : 0);
+  }
+});
+
+it("fails closed on absent, invalid-version, hash-mismatched, URL-mismatched or revoked receipts", async () => {
+  await pg.exec(migration);
+  expect((await visible())[0]).toMatchObject({ bio: null });
+  await prepareUrlReceipt(pg, source.url);
+  expect((await visible())[0]).toMatchObject({ bio: "Public biography" });
+  for (const alteration of [
+    "policy_version=2",
+    "url_hash=decode(repeat('00',32),'hex')",
+    "url='https://example.org/other'",
+  ]) {
+    await pg.exec(`update mn_private.public_url_receipts set ${alteration}`);
+    expect((await visible())[0]).toMatchObject({ bio: null });
+    await pg.exec("delete from mn_private.public_url_receipts");
+    await prepareUrlReceipt(pg, source.url);
+  }
+  await pg.exec("delete from mn_private.public_url_receipts");
+  expect((await visible())[0]).toMatchObject({ bio: null });
+  await prepareUrlReceipt(pg, source.url);
+  // Canonically equivalent URL has different original bytes; the old receipt is insufficient.
+  const url = "HTTPS://example.org/lore";
+  await pg.query("update artist_vault_sources set url=$1", [url]);
+  const p = provenance();
+  p.sources[0].url = url;
+  p.sources[0].revision = vaultSourceRevision({ ...source, url });
+  await pg.query("update mn_private.artist_bio_provenance set provenance=$1", [JSON.stringify(p)]);
+  expect((await visible())[0]).toMatchObject({ bio: null });
+  await prepareUrlReceipt(pg, url);
+  expect((await visible())[0]).toMatchObject({ bio: "Public biography" });
+});
+
+it("rolls back receipt plus evidence publication together on failure", async () => {
+  await pg.exec(migration);
+  const url = "https://example.org/new";
+  await expect(
+    pg.transaction(async tx => {
+      await tx.exec("set local role mnweb");
+      await prepareUrlReceipt(tx, url);
+      await tx.query("update artist_vault_sources set url=$1", [url]);
+      await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+        JSON.stringify({ kind: "unknown" }),
+      ]);
+      throw new Error("Synthetic publication failure");
+    }),
+  ).rejects.toThrow("Synthetic publication failure");
+  expect((await pg.query("select url from artist_vault_sources")).rows).toEqual([
+    { url: source.url },
+  ]);
+  expect((await pg.query("select * from mn_private.public_url_receipts")).rows).toEqual([]);
+  expect((await pg.query("select provenance from mn_private.artist_bio_provenance")).rows).toEqual([
+    { provenance: provenance() },
+  ]);
+});
+
+it("denies public receipt reads and forgery and restricts trusted roles to their least privileges", async () => {
+  await pg.exec(migration);
+  for (const role of ["anon", "authenticated", "inherited_anon"]) {
+    await pg.exec(`set role ${role}`);
+    await expect(pg.query("select * from mn_private.public_url_receipts")).rejects.toMatchObject({
+      code: "42501",
+    });
+    await expect(prepareUrlReceipt(pg, source.url)).rejects.toMatchObject({ code: "42501" });
+    await pg.exec("reset role");
+  }
+  await pg.exec("set role mnweb");
+  expect(await prepareUrlReceipt(pg, source.url)).toBe(true);
+  expect((await pg.query("select url from mn_private.public_url_receipts")).rows).toEqual([
+    { url: source.url },
+  ]);
+  for (const sql of [
+    "delete from mn_private.public_url_receipts",
+    "update mn_private.public_url_receipts set policy_version=2",
+  ])
+    await expect(pg.query(sql)).rejects.toMatchObject({ code: "42501" });
+  await pg.exec("reset role;set role mn_projection_reader");
+  expect((await pg.query("select url from mn_private.public_url_receipts")).rows).toEqual([
+    { url: source.url },
+  ]);
+  await expect(prepareUrlReceipt(pg, source.url)).rejects.toMatchObject({ code: "42501" });
+  await pg.exec("reset role");
+});
+
+it("rejects a conflicting hash receipt instead of reporting successful publication", async () => {
+  await pg.exec(migration);
+  const hash = createHash("sha256").update(source.url).digest("hex");
+  await pg.query("insert into mn_private.public_url_receipts values(decode($1,'hex'),$2,1)", [
+    hash,
+    "https://example.org/different",
+  ]);
+  await expect(
+    pg.transaction(async tx => {
+      await tx.exec("set local role mnweb");
+      await prepareUrlReceipt(tx, source.url);
+      await tx.query("update artists set bio=$1", ["Must not publish"]);
+    }),
+  ).rejects.toThrow("URL receipt conflict: exact bytes were not persisted");
+  expect((await pg.query("select bio from artists")).rows).toEqual([{ bio: "Public biography" }]);
+  expect((await visible())[0]).toMatchObject({ bio: null });
+  expect((await pg.query("select url from mn_private.public_url_receipts")).rows).toEqual([
+    { url: "https://example.org/different" },
   ]);
 });

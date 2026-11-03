@@ -1,3 +1,4 @@
+import { prepareUrlReceipt } from "./prepareUrlReceipt";
 /** Handler integration through a TEST-ONLY SQL adapter. No server, PostgREST or native PG17 proof. */
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -102,6 +103,12 @@ beforeEach(async () => {
     JSON.stringify(provenance()),
   ]);
   await pg.exec(migration);
+  await pg.transaction(async tx => {
+    await prepareUrlReceipt(tx, source.url);
+    await tx.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(provenance()),
+    ]);
+  });
   mocks.saved.mockImplementation(async (id: string) => {
     await pg.exec("set role anon");
     try {

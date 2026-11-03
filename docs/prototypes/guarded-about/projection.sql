@@ -21,25 +21,27 @@ $$;
 ALTER FUNCTION mn_projection.revision(public.artist_vault_sources) OWNER TO mn_projection_reader;
 REVOKE ALL ON FUNCTION mn_projection.revision(public.artist_vault_sources) FROM PUBLIC;
 
--- Deliberately bounded URL grammar. Full WHATWG parity remains a release gate.
+-- Private receipts attest the existing JavaScript URL policy, never SQL URL parsing.
+-- Trusted writers must prepare receipts atomically with evidence publication.
+CREATE TABLE mn_private.public_url_receipts (
+ url_hash bytea NOT NULL,
+ url text COLLATE "C" NOT NULL,
+ policy_version integer NOT NULL,
+ PRIMARY KEY(url_hash,policy_version)
+);
+REVOKE ALL ON mn_private.public_url_receipts FROM PUBLIC,anon,authenticated,mnweb,mn_projection_reader;
+ALTER TABLE mn_private.public_url_receipts ENABLE ROW LEVEL SECURITY;
+GRANT SELECT,INSERT ON mn_private.public_url_receipts TO mnweb;
+GRANT SELECT ON mn_private.public_url_receipts TO mn_projection_reader;
+CREATE POLICY receipt_app_read ON mn_private.public_url_receipts FOR SELECT TO mnweb USING(true);
+CREATE POLICY receipt_app_insert ON mn_private.public_url_receipts FOR INSERT TO mnweb WITH CHECK(true);
+CREATE POLICY receipt_projection_read ON mn_private.public_url_receipts FOR SELECT TO mn_projection_reader USING(true);
 CREATE FUNCTION mn_projection.safe_url(value text) RETURNS boolean
-LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog AS $$
-DECLARE query_text text; part text; key text; port text;
-BEGIN
- IF value IS NULL OR value ~* '(^https?://|[.])xn--'
- OR value !~* '^https?://[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+(:[0-9]{1,5})?([/?#][A-Za-z0-9._~/%:@!$&()*+,;=/?#-]*)?$' THEN RETURN false; END IF;
- port:=substring(lower(value) from '^https?://[^/?#:]+:([0-9]+)');
- IF port IS NOT NULL AND port::integer>65535 THEN RETURN false; END IF;
- query_text:=substring(value from '\?([^#]*)');
- IF query_text IS NOT NULL THEN
-  FOREACH part IN ARRAY string_to_array(query_text,'&') LOOP
-   key:=split_part(part,'=',1);
-   -- Reject encoded keys until exact URLSearchParams decoding is implemented.
-   IF key LIKE '%\%%' OR key ~* 'token|secret|signature|api[-_]?key' THEN RETURN false; END IF;
-  END LOOP;
- END IF;
- RETURN true;
-END $$;
+LANGUAGE sql STABLE SET search_path=pg_catalog AS $$
+ SELECT EXISTS(SELECT 1 FROM mn_private.public_url_receipts r
+ WHERE r.policy_version=1 AND r.url_hash=sha256(convert_to(value,'UTF8'))
+ AND convert_to(r.url,'UTF8')=convert_to(value,'UTF8'))
+$$;
 ALTER FUNCTION mn_projection.safe_url(text) OWNER TO mn_projection_reader;
 REVOKE ALL ON FUNCTION mn_projection.safe_url(text) FROM PUBLIC;
 
