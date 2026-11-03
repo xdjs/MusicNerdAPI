@@ -11,12 +11,12 @@ beforeEach(() => {
 });
 
 describe("removeStagedUpload", () => {
-  it("removes the object from the staging bucket and throws when storage refuses", async () => {
+  it("defers unversioned staging cleanup without any storage operation", async () => {
     remove.mockResolvedValue(undefined);
     await removeStagedUpload("a1/x.pdf");
-    expect(remove).toHaveBeenCalledWith("lore-upload-staging", ["a1/x.pdf"]);
+    expect(remove).not.toHaveBeenCalled();
     remove.mockRejectedValue(new Error("HTTP 503"));
-    await expect(removeStagedUpload("a1/x.pdf")).rejects.toThrow("HTTP 503");
+    await expect(removeStagedUpload("a1/x.pdf")).resolves.toBeUndefined();
   });
 });
 
@@ -24,6 +24,6 @@ describe("cleanupSavedUpload", () => {
   it("swallows a failed cleanup, since the upload is already saved", async () => {
     remove.mockRejectedValue(new Error("HTTP 503"));
     await expect(cleanupSavedUpload("a1/x.pdf")).resolves.toBeUndefined();
-    expect(console.error).toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 });

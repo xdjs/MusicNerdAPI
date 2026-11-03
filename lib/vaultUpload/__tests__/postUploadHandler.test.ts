@@ -198,7 +198,7 @@ describe("postUploadHandler", () => {
     );
   });
 
-  it("removes the stored file and answers 403 when ownership changed during the upload", async () => {
+  it("retains stored bytes and answers 403 when ownership changed during the upload", async () => {
     mock.insert.mockRejectedValue(new OwnershipChangedError());
     const res = await postUploadHandler(req(new File([png], "photo.png", { type: "image/png" })));
     expect(res.status).toBe(403);
@@ -206,7 +206,7 @@ describe("postUploadHandler", () => {
       status: "error",
       error: "Artist ownership changed; this operation was cancelled.",
     });
-    expect(mock.remove).toHaveBeenCalledWith("vault-files", [mock.upload.mock.calls[0][1]]);
+    expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.queue).not.toHaveBeenCalled();
   });
 

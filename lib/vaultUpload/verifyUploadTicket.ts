@@ -19,6 +19,8 @@ export function verifyUploadTicket(value: string, userId: string): UploadTicket 
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
     throw new Error("Invalid upload ticket");
   const ticket = JSON.parse(Buffer.from(payload, "base64url").toString()) as UploadTicket;
+  if (ticket.expectedClaimId !== null && typeof ticket.expectedClaimId !== "string")
+    throw new Error("Invalid upload ticket");
   if (ticket.userId !== userId) throw new Error("Invalid upload ticket");
   return ticket;
 }

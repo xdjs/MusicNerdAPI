@@ -1,9 +1,9 @@
 import { removeStagedUpload } from "@/lib/vaultUpload/removeStagedUpload";
 
 /**
- * Removes the staged copy of an upload that is already saved. A failure is
- * logged, never surfaced: the upload succeeded, and the staged object is only
- * a leftover.
+ * Invokes the staging lifecycle hook after a saved upload. Physical deletion
+ * is currently deferred; this does not assert cleanup. Future hook failures
+ * must not turn a committed upload into a reported failure.
  *
  * @param path - The staged object's key.
  * @returns Nothing.

@@ -8,12 +8,13 @@ import {
 } from "@/lib/artistImages/const";
 import { isSupabaseStorageConfigured } from "@/lib/artistImages/isSupabaseStorageConfigured";
 import { profileImagePublicUrl } from "@/lib/artistImages/profileImagePublicUrl";
-import { purgeStaleProfileImages } from "@/lib/artistImages/purgeStaleProfileImages";
 import { validateMagicBytes } from "@/lib/artistImages/validateMagicBytes";
 import { validateProfileImageForm } from "@/lib/artistImages/validateProfileImageForm";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
-import { db } from "@/lib/db/db";
+import { getLoreClaimGeneration } from "@/lib/ownership/getLoreClaimGeneration";
+import { withArtistUploadWrite } from "@/lib/ownership/withArtistUploadWrite";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { artists } from "@/lib/db/schema";
 import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
@@ -22,7 +23,7 @@ import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 /**
  * Handles POST /api/artist/profile-image: stores an uploaded PNG, JPEG or
  * WebP in the vault bucket, points the artist's `customImage` at its public
- * URL, then purges the artist's older uploads best-effort.
+ * URL under the original claim lock. Object cleanup is deferred.
  *
  * @param request - The request; a claimant or admin Privy token, a multipart form with `file` and `artistId`.
  * @returns 200 with `{ status, success, imagePath }`; 400, 401, 403, 500 or 503.
@@ -37,6 +38,12 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
     const form = await validateProfileImageForm(request);
     if (form instanceof NextResponse) return form;
     const { file, artistId } = form;
+    const expectedClaimId = await getLoreClaimGeneration(artistId);
+    if (expectedClaimId === null)
+      return error(
+        "Uploads require an approved claim while ownership generation is unavailable.",
+        403,
+      );
     if (!(await canEditArtist(auth.userId, artistId)))
       return error("Not authorized for this artist", 403);
     if (file.size > MAX_PROFILE_IMAGE_BYTES) return error("Image too large (max 5MB)", 400);
@@ -78,14 +85,18 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
       return error("Failed to upload image to storage", 500);
     }
     const publicUrl = profileImagePublicUrl(storagePath);
-    await db.update(artists).set({ customImage: publicUrl }).where(eq(artists.id, artistId));
-    await purgeStaleProfileImages(artistId, filename);
+    await withArtistUploadWrite(artistId, auth.userId, expectedClaimId, async tx => {
+      await tx.update(artists).set({ customImage: publicUrl }).where(eq(artists.id, artistId));
+    });
+    // Do not purge the folder: another upload may have stored its bytes before
+    // its fenced write. Physical cleanup requires an object lifecycle record.
     return NextResponse.json(
       { status: "ok", success: true, imagePath: publicUrl },
       { status: 200, headers },
     );
   } catch (e) {
     console.error("[artist/profile-image] Error:", e);
+    if (e instanceof OwnershipChangedError) return error(e.message, 403);
     return error("Failed to upload image", 500);
   }
 }

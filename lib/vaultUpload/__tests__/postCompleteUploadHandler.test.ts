@@ -23,6 +23,14 @@ vi.mock("@/lib/vaultUpload/extractPdfText", () => ({ extractPdfText: mock.pdf })
 vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: mock.download }));
 vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
+vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({
+  withArtistUploadWrite: async (
+    _a: string,
+    _u: string,
+    _c: string | null,
+    write: (tx: object) => Promise<unknown>,
+  ) => write({}),
+}));
 const { postCompleteUploadHandler: complete } =
   await import("@/lib/vaultUpload/postCompleteUploadHandler");
 const { signUploadTicket } = await import("@/lib/vaultUpload/signUploadTicket");
@@ -53,6 +61,7 @@ beforeEach(() => {
   mock.remove.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
   ticket = signUploadTicket({
+    expectedClaimId: "claim-1",
     userId: "owner",
     artistId,
     path,
@@ -93,11 +102,10 @@ describe("postCompleteUploadHandler", () => {
       "upload",
       "insert",
       "queue",
-      "remove",
     ]);
     expect(mock.upload).toHaveBeenCalledWith("vault-files", path, bytes, {
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
       cacheControl: "3600",
     });
     expect(mock.insert).toHaveBeenCalledWith(
@@ -121,7 +129,7 @@ describe("postCompleteUploadHandler", () => {
       userId: "owner",
       trigger: "upload",
     });
-    expect(mock.remove).toHaveBeenCalledWith("lore-upload-staging", [path]);
+    expect(mock.remove).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({
       status: "ok",
       source: { id: "source", filePath: expect.any(Object) },
@@ -136,7 +144,7 @@ describe("postCompleteUploadHandler", () => {
     expect(mock.download).not.toHaveBeenCalled();
   });
 
-  it("removes the public copy and rejects completion when ownership changes during upload", async () => {
+  it("retains public bytes and rejects completion when ownership changes during upload", async () => {
     mock.insert.mockRejectedValue(new OwnershipChangedError());
     const response = await complete(req({ ticket }));
     expect(response.status).toBe(403);
@@ -145,9 +153,8 @@ describe("postCompleteUploadHandler", () => {
       error: "Artist ownership changed; this operation was cancelled.",
     });
     expect(mock.upload).toHaveBeenCalled();
-    expect(mock.remove).toHaveBeenCalledTimes(2);
-    expect(mock.remove).toHaveBeenNthCalledWith(1, "vault-files", [path]);
-    expect(mock.remove).toHaveBeenNthCalledWith(2, "lore-upload-staging", [path]);
+    expect(mock.remove).not.toHaveBeenCalled();
+    expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.queue).not.toHaveBeenCalled();
   });
 
@@ -164,8 +171,9 @@ describe("postCompleteUploadHandler", () => {
     expect(mock.remove).not.toHaveBeenCalled();
   });
 
-  it("cleans an expired authentic ticket without downloading or publishing", async () => {
+  it("rejects an expired authentic ticket without downloading or publishing", async () => {
     const expired = signUploadTicket({
+      expectedClaimId: "claim-1",
       userId: "owner",
       artistId,
       path: `${artistId}/expired.pdf`,
@@ -180,30 +188,24 @@ describe("postCompleteUploadHandler", () => {
       status: "error",
       error: "Upload expired. Please try again.",
     });
-    expect(mock.remove).toHaveBeenCalledWith("lore-upload-staging", [`${artistId}/expired.pdf`]);
+    expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.download).not.toHaveBeenCalled();
     expect(mock.insert).not.toHaveBeenCalled();
   });
 
-  it("retains retryability if expired-ticket cleanup fails", async () => {
+  it("expired ticket remains invalid when cleanup is deferred", async () => {
     const expired = signUploadTicket({
+      expectedClaimId: "claim-1",
       userId: "owner",
       artistId,
-      path: `${artistId}/expired.pdf`,
-      name: "expired.pdf",
+      path,
+      name: "fixture.pdf",
       type: "application/pdf",
-      size: 12,
+      size: bytes.length,
       expires: 0,
     });
-    mock.remove.mockRejectedValueOnce(new Error("unavailable"));
-    const response = await complete(req({ ticket: expired }));
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      status: "error",
-      error: "Could not finish the upload. Please retry this file.",
-      retryCompletion: true,
-    });
     expect((await complete(req({ ticket: expired }))).status).toBe(400);
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
   it("extracts PDF text and queues Lore only after validating and saving the source", async () => {
@@ -223,7 +225,7 @@ describe("postCompleteUploadHandler", () => {
     expect(mock.insert.mock.invocationCallOrder[0]).toBeLessThan(
       mock.queue.mock.invocationCallOrder[0],
     );
-    expect(mock.remove).toHaveBeenCalled();
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
   it("warns when a PDF had no readable text", async () => {
@@ -249,7 +251,7 @@ describe("postCompleteUploadHandler", () => {
       source: { id: "source" },
       warning: expect.stringContaining("File saved"),
     });
-    expect(mock.remove).toHaveBeenCalled();
+    expect(mock.remove).not.toHaveBeenCalled();
     mock.byPath.mockResolvedValue({ id: "source", filePath: path });
     expect((await complete(req({ ticket }))).status).toBe(200);
     expect(mock.insert).toHaveBeenCalledTimes(1);
@@ -260,12 +262,12 @@ describe("postCompleteUploadHandler", () => {
     expect((await complete(req({ ticket }))).status).toBe(200);
   });
 
-  it("removes the public copy after a confirmed pre-save failure", async () => {
+  it("retains public bytes after a pre-save failure", async () => {
     mock.insert.mockRejectedValue(new Error("insert failed"));
     const response = await complete(req({ ticket }));
     expect(response.status).toBe(500);
     expect((await response.json()).retryCompletion).toBe(true);
-    expect(mock.remove).toHaveBeenLastCalledWith("vault-files", [path]);
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
   it("recovers a committed source after a lost insert response without deleting its file", async () => {
@@ -274,8 +276,8 @@ describe("postCompleteUploadHandler", () => {
     const response = await complete(req({ ticket }));
     expect(response.status).toBe(200);
     expect((await response.json()).source.id).toBe("committed-source");
-    expect(mock.remove).toHaveBeenCalledTimes(1);
-    expect(mock.remove).toHaveBeenLastCalledWith("lore-upload-staging", [path]);
+    expect(mock.remove).not.toHaveBeenCalled();
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
   it("preserves uncertain publication and requests same-ticket retry if reconciliation fails", async () => {
@@ -300,6 +302,7 @@ describe("postCompleteUploadHandler", () => {
     );
     mock.download.mockResolvedValue(data);
     const dataTicket = signUploadTicket({
+      expectedClaimId: "claim-1",
       userId: "owner",
       artistId,
       path: `${artistId}/data`,
@@ -318,7 +321,7 @@ describe("postCompleteUploadHandler", () => {
   });
 
   it.each(["size", "magic"])(
-    "removes rejected %s bytes from staging before returning 400",
+    "retains rejected %s staging bytes while returning 400",
     async kind => {
       mock.download.mockResolvedValue(
         Buffer.from(kind === "size" ? "wrong size" : "x".repeat(bytes.length)),
@@ -326,20 +329,16 @@ describe("postCompleteUploadHandler", () => {
       const response = await complete(req({ ticket }));
       expect(response.status).toBe(400);
       expect((await response.json()).error).toContain(kind === "size" ? "size" : "content");
-      expect(mock.remove).toHaveBeenLastCalledWith("lore-upload-staging", [path]);
+      expect(mock.remove).not.toHaveBeenCalled();
       expect(mock.upload).not.toHaveBeenCalled();
       expect(mock.insert).not.toHaveBeenCalled();
     },
   );
 
-  it("keeps completion retryable when rejection cleanup fails", async () => {
+  it("rejects bad bytes without deleting concurrent staged replacements", async () => {
     mock.download.mockResolvedValue(Buffer.from("wrong size"));
-    mock.remove.mockRejectedValueOnce(new Error("storage unavailable"));
-    const response = await complete(req({ ticket }));
-    expect(response.status).toBe(500);
-    expect((await response.json()).retryCompletion).toBe(true);
     expect((await complete(req({ ticket }))).status).toBe(400);
-    expect(mock.remove).toHaveBeenCalledTimes(2);
+    expect(mock.remove).not.toHaveBeenCalled();
     expect(mock.insert).not.toHaveBeenCalled();
   });
 
@@ -352,30 +351,19 @@ describe("postCompleteUploadHandler", () => {
       error: "Not authorized for this artist",
     });
     expect(mock.download).not.toHaveBeenCalled();
-    expect(mock.remove).toHaveBeenCalledWith("lore-upload-staging", [path]);
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
-  it("keeps a revoked-owner rejection retryable if staging cleanup fails", async () => {
+  it("rejects revoked owner without deleting staged bytes", async () => {
     mock.canEdit.mockResolvedValue(false);
-    mock.remove.mockRejectedValue(new Error("storage unavailable"));
-    const response = await complete(req({ ticket }));
-    expect(response.status).toBe(500);
-    expect((await response.json()).retryCompletion).toBe(true);
-    expect(mock.download).not.toHaveBeenCalled();
+    expect((await complete(req({ ticket }))).status).toBe(403);
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
-  it("keeps mid-upload ownership loss retryable when only staging cleanup fails", async () => {
+  it("rejects mid-upload ownership loss while retaining bytes for reconciliation", async () => {
     mock.insert.mockRejectedValue(new OwnershipChangedError());
-    mock.remove
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("staging unavailable"));
-    const response = await complete(req({ ticket }));
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      status: "error",
-      error: "Could not clean up the rejected upload. Please retry this file.",
-      retryCompletion: true,
-    });
+    expect((await complete(req({ ticket }))).status).toBe(403);
+    expect(mock.remove).not.toHaveBeenCalled();
   });
 
   it("throws into a retryable 500 when the staged object is missing", async () => {
@@ -397,4 +385,12 @@ describe("postCompleteUploadHandler", () => {
     });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
+});
+
+it("rejects a ticket from an earlier claim even when the same user can edit again", async () => {
+  mock.claim.mockResolvedValue("replacement-claim");
+  expect((await complete(req({ ticket }))).status).toBe(403);
+  expect(mock.download).not.toHaveBeenCalled();
+  expect(mock.upload).not.toHaveBeenCalled();
+  expect(mock.insert).not.toHaveBeenCalled();
 });

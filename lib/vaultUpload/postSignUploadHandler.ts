@@ -1,3 +1,4 @@
+import { getLoreClaimGeneration } from "@/lib/ownership/getLoreClaimGeneration";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
@@ -26,6 +27,15 @@ export async function postSignUploadHandler(request: Request): Promise<NextRespo
     const body = await validateSignUploadBody(request);
     if (body instanceof NextResponse) return body;
     const { artistId, name, type, size } = body;
+    const expectedClaimId = await getLoreClaimGeneration(artistId);
+    if (expectedClaimId === null)
+      return NextResponse.json(
+        {
+          status: "error",
+          error: "Uploads require an approved claim while ownership generation is unavailable.",
+        },
+        { status: 403, headers },
+      );
     if (!(await canEditArtist(auth.userId, artistId)))
       return NextResponse.json(
         { status: "error", error: "Not authorized for this artist" },
@@ -41,6 +51,7 @@ export async function postSignUploadHandler(request: Request): Promise<NextRespo
     const signedUrl = await createSignedUploadUrl(LORE_UPLOAD_BUCKET, path);
     const ticket = signUploadTicket({
       userId: auth.userId,
+      expectedClaimId,
       artistId,
       path,
       name,
