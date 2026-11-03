@@ -1,3 +1,4 @@
+import { LoreChangedError } from "@/lib/lore/LoreChangedError";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
 import { hasPinnedBio } from "@/lib/bio/hasPinnedBio";
@@ -24,6 +25,10 @@ export async function generateArtistBio(
   artistId: string,
   auth: ArtistWriteAuth,
 ): Promise<GeneratedBio> {
+  // Leave time for transaction cleanup before the route's 60-second limit.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("Gemini timeout")), 45_000);
+  const signal = controller.signal;
   try {
     const artist = await getArtistById(artistId);
     if (!artist) return { httpStatus: 404, error: "Artist not found" };
@@ -34,24 +39,32 @@ export async function generateArtistBio(
         pinned: true,
         message: "Bio is pinned. Unpin it before regenerating.",
       };
-    const doc = await prepareAboutLore(artistId, auth);
+    const doc = await prepareAboutLore(artistId, auth, { signal });
     if ("error" in doc) return doc;
+    signal.throwIfAborted();
     const draft = await generateAboutFromDoc(
       artist.name ?? "Artist",
       doc.content,
       (doc.sources ?? []) as DocSource[],
+      { abortSignal: signal },
     );
     // As onboarding publishes it: the Lore keeps its citations, the About is prose.
     const bio = sanitizeBioText(stripCitationMarkers(draft));
     if (!/\p{L}/u.test(bio)) throw new Error("About generation returned no prose");
     const saved = await persistArtistBio(artistId, bio, {
       generated: true,
+      signal,
       expectedBio: artist.bio,
+      expectedLore: { content: doc.content, sources: (doc.sources ?? []) as DocSource[] },
       ownership: auth,
     });
     return { httpStatus: 200, bio: saved };
   } catch (error) {
-    if (error instanceof BioConflictError || error instanceof OwnershipChangedError)
+    if (
+      error instanceof LoreChangedError ||
+      error instanceof BioConflictError ||
+      error instanceof OwnershipChangedError
+    )
       return { httpStatus: 409, error: error.message };
     if (error instanceof Error && error.message === "Gemini timeout")
       return {
@@ -63,5 +76,8 @@ export async function generateArtistBio(
       httpStatus: 500,
       error: "Could not generate About from Lore. Your existing About has been kept.",
     };
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
 }

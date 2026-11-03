@@ -25,3 +25,6 @@ export type BioUpdateResult = {
   statusCode?: number;
   code?: string;
 };
+
+/** Exact durable Lore lease acquired by an About request. */
+export type AboutLoreLease = { jobId: string; claimedAt: string; requestedAt: string };

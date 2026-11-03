@@ -51,6 +51,7 @@ describe("refreshArtistDoc", () => {
       "j1",
       summary,
       undefined,
+      undefined,
     );
   });
 

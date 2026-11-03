@@ -22,11 +22,20 @@ export async function generateAboutFromDoc(
   artistName: string,
   docContent: string,
   sources: DocSource[] = [],
-  { onTextDelta }: Pick<StreamTextOptions, "onTextDelta"> = {},
+  { onTextDelta, abortSignal }: Pick<StreamTextOptions, "onTextDelta" | "abortSignal"> = {},
 ): Promise<string> {
+  abortSignal?.throwIfAborted();
+  const callSignal = abortSignal
+    ? AbortSignal.any([abortSignal, AbortSignal.timeout(GEMINI_ABOUT_TIMEOUT_MS)])
+    : undefined;
   const response = await withTimeout(
     streamText({
       onTextDelta,
+      ...(abortSignal
+        ? {
+            abortSignal: callSignal,
+          }
+        : {}),
       prompt: `ARTIST KNOWLEDGE DOCUMENT:\n${docContent}`,
       instructions: aboutSystemInstruction(artistName),
       temperature: 0.5,
@@ -35,6 +44,7 @@ export async function generateAboutFromDoc(
     GEMINI_ABOUT_TIMEOUT_MS,
     "Gemini timeout",
   );
+  if (callSignal?.aborted) throw new Error("Gemini timeout");
   const raw = response.text?.trim();
   if (!raw) throw new Error("About generation returned empty text");
   return validateCitations(raw, sources).slice(0, MAX_BIO_LENGTH);

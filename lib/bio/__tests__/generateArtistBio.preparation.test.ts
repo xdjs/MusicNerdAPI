@@ -23,7 +23,7 @@ vi.mock("@/lib/bio/hasPinnedBio", () => ({ hasPinnedBio: async () => false }));
 vi.mock("@/lib/artists/getArtistById", () => ({
   getArtistById: async () => ({ id: "a", name: "New Artist", bio: null }),
 }));
-vi.mock("@/lib/research/settleLoreRefresh", () => ({ settleLoreRefresh: m.settle }));
+vi.mock("@/lib/bio/finishAboutLoreRefresh", () => ({ finishAboutLoreRefresh: m.settle }));
 vi.mock("@/lib/research/failResearchJob", () => ({ failResearchJob: m.fail }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
 const { generateArtistBio } = await import("../generateArtistBio");
@@ -33,7 +33,12 @@ const sources = [
 ];
 beforeEach(() => {
   vi.resetAllMocks();
-  m.reserve.mockResolvedValue({ status: "acquired", jobId: "j", requestedAt: "" });
+  m.reserve.mockResolvedValue({
+    status: "acquired",
+    jobId: "j",
+    requestedAt: "",
+    claimedAt: "lease",
+  });
   m.doc.mockResolvedValue(undefined);
   m.material.mockResolvedValue({
     artist: { name: "New Artist" },
@@ -65,13 +70,31 @@ beforeEach(() => {
 });
 it("takes a newly added artist's approved readable Lore through document persistence and then About", async () => {
   expect(await generateArtistBio("a", auth)).toEqual({ httpStatus: 200, bio: "New About" });
-  expect(m.saveDoc).toHaveBeenCalledWith("a", "New Lore [1]", sources, null, "j", undefined, auth);
-  expect(m.about).toHaveBeenCalledWith("New Artist", "New Lore [1]", sources);
+  expect(m.saveDoc).toHaveBeenCalledWith(
+    "a",
+    "New Lore [1]",
+    sources,
+    null,
+    "j",
+    undefined,
+    auth,
+    {
+      jobId: "j",
+      requestedAt: "",
+      claimedAt: "lease",
+    },
+    expect.any(AbortSignal),
+  );
+  expect(m.about).toHaveBeenCalledWith("New Artist", "New Lore [1]", sources, {
+    abortSignal: expect.any(AbortSignal),
+  });
   expect(m.about.mock.invocationCallOrder[0]).toBeGreaterThan(
     m.saveDoc.mock.invocationCallOrder[0],
   );
   expect(m.saveAbout).toHaveBeenCalledWith("a", "New About", {
     generated: true,
+    signal: expect.any(AbortSignal),
+    expectedLore: { content: "New Lore [1]", sources },
     expectedBio: null,
     ownership: auth,
   });
@@ -81,7 +104,9 @@ it("reuses an artist's existing document", async () => {
   m.doc.mockResolvedValue({ content: "Existing Lore", sources });
   expect(await generateArtistBio("a", auth)).toMatchObject({ httpStatus: 200 });
   expect(m.synthesize).not.toHaveBeenCalled();
-  expect(m.about).toHaveBeenCalledWith("New Artist", "Existing Lore", sources);
+  expect(m.about).toHaveBeenCalledWith("New Artist", "Existing Lore", sources, {
+    abortSignal: expect.any(AbortSignal),
+  });
 });
 it("reports Lore preparation failure and never starts About", async () => {
   m.synthesize.mockRejectedValue(new Error("provider failed"));

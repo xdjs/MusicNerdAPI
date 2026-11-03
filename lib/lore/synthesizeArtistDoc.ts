@@ -21,11 +21,15 @@ import { validateCitations } from "@/lib/lore/validateCitations";
 export async function synthesizeArtistDoc(
   artistId: string,
   presetSources?: DocSource[],
-  { onTextDelta }: Pick<StreamTextOptions, "onTextDelta"> = {},
+  { onTextDelta, abortSignal }: Pick<StreamTextOptions, "onTextDelta" | "abortSignal"> = {},
 ): Promise<{ doc: string; sources: DocSource[] }> {
   const { artistName, context, sources } = await buildDocContext(artistId, presetSources);
   const today = new Date().toISOString().slice(0, 10);
+  const callSignal = abortSignal
+    ? AbortSignal.any([abortSignal, AbortSignal.timeout(GEMINI_TIMEOUT_MS)])
+    : undefined;
   const call = {
+    ...(abortSignal ? { abortSignal: callSignal } : {}),
     prompt: context,
     instructions: docSystemInstruction(artistName, today),
     temperature: 0.4,
@@ -33,11 +37,13 @@ export async function synthesizeArtistDoc(
   };
   // Streamed only when the onboarding build shows it being written; the Lore
   // refresh keeps its non-streaming call.
+  abortSignal?.throwIfAborted();
   const response = await withTimeout(
     onTextDelta ? streamText({ ...call, onTextDelta }) : generateText(call),
     GEMINI_TIMEOUT_MS,
     "Gemini timeout",
   );
+  if (callSignal?.aborted) throw new Error("Gemini timeout");
   const raw = response.text?.trim();
   if (!raw) throw new Error("Doc synthesis returned empty text");
   return { doc: validateCitations(raw, sources).slice(0, ARTIST_DOC_MAX_CHARS), sources };

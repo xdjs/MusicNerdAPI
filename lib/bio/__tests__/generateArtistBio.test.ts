@@ -38,10 +38,14 @@ describe("generateArtistBio", () => {
       httpStatus: 200,
       bio: "About from Lore",
     });
-    expect(mock.generateAboutFromDoc).toHaveBeenCalledWith("Artist", "Stored Lore [1]", manifest);
+    expect(mock.generateAboutFromDoc).toHaveBeenCalledWith("Artist", "Stored Lore [1]", manifest, {
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(mock.persistArtistBio).toHaveBeenCalledWith("a1", "About from Lore", {
       generated: true,
+      signal: expect.any(AbortSignal),
       expectedBio: "Original About",
+      expectedLore: { content: "Stored Lore [1]", sources: manifest },
       ownership: auth,
     });
   });
@@ -126,4 +130,21 @@ describe("generateArtistBio", () => {
       bio: "東京の音楽家です。",
     });
   });
+});
+
+it("aborts the request budget and never starts About after a delayed prerequisite", async () => {
+  vi.useFakeTimers();
+  try {
+    mock.prepareAboutLore.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 46_000));
+      return { content: "Lore", sources: manifest };
+    });
+    const result = generateArtistBio("a1", auth);
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(await result).toMatchObject({ httpStatus: 408 });
+    expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
+    expect(mock.persistArtistBio).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });

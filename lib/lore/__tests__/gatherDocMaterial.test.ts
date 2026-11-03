@@ -63,7 +63,7 @@ describe("gatherDocMaterial", () => {
       ...signals,
       ...credits,
     });
-    expect(m.getVaultSourcesByStatus).toHaveBeenCalledWith("a1", "approved");
+    expect(m.getVaultSourcesByStatus).toHaveBeenCalledWith("a1", "approved", true);
     expect(m.socialSignalSources).toHaveBeenCalledWith([{ url: "p" }], "novareyes", "Nova Reyes");
   });
 

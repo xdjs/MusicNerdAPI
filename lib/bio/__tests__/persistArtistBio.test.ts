@@ -3,12 +3,14 @@ import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 
 const m = vi.hoisted(() => ({
   lockArtistRow: vi.fn(),
+  assertLore: vi.fn(),
   authorize: vi.fn(),
   findApprovedClaim: vi.fn(),
   record: vi.fn(),
   saveBioVersions: vi.fn(),
   transaction: vi.fn(),
 }));
+vi.mock("@/lib/bio/assertAboutLoreCurrent", () => ({ assertAboutLoreCurrent: m.assertLore }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: m.transaction } }));
 vi.mock("@/lib/db/lockArtistRow", () => ({ lockArtistRow: m.lockArtistRow }));
 vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
@@ -264,4 +266,26 @@ describe("persistArtistBio", () => {
     ).rejects.toThrow("confirmation failed");
     expect(set).not.toHaveBeenCalled();
   });
+});
+
+it("revalidates the exact Lore before any About/history writes and preserves them on source change", async () => {
+  const { tx, set } = setup();
+  const expectedLore = { content: "Lore", sources: [] };
+  m.assertLore.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(persistArtistBio("a1", "New", { ownership: owner, expectedLore })).rejects.toThrow(
+    "Lore sources changed",
+  );
+  expect(m.assertLore).toHaveBeenCalledWith(tx, "a1", expectedLore);
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+it("does not publish when the deadline elapses while waiting for the artist lock", async () => {
+  const { set } = setup();
+  const controller = new AbortController();
+  m.lockArtistRow.mockImplementation(async () => controller.abort(new Error("deadline")));
+  await expect(
+    persistArtistBio("a1", "New", { ownership: owner, signal: controller.signal }),
+  ).rejects.toThrow("deadline");
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
 });

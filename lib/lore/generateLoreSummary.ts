@@ -14,12 +14,22 @@ import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
  */
 export async function generateLoreSummary(
   artistId: string,
+  abortSignal?: AbortSignal,
 ): Promise<LoreSummary | null | undefined> {
   try {
     const sources = await getVaultSourcesByStatus(artistId, "approved");
     if (!sources.length) return null;
+    abortSignal?.throwIfAborted();
+    const callSignal = abortSignal
+      ? AbortSignal.any([abortSignal, AbortSignal.timeout(GEMINI_ABOUT_TIMEOUT_MS)])
+      : undefined;
     const response = await withTimeout(
       generateText({
+        ...(abortSignal
+          ? {
+              abortSignal: callSignal,
+            }
+          : {}),
         prompt: JSON.stringify(
           sources.map(source => ({ title: source.title, type: source.type ?? "article" })),
         ),
@@ -31,6 +41,7 @@ export async function generateLoreSummary(
       GEMINI_ABOUT_TIMEOUT_MS,
       "Gemini timeout",
     );
+    if (callSignal?.aborted) throw new Error("Gemini timeout");
     const text = response.text?.trim();
     return text && text.length <= LORE_SUMMARY_MAX_CHARS
       ? { text, sourceKey: loreSourceKey(sources) }

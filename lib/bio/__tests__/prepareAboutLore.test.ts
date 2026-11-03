@@ -8,7 +8,7 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/bio/reserveAboutLoreRefresh", () => ({ reserveAboutLoreRefresh: m.reserve }));
 vi.mock("@/lib/lore/refreshArtistDoc", () => ({ refreshArtistDoc: m.refresh }));
-vi.mock("@/lib/research/settleLoreRefresh", () => ({ settleLoreRefresh: m.settle }));
+vi.mock("@/lib/bio/finishAboutLoreRefresh", () => ({ finishAboutLoreRefresh: m.settle }));
 vi.mock("@/lib/research/failResearchJob", () => ({ failResearchJob: m.fail }));
 vi.mock("@/lib/lore/getArtistDocStrict", () => ({ getArtistDocStrict: m.doc }));
 const { prepareAboutLore } = await import("../prepareAboutLore");
@@ -16,7 +16,12 @@ const auth = { userId: "u", expectedClaimId: null };
 const doc = { content: "Readable Lore", sources: [] };
 beforeEach(() => {
   vi.resetAllMocks();
-  m.reserve.mockResolvedValue({ status: "acquired", jobId: "j", requestedAt: "t" });
+  m.reserve.mockResolvedValue({
+    status: "acquired",
+    jobId: "j",
+    requestedAt: "t",
+    claimedAt: "lease",
+  });
   m.refresh.mockResolvedValue("rebuilt");
   m.settle.mockResolvedValue(true);
   m.doc.mockResolvedValue(doc);
@@ -29,8 +34,13 @@ describe("prepareAboutLore", () => {
       jobId: "j",
       expectedClaimId: null,
       auth,
+      lease: { jobId: "j", requestedAt: "t", claimedAt: "lease" },
     });
-    expect(m.settle).toHaveBeenCalledWith("j", "t");
+    expect(m.settle).toHaveBeenCalledWith(
+      "a",
+      { jobId: "j", requestedAt: "t", claimedAt: "lease" },
+      "rebuilt",
+    );
     expect(m.doc.mock.invocationCallOrder[0]).toBeGreaterThan(
       m.refresh.mock.invocationCallOrder[0],
     );
@@ -73,8 +83,11 @@ describe("prepareAboutLore", () => {
       httpStatus: 500,
       code: "LORE_PREPARATION_FAILED",
     });
-    expect(m.fail).toHaveBeenCalledWith("j", "Could not prepare Lore for About");
-    expect(m.settle).not.toHaveBeenCalled();
+    expect(m.settle).toHaveBeenCalledWith(
+      "a",
+      { jobId: "j", requestedAt: "t", claimedAt: "lease" },
+      "failed",
+    );
   });
   it("does not use a document after ownership changed", async () => {
     m.refresh.mockResolvedValue("cancelled");
@@ -97,4 +110,28 @@ describe("prepareAboutLore", () => {
       code: "LORE_PREPARATION_FAILED",
     });
   });
+});
+it("recovers its own lease when settlement throws once", async () => {
+  m.settle.mockRejectedValueOnce(new Error("transient")).mockResolvedValue(false);
+  expect(await prepareAboutLore("a", auth)).toMatchObject({ httpStatus: 500 });
+  expect(m.settle).toHaveBeenCalledTimes(2);
+  expect(m.settle.mock.calls[1][2]).toBe("failed");
+});
+it("reports recovery delay if both settlement and cleanup fail", async () => {
+  m.settle.mockRejectedValue(new Error("offline"));
+  expect(await prepareAboutLore("a", auth)).toMatchObject({
+    httpStatus: 500,
+    error: expect.stringContaining("few minutes"),
+  });
+});
+it("cleans up an unexpected refresh rejection", async () => {
+  m.refresh.mockRejectedValue(new Error("unexpected"));
+  expect(await prepareAboutLore("a", auth)).toMatchObject({ httpStatus: 500 });
+  expect(m.settle.mock.calls[0][2]).toBe("failed");
+});
+it("does not reserve or generate after the request deadline", async () => {
+  const signal = AbortSignal.abort(new Error("deadline"));
+  expect(await prepareAboutLore("a", auth, { signal })).toMatchObject({ httpStatus: 500 });
+  expect(m.reserve).not.toHaveBeenCalled();
+  expect(m.refresh).not.toHaveBeenCalled();
 });
