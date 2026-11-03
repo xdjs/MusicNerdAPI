@@ -107,6 +107,17 @@ it("claims once, uses real-boundary names without fixture overrides, and retains
   expect(m.sources).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
   expect(m.turn).toHaveBeenCalledTimes(1);
   expect(result.diagnostic.records[0].kind).toBe("source-preflight");
+  const guard = JSON.parse(readFileSync(m.guard.mock.calls[0][0].manifestPath, "utf8"));
+  expect(guard).toMatchObject({
+    maxInputBytes: 128000,
+    maxTotalInputBytes: 196608,
+    maxCalls: 6,
+    maxOutputTokens: 1024,
+    maxToolExecutions: 12,
+    toolLimits: { webSearch: 2 },
+  });
+  expect(result.diagnostic.reservationUsd).toBe(0.65);
+  expect(result.diagnostic.invoiceGuarantee).toBe(false);
   expect(m.turn.mock.calls[0][0]).toEqual({
     artistId: "11111111-1111-4111-8111-111111111111",
     question: "Question",

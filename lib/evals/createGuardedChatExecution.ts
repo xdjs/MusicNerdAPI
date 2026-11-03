@@ -26,6 +26,7 @@ const manifestSchema = z
     maxToolExecutions: z.number().int().min(1).max(12),
     maxCalls: z.number().int().min(1).max(6),
     maxInputBytes: z.number().int().min(1).max(128000),
+    maxTotalInputBytes: z.number().int().min(1).max(196608),
     maxOutputTokens: z.number().int().min(1).max(2048),
     maxOutputCharacters: z.number().int().min(1).max(8192),
     maxCaptureBytes: z.number().int().min(1).max(1000000),
@@ -54,17 +55,28 @@ export function createGuardedChatExecution({
   let failed = false;
   let failureReason: string | undefined;
   let calls = 0;
+  let consumedInputBytes = 0;
   let bytes = 0;
   let outputCharacters = 0;
   let toolExecutions = 0;
   const toolCounts = new Map<string, number>();
   const abort = new AbortController();
-  const fail = (reason: string): never => {
+  const fail = (
+    reason: string,
+    admission?: { inputBytes: number; attemptedCall: number },
+  ): never => {
     const firstFailure = !failed;
     failed = true;
     failureReason ??= reason;
     if (firstFailure) {
-      const value = { reason: failureReason, calls, toolExecutions };
+      const value = {
+        reason: failureReason,
+        calls,
+        toolExecutions,
+        consumedInputBytes,
+        remainingInputBytes: manifest.maxTotalInputBytes - consumedInputBytes,
+        ...admission,
+      };
       const size = Buffer.byteLength(JSON.stringify({ kind: "guard-failure", value }));
       if (bytes + size <= manifest.maxCaptureBytes) {
         bytes += size;
@@ -123,11 +135,23 @@ export function createGuardedChatExecution({
             fail("eval_nontext_input");
         }
         const { abortSignal: _signal, headers: _headers, ...prepared } = params;
-        if (Buffer.byteLength(JSON.stringify(prepared)) > manifest.maxInputBytes)
-          fail("eval_input_limit");
-        if (calls >= manifest.maxCalls) fail("eval_call_limit");
-        capture("model-input", { call: calls + 1, prepared });
+        const inputBytes = Buffer.byteLength(JSON.stringify(prepared));
+        const admission = { inputBytes, attemptedCall: calls + 1 };
+        if (inputBytes > manifest.maxInputBytes) fail("eval_input_limit", admission);
+        if (inputBytes > manifest.maxTotalInputBytes - consumedInputBytes)
+          fail("eval_total_input_limit", admission);
+        if (calls >= manifest.maxCalls) fail("eval_call_limit", admission);
+        // Reserve synchronously before capture/forward, including repeated or cached prefixes.
+        // A failed capture or failed/uncertain forward never releases this reservation.
+        consumedInputBytes += inputBytes;
         calls++;
+        capture("model-input", {
+          call: calls,
+          prepared,
+          inputBytes,
+          consumedInputBytes,
+          remainingInputBytes: manifest.maxTotalInputBytes - consumedInputBytes,
+        });
         const result = await doStream();
         let finished = false;
         return {

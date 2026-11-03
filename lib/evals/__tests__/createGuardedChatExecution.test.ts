@@ -77,6 +77,7 @@ function setup(
     maxToolExecutions: 12,
     maxCalls: 3,
     maxInputBytes: 128000,
+    maxTotalInputBytes: 196608,
     maxOutputTokens: 128,
     maxOutputCharacters: 8192,
     maxCaptureBytes: 1000000,
@@ -568,6 +569,46 @@ it("rejects unknown custom content and retains the specific guard reason", async
     reason: "eval_nontext_input",
     calls: 1,
     toolExecutions: 1,
+  });
+  expect(external).not.toHaveBeenCalled();
+});
+
+it("charges full repeated inputs cumulatively and reports a rejected continuation", async () => {
+  const model = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () => result(true),
+  });
+  const tools = {
+    searchSources: tool({
+      inputSchema: z.object({ query: z.string() }),
+      execute: async () => ({ text: "界".repeat(500) }),
+    }),
+  };
+  const probe = setup(model);
+  await probe.execute({ model: MODEL_CHAT, prompt: "q", tools, stopWhen: isStepCount(2) });
+  const sizes = model.doStreamCalls.map(({ abortSignal: _a, headers: _h, ...p }) =>
+    Buffer.byteLength(JSON.stringify(p)),
+  );
+  const sum = sizes[0] + sizes[1];
+  events.length = 0;
+  // A distinct directory isolates the one-shot marker for this independent offline fixture.
+  rmSync(dir, { recursive: true, force: true });
+  dir = mkdtempSync(join(tmpdir(), "mn1424-cumulative-"));
+  const bounded = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () => result(true),
+  });
+  const { execute } = setup(bounded, { maxTotalInputBytes: sum - 1 });
+  await expect(
+    execute({ model: MODEL_CHAT, prompt: "q", tools, stopWhen: isStepCount(2) }),
+  ).rejects.toThrow();
+  expect(bounded.doStreamCalls).toHaveLength(1);
+  expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+    reason: "eval_total_input_limit",
+    attemptedCall: 2,
+    inputBytes: sizes[1],
+    consumedInputBytes: sizes[0],
+    remainingInputBytes: sizes[1] - 1,
   });
   expect(external).not.toHaveBeenCalled();
 });
