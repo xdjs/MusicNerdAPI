@@ -13,39 +13,40 @@ export async function prepareAboutLore(
   auth: ArtistWriteAuth,
   options: { signal?: AbortSignal } = {},
 ): Promise<
-  | NonNullable<Awaited<ReturnType<typeof getArtistDocStrict>>>
+  | (NonNullable<Awaited<ReturnType<typeof getArtistDocStrict>>> & { aboutLease: AboutLoreLease })
   | Exclude<GeneratedBio, { httpStatus: 200 }>
 > {
   const busy = {
     httpStatus: 409 as const,
     code: "LORE_PREPARING" as const,
     error:
-      "Lore preparation is still in progress. Please try Regenerate About again shortly. Your existing About has been kept.",
+      "Lore or About generation is already in progress. Please try Regenerate About again shortly. Your existing About has been kept.",
   };
   let acquired: AboutLoreLease | undefined;
   try {
-    for (let attempt = 0; attempt <= 20; attempt++) {
-      options.signal?.throwIfAborted();
-      const reservation = await reserveAboutLoreRefresh(artistId, auth);
-      if (reservation.status === "busy") {
-        if (attempt === 20) return busy;
-        await new Promise(resolve => setTimeout(resolve, 500));
-        continue;
-      }
-      if (reservation.status === "acquired") {
-        acquired = {
-          jobId: reservation.jobId,
-          requestedAt: reservation.requestedAt,
-          claimedAt: reservation.claimedAt,
-        };
-        const result = await refreshArtistDoc(artistId, {
-          createIfMissing: true,
-          jobId: acquired.jobId,
-          expectedClaimId: auth.expectedClaimId,
-          auth,
-          lease: acquired,
-          ...(options.signal ? { signal: options.signal } : {}),
-        });
+    options.signal?.throwIfAborted();
+    const reservation = await reserveAboutLoreRefresh(artistId, auth);
+    if (reservation.status === "busy") {
+      return busy;
+    }
+    {
+      acquired = {
+        jobId: reservation.jobId,
+        requestedAt: reservation.requestedAt,
+        claimedAt: reservation.claimedAt,
+      };
+      const result =
+        reservation.needsRefresh === false
+          ? "rebuilt"
+          : await refreshArtistDoc(artistId, {
+              createIfMissing: true,
+              jobId: acquired.jobId,
+              expectedClaimId: auth.expectedClaimId,
+              auth,
+              lease: acquired,
+              ...(options.signal ? { signal: options.signal } : {}),
+            });
+      if (result !== "rebuilt") {
         const settled = await finishAboutLoreRefresh(
           artistId,
           acquired,
@@ -64,11 +65,12 @@ export async function prepareAboutLore(
               "About needs approved, readable Lore. If you just added a link, wait for source processing or review to finish, then try again. Your existing About has been kept.",
           };
       }
-      const doc = await getArtistDocStrict(artistId);
-      if (!doc?.content.trim()) throw new Error("Prepared Lore is unavailable");
-      return doc;
     }
-    return busy;
+    options.signal?.throwIfAborted();
+    const doc = await getArtistDocStrict(artistId);
+    if (!doc?.content.trim()) throw new Error("Prepared Lore is unavailable");
+    if (!acquired) throw new Error("About lease unavailable");
+    return { ...doc, aboutLease: acquired };
   } catch (error) {
     // A settlement error or unexpected rejection must not strand a lease when
     // storage has recovered. The exact token prevents releasing another worker.

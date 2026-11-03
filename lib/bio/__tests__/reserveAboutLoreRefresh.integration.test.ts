@@ -60,12 +60,15 @@ it("reserves exactly one Lore job for a new artist, with editor attribution", as
     (await client.query("select actor_user_id,trigger from artist_activity_events")).rows,
   ).toEqual([{ actor_user_id: owner, trigger: "about_editor" }]);
 });
-it("reuses current Lore without creating a job", async () => {
+it("leases current Lore without rebuilding", async () => {
   await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
     artist,
   ]);
-  expect(await reserveAboutLoreRefresh(artist, auth)).toEqual({ status: "ready" });
-  expect((await client.query("select * from artist_research_jobs")).rows).toEqual([]);
+  expect(await reserveAboutLoreRefresh(artist, auth)).toMatchObject({
+    status: "acquired",
+    needsRefresh: false,
+  });
+  expect((await client.query("select * from artist_research_jobs")).rows).toHaveLength(1);
 });
 it("reuses a queued refresh even when an old document exists, preserving requestedAt", async () => {
   await client.query("insert into artist_docs(artist_id,content) values($1,'Old Lore')", [artist]);
@@ -111,9 +114,13 @@ it("permits an authorized admin to prepare an unclaimed newly added artist", asy
   expect(await reserveAboutLoreRefresh(artist, { ...auth, expectedClaimId: null })).toMatchObject({
     status: "acquired",
   });
-  expect((await client.query("select state from artist_research_jobs")).rows).toEqual([
-    { state: { claimId: null } },
-  ]);
+  expect(
+    (
+      await client.query<{ state: Record<string, unknown> }>(
+        "select state from artist_research_jobs",
+      )
+    ).rows,
+  ).toEqual([{ state: { claimId: null } }]);
   await client.exec(`update users set is_admin=false where id='${owner}'`);
 });
 
@@ -139,7 +146,10 @@ it.each(["pending", "rejected", "unreadable"])(
         state === "unreadable" ? "approved" : state,
       ],
     );
-    expect(await reserveAboutLoreRefresh(artist, auth)).toEqual({ status: "ready" });
+    expect(await reserveAboutLoreRefresh(artist, auth)).toMatchObject({
+      status: "acquired",
+      needsRefresh: false,
+    });
   },
 );
 it("does not reuse rejected-source Lore on either of two consecutive requests", async () => {
@@ -261,4 +271,83 @@ it("does not charge an old failure against a newer refresh request", async () =>
     (await client.query("select status,claimed_at,attempts,last_error from artist_research_jobs"))
       .rows,
   ).toEqual([{ status: "pending", claimed_at: null, attempts: 0, last_error: null }]);
+});
+it("leases current Lore for the entire About operation so concurrent requests cannot both start", async () => {
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+    artist,
+  ]);
+  const results = await Promise.all([
+    reserveAboutLoreRefresh(artist, auth),
+    reserveAboutLoreRefresh(artist, auth),
+  ]);
+  expect(results.filter(r => r.status === "acquired")).toHaveLength(1);
+  expect(results.find(r => r.status === "acquired")).toMatchObject({ needsRefresh: false });
+  expect(results.filter(r => r.status === "busy")).toHaveLength(1);
+});
+it("rolls back lease settlement when the enclosing About transaction fails", async () => {
+  const lease = await takeLease();
+  await expect(
+    database.transaction(async tx => {
+      expect(await finishAboutLoreRefresh(artist, lease, "rebuilt", tx as never)).toBe(true);
+      throw new Error("About write failed");
+    }),
+  ).rejects.toThrow("About write failed");
+  expect(
+    (await client.query("select status,claimed_at is not null as leased from artist_research_jobs"))
+      .rows,
+  ).toEqual([{ status: "running", leased: true }]);
+  expect(await finishAboutLoreRefresh(artist, lease, "rebuilt")).toBe(true);
+});
+it("does not impose a Lore rebuild cooldown after an About-only request", async () => {
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+    artist,
+  ]);
+  const lease = await takeLease();
+  expect(await finishAboutLoreRefresh(artist, lease, "rebuilt")).toBe(true);
+  const { queueLoreRefreshInTransaction } =
+    await import("@/lib/research/queueLoreRefreshInTransaction");
+  expect(
+    await database.transaction(async tx =>
+      queueLoreRefreshInTransaction(tx as never, artist, claim, { manual: true }),
+    ),
+  ).toBe(true);
+});
+it("expired About-only leases become ordinary Lore rebuilds when the worker reclaims them", async () => {
+  await client.exec(
+    "create table if not exists artist_social_posts(artist_id uuid,is_own_post boolean,caption text)",
+  );
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+    artist,
+  ]);
+  const lease = await takeLease();
+  await client.exec("update artist_research_jobs set claimed_at=now()-interval '4 minutes'");
+  const { claimResearchJob } = await import("@/lib/research/claimResearchJob");
+  const job = await claimResearchJob({ kinds: ["lore_refresh"], artistId: artist });
+  expect(job?.id).toBe(lease.jobId);
+  expect(job?.state).not.toHaveProperty("aboutOnly");
+  expect(job?.attempts).toBe(1);
+  expect(await finishAboutLoreRefresh(artist, lease, "rebuilt")).toBe(false);
+});
+it("an explicit retry of a pending About-only lease rebuilds Lore and restores the normal cooldown", async () => {
+  await client.query("insert into artist_docs(artist_id,content) values($1,'Current Lore')", [
+    artist,
+  ]);
+  const lease = await takeLease();
+  await finishAboutLoreRefresh(artist, lease, "failed");
+  const retry = await takeLease();
+  expect(
+    (
+      await client.query<{ state: Record<string, unknown> }>(
+        "select state from artist_research_jobs",
+      )
+    ).rows[0].state,
+  ).not.toHaveProperty("aboutOnly");
+  await finishAboutLoreRefresh(artist, retry, "rebuilt");
+  const { queueLoreRefreshInTransaction } =
+    await import("@/lib/research/queueLoreRefreshInTransaction");
+  expect(
+    await database.transaction(async tx =>
+      queueLoreRefreshInTransaction(tx as never, artist, claim, { manual: true }),
+    ),
+  ).toBe(false);
 });

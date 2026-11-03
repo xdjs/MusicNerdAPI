@@ -5,6 +5,8 @@ import { hasPinnedBio } from "@/lib/bio/hasPinnedBio";
 import { prepareAboutLore } from "@/lib/bio/prepareAboutLore";
 import { persistArtistBio } from "@/lib/bio/persistArtistBio";
 import { sanitizeBioText } from "@/lib/bio/sanitizeBioText";
+import { finishAboutLoreRefresh } from "@/lib/bio/finishAboutLoreRefresh";
+import type { AboutLoreLease, AboutGenerationBudget } from "@/lib/bio/types";
 import type { GeneratedBio } from "@/lib/bio/types";
 import { generateAboutFromDoc } from "@/lib/lore/generateAboutFromDoc";
 import { stripCitationMarkers } from "@/lib/lore/stripCitationMarkers";
@@ -24,12 +26,22 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 export async function generateArtistBio(
   artistId: string,
   auth: ArtistWriteAuth,
+  budget: AboutGenerationBudget = {},
 ): Promise<GeneratedBio> {
   // Leave time for transaction cleanup before the route's 60-second limit.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error("Gemini timeout")), 45_000);
-  const signal = controller.signal;
+  const remaining = Math.min(45_000, (budget.deadline ?? Date.now() + 45_000) - Date.now());
+  if (remaining <= 0) controller.abort(new Error("Gemini timeout"));
+  const timer = setTimeout(
+    () => controller.abort(new Error("Gemini timeout")),
+    Math.max(0, remaining),
+  );
+  const signal = budget.signal
+    ? AbortSignal.any([controller.signal, budget.signal])
+    : controller.signal;
+  let aboutLease: AboutLoreLease | undefined;
   try {
+    signal.throwIfAborted();
     const artist = await getArtistById(artistId);
     if (!artist) return { httpStatus: 404, error: "Artist not found" };
     if (await hasPinnedBio(artistId))
@@ -41,6 +53,7 @@ export async function generateArtistBio(
       };
     const doc = await prepareAboutLore(artistId, auth, { signal });
     if ("error" in doc) return doc;
+    aboutLease = doc.aboutLease;
     signal.throwIfAborted();
     const draft = await generateAboutFromDoc(
       artist.name ?? "Artist",
@@ -53,20 +66,33 @@ export async function generateArtistBio(
     if (!/\p{L}/u.test(bio)) throw new Error("About generation returned no prose");
     const saved = await persistArtistBio(artistId, bio, {
       generated: true,
+      ...(aboutLease ? { aboutLease } : {}),
       signal,
       expectedBio: artist.bio,
       expectedLore: { content: doc.content, sources: (doc.sources ?? []) as DocSource[] },
       ownership: auth,
     });
+    aboutLease = undefined; // settled atomically with the About write
     return { httpStatus: 200, bio: saved };
   } catch (error) {
+    if (aboutLease) {
+      try {
+        await finishAboutLoreRefresh(artistId, aboutLease, "rebuilt");
+      } catch {
+        return {
+          httpStatus: 500,
+          error:
+            "About could not finish or release its preparation job. Your existing About has been kept. Wait a few minutes for recovery before trying again.",
+        };
+      }
+    }
     if (
       error instanceof LoreChangedError ||
       error instanceof BioConflictError ||
       error instanceof OwnershipChangedError
     )
       return { httpStatus: 409, error: error.message };
-    if (error instanceof Error && error.message === "Gemini timeout")
+    if (signal.aborted || (error instanceof Error && error.message === "Gemini timeout"))
       return {
         httpStatus: 408,
         error: "About generation timed out. Please try again. Your existing About has been kept.",

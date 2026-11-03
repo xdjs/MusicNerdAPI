@@ -37,12 +37,14 @@ export async function refreshArtistDoc(
   } = {},
 ): Promise<DocRefresh> {
   try {
+    options.signal?.throwIfAborted();
     const claimId =
       options.expectedClaimId !== undefined
         ? options.expectedClaimId
         : ((await findApprovedClaim(db, artistId))?.id ?? null);
     if (!options.createIfMissing && !(await getArtistDoc(artistId))) return "no-document";
     if (toSourceList(await gatherDocMaterial(artistId)).length === 0) return "no-material";
+    options.signal?.throwIfAborted();
     const [{ doc, sources }, summary] = await Promise.all([
       options.signal
         ? synthesizeArtistDoc(artistId, undefined, { abortSignal: options.signal })

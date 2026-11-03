@@ -1,3 +1,4 @@
+import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -9,9 +10,12 @@ export async function finishAboutLoreRefresh(
   artistId: string,
   lease: AboutLoreLease,
   outcome: "rebuilt" | "no-material" | "cancelled" | "changed" | "failed",
+  executor?: Pick<typeof db, "execute">,
 ): Promise<boolean> {
+  if (!executor) return db.transaction(tx => finishAboutLoreRefresh(artistId, lease, outcome, tx));
+  await limitAboutTransaction(executor);
   const rows = rowsOf(
-    await db.execute(sql`
+    await executor.execute(sql`
   update artist_research_jobs set
     status=case
       when coalesce(state->>'requestedAt','')<>${lease.requestedAt} or ${outcome}='changed' then 'pending'

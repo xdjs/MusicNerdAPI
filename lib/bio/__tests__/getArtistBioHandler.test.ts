@@ -99,7 +99,11 @@ describe("getArtistBioHandler", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok", bio: "Fresh." });
     expect(mock.order).toEqual(["claim", "auth"]);
-    expect(mock.generate).toHaveBeenCalledWith(id, { userId: "u1", expectedClaimId: "c1" });
+    expect(mock.generate).toHaveBeenCalledWith(
+      id,
+      { userId: "u1", expectedClaimId: "c1" },
+      { deadline: expect.any(Number), signal: expect.any(AbortSignal) },
+    );
   });
 
   it("regenerate passes on the auth failure and the generation error", async () => {

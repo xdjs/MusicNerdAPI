@@ -28,7 +28,10 @@ beforeEach(() => {
 });
 describe("prepareAboutLore", () => {
   it("creates missing Lore before returning the saved document", async () => {
-    expect(await prepareAboutLore("a", auth)).toEqual(doc);
+    expect(await prepareAboutLore("a", auth)).toEqual({
+      ...doc,
+      aboutLease: { jobId: "j", requestedAt: "t", claimedAt: "lease" },
+    });
     expect(m.refresh).toHaveBeenCalledWith("a", {
       createIfMissing: true,
       jobId: "j",
@@ -36,37 +39,33 @@ describe("prepareAboutLore", () => {
       auth,
       lease: { jobId: "j", requestedAt: "t", claimedAt: "lease" },
     });
-    expect(m.settle).toHaveBeenCalledWith(
-      "a",
-      { jobId: "j", requestedAt: "t", claimedAt: "lease" },
-      "rebuilt",
-    );
+    expect(m.settle).not.toHaveBeenCalled();
     expect(m.doc.mock.invocationCallOrder[0]).toBeGreaterThan(
       m.refresh.mock.invocationCallOrder[0],
     );
   });
   it("reuses a current document without rebuilding", async () => {
-    m.reserve.mockResolvedValue({ status: "ready" });
-    expect(await prepareAboutLore("a", auth)).toEqual(doc);
+    m.reserve.mockResolvedValue({
+      status: "acquired",
+      jobId: "j",
+      requestedAt: "t",
+      claimedAt: "lease",
+      needsRefresh: false,
+    });
+    expect(await prepareAboutLore("a", auth)).toEqual({
+      ...doc,
+      aboutLease: { jobId: "j", requestedAt: "t", claimedAt: "lease" },
+    });
     expect(m.refresh).not.toHaveBeenCalled();
   });
-  it("waits for another worker, then uses its document without duplicate generation", async () => {
-    vi.useFakeTimers();
-    m.reserve.mockResolvedValueOnce({ status: "busy" }).mockResolvedValue({ status: "ready" });
-    const result = prepareAboutLore("a", auth);
-    await vi.runAllTimersAsync();
-    expect(await result).toEqual(doc);
-    expect(m.refresh).not.toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-  it("bounds waiting for an in-flight or differently purposed job", async () => {
-    vi.useFakeTimers();
+  it("returns busy immediately without starting a second Lore or About operation", async () => {
     m.reserve.mockResolvedValue({ status: "busy" });
-    const result = prepareAboutLore("a", auth);
-    await vi.runAllTimersAsync();
-    expect(await result).toMatchObject({ httpStatus: 409, code: "LORE_PREPARING" });
+    expect(await prepareAboutLore("a", auth)).toMatchObject({
+      httpStatus: 409,
+      code: "LORE_PREPARING",
+    });
+    expect(m.reserve).toHaveBeenCalledTimes(1);
     expect(m.refresh).not.toHaveBeenCalled();
-    vi.useRealTimers();
   });
   it("explains that approved readable material is required", async () => {
     m.refresh.mockResolvedValue("no-material");
@@ -95,15 +94,22 @@ describe("prepareAboutLore", () => {
     expect(m.doc).not.toHaveBeenCalled();
   });
   it("does not generate About while newer sources still need a refresh", async () => {
+    m.refresh.mockResolvedValue("changed");
     m.settle.mockResolvedValue(false);
     expect(await prepareAboutLore("a", auth)).toMatchObject({
       httpStatus: 409,
-      code: "LORE_PREPARING",
+      error: expect.stringContaining("sources changed"),
     });
     expect(m.doc).not.toHaveBeenCalled();
   });
   it("does not turn a failed document read into missing material", async () => {
-    m.reserve.mockResolvedValue({ status: "ready" });
+    m.reserve.mockResolvedValue({
+      status: "acquired",
+      jobId: "j",
+      requestedAt: "t",
+      claimedAt: "lease",
+      needsRefresh: false,
+    });
     m.doc.mockRejectedValue(new Error("offline"));
     expect(await prepareAboutLore("a", auth)).toMatchObject({
       httpStatus: 500,
@@ -112,12 +118,14 @@ describe("prepareAboutLore", () => {
   });
 });
 it("recovers its own lease when settlement throws once", async () => {
+  m.refresh.mockResolvedValue("failed");
   m.settle.mockRejectedValueOnce(new Error("transient")).mockResolvedValue(false);
   expect(await prepareAboutLore("a", auth)).toMatchObject({ httpStatus: 500 });
   expect(m.settle).toHaveBeenCalledTimes(2);
   expect(m.settle.mock.calls[1][2]).toBe("failed");
 });
 it("reports recovery delay if both settlement and cleanup fail", async () => {
+  m.refresh.mockResolvedValue("failed");
   m.settle.mockRejectedValue(new Error("offline"));
   expect(await prepareAboutLore("a", auth)).toMatchObject({
     httpStatus: 500,

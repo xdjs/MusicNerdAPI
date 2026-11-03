@@ -23,7 +23,10 @@ export async function synthesizeArtistDoc(
   presetSources?: DocSource[],
   { onTextDelta, abortSignal }: Pick<StreamTextOptions, "onTextDelta" | "abortSignal"> = {},
 ): Promise<{ doc: string; sources: DocSource[] }> {
-  const { artistName, context, sources } = await buildDocContext(artistId, presetSources);
+  abortSignal?.throwIfAborted();
+  const { artistName, context, sources } = abortSignal
+    ? await buildDocContext(artistId, presetSources, abortSignal)
+    : await buildDocContext(artistId, presetSources);
   const today = new Date().toISOString().slice(0, 10);
   const callSignal = abortSignal
     ? AbortSignal.any([abortSignal, AbortSignal.timeout(GEMINI_TIMEOUT_MS)])

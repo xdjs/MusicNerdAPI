@@ -148,3 +148,10 @@ it("aborts the request budget and never starts About after a delayed prerequisit
     vi.useRealTimers();
   }
 });
+it("does not start any reads or models when the handler budget is already exhausted", async () => {
+  expect(await generateArtistBio("a1", auth, { deadline: Date.now() - 1 })).toMatchObject({
+    httpStatus: 408,
+  });
+  expect(mock.getArtistById).not.toHaveBeenCalled();
+  expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
+});

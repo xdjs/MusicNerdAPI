@@ -93,6 +93,7 @@ it("takes a newly added artist's approved readable Lore through document persist
   );
   expect(m.saveAbout).toHaveBeenCalledWith("a", "New About", {
     generated: true,
+    aboutLease: { jobId: "j", requestedAt: "", claimedAt: "lease" },
     signal: expect.any(AbortSignal),
     expectedLore: { content: "New Lore [1]", sources },
     expectedBio: null,
@@ -100,7 +101,13 @@ it("takes a newly added artist's approved readable Lore through document persist
   });
 });
 it("reuses an artist's existing document", async () => {
-  m.reserve.mockResolvedValue({ status: "ready" });
+  m.reserve.mockResolvedValue({
+    status: "acquired",
+    jobId: "j",
+    requestedAt: "",
+    claimedAt: "lease",
+    needsRefresh: false,
+  });
   m.doc.mockResolvedValue({ content: "Existing Lore", sources });
   expect(await generateArtistBio("a", auth)).toMatchObject({ httpStatus: 200 });
   expect(m.synthesize).not.toHaveBeenCalled();
@@ -136,4 +143,25 @@ it("has no model calls or About writes when no usable material is available", as
   expect(m.synthesize).not.toHaveBeenCalled();
   expect(m.about).not.toHaveBeenCalled();
   expect(m.saveAbout).not.toHaveBeenCalled();
+});
+it("keeps the Lore lease held while About is generating and releases it without a Lore failure on About error", async () => {
+  m.about.mockImplementation(async () => {
+    expect(m.settle).not.toHaveBeenCalled();
+    throw new Error("About failed");
+  });
+  expect(await generateArtistBio("a", auth)).toMatchObject({ httpStatus: 500 });
+  expect(m.settle).toHaveBeenCalledWith(
+    "a",
+    { jobId: "j", requestedAt: "", claimedAt: "lease" },
+    "rebuilt",
+  );
+});
+it("does not start model calls for an overlapping request", async () => {
+  m.reserve.mockResolvedValue({ status: "busy" });
+  expect(await generateArtistBio("a", auth)).toMatchObject({
+    httpStatus: 409,
+    code: "LORE_PREPARING",
+  });
+  expect(m.synthesize).not.toHaveBeenCalled();
+  expect(m.about).not.toHaveBeenCalled();
 });

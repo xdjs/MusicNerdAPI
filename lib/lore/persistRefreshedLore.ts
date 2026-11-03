@@ -1,3 +1,4 @@
+import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
 import type { AboutLoreLease } from "@/lib/bio/types";
 import { assertLoreRefreshLease } from "@/lib/lore/assertLoreRefreshLease";
 import { assertLoreSourcesCurrent } from "@/lib/lore/assertLoreSourcesCurrent";
@@ -39,6 +40,7 @@ export async function persistRefreshedLore(
   signal?: AbortSignal,
 ): Promise<boolean> {
   return db.transaction(async tx => {
+    if (lease) await limitAboutTransaction(tx);
     await lockArtistRow(tx, artistId);
     if (auth) await authorizeLockedArtistWrite(tx, artistId, { ...auth, expectedClaimId });
     if (lease) await assertLoreRefreshLease(tx, artistId, lease);

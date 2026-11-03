@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { renderSql } from "@/lib/db/__tests__/renderSql";
 const execute = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/db/db", () => ({ db: { execute } }));
+vi.mock("@/lib/db/db", () => ({
+  db: { execute, transaction: (fn: (tx: unknown) => unknown) => fn({ execute }) },
+}));
 const { finishAboutLoreRefresh } = await import("../finishAboutLoreRefresh");
 const lease = { jobId: "j", claimedAt: "2026-11-03T00:00:00Z", requestedAt: "r" };
 beforeEach(() => {
@@ -9,7 +11,7 @@ beforeEach(() => {
 });
 it("settles only the exact running lease and preserves a newer request", async () => {
   expect(await finishAboutLoreRefresh("a", lease, "rebuilt")).toBe(true);
-  const q = renderSql(execute.mock.calls[0][0]);
+  const q = renderSql(execute.mock.calls[1][0]);
   expect(q.text).toContain("status='running'");
   expect(q.text).toContain("claimed_at=");
   expect(q.text).toContain("state->>'requestedAt'");

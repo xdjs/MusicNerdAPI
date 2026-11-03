@@ -26,5 +26,8 @@ export type BioUpdateResult = {
   code?: string;
 };
 
+/** The handler's absolute generation deadline and client cancellation. */
+export type AboutGenerationBudget = { deadline?: number; signal?: AbortSignal };
+
 /** Exact durable Lore lease acquired by an About request. */
 export type AboutLoreLease = { jobId: string; claimedAt: string; requestedAt: string };

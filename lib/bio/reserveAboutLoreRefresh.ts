@@ -1,3 +1,4 @@
+import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { db } from "@/lib/db/db";
@@ -15,10 +16,17 @@ export async function reserveAboutLoreRefresh(
   artistId: string,
   auth: ArtistWriteAuth,
 ): Promise<
-  | { status: "ready" | "busy" }
-  | { status: "acquired"; jobId: string; requestedAt: string; claimedAt: string }
+  | { status: "busy" }
+  | {
+      status: "acquired";
+      jobId: string;
+      requestedAt: string;
+      claimedAt: string;
+      needsRefresh?: boolean;
+    }
 > {
   return db.transaction(async tx => {
+    await limitAboutTransaction(tx);
     await lockArtistRow(tx, artistId);
     await authorizeLockedArtistWrite(tx, artistId, auth);
     const jobs = rowsOf(
@@ -35,7 +43,7 @@ export async function reserveAboutLoreRefresh(
         return { status: "busy" };
       const claimed = rowsOf(
         await tx.execute(sql`
-        update artist_research_jobs set status='running', claimed_at=now(), updated_at=now()
+        update artist_research_jobs set status='running', claimed_at=now(), updated_at=now(), state=state - 'aboutOnly'
         where id=${job.id}::uuid and status='pending' and claimed_at is null
           and attempts < ${MAX_ATTEMPTS}
         returning id, claimed_at::text as claimed_at, coalesce(state->>'requestedAt','') as requested_at
@@ -55,10 +63,11 @@ export async function reserveAboutLoreRefresh(
       select content,sources from artist_docs where artist_id=${artistId}::uuid limit 1
     `),
     ) as { content: string; sources: DocSource[] | null }[];
+    let needsRefresh = true;
     if (docs[0]?.content?.trim()) {
       try {
         await assertLoreSourcesCurrent(tx, artistId, docs[0].sources ?? []);
-        return { status: "ready" };
+        needsRefresh = false;
       } catch (error) {
         if (!(error instanceof LoreChangedError)) throw error;
       }
@@ -75,7 +84,7 @@ export async function reserveAboutLoreRefresh(
     const claimed = rowsOf(
       await tx.execute(sql`
       insert into artist_research_jobs(artist_id,kind,status,claimed_at,state,activity_id)
-      values(${artistId}::uuid,'lore_refresh','running',now(),${JSON.stringify({ claimId: auth.expectedClaimId })}::jsonb,${activityId}::uuid)
+      values(${artistId}::uuid,'lore_refresh','running',now(),${JSON.stringify({ claimId: auth.expectedClaimId, ...(!needsRefresh ? { aboutOnly: true } : {}) })}::jsonb,${activityId}::uuid)
       on conflict (artist_id,kind) where status in ('pending','running') do nothing
       returning id, claimed_at::text as claimed_at
     `),
@@ -85,6 +94,7 @@ export async function reserveAboutLoreRefresh(
           status: "acquired",
           jobId: claimed[0].id,
           requestedAt: "",
+          needsRefresh,
           claimedAt: claimed[0].claimed_at,
         }
       : { status: "busy" };
