@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const mock = vi.hoisted(() => ({
+  fence: vi.fn(),
   authenticate: vi.fn(),
   canEdit: vi.fn(),
   claim: vi.fn(),
@@ -23,14 +24,7 @@ vi.mock("@/lib/vaultUpload/extractPdfText", () => ({ extractPdfText: mock.pdf })
 vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: mock.download }));
 vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
-vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({
-  withArtistUploadWrite: async (
-    _a: string,
-    _u: string,
-    _c: string | null,
-    write: (tx: object) => Promise<unknown>,
-  ) => write({}),
-}));
+vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: mock.fence }));
 const { postCompleteUploadHandler: complete } =
   await import("@/lib/vaultUpload/postCompleteUploadHandler");
 const { signUploadTicket } = await import("@/lib/vaultUpload/signUploadTicket");
@@ -49,6 +43,7 @@ let ticket: string;
 beforeEach(() => {
   vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+  mock.fence.mockReset().mockImplementation(async (_a, _u, _c, write) => write({}));
   mock.authenticate.mockReset().mockResolvedValue({ userId: "owner" });
   mock.canEdit.mockReset().mockResolvedValue(true);
   mock.claim.mockReset().mockResolvedValue("claim-1");
@@ -75,7 +70,7 @@ beforeEach(() => {
 describe("postCompleteUploadHandler", () => {
   it("runs the statements in order: download, check, publish, save, refresh, clean up", async () => {
     const order: string[] = [];
-    for (const [name, fn] of Object.entries(mock)) {
+    for (const [name, fn] of Object.entries(mock).filter(([name]) => name !== "fence")) {
       fn.mockImplementation(async (...args: unknown[]) => {
         order.push(name);
         if (name === "authenticate") return { userId: "owner" };
@@ -393,4 +388,20 @@ it("rejects a ticket from an earlier claim even when the same user can edit agai
   expect(mock.download).not.toHaveBeenCalled();
   expect(mock.upload).not.toHaveBeenCalled();
   expect(mock.insert).not.toHaveBeenCalled();
+});
+
+it("never upgrades a revoked claim ticket to independent contributor authority", async () => {
+  mock.claim.mockResolvedValue(null);
+  mock.canEdit.mockResolvedValue(true); // Admin status is not a replacement for original claim authority.
+  expect((await complete(req({ ticket }))).status).toBe(403);
+  expect(mock.insert).not.toHaveBeenCalled();
+  expect(mock.upload).not.toHaveBeenCalled();
+});
+it("does not expose an existing source when revocation wins after the initial check", async () => {
+  mock.byPath.mockResolvedValue({ id: "preserved-source", extractedText: "private fixture" });
+  mock.fence.mockRejectedValueOnce(new OwnershipChangedError());
+  const response = await complete(req({ ticket }));
+  expect(response.status).toBe(403);
+  expect(await response.text()).not.toContain("private fixture");
+  expect(mock.byPath).not.toHaveBeenCalled();
 });
