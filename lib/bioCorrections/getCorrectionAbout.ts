@@ -29,10 +29,11 @@ export async function getCorrectionAbout(
     public_about: unknown;
     pinned: boolean;
     status: string;
-  }>(sql`select r.artist_id, a.bio, a.bio_provenance, r.status, p.public_about,
+  }>(sql`select r.artist_id, a.bio, bp.provenance as bio_provenance, r.status, p.public_about,
     (select c.id from artist_claims c where c.artist_id=a.id and c.status='approved' limit 1) claim_id,
     exists(select 1 from artist_bio_versions v where v.artist_id=a.id and v.is_pinned) pinned
     from artist_bio_corrections r join artists a on a.id=r.artist_id
+    left join mn_private.artist_bio_provenance bp on bp.artist_id=a.id
     left join artist_directory_preparations p on p.artist_id=a.id where r.id=${reportId}::uuid`);
   if (!row || row.status !== "pending")
     throw new CorrectionAboutConflict("This report has already been reviewed or no longer exists.");

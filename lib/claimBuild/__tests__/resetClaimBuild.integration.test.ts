@@ -9,7 +9,14 @@ vi.mock("@/lib/db/db", () => ({
   },
 }));
 const client = new PGlite();
-const database = drizzle(client);
+const queries: string[] = [];
+const database = drizzle(client, {
+  logger: {
+    logQuery(query: string) {
+      queries.push(query);
+    },
+  },
+});
 const artistId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const otherId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
@@ -19,7 +26,9 @@ beforeAll(async () => {
   await client.exec(`
     CREATE TABLE artists (id uuid PRIMARY KEY, name text, spotify text, deezer text,
       instagram text, tiktok text, x text, youtube text, soundcloud text, bandcamp text,
-      twitch text, facebook text, discogs text, bio text, bio_provenance jsonb);
+      twitch text, facebook text, discogs text, bio text);
+    CREATE SCHEMA mn_private;
+    CREATE TABLE mn_private.artist_bio_provenance(artist_id uuid PRIMARY KEY,provenance jsonb);
     CREATE TABLE artist_onboarding_steps (artist_id uuid, step text);
     CREATE TABLE artist_vault_sources (id uuid DEFAULT gen_random_uuid(), artist_id uuid, origin text);
     CREATE TABLE artist_docs (id uuid DEFAULT gen_random_uuid(), artist_id uuid);
@@ -63,15 +72,27 @@ it("preserves catalog identity and mappings while resetting only the artist's re
   const otherBefore = (await client.query("SELECT * FROM artists WHERE id=$1", [otherId])).rows;
 
   const lineage = { version: 1, kind: "unknown", bioHash: "saved-hash" };
-  await client.query("update artists set bio_provenance=$1 where id=$2", [
-    JSON.stringify(lineage),
-    artistId,
-  ]);
+  await client.query(
+    "insert into mn_private.artist_bio_provenance(provenance,artist_id) values($1,$2)",
+    [JSON.stringify(lineage), artistId],
+  );
+  queries.length = 0;
   const removed = await resetClaimBuild(artistId);
+  const artistLock = queries.findIndex(query => query.includes("for update"));
+  const stepDelete = queries.findIndex(query => query.startsWith("delete from"));
+  const evidenceRead = queries.findIndex(query => query.includes("select provenance"));
+  expect(artistLock).toBeGreaterThanOrEqual(0);
+  expect(artistLock).toBeLessThan(stepDelete);
+  expect(artistLock).toBeLessThan(evidenceRead);
   expect(removed?.bioProvenance).toEqual(lineage);
   expect(
-    (await client.query("select bio_provenance from artists where id=$1", [artistId])).rows,
-  ).toEqual([{ bio_provenance: null }]);
+    (
+      await client.query(
+        "select provenance from mn_private.artist_bio_provenance where artist_id=$1",
+        [artistId],
+      )
+    ).rows,
+  ).toEqual([]);
 
   expect(
     (await client.query("SELECT * FROM artists WHERE id=$1", [artistId])).rows[0],

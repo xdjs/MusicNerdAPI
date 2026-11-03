@@ -53,6 +53,7 @@ vi.mock("@/lib/db/db", () => ({
   },
 }));
 const { persistArtistBio } = await import("../persistArtistBio");
+const { resetClaimBuild } = await import("@/lib/claimBuild/resetClaimBuild");
 const { reserveAboutLoreRefresh } = await import("../reserveAboutLoreRefresh");
 const { finishAboutLoreRefresh } = await import("../finishAboutLoreRefresh");
 const { getPublicSavedBio } = await import("../getPublicSavedBio");
@@ -166,7 +167,7 @@ describe.skipIf(!socket)(
       )
         throw new Error("Refusing non-disposable database");
       await admin!.unsafe(
-        "drop schema public cascade;create schema public;revoke create on schema public from public;grant usage on schema public to mnweb",
+        "drop schema if exists mn_private cascade;drop schema public cascade;create schema public;revoke create on schema public from public;grant usage on schema public to mnweb",
       );
       for (const [name, table] of Object.entries(tables)) {
         const columns = Object.values(getTableColumns(table))
@@ -195,13 +196,17 @@ describe.skipIf(!socket)(
       );
       await admin!`insert into artists(id,bio) values(${artist},'Legacy biography')`;
       await admin!`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},'Legacy pinned biography',true)`;
+      await admin!.unsafe(`do $$ begin
+        if not exists(select from pg_roles where rolname='anon') then create role anon; end if;
+        if not exists(select from pg_roles where rolname='authenticated') then create role authenticated; end if;
+      end $$`);
       for (const file of ["0060_source_publication.sql", "0061_about_evidence_provenance.sql"])
         await admin!.unsafe(readFileSync(`/tmp/mn-about-trusted-web/drizzle/${file}`, "utf8"));
-      expect(await client!`select bio,bio_provenance from artists`).toEqual([
-        { bio: "Legacy biography", bio_provenance: null },
-      ]);
       expect(
-        await client!`select bio_text,is_pinned,bio_provenance from artist_bio_versions`,
+        await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
+      ).toEqual([{ bio: "Legacy biography", bio_provenance: null }]);
+      expect(
+        await client!`select v.bio_text,v.is_pinned,p.provenance as bio_provenance from artist_bio_versions v left join mn_private.artist_bio_version_provenance p on p.version_id=v.id`,
       ).toEqual([{ bio_text: "Legacy pinned biography", is_pinned: true, bio_provenance: null }]);
       const [role] =
         await client!`select rolsuper,rolbypassrls from pg_roles where rolname=current_user`;
@@ -214,7 +219,9 @@ describe.skipIf(!socket)(
       holdCommit = undefined;
       startBarrier = undefined;
       backendPids.clear();
-      await admin!.unsafe(`truncate ${Object.keys(tables).join(",")}`);
+      await admin!.unsafe(
+        `truncate mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
+      );
       await admin!`insert into artists(id,name,bio) values(${artist},'Synthetic artist','Original')`;
       await admin!`insert into users(id,is_admin,is_white_listed) values(${user},true,true)`;
       await admin!`insert into artist_vault_sources(id,artist_id,activity_id,origin,status,publication,url,extracted_text) values(${sourceId},${artist},${event},'submission','approved','inherit',${source.url},${source.extractedText})`;
@@ -426,16 +433,63 @@ describe.skipIf(!socket)(
       ]);
     });
 
-    it("rolls back both provenance columns when the second table's migration lock times out", async () => {
-      await admin!.unsafe(
-        "alter table artists drop column bio_provenance;alter table artist_bio_versions drop column bio_provenance",
-      );
+    it("serializes reset behind generation and backs up matching committed text and lineage", async () => {
+      const held = await heldPublication();
+      const reset = capture(resetClaimBuild(artist));
+      try {
+        await waitForBlockedWriter();
+      } finally {
+        held.release();
+      }
+      expect((await held.outcome).error).toBeUndefined();
+      const result = await reset;
+      expect(result.error).toBeUndefined();
+      expect(result.value?.bio).toBe("Generated");
+      expect(result.value?.bioProvenance).toMatchObject({ kind: "generated", sources });
+      expect(await client!`select bio from artists`).toEqual([{ bio: null }]);
+      expect(await client!`select * from mn_private.artist_bio_provenance`).toHaveLength(0);
+      expect(await client!`select * from mn_private.artist_bio_version_provenance`).toHaveLength(1);
+    });
+
+    it("denies direct public provenance reads while old public artist reads retain their shape", async () => {
+      await admin!.unsafe(`do $$ begin
+        if not exists(select from pg_roles where rolname='anon') then create role anon; end if;
+        if not exists(select from pg_roles where rolname='authenticated') then create role authenticated; end if;
+      end $$;
+      grant usage on schema public to anon,authenticated;
+      grant select on artists to anon,authenticated;
+      create policy synthetic_public_read on artists for select to public using(true)`);
+      await persistArtistBio(artist, "Generated", publication);
+      for (const role of ["anon", "authenticated"]) {
+        const rows = await admin!.begin(async tx => {
+          await tx.unsafe(`set local role ${role}`);
+          return tx`select * from artists`;
+        });
+        expect(rows[0].bio).toBe("Generated");
+        expect(rows[0]).not.toHaveProperty("bio_provenance");
+        for (const table of ["artist_bio_provenance", "artist_bio_version_provenance"]) {
+          const result = await capture(
+            admin!.begin(async tx => {
+              await tx.unsafe(`set local role ${role}`);
+              return tx.unsafe(`select * from mn_private.${table}`);
+            }),
+          );
+          expect(errorCode(result.error)).toBe("42501");
+        }
+      }
+      expect(
+        await client!`select count(*)::int as n from mn_private.artist_bio_provenance`,
+      ).toEqual([{ n: 1 }]);
+    });
+
+    it("rolls back private provenance schema when the history foreign-key lock times out", async () => {
+      await admin!.unsafe("drop schema mn_private cascade");
       await admin!`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},'Preserved pin',true)`;
       const entered = deferred(),
         release = deferred();
       const holder = capture(
         competitor!.begin(async tx => {
-          await tx`select id from artist_bio_versions`;
+          await tx`lock table artist_bio_versions in access exclusive mode`;
           entered.resolve();
           await release.promise;
         }),
@@ -454,7 +508,7 @@ describe.skipIf(!socket)(
         );
         expect(errorCode(attempted.error)).toBe("55P03");
         expect(
-          await admin!`select column_name from information_schema.columns where table_schema='public' and table_name in ('artists','artist_bio_versions') and column_name='bio_provenance'`,
+          await admin!`select schema_name from information_schema.schemata where schema_name='mn_private'`,
         ).toHaveLength(0);
       } finally {
         release.resolve();
@@ -464,11 +518,11 @@ describe.skipIf(!socket)(
         await tx`set local lock_timeout='2s'`;
         await tx.unsafe(migration);
       });
-      expect(await client!`select bio,bio_provenance from artists`).toEqual([
-        { bio: "Original", bio_provenance: null },
-      ]);
       expect(
-        await client!`select bio_text,is_pinned,bio_provenance from artist_bio_versions`,
+        await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
+      ).toEqual([{ bio: "Original", bio_provenance: null }]);
+      expect(
+        await client!`select v.bio_text,v.is_pinned,p.provenance as bio_provenance from artist_bio_versions v left join mn_private.artist_bio_version_provenance p on p.version_id=v.id`,
       ).toEqual([{ bio_text: "Preserved pin", is_pinned: true, bio_provenance: null }]);
     });
   },

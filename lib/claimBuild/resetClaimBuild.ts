@@ -1,4 +1,6 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { lockArtistRow } from "@/lib/db/lockArtistRow";
+import { readBioProvenance } from "@/lib/bio/readBioProvenance";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import {
   artists,
@@ -33,6 +35,8 @@ const DISCOVERABLE_LINK_COLUMNS = [
  */
 export async function resetClaimBuild(artistId: string) {
   return db.transaction(async tx => {
+    // Capture the text and its private lineage from one generation, before any deletion.
+    await lockArtistRow(tx, artistId);
     // 1. Steps
     const deletedSteps = await tx
       .delete(artistOnboardingSteps)
@@ -52,12 +56,12 @@ export async function resetClaimBuild(artistId: string) {
         facebook: artists.facebook,
         discogs: artists.discogs,
         bio: artists.bio,
-        bioProvenance: artists.bioProvenance,
       })
       .from(artists)
       .where(eq(artists.id, artistId));
 
     if (!artist) return null;
+    const bioProvenance = await readBioProvenance(tx, artistId);
 
     const links: Record<string, string> = {};
     for (const col of DISCOVERABLE_LINK_COLUMNS) {
@@ -79,9 +83,12 @@ export async function resetClaimBuild(artistId: string) {
         facebook: null,
         discogs: null,
         bio: null,
-        bioProvenance: null,
       })
       .where(eq(artists.id, artistId));
+
+    await tx.execute(
+      sql`delete from mn_private.artist_bio_provenance where artist_id=${artistId}::uuid`,
+    );
 
     // 3. Research sources
     const deletedSources = await tx
@@ -113,7 +120,7 @@ export async function resetClaimBuild(artistId: string) {
       steps: deletedSteps.map(r => r.step),
       links,
       bio: artist.bio ?? null,
-      bioProvenance: artist.bioProvenance ?? null,
+      bioProvenance,
       doc: deletedDocs.length > 0,
       sources: deletedSources.length,
       jobs: deletedJobs.length,

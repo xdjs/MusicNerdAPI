@@ -1,3 +1,5 @@
+import { readBioProvenance } from "@/lib/bio/readBioProvenance";
+import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
 import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
@@ -39,8 +41,7 @@ export async function saveCorrectionAbout(
     const [artist] = await tx.execute<{
       id: string;
       bio: string | null;
-      bioProvenance: unknown;
-    }>(sql`select a.id,a.bio,a.bio_provenance as "bioProvenance" from artists a
+    }>(sql`select a.id,a.bio from artists a
       join artist_bio_corrections r on r.artist_id=a.id where r.id=${reportId}::uuid for update of a`);
     if (!artist) throw new CorrectionAboutConflict("This report no longer exists.");
     await tx.execute(
@@ -59,14 +60,13 @@ export async function saveCorrectionAbout(
     // provenance. A newly saved history row must not turn that text into legacy
     // manual prose that could bypass source withdrawal after a later pin.
     const previousProvenance = stored
-      ? (artist.bioProvenance ?? null)
+      ? await readBioProvenance(tx, artist.id)
       : nextBioProvenance(current.bio, null, null, { generated: true, claimId: null });
     const bioProvenance = nextBioProvenance(bio, artist.bio ?? current.bio, previousProvenance);
     await saveBioVersions(tx, artist.id, [current.bio, bio], [previousProvenance, bioProvenance]);
     if (stored) {
-      await tx.execute(
-        sql`update artists set bio=${bio},bio_provenance=${bioProvenance == null ? null : JSON.stringify(bioProvenance)}::jsonb where id=${artist.id}::uuid`,
-      );
+      await tx.execute(sql`update artists set bio=${bio} where id=${artist.id}::uuid`);
+      await writeBioProvenance(tx, artist.id, bioProvenance);
     } else {
       // Keep identity/source gates and the private pre-claim preparation untouched.
       await tx.execute(sql`update artist_directory_preparations

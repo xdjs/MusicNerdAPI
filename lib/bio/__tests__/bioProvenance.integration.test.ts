@@ -56,6 +56,9 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       await pg.exec(`create table ${name}(${columns})`);
     }
     await pg.exec(
+      `create schema mn_private; create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null); create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);`,
+    );
+    await pg.exec(
       "alter table artist_docs add unique(artist_id);create table artist_claims(artist_id uuid,status text)",
     );
     await pg.query("insert into artists(id,bio) values($1,'Original manual')", [artist]);
@@ -72,11 +75,17 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
     });
     await persistArtistBio(artist, "Generated", { ...options(), expectedBio: "Original manual" });
     const first = (
-      await pg.query<{ bio_provenance: unknown }>("select bio_provenance from artists")
+      await pg.query<{ bio_provenance: unknown }>(
+        "select provenance as bio_provenance from mn_private.artist_bio_provenance",
+      )
     ).rows[0].bio_provenance;
     expect(first).toMatchObject({ kind: "generated", claimId: null, sources: sources() });
     expect(
-      (await pg.query("select bio_text,bio_provenance from artist_bio_versions")).rows,
+      (
+        await pg.query(
+          "select v.bio_text,p.provenance as bio_provenance from artist_bio_versions v left join mn_private.artist_bio_version_provenance p on p.version_id=v.id",
+        )
+      ).rows,
     ).toEqual([
       { bio_text: "Original manual", bio_provenance: null },
       { bio_text: "Generated", bio_provenance: first },
@@ -85,18 +94,23 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
     await pg.query("update artist_vault_sources set extracted_text=$1", [source.extractedText]);
     await persistArtistBio(artist, "Generated", options());
     const second = (
-      await pg.query<{ bio_provenance: unknown }>("select bio_provenance from artists")
+      await pg.query<{ bio_provenance: unknown }>(
+        "select provenance as bio_provenance from mn_private.artist_bio_provenance",
+      )
     ).rows[0].bio_provenance;
     expect(second).not.toEqual(first);
     expect(
-      (await pg.query("select bio_provenance from artist_bio_versions where bio_text='Generated'"))
-        .rows,
+      (
+        await pg.query(
+          "select p.provenance as bio_provenance from artist_bio_versions v left join mn_private.artist_bio_version_provenance p on p.version_id=v.id where bio_text='Generated'",
+        )
+      ).rows,
     ).toEqual([{ bio_provenance: first }, { bio_provenance: second }]);
     await persistArtistBio(artist, "Manual derivative", { ownership: { expectedClaimId: null } });
     expect(
       (
         await pg.query<{ bio_provenance: { sources: unknown } }>(
-          "select bio_provenance from artists",
+          "select provenance as bio_provenance from mn_private.artist_bio_provenance",
         )
       ).rows[0].bio_provenance.sources,
     ).toEqual(sources());
@@ -114,6 +128,30 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       { bio: "Manual derivative" },
     ]);
     expect((await pg.query("select content from artist_docs")).rows).toEqual([{ content: "Lore" }]);
+    const before = async () => ({
+      current: (await pg.query("select * from mn_private.artist_bio_provenance")).rows,
+      history: (await pg.query("select * from artist_bio_versions order by id")).rows,
+      evidence: (
+        await pg.query("select * from mn_private.artist_bio_version_provenance order by version_id")
+      ).rows,
+    });
+    const unchanged = await before();
+    await pg.exec(
+      "create function reject_evidence() returns trigger language plpgsql as $$begin raise exception 'private evidence failed';end$$;",
+    );
+    for (const table of ["artist_bio_provenance", "artist_bio_version_provenance"]) {
+      await pg.exec(
+        `create trigger fail_evidence before insert or update on mn_private.${table} for each row execute function reject_evidence()`,
+      );
+      await expect(
+        persistArtistBio(artist, "Sidecar failure", { ownership: { expectedClaimId: null } }),
+      ).rejects.toThrow();
+      expect(await before()).toEqual(unchanged);
+      expect((await pg.query("select bio from artists")).rows).toEqual([
+        { bio: "Manual derivative" },
+      ]);
+      await pg.exec(`drop trigger fail_evidence on mn_private.${table}`);
+    }
   } finally {
     await pg.close();
   }

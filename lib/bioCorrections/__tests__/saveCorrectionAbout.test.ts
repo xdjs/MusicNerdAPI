@@ -8,11 +8,15 @@ import { saveCorrectionAbout } from "@/lib/bioCorrections/saveCorrectionAbout";
 
 const mock = vi.hoisted(() => ({
   transaction: vi.fn(),
+  readProvenance: vi.fn(),
+  writeProvenance: vi.fn(),
   execute: vi.fn(),
   current: vi.fn(),
   versions: vi.fn(),
   activity: vi.fn(),
 }));
+vi.mock("@/lib/bio/readBioProvenance", () => ({ readBioProvenance: mock.readProvenance }));
+vi.mock("@/lib/bio/writeBioProvenance", () => ({ writeBioProvenance: mock.writeProvenance }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: mock.transaction } }));
 vi.mock("@/lib/bioCorrections/getCorrectionAbout", () => ({ getCorrectionAbout: mock.current }));
 vi.mock("@/lib/bio/saveBioVersions", () => ({ saveBioVersions: mock.versions }));
@@ -24,6 +28,7 @@ const current = { bio: "Old bio", revision: "rev", artistId: "a1", claimed: true
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.readProvenance.mockResolvedValue(null);
   mock.transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
   mock.execute.mockResolvedValue([]);
   mock.execute
@@ -47,10 +52,8 @@ describe("saveCorrectionAbout", () => {
     );
     expect(mock.current).toHaveBeenCalledWith("r1", tx);
     expect(mock.versions).toHaveBeenCalledWith(tx, "a1", ["Old bio", "New bio"], [null, null]);
-    expect(sqlOf(4).text).toBe(
-      "update artists set bio=$1,bio_provenance=$2::jsonb where id=$3::uuid",
-    );
-    expect(sqlOf(4).params).toEqual(["New bio", null, "a1"]);
+    expect(sqlOf(4).text).toBe("update artists set bio=$1 where id=$2::uuid");
+    expect(sqlOf(4).params).toEqual(["New bio", "a1"]);
     expect(mock.activity).toHaveBeenCalledWith(
       "a1",
       "about_edited",
@@ -131,11 +134,12 @@ it("preserves generated lineage when an admin edits an unclaimed generated About
     claimId: null,
     sources: [],
   });
+  mock.readProvenance.mockResolvedValue(p);
   mock.execute.mockReset();
   mock.execute
     .mockResolvedValue([])
     .mockResolvedValueOnce([{ id: "admin" }])
-    .mockResolvedValueOnce([{ id: "a1", bio: "Old bio", bioProvenance: p }]);
+    .mockResolvedValueOnce([{ id: "a1", bio: "Old bio" }]);
   mock.current.mockResolvedValue({ ...current, claimed: false, storage: "artist" });
   await saveCorrectionAbout("r1", "admin", "New bio", "rev");
   expect(sqlOf(4).text).toContain("update artists set bio=");

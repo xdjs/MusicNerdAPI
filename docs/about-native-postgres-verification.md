@@ -2,6 +2,12 @@
 
 Issue: MusicNerdWeb #1655. Verified locally on 2026-11-03; nothing released or applied to a live database.
 
+## Private-sidecar revalidation
+
+The current local revision replaces the unpublished public-column migration with private evidence tables. The earlier column-test report below is historical. Updated native PostgreSQL 14.18 run: **17 passed in 4.15 seconds**, including the existing multi-connection source/lease/authority races, private schema migration rollback under a history-table lock, and real anon/authenticated SELECT denial. Legacy public artist SELECT * still works and has no provenance field. A separate PGlite regression also checks an inherited anonymous role. Raw public bio access remains explicitly visible in this test and is a release gate, not evidence of safe public projection. The first native refactor run caught null legacy lineage being inserted into a NOT NULL sidecar; writers now represent legacy by absent rows. Independent review also found the reset flow lacked an early artist lock; the fix is verified by a real concurrent reset waiting for generation to commit, then backing up matching text and lineage. The temporary server was stopped after this final run.
+
+Only PostgreSQL 14 is installed in the inspected local Homebrew locations; no PostgreSQL 17 server was available. No download, remote database test or live write was attempted. Target-equivalent PostgreSQL 17 verification remains outstanding.
+
 ## Environment and isolation
 
 PostgreSQL 14.18 (Homebrew), initialized as a new disposable cluster under a private `/tmp/mn-1655-pg.*` directory. TCP listening was disabled; the Unix socket was permission 0700. No existing database service, application credentials, env file, remote source, storage service or model was used. The temporary server was stopped after verification.

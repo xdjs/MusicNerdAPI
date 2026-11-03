@@ -1,3 +1,5 @@
+import { readBioProvenance } from "@/lib/bio/readBioProvenance";
+import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
 import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
 import { assertLoreSourcesCurrent } from "@/lib/lore/assertLoreSourcesCurrent";
 import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
@@ -114,25 +116,19 @@ export async function persistArtistBio(
     )
       throw new LoreChangedError();
     options.signal?.throwIfAborted();
-    const bioProvenance = nextBioProvenance(bio, artist.bio, artist.bioProvenance, {
+    const previousProvenance = await readBioProvenance(tx, artistId);
+    const bioProvenance = nextBioProvenance(bio, artist.bio, previousProvenance, {
       generated: !!options.generated,
       claimId: ownership.expectedClaimId,
       sources: options.expectedLore?.sources ?? options.document?.sources,
       authored: !!options.document && !options.expectedLore && options.documentOrigin !== "server",
     });
-    if (
-      artist.bio === bio &&
-      JSON.stringify(artist.bioProvenance ?? null) === JSON.stringify(bioProvenance)
-    )
+    if (artist.bio === bio && JSON.stringify(previousProvenance) === JSON.stringify(bioProvenance))
       return bio;
-    await saveBioVersions(
-      tx,
-      artistId,
-      [artist.bio, bio],
-      [artist.bioProvenance ?? null, bioProvenance],
-    );
+    await saveBioVersions(tx, artistId, [artist.bio, bio], [previousProvenance, bioProvenance]);
     options.signal?.throwIfAborted();
-    await tx.update(artists).set({ bio, bioProvenance }).where(eq(artists.id, artistId));
+    await tx.update(artists).set({ bio }).where(eq(artists.id, artistId));
+    await writeBioProvenance(tx, artistId, bioProvenance);
     const automatic = options.generated && !ownership.userId && !options.document;
     await recordArtistActivity(
       artistId,

@@ -32,7 +32,7 @@ const manifest = [source, other].map((s, index) => ({
   revision: vaultSourceRevision(s),
 }));
 beforeAll(async () => {
-  await pg.exec(`create table artist_claims(artist_id uuid,status text);
+  await pg.exec(`create schema mn_private;create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(artist_id uuid,status text);
  create table artist_activity_events(id text,artist_id uuid,source_id text,actor_kind text,actor_user_id text,trigger text,action text);
  create table artist_vault_sources(id text,artist_id uuid,activity_id text,type text,origin text,status text,publication text,url text,extracted_text text,file_path text,title text,snippet text,published_at text);`);
 });

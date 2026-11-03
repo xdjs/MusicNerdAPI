@@ -3,6 +3,8 @@ import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 
 const m = vi.hoisted(() => ({
   lockArtistRow: vi.fn(),
+  readProvenance: vi.fn(),
+  writeProvenance: vi.fn(),
   assertLore: vi.fn(),
   assertSources: vi.fn(),
   assertLease: vi.fn(),
@@ -16,6 +18,8 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/lore/assertLoreSourcesCurrent", () => ({
   assertLoreSourcesCurrent: m.assertSources,
 }));
+vi.mock("@/lib/bio/readBioProvenance", () => ({ readBioProvenance: m.readProvenance }));
+vi.mock("@/lib/bio/writeBioProvenance", () => ({ writeBioProvenance: m.writeProvenance }));
 vi.mock("@/lib/bio/assertAboutLoreCurrent", () => ({ assertAboutLoreCurrent: m.assertLore }));
 vi.mock("@/lib/lore/assertLoreRefreshLease", () => ({ assertLoreRefreshLease: m.assertLease }));
 vi.mock("@/lib/bio/finishAboutLoreRefresh", () => ({ finishAboutLoreRefresh: m.finish }));
@@ -36,6 +40,7 @@ function setup({
   pinned = false,
   bioProvenance = null as unknown,
 } = {}) {
+  m.readProvenance.mockResolvedValue(bioProvenance);
   const set = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
   const values = vi.fn(() => ({
     onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
@@ -44,7 +49,7 @@ function setup({
   const tx = {
     execute: vi.fn().mockResolvedValue([]),
     query: {
-      artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio, bioProvenance }) },
+      artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio }) },
       artistBioVersions: {
         findFirst: vi.fn().mockResolvedValue(pinned ? { bioText: bio } : undefined),
       },
@@ -152,7 +157,7 @@ describe("persistArtistBio", () => {
       ["Artist edited bio", "New artist bio"],
       [null, null],
     );
-    expect(set).toHaveBeenCalledWith({ bio: "New artist bio", bioProvenance: null });
+    expect(set).toHaveBeenCalledWith({ bio: "New artist bio" });
     expect(m.saveBioVersions.mock.invocationCallOrder[0]).toBeLessThan(
       set.mock.invocationCallOrder[0],
     );
@@ -211,7 +216,6 @@ describe("persistArtistBio", () => {
     );
     expect(set).toHaveBeenCalledWith({
       bio: ABOUT_EMPTY_STATE,
-      bioProvenance: expect.objectContaining({ kind: "unknown" }),
     });
   });
 
@@ -255,7 +259,7 @@ describe("persistArtistBio", () => {
   });
 
   it("confirms the steps in the same transaction, even when the bio already matches", async () => {
-    const { tx, set } = setup();
+    const { tx } = setup();
     const confirmation = vi.fn().mockResolvedValue(undefined);
     const confirmValues = vi.fn(() => ({ onConflictDoNothing: confirmation }));
     tx.insert.mockReturnValueOnce({ values: confirmValues } as never);
@@ -266,8 +270,10 @@ describe("persistArtistBio", () => {
       confirmSteps: ["publish"],
     });
     expect(confirmValues).toHaveBeenCalledWith({ artistId: "a1", step: "publish" });
-    expect(set).toHaveBeenCalledWith(
-      expect.objectContaining({ bioProvenance: expect.objectContaining({ kind: "unknown" }) }),
+    expect(m.writeProvenance).toHaveBeenCalledWith(
+      tx,
+      "a1",
+      expect.objectContaining({ kind: "unknown" }),
     );
     expect(m.record).toHaveBeenCalled();
   });
@@ -366,8 +372,12 @@ it("saves fresh evidence even when regeneration produces identical text", async 
   });
   expect(set).toHaveBeenCalledWith({
     bio: "Same",
-    bioProvenance: expect.objectContaining({ kind: "generated", sources }),
   });
+  expect(m.writeProvenance).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    expect.objectContaining({ kind: "generated", sources }),
+  );
   expect(m.saveBioVersions).toHaveBeenCalledWith(
     tx,
     "a1",

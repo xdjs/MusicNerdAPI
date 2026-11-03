@@ -60,7 +60,6 @@ export async function searchArtists(
 
   const dbArtistsWithImages: SearchArtistResult[] = (dbResults ?? []).map(artist => ({
     ...artist,
-    bioProvenance: undefined, // Generation evidence is server-only.
     bio: null, // Search results carry identity; About uses its claim-checked endpoint.
     isExternalOnly: false,
     imageUrl: customImageUrl(artist.customImage) ?? imageMap.get(artist.id) ?? null,

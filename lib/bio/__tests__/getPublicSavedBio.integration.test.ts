@@ -30,11 +30,11 @@ it("rechecks immutable trust, claim scope, privacy and moderation without rewrit
   };
   try {
     await pg.exec(
-      `create table artists(id uuid,bio text,bio_provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);`,
+      `create table artists(id uuid,bio text); create schema mn_private; create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);`,
     );
-    await pg.query("insert into artists values($1,$2,$3)", [
+    await pg.query("insert into artists values($1,$2)", [artist, bio]);
+    await pg.query("insert into mn_private.artist_bio_provenance values($1,$2)", [
       artist,
-      bio,
       JSON.stringify(provenance),
     ]);
     await pg.query(
@@ -65,10 +65,24 @@ it("rechecks immutable trust, claim scope, privacy and moderation without rewrit
     }
     await pg.exec("delete from artist_claims;update artist_activity_events set source_id=null");
     expect(await read()).toBeNull();
-    expect((await pg.query("select bio,bio_provenance from artists")).rows).toEqual([
-      { bio, bio_provenance: provenance },
-    ]);
+    expect(
+      (
+        await pg.query(
+          "select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id",
+        )
+      ).rows,
+    ).toEqual([{ bio, bio_provenance: provenance }]);
   } finally {
     await pg.close();
   }
 }, 30000);
+
+it("does not downgrade a private metadata permission/read failure to legacy prose", async () => {
+  await expect(
+    getPublicSavedBio("00000000-0000-4000-8000-000000000001", {
+      execute: async () => {
+        throw new Error("permission denied for schema mn_private");
+      },
+    } as never),
+  ).rejects.toThrow("permission denied");
+});
