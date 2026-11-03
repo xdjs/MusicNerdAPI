@@ -17,17 +17,21 @@ const { loadChatPdfs } = await import("@/lib/chatPdf/loadChatPdfs");
 const artist = "00000000-0000-4000-8000-000000000001";
 const id = "00000000-0000-4000-8000-000000000002";
 beforeAll(async () => {
-  await client.exec(`create table artist_claims(id uuid,artist_id uuid,status text);
- create table artist_vault_sources(id uuid,artist_id uuid,status text,content_type text,file_path text,file_size integer,title text,file_name text,url text,updated_at timestamptz,created_at timestamptz,extracted_text text);`);
+  await client.exec(`create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);
+ create table artist_claims(id uuid,artist_id uuid,status text);
+ create table artist_vault_sources(id uuid,artist_id uuid,status text,content_type text,file_path text,file_size integer,title text,file_name text,url text,updated_at timestamptz,created_at timestamptz,extracted_text text,activity_id uuid,origin text);`);
   await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
   await client.query(
-    "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,'archive.pdf','archive.pdf',$4,null,now(),null)",
+    "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,'archive.pdf','archive.pdf',$4,null,now(),null)",
     [
       id,
       artist,
       `${artist}/archive.pdf`,
       `https://public.example/vault-files/${artist}/archive.pdf`,
     ],
+  );
+  await client.exec(
+    "alter table artist_vault_sources add column publication text not null default 'inherit'",
   );
 }, 30000);
 afterAll(async () => client.close());
@@ -55,7 +59,7 @@ it("filters unusable rows before the cap and ranks a named PDF beyond 32 eligibl
     const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
     const path = `${artist}/document-${i}.pdf`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,$4,$5,$5,$6,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,$4,$5,$5,$6,null,now(),null)",
       [
         sid,
         artist,
@@ -104,7 +108,7 @@ it("fails closed across transactional claim/source deletion and source rejection
   expect(cite).not.toHaveBeenCalled();
   await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
   await client.query(
-    "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,'x.pdf','x.pdf',$4,null,now(),null)",
+    "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,'x.pdf','x.pdf',$4,null,now(),null)",
     [wanted, artist, `${artist}/x.pdf`, `https://public.example/vault-files/${artist}/x.pdf`],
   );
   read.mockResolvedValue(file);
@@ -130,7 +134,7 @@ it("matches exact names before the cap and refuses duplicate names and ineligibl
     const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
     const path = `${artist}/document-${i}.pdf`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
       [
         sid,
         artist,
@@ -182,7 +186,7 @@ it("does not select a shorter filename inside an explicitly named longer eligibl
   ]) {
     const path = `${artist}/${title}`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
       [sid, artist, path, title, `https://public.example/vault-files/${path}`],
     );
   }
@@ -193,4 +197,41 @@ it("does not select a shorter filename inside an explicitly named longer eligibl
     expect(await tools.readNamedPdf.execute!({ filename }, context)).toHaveProperty("error");
   }
   expect(read).not.toHaveBeenCalled();
+});
+
+it("allows explicit approved publication without a claim and revokes PDF reads on publication change", async () => {
+  await client.exec(
+    "delete from artist_claims; update artist_vault_sources set status='approved',publication='public'",
+  );
+  const rows = await loadChatPdfs(artist);
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows[0].claimId).toBeNull();
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  const tools = createChatPdfTools(artist, vi.fn().mockReturnValue(1));
+  const context = { toolCallId: "p", messages: [], context: {} };
+  await tools.tools.searchPdfSources.execute!({ query: "document" }, context);
+  await client.query("update artist_vault_sources set publication='private' where id=$1", [
+    rows[0].id,
+  ]);
+  const result = await tools.tools.readPdfSource.execute!({ sourceId: rows[0].id }, context);
+  expect(result).toHaveProperty("error");
+  expect(await loadChatPdfs(artist, rows[0].id)).toEqual([]);
+});
+
+it("keeps trusted inherited PDF discovery after revocation but respects privacy and moderation", async () => {
+  await client.query("delete from artist_vault_sources where id<>$1", [id]);
+  await client.exec("delete from artist_claims;delete from artist_activity_events");
+  await client.query(
+    "update artist_vault_sources set status='approved',publication='inherit',origin='upload',activity_id=$1 where id=$1",
+    [id],
+  );
+  await client.query(
+    "insert into artist_activity_events values($1,$2,$1,'user',$1,'trusted_submission','source_upload')",
+    [id, artist],
+  );
+  expect(await loadChatPdfs(artist)).toHaveLength(1);
+  await client.exec("update artist_vault_sources set publication='private'");
+  expect(await loadChatPdfs(artist)).toHaveLength(0);
+  await client.exec("update artist_vault_sources set publication='inherit',status='rejected'");
+  expect(await loadChatPdfs(artist)).toHaveLength(0);
 });

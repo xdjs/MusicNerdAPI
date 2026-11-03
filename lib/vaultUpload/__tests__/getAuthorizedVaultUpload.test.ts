@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { getAuthorizedVaultUpload } from "../getAuthorizedVaultUpload";
 const m = vi.hoisted(() => ({ fence: vi.fn(), read: vi.fn() }));
 vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: m.fence }));
 vi.mock("@/lib/vault/getVaultUploadByPath", () => ({ getVaultUploadByPath: m.read }));
-import { getAuthorizedVaultUpload } from "../getAuthorizedVaultUpload";
 beforeEach(() => vi.resetAllMocks());
 it("uses the locked transaction for retry/recovery reads", async () => {
   const tx = { query: {} };

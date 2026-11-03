@@ -40,7 +40,12 @@ export type VaultSourceInput = {
 
 /** Who submitted a source and why. With `approveIfTrusted`, an admin's or
  *  whitelisted submitter's source is approved at write time. */
-export type SourceProvenance = { userId: string; trigger: string; approveIfTrusted?: boolean };
+export type SourceProvenance = {
+  userId: string;
+  trigger: string;
+  approveIfTrusted?: boolean;
+  recordSubmissionTrust?: boolean;
+};
 
 /** A search hit with the type its URL implies. The URL cannot be invented; a model's guess at the type could. */
 export type DiscoveryResult = WebSearchResult & { type: SourceType };

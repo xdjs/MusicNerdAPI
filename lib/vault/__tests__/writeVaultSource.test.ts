@@ -180,3 +180,25 @@ describe("writeVaultSource for an upload", () => {
     );
   });
 });
+it.each([
+  [{ is_admin: true, is_white_listed: false }, "trusted_submission"],
+  [{ is_admin: false, is_white_listed: true }, "trusted_submission"],
+  [{ is_admin: false, is_white_listed: false }, "upload"],
+])("records submission trust without changing claimant moderation: %j", async (role, trigger) => {
+  execute.mockResolvedValueOnce([role] as never);
+  await writeVaultSource(
+    writer,
+    { artistId: "a1", url: "u", filePath: "a1/file", status: "approved" },
+    "u",
+    { userId: "u1", trigger: "upload", recordSubmissionTrust: true },
+  );
+  expect(values).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "approved", origin: "upload" }),
+  );
+  expect(record).toHaveBeenCalledWith(
+    "a1",
+    "source_upload",
+    { userId: "u1", sourceId: "s1", trigger },
+    writer,
+  );
+});

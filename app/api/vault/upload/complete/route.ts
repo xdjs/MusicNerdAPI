@@ -17,10 +17,11 @@ export async function OPTIONS() {
 /**
  * Completes a signed upload: checks the staged file against its ticket,
  * extracts its text, publishes it to the vault, saves the source as approved
- * and queues a Lore refresh. Idempotent for the same ticket.
+ * and returns its receipt. Claim-bound uploads queue a Lore refresh; independent
+ * contributions append only. Idempotent for the same ticket; removed contributions return 410.
  *
- * @param request - The request; a claimant or admin Privy token, JSON `{ ticket }`.
- * @returns 200 with `{ status, source, warning? }`, or an error (`retryCompletion: true` asks for the same ticket again).
+ * @param request - The request; an authenticated claimant/admin, or trusted contributor for unclaimed Lore, Privy token, JSON `{ ticket }`.
+ * @returns 200 with `{ status, source, receiptOnly?, warning? }`, or an error (`retryCompletion: true` asks for the same ticket again).
  */
 export async function POST(request: Request) {
   return postCompleteUploadHandler(request);

@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { publishImmutableUpload } from "../publishImmutableUpload";
 const m = vi.hoisted(() => ({ upload: vi.fn(), download: vi.fn() }));
 vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: m.upload }));
 vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: m.download }));
-import { publishImmutableUpload } from "../publishImmutableUpload";
 beforeEach(() => {
   vi.resetAllMocks();
 });

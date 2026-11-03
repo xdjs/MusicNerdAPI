@@ -1,3 +1,5 @@
+import { completeIndependentLoreUpload } from "./completeIndependentLoreUpload";
+import type { IndependentUploadTicket } from "./independentUploadTypes";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
@@ -23,12 +25,13 @@ import { verifyUploadTicket } from "@/lib/vaultUpload/verifyUploadTicket";
 /**
  * Handles POST /api/vault/upload/complete: checks the staged file against its
  * ticket, extracts its text, publishes it to the vault, saves the source as
- * approved and queues a Lore refresh. Completing the same ticket again
+ * approved. Independent scope returns an actor-bound receipt without claimant jobs.
+ * Claim-bound scope queues a Lore refresh. Completing the same ticket again
  * returns the saved source. A `retryCompletion: true` error asks for the same
  * ticket again, never a new upload.
  *
- * @param request - The request; a claimant or admin Privy token, JSON `{ ticket }`.
- * @returns 200 with `{ status, source, warning? }`; 400, 401, 403, 500 or 503.
+ * @param request - The request; an authenticated claimant/admin, or trusted contributor for unclaimed Lore, Privy token, JSON `{ ticket }`.
+ * @returns 200 with `{ status, source, receiptOnly?, warning? }`; 400, 401, 403, 500 or 503.
  */
 export async function postCompleteUploadHandler(request: Request): Promise<NextResponse> {
   const headers = getCorsHeaders();
@@ -59,6 +62,8 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       await removeStagedUpload(ticket.path);
       return error(400, "Upload expired. Please try again.");
     }
+    if (ticket.scope === "contribution")
+      return completeIndependentLoreUpload(ticket as IndependentUploadTicket);
     const expectedClaimId = ticket.expectedClaimId;
     if (
       expectedClaimId === null ||
@@ -116,7 +121,7 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
         filePath: ticket.path,
         contentType: ticket.type,
       },
-      { userId, trigger: "upload" },
+      { userId, trigger: "upload", recordSubmissionTrust: true },
       { userId, expectedClaimId },
     );
     const source =

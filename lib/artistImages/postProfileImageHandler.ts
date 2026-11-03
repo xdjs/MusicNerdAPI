@@ -1,3 +1,4 @@
+import { withAdminProfileWrite } from "./withAdminProfileWrite";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import {
@@ -39,11 +40,6 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
     if (form instanceof NextResponse) return form;
     const { file, artistId } = form;
     const expectedClaimId = await getLoreClaimGeneration(artistId);
-    if (expectedClaimId === null)
-      return error(
-        "Uploads require an approved claim while ownership generation is unavailable.",
-        403,
-      );
     if (!(await canEditArtist(auth.userId, artistId)))
       return error("Not authorized for this artist", 403);
     if (file.size > MAX_PROFILE_IMAGE_BYTES) return error("Image too large (max 5MB)", 400);
@@ -85,9 +81,11 @@ export async function postProfileImageHandler(request: Request): Promise<NextRes
       return error("Failed to upload image to storage", 500);
     }
     const publicUrl = profileImagePublicUrl(storagePath);
-    await withArtistUploadWrite(artistId, auth.userId, expectedClaimId, async tx => {
+    const write = async (tx: import("@/lib/ownership/types").TransactionDb) => {
       await tx.update(artists).set({ customImage: publicUrl }).where(eq(artists.id, artistId));
-    });
+    };
+    if (expectedClaimId === null) await withAdminProfileWrite(artistId, auth.userId, write);
+    else await withArtistUploadWrite(artistId, auth.userId, expectedClaimId, write);
     // Do not purge the folder: another upload may have stored its bytes before
     // its fenced write. Physical cleanup requires an object lifecycle record.
     return NextResponse.json(

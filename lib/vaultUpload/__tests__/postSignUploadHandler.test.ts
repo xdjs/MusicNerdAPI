@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const mock = vi.hoisted(() => ({
+  trusted: vi.fn(),
   claim: vi.fn(),
   authenticate: vi.fn(),
   canEdit: vi.fn(),
@@ -11,6 +12,9 @@ vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: mock.aut
 vi.mock("@/lib/auth/canEditArtist", () => ({ canEditArtist: mock.canEdit }));
 vi.mock("@/lib/storage/createSignedUploadUrl", () => ({ createSignedUploadUrl: mock.sign }));
 vi.mock("@/lib/ownership/getLoreClaimGeneration", () => ({ getLoreClaimGeneration: mock.claim }));
+vi.mock("@/lib/vaultUpload/isTrustedLoreContributor", () => ({
+  isTrustedLoreContributor: mock.trusted,
+}));
 const { postSignUploadHandler } = await import("@/lib/vaultUpload/postSignUploadHandler");
 const { verifyUploadTicket } = await import("@/lib/vaultUpload/verifyUploadTicket");
 
@@ -23,6 +27,7 @@ const req = (body: unknown) =>
 
 beforeEach(() => {
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+  mock.trusted.mockReset().mockResolvedValue(false);
   mock.claim.mockReset().mockResolvedValue("claim-1");
   mock.authenticate.mockReset().mockResolvedValue({ userId: "owner" });
   mock.canEdit.mockReset().mockResolvedValue(true);
@@ -126,4 +131,24 @@ it("fails closed for unclaimed state without a durable generation", async () => 
     ).status,
   ).toBe(403);
   expect(mock.sign).not.toHaveBeenCalled();
+});
+
+it("issues append-only authority to a trusted unclaimed contributor, never claimant authority", async () => {
+  mock.claim.mockResolvedValue(null);
+  mock.trusted.mockResolvedValue(true);
+  mock.canEdit.mockResolvedValue(false);
+  const response = await postSignUploadHandler(
+    req({ artistId, name: "file.pdf", type: "application/pdf", size: 100 }),
+  );
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  const parsed = verifyUploadTicket(body.ticket, "owner");
+  expect(parsed).toMatchObject({
+    scope: "contribution",
+    expectedClaimId: null,
+    userId: "owner",
+    artistId,
+  });
+  expect(parsed.path).toContain(`/${parsed.sourceId}_`);
+  expect(mock.canEdit).not.toHaveBeenCalled();
 });

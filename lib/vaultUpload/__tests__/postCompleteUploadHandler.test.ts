@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const mock = vi.hoisted(() => ({
+  independent: vi.fn(),
   fence: vi.fn(),
   authenticate: vi.fn(),
   canEdit: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock("@/lib/storage/downloadObject", () => ({ downloadObject: mock.download }
 vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
 vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: mock.fence }));
+vi.mock("@/lib/vaultUpload/completeIndependentLoreUpload", () => ({
+  completeIndependentLoreUpload: mock.independent,
+}));
 const { postCompleteUploadHandler: complete } =
   await import("@/lib/vaultUpload/postCompleteUploadHandler");
 const { signUploadTicket } = await import("@/lib/vaultUpload/signUploadTicket");
@@ -43,6 +47,11 @@ let ticket: string;
 beforeEach(() => {
   vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+  mock.independent
+    .mockReset()
+    .mockResolvedValue(
+      NextResponse.json({ status: "ok", source: { id: "independent" }, receiptOnly: true }),
+    );
   mock.fence.mockReset().mockImplementation(async (_a, _u, _c, write) => write({}));
   mock.authenticate.mockReset().mockResolvedValue({ userId: "owner" });
   mock.canEdit.mockReset().mockResolvedValue(true);
@@ -117,7 +126,7 @@ describe("postCompleteUploadHandler", () => {
         filePath: path,
         contentType: "application/pdf",
       },
-      { userId: "owner", trigger: "upload" },
+      { userId: "owner", trigger: "upload", recordSubmissionTrust: true },
       { userId: "owner", expectedClaimId: "claim-1" },
     );
     expect(mock.queue).toHaveBeenCalledWith(artistId, "claim-1", {
@@ -210,7 +219,7 @@ describe("postCompleteUploadHandler", () => {
         extractedText: "A short artist-written document.",
         status: "approved",
       }),
-      { userId: "owner", trigger: "upload" },
+      { userId: "owner", trigger: "upload", recordSubmissionTrust: true },
       { userId: "owner", expectedClaimId: "claim-1" },
     );
     expect(mock.queue).toHaveBeenCalledWith(artistId, "claim-1", {
@@ -309,7 +318,7 @@ describe("postCompleteUploadHandler", () => {
     expect((await complete(req({ ticket: dataTicket }))).status).toBe(200);
     expect(mock.insert).toHaveBeenCalledWith(
       expect.objectContaining({ type: "data", extractedText: data.toString("utf8") }),
-      { userId: "owner", trigger: "upload" },
+      { userId: "owner", trigger: "upload", recordSubmissionTrust: true },
       { userId: "owner", expectedClaimId: "claim-1" },
     );
     expect(mock.pdf).not.toHaveBeenCalled();
@@ -404,4 +413,25 @@ it("does not expose an existing source when revocation wins after the initial ch
   expect(response.status).toBe(403);
   expect(await response.text()).not.toContain("private fixture");
   expect(mock.byPath).not.toHaveBeenCalled();
+});
+
+it("dispatches signed independent tickets without granting claimant operations", async () => {
+  const sourceId = "00000000-0000-4000-8000-000000000009";
+  const independent = signUploadTicket({
+    userId: "owner",
+    artistId,
+    expectedClaimId: null,
+    scope: "contribution",
+    sourceId,
+    path: `${artistId}/${sourceId}_a.txt`,
+    name: "a.txt",
+    type: "text/plain",
+    size: 4,
+    expires: Date.now() + 60000,
+  });
+  expect((await complete(req({ ticket: independent }))).status).toBe(200);
+  expect(mock.independent).toHaveBeenCalled();
+  expect(mock.claim).not.toHaveBeenCalled();
+  expect(mock.canEdit).not.toHaveBeenCalled();
+  expect(mock.queue).not.toHaveBeenCalled();
 });

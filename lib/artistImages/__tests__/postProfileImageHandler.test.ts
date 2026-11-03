@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const m = vi.hoisted(() => ({
+  adminWrite: vi.fn(),
   claim: vi.fn(),
   fenced: vi.fn(),
   authenticateRequest: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock("@/lib/artistImages/purgeStaleProfileImages", () => ({
 }));
 vi.mock("@/lib/ownership/getLoreClaimGeneration", () => ({ getLoreClaimGeneration: m.claim }));
 vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: m.fenced }));
+vi.mock("@/lib/artistImages/withAdminProfileWrite", () => ({
+  withAdminProfileWrite: m.adminWrite,
+}));
 const { postProfileImageHandler } = await import("@/lib/artistImages/postProfileImageHandler");
 
 const ARTIST = "aab92f80-f9e1-4299-aa33-7dd85c8de5d3";
@@ -42,6 +46,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(1761000000000);
   vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+  m.adminWrite
+    .mockReset()
+    .mockImplementation(async (_a, _u, write) => write({ update: () => ({ set: m.set }) }));
   m.claim.mockReset().mockResolvedValue("claim-1");
   m.fenced
     .mockReset()
@@ -188,10 +195,20 @@ it("rejects a profile upload revoked while storage was running without publishin
   expect(m.purgeStaleProfileImages).not.toHaveBeenCalled();
 });
 
-it("fails closed for unclaimed state without a durable generation", async () => {
+it("does not grant profile authority to an unclaimed non-admin contributor", async () => {
   m.claim.mockResolvedValue(null);
+  m.canEditArtist.mockResolvedValue(false);
   expect((await postProfileImageHandler(request({ file: png(), artistId: ARTIST }))).status).toBe(
     403,
   );
   expect(m.uploadStorageObject).not.toHaveBeenCalled();
+});
+
+it("retains original unclaimed admin profile authority with a final role fence", async () => {
+  m.claim.mockResolvedValue(null);
+  expect((await postProfileImageHandler(request({ file: png(), artistId: ARTIST }))).status).toBe(
+    200,
+  );
+  expect(m.adminWrite).toHaveBeenCalledWith(ARTIST, "u1", expect.any(Function));
+  expect(m.fenced).not.toHaveBeenCalled();
 });

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
@@ -23,6 +24,9 @@ export async function withArtistUploadWrite<T>(
 ): Promise<T> {
   return db.transaction(async tx => {
     await lockArtistRow(tx, artistId);
+    // Keep administrator authority stable through the final write. Whitelist
+    // loss does not revoke a claimant's ownership; authorization below decides.
+    await tx.execute(sql`select id from users where id = ${userId}::uuid for share`);
     await authorizeLockedArtistWrite(tx, artistId, { userId, expectedClaimId });
     return write(tx);
   });

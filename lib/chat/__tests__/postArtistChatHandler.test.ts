@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   webSearch: vi.fn(),
   pdfLoad: vi.fn(),
   pdfRead: vi.fn(),
+  assertCurrent: vi.fn(),
 }));
 vi.mock("ai", async importOriginal => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -32,6 +33,9 @@ vi.mock("@/lib/questionResearch/reserveQuestionPlanning", () => ({
 }));
 vi.mock("@/lib/questionResearch/loadPublicResearchOriginals", () => ({
   loadPublicResearchOriginals: m.originals,
+}));
+vi.mock("@/lib/sourcePublication/assertPublicSourceCurrent", () => ({
+  assertPublicSourceCurrent: m.assertCurrent,
 }));
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
 vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdfLoad }));
@@ -91,6 +95,7 @@ async function chunksOf(response: Response) {
 }
 
 beforeEach(() => {
+  m.assertCurrent.mockReset().mockResolvedValue(undefined);
   vi.clearAllMocks();
   m.pdfLoad.mockResolvedValue([]);
   m.artist.mockResolvedValue({ id: artistId, name: "Dutchyyy" });
@@ -386,4 +391,34 @@ it("reads an explicitly named original in one tool call and two real SDK steps w
   ]);
   expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("stops before the next model forward when a read source publication is revoked", async () => {
+  m.assertCurrent
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValue(new Error("Source changed or is no longer public"));
+  const model = new MockLanguageModelV4({
+    doStream: [toolStep("readSource", { sourceId: "vault:1" }), textStep("Must not be delivered")],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What label is Dutchyyy on?")));
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(chunks.some(c => c.type === "error")).toBe(true);
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+  expect(m.assertCurrent).toHaveBeenCalledTimes(2);
+});
+
+it("revalidates search previews, including before the next model forward", async () => {
+  let checks = 0;
+  m.assertCurrent.mockImplementation(async () => {
+    if (++checks > 2) throw new Error("Source no longer public");
+  });
+  const model = new MockLanguageModelV4({
+    doStream: [toolStep("searchSources", { query: "label" }), textStep("Must not be delivered")],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What label?")));
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(chunks.some(c => c.type === "error")).toBe(true);
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
 });

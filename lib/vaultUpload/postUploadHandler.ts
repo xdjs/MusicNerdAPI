@@ -1,3 +1,4 @@
+import { isTrustedLoreContributor } from "./isTrustedLoreContributor";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
@@ -44,11 +45,16 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
     const { file, artistId } = form;
 
     const expectedClaimId = await getLoreClaimGeneration(artistId);
-    if (expectedClaimId === null)
+    if (expectedClaimId === null) {
+      if (!(await isTrustedLoreContributor(userId)))
+        return error(403, "Not authorized for this artist");
+      // A multipart retry has no durable client identity. Independent contributions
+      // use sign/complete, whose user-bound ticket is available before any bytes.
       return error(
-        403,
-        "Uploads require an approved claim while ownership generation is unavailable.",
+        409,
+        "Use /api/vault/upload/sign and /complete for independent Lore contributions so retries preserve the same upload identity.",
       );
+    }
     if (!(await canEditArtist(userId, artistId)))
       return error(403, "Not authorized for this artist");
 
@@ -163,7 +169,7 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
         contentType: resolvedType,
         extractedText: extractedText ?? null,
       },
-      { userId, trigger: "upload" },
+      { userId, trigger: "upload", recordSubmissionTrust: true },
       { userId, expectedClaimId },
     );
 

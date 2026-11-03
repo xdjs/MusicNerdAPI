@@ -54,3 +54,16 @@ it("rejects legacy tickets without a claim generation", () => {
     "Invalid upload ticket",
   );
 });
+
+it("rejects contribution authority with a claim generation or mismatched source path", () => {
+  const sourceId = "00000000-0000-4000-8000-000000000009";
+  expect(() =>
+    verifyUploadTicket(signUploadTicket({ ...ticket, scope: "contribution", sourceId }), "owner"),
+  ).toThrow();
+  expect(() =>
+    verifyUploadTicket(
+      signUploadTicket({ ...ticket, expectedClaimId: null, scope: "contribution", sourceId }),
+      "owner",
+    ),
+  ).toThrow();
+});

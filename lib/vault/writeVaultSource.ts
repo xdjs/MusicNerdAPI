@@ -44,7 +44,7 @@ export async function writeVaultSource(
     return undefined;
   let status = data.status ?? "pending";
   let trigger = provenance?.trigger;
-  if (provenance?.approveIfTrusted) {
+  if (provenance?.approveIfTrusted || provenance?.recordSubmissionTrust) {
     // Hold the current role through publication: a revocation that completed
     // first saves the source pending, a concurrent one waits.
     const [user] = rowsOf(
@@ -54,7 +54,7 @@ export async function writeVaultSource(
     ) as { is_admin: boolean | null; is_white_listed: boolean | null }[];
     if (!user) throw new Error("Submitting account no longer exists");
     const trusted = !!(user.is_admin || user.is_white_listed);
-    status = trusted ? "approved" : "pending";
+    if (provenance.approveIfTrusted) status = trusted ? "approved" : "pending";
     if (trusted) trigger = "trusted_submission";
   }
   let activityId = context?.activityId ?? null;

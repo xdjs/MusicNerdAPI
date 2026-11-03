@@ -1,3 +1,4 @@
+import { isTrustedLoreContributor } from "./isTrustedLoreContributor";
 import { getLoreClaimGeneration } from "@/lib/ownership/getLoreClaimGeneration";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -16,7 +17,7 @@ import { validateSignUploadBody } from "@/lib/vaultUpload/validateSignUploadBody
  * stages a storage key under the artist, and returns the signed URL to `PUT`
  * the file to with a ticket, bound to the user, for `complete`.
  *
- * @param request - The request; a claimant or admin Privy token, JSON `{ artistId, name, type, size }`.
+ * @param request - The request; an authenticated claimant/admin, or trusted contributor for unclaimed Lore, Privy token, JSON `{ artistId, name, type, size }`.
  * @returns 200 with `{ status, signedUrl, contentType, ticket }`; 400, 401, 403 or 500.
  */
 export async function postSignUploadHandler(request: Request): Promise<NextResponse> {
@@ -28,15 +29,11 @@ export async function postSignUploadHandler(request: Request): Promise<NextRespo
     if (body instanceof NextResponse) return body;
     const { artistId, name, type, size } = body;
     const expectedClaimId = await getLoreClaimGeneration(artistId);
-    if (expectedClaimId === null)
-      return NextResponse.json(
-        {
-          status: "error",
-          error: "Uploads require an approved claim while ownership generation is unavailable.",
-        },
-        { status: 403, headers },
-      );
-    if (!(await canEditArtist(auth.userId, artistId)))
+    const independent = expectedClaimId === null;
+    const allowed = independent
+      ? await isTrustedLoreContributor(auth.userId)
+      : await canEditArtist(auth.userId, artistId);
+    if (!allowed)
       return NextResponse.json(
         { status: "error", error: "Not authorized for this artist" },
         { status: 403, headers },
@@ -47,9 +44,11 @@ export async function postSignUploadHandler(request: Request): Promise<NextRespo
         { status: "error", error: "File type not supported" },
         { status: 400, headers },
       );
-    const path = `${artistId}/${randomUUID()}_${name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+    const sourceId = randomUUID();
+    const path = `${artistId}/${sourceId}_${name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
     const signedUrl = await createSignedUploadUrl(LORE_UPLOAD_BUCKET, path);
     const ticket = signUploadTicket({
+      ...(independent ? { scope: "contribution" as const, sourceId } : {}),
       userId: auth.userId,
       expectedClaimId,
       artistId,

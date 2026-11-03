@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const mock = vi.hoisted(() => ({
+  trusted: vi.fn(),
   authenticate: vi.fn(),
   canEdit: vi.fn(),
   claim: vi.fn(),
@@ -23,6 +24,9 @@ vi.mock("@/lib/storage/isSupabaseStorageConfigured", () => ({
 }));
 vi.mock("@/lib/storage/uploadStorageObject", () => ({ uploadStorageObject: mock.upload }));
 vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
+vi.mock("@/lib/vaultUpload/isTrustedLoreContributor", () => ({
+  isTrustedLoreContributor: mock.trusted,
+}));
 const { postUploadHandler } = await import("@/lib/vaultUpload/postUploadHandler");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
 
@@ -36,6 +40,7 @@ const req = (file: File | null, artistId: string | null = "artist-x") => {
 
 beforeEach(() => {
   vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+  mock.trusted.mockReset().mockResolvedValue(false);
   mock.authenticate.mockReset().mockResolvedValue({ userId: "admin-1" });
   mock.canEdit.mockReset().mockResolvedValue(true);
   mock.claim.mockReset().mockResolvedValue("claim-1");
@@ -73,7 +78,11 @@ describe("postUploadHandler", () => {
       extractedText: null,
       snippet: "Uploaded file: press-photo.png (8 B)",
     });
-    expect(provenance).toEqual({ userId: "admin-1", trigger: "upload" });
+    expect(provenance).toEqual({
+      userId: "admin-1",
+      trigger: "upload",
+      recordSubmissionTrust: true,
+    });
     expect(authorization).toEqual({ userId: "admin-1", expectedClaimId: "claim-1" });
     expect(mock.upload).toHaveBeenCalledWith("vault-files", data.filePath, Buffer.from(png), {
       contentType: "image/png",
@@ -227,4 +236,14 @@ describe("postUploadHandler", () => {
     expect(await response.json()).toEqual({ status: "error", error: "Failed to upload file" });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
   });
+});
+
+it("requires stable sign/complete identity for independent contributions, without storing bytes", async () => {
+  mock.claim.mockResolvedValue(null);
+  mock.trusted.mockResolvedValue(true);
+  expect(
+    (await postUploadHandler(req(new File(["body"], "a.txt", { type: "text/plain" })))).status,
+  ).toBe(409);
+  expect(mock.upload).not.toHaveBeenCalled();
+  expect(mock.insert).not.toHaveBeenCalled();
 });
