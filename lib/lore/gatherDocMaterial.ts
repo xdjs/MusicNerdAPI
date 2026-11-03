@@ -24,7 +24,7 @@ export async function gatherDocMaterial(artistId: string): Promise<DocMaterial> 
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const artistName = artist.name ?? "Unknown Artist";
 
-  const approvedSources = await getVaultSourcesByStatus(artistId, "approved");
+  const approvedSources = await getVaultSourcesByStatus(artistId, "approved", true);
   const vaultSources = approvedSources.filter(isCitableSource);
   const uncitable = approvedSources.length - vaultSources.length;
   if (uncitable > 0) {

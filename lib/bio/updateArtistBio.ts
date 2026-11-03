@@ -2,6 +2,7 @@ import { getArtistById } from "@/lib/artists/getArtistById";
 import { generateArtistBio } from "@/lib/bio/generateArtistBio";
 import { isAboutEmptyState } from "@/lib/bio/isAboutEmptyState";
 import { persistArtistBio } from "@/lib/bio/persistArtistBio";
+import type { AboutGenerationBudget } from "@/lib/bio/types";
 import type { BioUpdateResult } from "@/lib/bio/types";
 import type { ArtistWriteAuth } from "@/lib/ownership/types";
 
@@ -19,12 +20,15 @@ export async function updateArtistBio(
   artistId: string,
   input: { bio?: string; regenerate: boolean },
   ownership: ArtistWriteAuth,
+  budget?: AboutGenerationBudget,
 ): Promise<BioUpdateResult> {
   try {
     if (input.regenerate) {
       // Tells a real regeneration apart from a no-op: a pinned bio comes back unchanged.
       const priorBio = (await getArtistById(artistId))?.bio ?? null;
-      const generated = await generateArtistBio(artistId, ownership);
+      const generated = await (budget
+        ? generateArtistBio(artistId, ownership, budget)
+        : generateArtistBio(artistId, ownership));
       if (generated.httpStatus !== 200)
         return {
           status: "error",

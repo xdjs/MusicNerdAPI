@@ -17,7 +17,7 @@ export async function OPTIONS() {
 
 /**
  * Reads the artist's About as the profile shows it. With `?regenerate=true`,
- * the claimant or an admin rewrites it from the stored Lore and saves it.
+ * the claimant or an admin prepares missing/pending Lore, then rewrites About.
  *
  * @param request - The request; a claimant or admin Privy token when regenerating.
  * @param context - The route context.
@@ -30,7 +30,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 /**
- * Saves the About the claimant or an admin wrote, or regenerates it from the Lore.
+ * Saves the About the claimant or an admin wrote, or prepares Lore and regenerates About.
  *
  * @param request - The request; a claimant or admin Privy token and `{ bio }` or `{ regenerate: true }`.
  * @param context - The route context.

@@ -21,6 +21,7 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @returns 200 with `{ status, bio, publicAbout }`, or the regenerated bio; 400, 401, 403, 404, 408, 409 or 500.
  */
 export async function getArtistBioHandler(request: Request, id: string) {
+  const deadline = Date.now() + 45_000;
   const headers = getCorsHeaders();
   try {
     if (!z.uuid().safeParse(id).success)
@@ -33,10 +34,14 @@ export async function getArtistBioHandler(request: Request, id: string) {
       const expectedClaimId = (await findApprovedClaim(db, id))?.id ?? null;
       const auth = await validateArtistEditRequest(request, id);
       if (auth instanceof NextResponse) return auth;
-      const { httpStatus, ...result } = await generateArtistBio(id, {
-        userId: auth.userId,
-        expectedClaimId,
-      });
+      const { httpStatus, ...result } = await generateArtistBio(
+        id,
+        {
+          userId: auth.userId,
+          expectedClaimId,
+        },
+        { deadline, signal: request.signal },
+      );
       return NextResponse.json(
         { status: httpStatus === 200 ? "ok" : "error", ...result },
         { status: httpStatus, headers },

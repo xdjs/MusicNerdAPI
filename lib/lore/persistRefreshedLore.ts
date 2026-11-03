@@ -1,8 +1,15 @@
+import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
+import type { AboutLoreLease } from "@/lib/bio/types";
+import { assertLoreRefreshLease } from "@/lib/lore/assertLoreRefreshLease";
+import { assertLoreSourcesCurrent } from "@/lib/lore/assertLoreSourcesCurrent";
+import type { DocSource } from "@/lib/lore/types";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
 import { artistDocs, artistResearchJobs } from "@/lib/db/schema";
 import type { LoreSummary } from "@/lib/lore/types";
+import { authorizeLockedArtistWrite } from "@/lib/ownership/authorizeLockedArtistWrite";
+import type { ArtistWriteAuth } from "@/lib/ownership/types";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
@@ -17,6 +24,8 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @param expectedClaimId - The claim captured before the sources were read.
  * @param jobId - The lore_refresh job, when a job is writing.
  * @param loreSummary - The inventory overview: null clears it, undefined keeps the last good one.
+ * @param auth - The explicit editor when preparation comes from About.
+ * @param lease - Exact lease for explicit About preparation.
  * @returns True when written; false when ownership or the job changed.
  */
 export async function persistRefreshedLore(
@@ -26,9 +35,16 @@ export async function persistRefreshedLore(
   expectedClaimId: string | null,
   jobId?: string,
   loreSummary?: LoreSummary | null,
+  auth?: ArtistWriteAuth,
+  lease?: AboutLoreLease,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   return db.transaction(async tx => {
+    if (lease) await limitAboutTransaction(tx);
     await lockArtistRow(tx, artistId);
+    if (auth) await authorizeLockedArtistWrite(tx, artistId, { ...auth, expectedClaimId });
+    if (lease) await assertLoreRefreshLease(tx, artistId, lease);
+    if (auth) await assertLoreSourcesCurrent(tx, artistId, sources as DocSource[]);
     const claim = await findApprovedClaim(tx, artistId);
     if ((claim?.id ?? null) !== expectedClaimId) return false;
     if (jobId) {
@@ -42,6 +58,7 @@ export async function persistRefreshedLore(
       });
       if (!job) return false;
     }
+    signal?.throwIfAborted();
     await tx
       .insert(artistDocs)
       .values({ artistId, content, sources, loreSummary: loreSummary ?? null })
@@ -54,6 +71,7 @@ export async function persistRefreshedLore(
           updatedAt: sql`(now() AT TIME ZONE 'utc'::text)`,
         },
       });
+    signal?.throwIfAborted();
     return true;
   });
 }

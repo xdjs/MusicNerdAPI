@@ -1,3 +1,10 @@
+import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
+import { finishAboutLoreRefresh } from "@/lib/bio/finishAboutLoreRefresh";
+import { assertLoreRefreshLease } from "@/lib/lore/assertLoreRefreshLease";
+import { LoreChangedError } from "@/lib/lore/LoreChangedError";
+import type { AboutLoreLease } from "@/lib/bio/types";
+import { assertAboutLoreCurrent } from "@/lib/bio/assertAboutLoreCurrent";
+import type { DocSource } from "@/lib/lore/types";
 import { and, eq, sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
@@ -25,6 +32,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
  * @param options.ownership - The claim it started under and, for a person's action, their user id.
  * @param options.generated - The bio is model output.
  * @param options.expectedBio - For generated text: the bio it was generated against.
+ * @param options.expectedLore - Exact Lore and evidence the generated About used.
  * @param options.document - The Lore document and its sources, published with the bio.
  * @param options.confirmSteps - Onboarding steps confirmed in the same transaction.
  * @returns The artist's bio after the write. Throws OwnershipChangedError or BioConflictError.
@@ -36,11 +44,15 @@ export async function persistArtistBio(
     ownership: BioWriteOwnership;
     generated?: boolean;
     expectedBio?: string | null;
+    expectedLore?: { content: string; sources: DocSource[] };
+    signal?: AbortSignal;
+    aboutLease?: AboutLoreLease;
     document?: { content: string; sources: unknown[] };
     confirmSteps?: ("interview" | "publish")[];
   },
 ): Promise<string | null> {
   return db.transaction(async tx => {
+    if (options.aboutLease) await limitAboutTransaction(tx);
     await lockArtistRow(tx, artistId);
     if (!options?.ownership) throw new OwnershipChangedError();
     const { ownership } = options;
@@ -55,6 +67,8 @@ export async function persistArtistBio(
       const claim = await findApprovedClaim(tx, artistId);
       if ((claim?.id ?? null) !== ownership.expectedClaimId) throw new OwnershipChangedError();
     }
+    if (options.aboutLease) await assertLoreRefreshLease(tx, artistId, options.aboutLease);
+    if (options.expectedLore) await assertAboutLoreCurrent(tx, artistId, options.expectedLore);
     const artist = await tx.query.artists.findFirst({ where: eq(artists.id, artistId) });
     if (!artist) throw new Error("Artist not found");
     const pinned = await tx.query.artistBioVersions.findFirst({
@@ -67,6 +81,7 @@ export async function persistArtistBio(
       return artist.bio;
     }
     if (options.generated && artist.bio !== options.expectedBio) throw new BioConflictError();
+    options.signal?.throwIfAborted();
     for (const step of options.confirmSteps ?? []) {
       await tx
         .insert(artistOnboardingSteps)
@@ -85,8 +100,15 @@ export async function persistArtistBio(
           set: { content, sources, updatedAt: sql`(now() AT TIME ZONE 'utc'::text)` },
         });
     }
+    if (
+      options.aboutLease &&
+      !(await finishAboutLoreRefresh(artistId, options.aboutLease, "rebuilt", tx))
+    )
+      throw new LoreChangedError();
+    options.signal?.throwIfAborted();
     if (artist.bio === bio) return bio;
     await saveBioVersions(tx, artistId, [artist.bio, bio]);
+    options.signal?.throwIfAborted();
     await tx.update(artists).set({ bio }).where(eq(artists.id, artistId));
     const automatic = options.generated && !ownership.userId && !options.document;
     await recordArtistActivity(
@@ -99,6 +121,7 @@ export async function persistArtistBio(
       },
       tx,
     );
+    options.signal?.throwIfAborted();
     return bio;
   });
 }

@@ -3,12 +3,18 @@ import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 
 const m = vi.hoisted(() => ({
   lockArtistRow: vi.fn(),
+  assertLore: vi.fn(),
+  assertLease: vi.fn(),
+  finish: vi.fn(),
   authorize: vi.fn(),
   findApprovedClaim: vi.fn(),
   record: vi.fn(),
   saveBioVersions: vi.fn(),
   transaction: vi.fn(),
 }));
+vi.mock("@/lib/bio/assertAboutLoreCurrent", () => ({ assertAboutLoreCurrent: m.assertLore }));
+vi.mock("@/lib/lore/assertLoreRefreshLease", () => ({ assertLoreRefreshLease: m.assertLease }));
+vi.mock("@/lib/bio/finishAboutLoreRefresh", () => ({ finishAboutLoreRefresh: m.finish }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: m.transaction } }));
 vi.mock("@/lib/db/lockArtistRow", () => ({ lockArtistRow: m.lockArtistRow }));
 vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
@@ -28,6 +34,7 @@ function setup({ bio = "Artist edited bio" as string | null, pinned = false } = 
     onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
   }));
   const tx = {
+    execute: vi.fn().mockResolvedValue([]),
     query: {
       artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio }) },
       artistBioVersions: {
@@ -45,6 +52,7 @@ const owner = { expectedClaimId: null };
 beforeEach(() => {
   Object.values(m).forEach(f => f.mockReset());
   m.findApprovedClaim.mockResolvedValue(undefined);
+  m.finish.mockResolvedValue(true);
   m.record.mockResolvedValue("activity-1");
 });
 
@@ -264,4 +272,46 @@ describe("persistArtistBio", () => {
     ).rejects.toThrow("confirmation failed");
     expect(set).not.toHaveBeenCalled();
   });
+});
+
+it("revalidates the exact Lore before any About/history writes and preserves them on source change", async () => {
+  const { tx, set } = setup();
+  const expectedLore = { content: "Lore", sources: [] };
+  m.assertLore.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(persistArtistBio("a1", "New", { ownership: owner, expectedLore })).rejects.toThrow(
+    "Lore sources changed",
+  );
+  expect(m.assertLore).toHaveBeenCalledWith(tx, "a1", expectedLore);
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+it("does not publish when the deadline elapses while waiting for the artist lock", async () => {
+  const { set } = setup();
+  const controller = new AbortController();
+  m.lockArtistRow.mockImplementation(async () => controller.abort(new Error("deadline")));
+  await expect(
+    persistArtistBio("a1", "New", { ownership: owner, signal: controller.signal }),
+  ).rejects.toThrow("deadline");
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+it("fences and settles the About lease using the same transaction as the About write", async () => {
+  const { tx, set } = setup();
+  const aboutLease = { jobId: "j", requestedAt: "r", claimedAt: "lease" };
+  await persistArtistBio("a1", "New", { ownership: owner, aboutLease });
+  expect(m.assertLease).toHaveBeenCalledWith(tx, "a1", aboutLease);
+  expect(m.finish).toHaveBeenCalledWith("a1", aboutLease, "rebuilt", tx);
+  expect(m.finish.mock.invocationCallOrder[0]).toBeLessThan(set.mock.invocationCallOrder[0]);
+});
+it("refuses the About write when settlement detects newer work or loses the lease", async () => {
+  const { set } = setup();
+  m.finish.mockResolvedValue(false);
+  await expect(
+    persistArtistBio("a1", "New", {
+      ownership: owner,
+      aboutLease: { jobId: "j", requestedAt: "r", claimedAt: "lease" },
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
 });

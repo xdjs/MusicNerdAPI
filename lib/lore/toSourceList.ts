@@ -1,4 +1,5 @@
 import type { DocMaterial, DocSource } from "@/lib/lore/types";
+import { vaultSourceRevision } from "@/lib/lore/vaultSourceRevision";
 import { byAuthority } from "@/lib/sources/byAuthority";
 
 /**
@@ -22,6 +23,7 @@ export function toSourceList(m: DocMaterial): DocSource[] {
       label: s.title ?? s.url,
       url: s.url,
       publishedAt: s.publishedAt ?? null,
+      revision: vaultSourceRevision(s),
     });
   }
   for (const a of m.answers) {

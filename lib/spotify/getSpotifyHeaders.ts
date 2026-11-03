@@ -6,7 +6,8 @@ import { fetchSpotifyResponse } from "./fetchSpotifyResponse";
  *
  * @returns Bearer headers for the Spotify Web API.
  */
-export async function getSpotifyHeaders(): Promise<SpotifyHeaders> {
+export async function getSpotifyHeaders(signal?: AbortSignal): Promise<SpotifyHeaders> {
+  signal?.throwIfAborted();
   const clientId = process.env.SPOTIFY_WEB_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_WEB_CLIENT_SECRET;
   if (!clientId || !clientSecret)
@@ -22,7 +23,9 @@ export async function getSpotifyHeaders(): Promise<SpotifyHeaders> {
       client_id: clientId,
       client_secret: clientSecret,
     }),
-    signal: AbortSignal.timeout(2_000),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(2_000)])
+      : AbortSignal.timeout(2_000),
   });
   if (!res.ok)
     throw Object.assign(new Error("Failed to get Spotify access token"), {
