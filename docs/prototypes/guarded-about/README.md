@@ -5,14 +5,14 @@
 Run from MusicNerdAPI with existing dependencies:
 
 ```sh
-node node_modules/vitest/vitest.mjs run docs/prototypes/guarded-about/projection.test.ts docs/prototypes/guarded-about/apiCompatibility.test.ts
+node node_modules/vitest/vitest.mjs run docs/prototypes/guarded-about/*.test.ts
 ```
 
 ## Current behavior and evidence
 
 `mn_public.artists(id,name,bio)` preserves identity rows and masks ineligible biography text to null. Trusted mnweb writers retain raw text. The projection owner is NOLOGIN/NOSUPERUSER/NOBYPASSRLS with SELECT-only access and explicit RLS policies. A privileged function has a fixed search_path and qualified objects; public roles receive view SELECT and narrow function EXECUTE, but no private schema USAGE or write ability. A security barrier does not replace the explicit guard.
 
-The current local run passed **22 tests across two files in 7.88 seconds**. Types and focused lint also passed. Tests cover public/authenticated/inherited roles, trusted raw access, SELECT * fields, denied raw/provenance reads and view writes, source privacy/moderation/content changes, old-writer hash mismatch, legacy claim scope, immutable trust removal and claim revocation. Migration failure rolls back atomically; leftover inherited column grants and an unidentified raw-reading login block cutover. Post-cutover emergency rollback retains denied raw access and the view, returns null biographies, and preserves editor text. A failed pre-cutover migration restores previous unsafe access; traffic must stay gated.
+The current local run passed **27 tests across three files in 8.04 seconds**. Types and focused lint also passed. Tests cover public/authenticated/inherited roles, trusted raw access, SELECT * fields, denied raw/provenance reads and view writes, source privacy/moderation/content changes, old-writer hash mismatch, legacy claim scope, immutable trust removal and claim revocation. Migration failure rolls back atomically; leftover inherited column grants and an unidentified raw-reading login block cutover. Post-cutover emergency rollback retains denied raw access and the view, returns null biographies, and preserves editor text. A failed pre-cutover migration restores previous unsafe access; traffic must stay gated.
 
 Differential checks against the existing JS projector now cover claimed generated and authored empty manifests, interview/social/vault evidence, null source URLs, unknown kinds, wrong claim scope, duplicate/fractional/unsafe source ids, and URL cases. Revision tests compare actual vaultSourceRevision bytes for nulls, controls, quotes, Unicode and a real date column under a non-ISO session DateStyle. Source IDs are compared numerically; arbitrary high-precision JSON decimals are treated more strictly than JS binary64 rounding and are not claimed fully equivalent.
 
@@ -52,3 +52,7 @@ Only PostgreSQL14.18 is available via the inspected local install. Docker CLI ex
 Final review found and corrected the NOINHERIT/SET ROLE escape in the initial grant guard. Its regression verifies the login has no inherited SELECT yet cutover still aborts because a reachable role can read raw text.
 
 Final receipt review found no remaining blocker within this isolated scope. The hash/version-only key avoids indexing long URL values; a 25 KB URL passes and conflicting stored bytes abort the publication transaction. See [staging and rollout plan](staging-plan.md) for confirmed role facts, unknown consumers and native PostgreSQL17 options.
+
+## Production integration decision
+
+[Integration assessment](integration-assessment.md): retain this as an isolated prototype until the role/client and interface decisions are resolved. `atomicWriter.test.ts` now decorates the actual API publication writer with receipt preparation on the same transaction. It verifies real About/Lore/history/lineage/lease writes, storage/conflict rollback and source withdrawal. Policy-rejected historical URLs do not block manual edits; they receive no receipt and stay publicly hidden. This is test-only integration evidence, not active application wiring or deployed end-to-end proof. Unknown-role access remains untouched.
