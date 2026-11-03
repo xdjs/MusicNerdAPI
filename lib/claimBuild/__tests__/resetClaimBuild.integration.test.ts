@@ -19,7 +19,7 @@ beforeAll(async () => {
   await client.exec(`
     CREATE TABLE artists (id uuid PRIMARY KEY, name text, spotify text, deezer text,
       instagram text, tiktok text, x text, youtube text, soundcloud text, bandcamp text,
-      twitch text, facebook text, discogs text, bio text);
+      twitch text, facebook text, discogs text, bio text, bio_provenance jsonb);
     CREATE TABLE artist_onboarding_steps (artist_id uuid, step text);
     CREATE TABLE artist_vault_sources (id uuid DEFAULT gen_random_uuid(), artist_id uuid, origin text);
     CREATE TABLE artist_docs (id uuid DEFAULT gen_random_uuid(), artist_id uuid);
@@ -62,7 +62,16 @@ it("preserves catalog identity and mappings while resetting only the artist's re
     .rows;
   const otherBefore = (await client.query("SELECT * FROM artists WHERE id=$1", [otherId])).rows;
 
+  const lineage = { version: 1, kind: "unknown", bioHash: "saved-hash" };
+  await client.query("update artists set bio_provenance=$1 where id=$2", [
+    JSON.stringify(lineage),
+    artistId,
+  ]);
   const removed = await resetClaimBuild(artistId);
+  expect(removed?.bioProvenance).toEqual(lineage);
+  expect(
+    (await client.query("select bio_provenance from artists where id=$1", [artistId])).rows,
+  ).toEqual([{ bio_provenance: null }]);
 
   expect(
     (await client.query("SELECT * FROM artists WHERE id=$1", [artistId])).rows[0],
@@ -82,6 +91,7 @@ it("preserves catalog identity and mappings while resetting only the artist's re
     steps: ["profiles"],
     links: { instagram: "research-handle" },
     bio: "research bio",
+    bioProvenance: lineage,
     doc: true,
     sources: 1,
     jobs: 2,

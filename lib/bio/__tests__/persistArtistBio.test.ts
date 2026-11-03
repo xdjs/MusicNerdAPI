@@ -31,7 +31,11 @@ const { persistArtistBio } = await import("@/lib/bio/persistArtistBio");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
 const { BioConflictError } = await import("@/lib/bio/BioConflictError");
 
-function setup({ bio = "Artist edited bio" as string | null, pinned = false } = {}) {
+function setup({
+  bio = "Artist edited bio" as string | null,
+  pinned = false,
+  bioProvenance = null as unknown,
+} = {}) {
   const set = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
   const values = vi.fn(() => ({
     onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
@@ -40,7 +44,7 @@ function setup({ bio = "Artist edited bio" as string | null, pinned = false } = 
   const tx = {
     execute: vi.fn().mockResolvedValue([]),
     query: {
-      artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio }) },
+      artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio, bioProvenance }) },
       artistBioVersions: {
         findFirst: vi.fn().mockResolvedValue(pinned ? { bioText: bio } : undefined),
       },
@@ -142,11 +146,13 @@ describe("persistArtistBio", () => {
     expect(await persistArtistBio("a1", "New artist bio", { ownership: owner })).toBe(
       "New artist bio",
     );
-    expect(m.saveBioVersions).toHaveBeenCalledWith(tx, "a1", [
-      "Artist edited bio",
-      "New artist bio",
-    ]);
-    expect(set).toHaveBeenCalledWith({ bio: "New artist bio" });
+    expect(m.saveBioVersions).toHaveBeenCalledWith(
+      tx,
+      "a1",
+      ["Artist edited bio", "New artist bio"],
+      [null, null],
+    );
+    expect(set).toHaveBeenCalledWith({ bio: "New artist bio", bioProvenance: null });
     expect(m.saveBioVersions.mock.invocationCallOrder[0]).toBeLessThan(
       set.mock.invocationCallOrder[0],
     );
@@ -197,11 +203,16 @@ describe("persistArtistBio", () => {
       generated: true,
       expectedBio: null,
     });
-    expect(m.saveBioVersions).toHaveBeenCalledWith(expect.anything(), "a1", [
-      null,
-      ABOUT_EMPTY_STATE,
-    ]);
-    expect(set).toHaveBeenCalledWith({ bio: ABOUT_EMPTY_STATE });
+    expect(m.saveBioVersions).toHaveBeenCalledWith(
+      expect.anything(),
+      "a1",
+      [null, ABOUT_EMPTY_STATE],
+      [null, expect.objectContaining({ kind: "unknown" })],
+    );
+    expect(set).toHaveBeenCalledWith({
+      bio: ABOUT_EMPTY_STATE,
+      bioProvenance: expect.objectContaining({ kind: "unknown" }),
+    });
   });
 
   it("publishes the document in the same transaction, before history and bio", async () => {
@@ -255,8 +266,10 @@ describe("persistArtistBio", () => {
       confirmSteps: ["publish"],
     });
     expect(confirmValues).toHaveBeenCalledWith({ artistId: "a1", step: "publish" });
-    expect(set).not.toHaveBeenCalled();
-    expect(m.record).not.toHaveBeenCalled();
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ bioProvenance: expect.objectContaining({ kind: "unknown" }) }),
+    );
+    expect(m.record).toHaveBeenCalled();
   });
 
   it("aborts publication if the confirmation can't be saved", async () => {
@@ -331,4 +344,34 @@ it("refuses onboarding publication after source privacy or moderation changes", 
   ).rejects.toThrow("Lore sources changed");
   expect(tx.insert).not.toHaveBeenCalled();
   expect(tx.update).not.toHaveBeenCalled();
+});
+
+it("saves fresh evidence even when regeneration produces identical text", async () => {
+  const old = { version: 1, kind: "generated", bioHash: "old", claimId: null, sources: [] };
+  const { tx, set } = setup({ bio: "Same", bioProvenance: old });
+  const sources = [
+    {
+      id: 1,
+      kind: "vault" as const,
+      label: "Evidence",
+      url: "https://example.org",
+      revision: "a".repeat(64),
+    },
+  ];
+  await persistArtistBio("a1", "Same", {
+    ownership: owner,
+    generated: true,
+    expectedBio: "Same",
+    expectedLore: { content: "Lore", sources },
+  });
+  expect(set).toHaveBeenCalledWith({
+    bio: "Same",
+    bioProvenance: expect.objectContaining({ kind: "generated", sources }),
+  });
+  expect(m.saveBioVersions).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    ["Same", "Same"],
+    [old, expect.objectContaining({ sources })],
+  );
 });

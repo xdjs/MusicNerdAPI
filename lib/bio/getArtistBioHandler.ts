@@ -5,7 +5,7 @@ import { validateArtistEditRequest } from "@/lib/auth/validateArtistEditRequest"
 import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 import { generateArtistBio } from "@/lib/bio/generateArtistBio";
 import { getPublicArtistAbout } from "@/lib/bio/getPublicArtistAbout";
-import { isRealBio } from "@/lib/bio/isRealBio";
+import { getPublicSavedBio } from "@/lib/bio/getPublicSavedBio";
 import { db } from "@/lib/db/db";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
@@ -53,15 +53,12 @@ export async function getArtistBioHandler(request: Request, id: string) {
         { status: "error", error: "Artist not found" },
         { status: 404, headers },
       );
-    const claimed = (await findApprovedClaim(db, id))?.id ?? null;
-    const directoryAbout = claimed ? null : await getPublicArtistAbout(id);
+    const publicBio = await getPublicSavedBio(id);
+    const directoryAbout = publicBio ? null : await getPublicArtistAbout(id);
     return NextResponse.json(
       {
         status: "ok",
-        bio:
-          claimed && isRealBio(artist.bio)
-            ? artist.bio
-            : (directoryAbout?.bio ?? ABOUT_EMPTY_STATE),
+        bio: publicBio ?? directoryAbout?.bio ?? ABOUT_EMPTY_STATE,
         publicAbout: directoryAbout,
       },
       { headers: { ...headers, "Cache-Control": "private, no-store" } },

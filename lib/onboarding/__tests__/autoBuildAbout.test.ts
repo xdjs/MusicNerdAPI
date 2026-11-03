@@ -71,6 +71,7 @@ describe("autoBuildAbout", () => {
       ownership,
       expectedBio: "Old bio",
       document: { content: "## Overview", sources: S },
+      documentOrigin: "server",
       confirmSteps: ["interview", "publish"],
     });
   });

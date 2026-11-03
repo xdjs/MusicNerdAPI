@@ -11,6 +11,14 @@ const mock = vi.hoisted(() => ({
   order: [] as string[],
 }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/bio/getPublicSavedBio", () => ({
+  getPublicSavedBio: async () =>
+    (await mock.findApprovedClaim())
+      ? (await mock.getArtistById())?.bio === ABOUT_EMPTY_STATE
+        ? null
+        : (await mock.getArtistById())?.bio
+      : null,
+}));
 vi.mock("@/lib/auth/validateArtistEditRequest", () => ({
   validateArtistEditRequest: mock.validate,
 }));
@@ -55,6 +63,7 @@ describe("getArtistBioHandler", () => {
 
   it("a claimed artist with only the claim prompt saved reads the claim prompt", async () => {
     mock.getArtistById.mockResolvedValue({ id, bio: ABOUT_EMPTY_STATE });
+    mock.getPublicArtistAbout.mockResolvedValue(null);
     expect(await (await read()).json()).toMatchObject({ bio: ABOUT_EMPTY_STATE });
   });
 

@@ -52,6 +52,7 @@ export async function resetClaimBuild(artistId: string) {
         facebook: artists.facebook,
         discogs: artists.discogs,
         bio: artists.bio,
+        bioProvenance: artists.bioProvenance,
       })
       .from(artists)
       .where(eq(artists.id, artistId));
@@ -78,6 +79,7 @@ export async function resetClaimBuild(artistId: string) {
         facebook: null,
         discogs: null,
         bio: null,
+        bioProvenance: null,
       })
       .where(eq(artists.id, artistId));
 
@@ -111,6 +113,7 @@ export async function resetClaimBuild(artistId: string) {
       steps: deletedSteps.map(r => r.step),
       links,
       bio: artist.bio ?? null,
+      bioProvenance: artist.bioProvenance ?? null,
       doc: deletedDocs.length > 0,
       sources: deletedSources.length,
       jobs: deletedJobs.length,

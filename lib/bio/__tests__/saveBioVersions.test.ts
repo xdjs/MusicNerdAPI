@@ -25,11 +25,13 @@ describe("saveBioVersions", () => {
       artistId: "a1",
       bioText: "Old bio",
       isPinned: false,
+      bioProvenance: null,
     });
     expect(values).toHaveBeenNthCalledWith(2, {
       artistId: "a1",
       bioText: "New bio",
       isPinned: false,
+      bioProvenance: null,
     });
   });
 
@@ -44,6 +46,11 @@ describe("saveBioVersions", () => {
       "Fresh",
     ]);
     expect(values).toHaveBeenCalledTimes(1);
-    expect(values).toHaveBeenCalledWith({ artistId: "a1", bioText: "Fresh", isPinned: false });
+    expect(values).toHaveBeenCalledWith({
+      artistId: "a1",
+      bioText: "Fresh",
+      bioProvenance: null,
+      isPinned: false,
+    });
   });
 });

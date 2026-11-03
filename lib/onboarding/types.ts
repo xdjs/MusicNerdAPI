@@ -35,7 +35,7 @@ export type TurnEvent =
   | { kind: "text-delta"; group: string; call: "doc" | "about"; delta: string }
   /** More than one account survived for a platform: `chosen` was written, `options` includes it. */
   | { kind: "choices"; platform: string; chosen: string; options: DiscoveredProfile[] }
-  /** `sources` is the manifest narrowed to the ids either text cites. */
+  /** `sources` is the complete evidence manifest, including uncited inputs. */
   | {
       kind: "draft";
       stage: "doc" | "about";

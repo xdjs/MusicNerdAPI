@@ -90,6 +90,7 @@ export const artists = pgTable(
     name: text(),
     lcname: text("lcname"),
     bio: text(),
+    bioProvenance: jsonb("bio_provenance"),
     bandcamp: text(),
     facebook: text(),
     x: text(),
@@ -689,6 +690,7 @@ export const artistBioVersions = pgTable(
       .notNull(),
     artistId: uuid("artist_id").notNull(),
     bioText: text("bio_text").notNull(),
+    bioProvenance: jsonb("bio_provenance"),
     isPinned: boolean("is_pinned").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .default(sql`(now() AT TIME ZONE 'utc'::text)`)

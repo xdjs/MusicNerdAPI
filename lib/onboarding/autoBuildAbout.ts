@@ -48,6 +48,7 @@ export async function* autoBuildAbout(
         ownership,
         expectedBio: artist?.bio ?? null,
         document: { content: doc, sources },
+        documentOrigin: "server",
         confirmSteps: ["interview", "publish"],
       });
       wrote = true;

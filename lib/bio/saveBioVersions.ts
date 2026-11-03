@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { isRealBio } from "@/lib/bio/isRealBio";
 import { artistBioVersions } from "@/lib/db/schema";
 import type { TransactionDb } from "@/lib/ownership/types";
@@ -16,12 +16,23 @@ export async function saveBioVersions(
   tx: Pick<TransactionDb, "query" | "insert">,
   artistId: string,
   texts: (string | null | undefined)[],
+  provenances: unknown[] = [],
 ): Promise<void> {
-  for (const text of texts.filter((v): v is string => isRealBio(v))) {
+  for (const [index, text] of texts.entries()) {
+    if (!isRealBio(text)) continue;
+    const bioProvenance = provenances[index] ?? null;
     const saved = await tx.query.artistBioVersions.findFirst({
-      where: and(eq(artistBioVersions.artistId, artistId), eq(artistBioVersions.bioText, text)),
+      where: and(
+        eq(artistBioVersions.artistId, artistId),
+        eq(artistBioVersions.bioText, text!),
+        bioProvenance == null
+          ? sql`${artistBioVersions.bioProvenance} is null`
+          : sql`${artistBioVersions.bioProvenance} = ${JSON.stringify(bioProvenance)}::jsonb`,
+      ),
     });
     if (!saved)
-      await tx.insert(artistBioVersions).values({ artistId, bioText: text, isPinned: false });
+      await tx
+        .insert(artistBioVersions)
+        .values({ artistId, bioText: text!, bioProvenance, isPinned: false });
   }
 }
