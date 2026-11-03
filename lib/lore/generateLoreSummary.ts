@@ -3,7 +3,7 @@ import { withTimeout } from "@/lib/async/withTimeout";
 import { GEMINI_ABOUT_TIMEOUT_MS, LORE_SUMMARY_MAX_CHARS } from "@/lib/lore/const";
 import { loreSourceKey } from "@/lib/lore/loreSourceKey";
 import type { LoreSummary } from "@/lib/lore/types";
-import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
+import { getLoreVaultSources } from "@/lib/lore/getLoreVaultSources";
 
 /**
  * A two-or-three-sentence overview of the artist's Lore sources, from titles
@@ -17,7 +17,7 @@ export async function generateLoreSummary(
   abortSignal?: AbortSignal,
 ): Promise<LoreSummary | null | undefined> {
   try {
-    const sources = await getVaultSourcesByStatus(artistId, "approved");
+    const sources = await getLoreVaultSources(artistId);
     if (!sources.length) return null;
     abortSignal?.throwIfAborted();
     const callSignal = abortSignal

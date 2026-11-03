@@ -1,3 +1,4 @@
+import { assertLoreSourcesCurrent } from "@/lib/lore/assertLoreSourcesCurrent";
 import { limitAboutTransaction } from "@/lib/bio/limitAboutTransaction";
 import { finishAboutLoreRefresh } from "@/lib/bio/finishAboutLoreRefresh";
 import { assertLoreRefreshLease } from "@/lib/lore/assertLoreRefreshLease";
@@ -69,6 +70,10 @@ export async function persistArtistBio(
     }
     if (options.aboutLease) await assertLoreRefreshLease(tx, artistId, options.aboutLease);
     if (options.expectedLore) await assertAboutLoreCurrent(tx, artistId, options.expectedLore);
+    if (options.document)
+      await assertLoreSourcesCurrent(tx, artistId, options.document.sources as DocSource[], {
+        allowEmpty: true,
+      });
     const artist = await tx.query.artists.findFirst({ where: eq(artists.id, artistId) });
     if (!artist) throw new Error("Artist not found");
     const pinned = await tx.query.artistBioVersions.findFirst({

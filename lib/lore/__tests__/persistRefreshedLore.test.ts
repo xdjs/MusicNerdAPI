@@ -143,3 +143,11 @@ it("does not publish after cancellation", async () => {
   ).rejects.toThrow("deadline");
   expect(tx.insert).not.toHaveBeenCalled();
 });
+
+it("revalidates sources for background refreshes as well as explicit About", async () => {
+  assertSources.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(persistRefreshedLore("a1", "Doc", [], "current-claim", "j1")).rejects.toThrow(
+    "Lore sources changed",
+  );
+  expect(tx.insert).not.toHaveBeenCalled();
+});

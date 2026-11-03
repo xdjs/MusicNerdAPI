@@ -20,9 +20,9 @@ vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
 const { handleAboutChoiceTurn } = await import("@/lib/onboarding/handleAboutChoiceTurn");
 
 const S = [
-  { id: 1, kind: "vault", label: "A", url: "https://a" },
-  { id: 2, kind: "vault", label: "B", url: "https://b" },
-  { id: 3, kind: "vault", label: "C", url: "https://c" },
+  { id: 1, kind: "vault", label: "A", url: "https://a", revision: "a".repeat(64) },
+  { id: 2, kind: "vault", label: "B", url: "https://b", revision: "b".repeat(64) },
+  { id: 3, kind: "vault", label: "C", url: "https://c", revision: "c".repeat(64) },
 ];
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ beforeEach(() => {
 });
 
 describe("handleAboutChoiceTurn", () => {
-  it("writes the About from the approved document, citing what either text uses", async () => {
+  it("writes the About from the approved document, preserving uncited evidence too", async () => {
     const events = await collect(
       handleAboutChoiceTurn(turnContext("publish"), {
         type: "about_choice",
@@ -57,7 +57,7 @@ describe("handleAboutChoiceTurn", () => {
         stage: "about",
         doc: "Doc[1].",
         about: "About[2].",
-        sources: [S[0], S[1]],
+        sources: S,
         expectedBio: "Bio now",
       },
     ]);
@@ -125,7 +125,12 @@ it("reuses prepared About only when the artist kept the exact reviewed document"
       sources: S as never,
     }),
   );
-  expect(events.at(-1)).toMatchObject({ kind: "draft", stage: "about", about: "Ready About[1]." });
+  expect(events.at(-1)).toMatchObject({
+    kind: "draft",
+    stage: "about",
+    about: "Ready About[1].",
+    sources: S,
+  });
   expect(m.about).not.toHaveBeenCalled();
   await collect(
     handleAboutChoiceTurn(turnContext("publish"), {

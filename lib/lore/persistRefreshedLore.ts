@@ -44,7 +44,6 @@ export async function persistRefreshedLore(
     await lockArtistRow(tx, artistId);
     if (auth) await authorizeLockedArtistWrite(tx, artistId, { ...auth, expectedClaimId });
     if (lease) await assertLoreRefreshLease(tx, artistId, lease);
-    if (auth) await assertLoreSourcesCurrent(tx, artistId, sources as DocSource[]);
     const claim = await findApprovedClaim(tx, artistId);
     if ((claim?.id ?? null) !== expectedClaimId) return false;
     if (jobId) {
@@ -58,6 +57,9 @@ export async function persistRefreshedLore(
       });
       if (!job) return false;
     }
+    await assertLoreSourcesCurrent(tx, artistId, sources as DocSource[], {
+      summaryKey: loreSummary?.sourceKey,
+    });
     signal?.throwIfAborted();
     await tx
       .insert(artistDocs)

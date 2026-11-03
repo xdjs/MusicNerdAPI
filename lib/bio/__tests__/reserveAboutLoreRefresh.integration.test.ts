@@ -33,7 +33,7 @@ beforeAll(async () => {
     create table users(id uuid primary key,is_admin boolean,email text,username text,username_needs_confirmation boolean,username_prompted_at timestamptz,wallet text,privy_user_id text,created_at timestamptz,updated_at timestamptz,legacy_id integer,is_white_listed boolean,is_super_admin boolean,is_hidden boolean,legacy_link_dismissed boolean,accepted_ugc_count integer);
     create table artist_claims(id uuid primary key,artist_id uuid,user_id uuid,status text,reference_code text,created_at timestamptz,updated_at timestamptz);
     create table artist_docs(artist_id uuid primary key,content text,sources jsonb default '[{"id":1,"kind":"interview","url":null,"label":"Interview"}]' );
-    create table artist_vault_sources(artist_id uuid,url text,extracted_text text,file_path text,status text,title text,snippet text,published_at text);
+    create table artist_vault_sources(id uuid, activity_id uuid, type text, origin text, publication text default 'inherit', artist_id uuid,url text,extracted_text text,file_path text,status text,title text,snippet text,published_at text);
     create table artist_activity_events(id uuid primary key default gen_random_uuid(),artist_id uuid,actor_user_id uuid,actor_kind text,action text,trigger text,source_id uuid,parent_activity_id uuid,created_at timestamptz default now());
     create table artist_research_jobs(id uuid primary key default gen_random_uuid(),artist_id uuid,kind text,status text default 'pending',claimed_at timestamptz,state jsonb,activity_id uuid,attempts integer default 0,last_error text,created_at timestamptz default now(),updated_at timestamptz default now());
     create unique index live_jobs on artist_research_jobs(artist_id,kind) where status in ('pending','running');
@@ -193,6 +193,7 @@ async function takeLease() {
 }
 it("rejects a source that becomes readable during generation, without a refresh marker", async () => {
   const source = {
+    publication: "inherit",
     url: "https://example.org/race",
     extractedText: "Readable source. ".repeat(30),
     status: "approved",

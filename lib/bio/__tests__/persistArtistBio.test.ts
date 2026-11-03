@@ -4,6 +4,7 @@ import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 const m = vi.hoisted(() => ({
   lockArtistRow: vi.fn(),
   assertLore: vi.fn(),
+  assertSources: vi.fn(),
   assertLease: vi.fn(),
   finish: vi.fn(),
   authorize: vi.fn(),
@@ -11,6 +12,9 @@ const m = vi.hoisted(() => ({
   record: vi.fn(),
   saveBioVersions: vi.fn(),
   transaction: vi.fn(),
+}));
+vi.mock("@/lib/lore/assertLoreSourcesCurrent", () => ({
+  assertLoreSourcesCurrent: m.assertSources,
 }));
 vi.mock("@/lib/bio/assertAboutLoreCurrent", () => ({ assertAboutLoreCurrent: m.assertLore }));
 vi.mock("@/lib/lore/assertLoreRefreshLease", () => ({ assertLoreRefreshLease: m.assertLease }));
@@ -314,4 +318,17 @@ it("refuses the About write when settlement detects newer work or loses the leas
   ).rejects.toThrow("Lore sources changed");
   expect(set).not.toHaveBeenCalled();
   expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+
+it("refuses onboarding publication after source privacy or moderation changes", async () => {
+  const { tx } = setup();
+  m.assertSources.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(
+    persistArtistBio("a1", "New About", {
+      ownership: owner,
+      document: { content: "Lore", sources: [] },
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+  expect(tx.update).not.toHaveBeenCalled();
 });

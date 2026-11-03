@@ -1,3 +1,6 @@
+import { publicKnowledgeUrl } from "@/lib/knowledge/publicKnowledgeUrl";
+import { loreSourceKey } from "@/lib/lore/loreSourceKey";
+import { publicVaultSourceSql } from "@/lib/sourcePublication/publicVaultSourceSql";
 import { sql } from "drizzle-orm";
 import { rowsOf } from "@/lib/db/rowsOf";
 import type { TransactionDb } from "@/lib/ownership/types";
@@ -11,14 +14,21 @@ export async function assertLoreSourcesCurrent(
   tx: Pick<TransactionDb, "execute">,
   artistId: string,
   sources: DocSource[],
+  options: { summaryKey?: string; allowEmpty?: boolean } = {},
 ): Promise<void> {
+  // Immutable trust still depends on its retained event. Fence deletion/anonymization
+  // through publication, just as the vault row locks fence moderation changes.
+  await tx.execute(sql`select id from artist_activity_events where artist_id=${artistId}::uuid
+    and id in (select activity_id from artist_vault_sources where artist_id=${artistId}::uuid) for share`);
   const rows = rowsOf(
     await tx.execute(sql`
-    select url,extracted_text as "extractedText",file_path as "filePath",status,
+    select v.id,v.activity_id as "activityId",v.origin,v.publication,v.type,url,extracted_text as "extractedText",file_path as "filePath",status,
            title,snippet,published_at as "publishedAt"
-    from artist_vault_sources where artist_id=${artistId}::uuid and status='approved' for share
+    from artist_vault_sources v where v.artist_id=${artistId}::uuid and ${publicVaultSourceSql()} for share of v
   `),
   ) as {
+    id: string;
+    type: string | null;
     url: string;
     extractedText: string | null;
     filePath: string | null;
@@ -27,10 +37,13 @@ export async function assertLoreSourcesCurrent(
     snippet: string | null;
     publishedAt: string | null;
   }[];
-  const current = rows.filter(isCitableSource);
+  const eligible = rows.filter(source => publicKnowledgeUrl(source.url));
+  if (options.summaryKey !== undefined && loreSourceKey(eligible) !== options.summaryKey)
+    throw new LoreChangedError();
+  const current = eligible.filter(isCitableSource);
   const recorded = sources.filter(s => s.kind === "vault");
   if (
-    !sources.length ||
+    (!options.allowEmpty && !sources.length) ||
     current.length !== recorded.length ||
     current.some(s => !recorded.some(r => r.url === s.url && r.revision === vaultSourceRevision(s)))
   )
