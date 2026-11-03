@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { projectSavedPublicBio } from "../../../lib/bio/projectSavedPublicBio";
+import { publicKnowledgeUrl } from "../../../lib/knowledge/publicKnowledgeUrl";
 import { ABOUT_EMPTY_STATE } from "../../../lib/bio/const";
 import { vaultSourceRevision } from "../../../lib/lore/vaultSourceRevision";
 const migration = readFileSync(new URL("./projection.sql", import.meta.url), "utf8");
@@ -248,4 +250,111 @@ it("serializes real date evidence independently of session DateStyle", async () 
     )
   ).rows;
   expect(revision).toBe(vaultSourceRevision({ ...source, publishedAt: "2026-11-03" }));
+});
+
+it("matches the application for claimed evidence kinds, empty manifests and source-id validation", async () => {
+  await pg.exec(migration);
+  await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
+  const cases: unknown[] = [
+    { ...provenance(), claimId: claim, sources: [] },
+    { ...provenance(), kind: "authored", claimId: claim, sources: [] },
+    { ...provenance(), claimId: claim, sources: [{ id: 1, kind: "interview", url: null }] },
+    {
+      ...provenance(),
+      claimId: claim,
+      sources: [{ id: 1, kind: "social", url: "https://example.org/post?ref=home#clip" }],
+    },
+    { ...provenance(), kind: "authored", claimId: null },
+    { ...provenance(), claimId: "old-claim" },
+    {
+      ...provenance(),
+      claimId: claim,
+      sources: [
+        { id: 1, kind: "interview", url: null },
+        { id: 1.0, kind: "social", url: null },
+      ],
+    },
+    { ...provenance(), claimId: claim, sources: [{ id: 1.1, kind: "interview", url: null }] },
+    {
+      ...provenance(),
+      claimId: claim,
+      sources: [{ id: 9007199254740992, kind: "interview", url: null }],
+    },
+    { ...provenance(), claimId: claim, sources: [{ id: 1, kind: "unknown", url: null }] },
+    { ...provenance(), claimId: claim, sources: [{ id: 1, kind: "interview" }] },
+  ];
+  for (const p of cases) {
+    await pg.query("update mn_private.artist_bio_provenance set provenance=$1", [
+      JSON.stringify(p),
+    ]);
+    expect((await visible())[0]).toMatchObject({
+      bio: projectSavedPublicBio({
+        bio: "Public biography",
+        provenance: p,
+        claimId: claim,
+        evidence: [source],
+      }),
+    });
+  }
+});
+it("compares supported URL cases to the actual JS validator and fails closed for unsupported encodings", async () => {
+  await pg.exec(migration);
+  const supported = [
+    "https://example.org/lore",
+    "HTTP://Example.org:8080/lore?ref=home&lang=en#clip",
+    "https://example.org/path%20name?title=two%20words",
+    "https://example.org:0/",
+    "https://example.org?ToKeN=x",
+    "https://example.org?api_key=x",
+    "https://example.org?signature=x",
+    "https://user:pass@example.org/path",
+    "ftp://example.org/path",
+    "https://example.org:99999/",
+    "HTTPS://example.org:99999/",
+    "https://999.999.999.999/",
+  ];
+  for (const url of supported) {
+    const [{ safe }] = (
+      await pg.query<{ safe: boolean }>("select mn_projection.safe_url($1) safe", [url])
+    ).rows;
+    expect(safe, url).toBe(publicKnowledgeUrl(url) !== null);
+  }
+  for (const url of [
+    "https://example.org?%74oken=x",
+    "https://example.org?%72ef=home",
+    "https://xn--bcher-kva.example/",
+    "https://例え.example/",
+  ]) {
+    const [{ safe }] = (
+      await pg.query<{ safe: boolean }>("select mn_projection.safe_url($1) safe", [url])
+    ).rows;
+    expect(safe).toBe(false);
+  }
+});
+
+it("blocks cutover when an unidentified login still has raw artist access", async () => {
+  await pg.exec("create role readonly_user login;grant select on artists to readonly_user;begin");
+  await expect(pg.exec(migration)).rejects.toThrow("Unexpected public raw access");
+  await pg.exec("rollback");
+  expect((await pg.query("select to_regclass('mn_public.artists') as view")).rows).toEqual([
+    { view: null },
+  ]);
+});
+
+it("blocks NOINHERIT login members that could SET ROLE into a raw reader", async () => {
+  await pg.exec(
+    "create role raw_reader nologin;grant select on artists to raw_reader;create role external_client login noinherit;grant raw_reader to external_client;begin",
+  );
+  expect(
+    (
+      await pg.query(
+        "select has_any_column_privilege('external_client','artists','SELECT') as inherited",
+      )
+    ).rows,
+  ).toEqual([{ inherited: false }]);
+  await expect(pg.exec(migration)).rejects.toThrow("Unexpected public raw access");
+  await pg.exec("rollback");
+  expect((await pg.query("select to_regclass('mn_public.artists') as view")).rows).toEqual([
+    { view: null },
+  ]);
 });
