@@ -3,7 +3,7 @@ import { isRealBio } from "@/lib/bio/isRealBio";
 import { publicKnowledgeUrl } from "@/lib/knowledge/publicKnowledgeUrl";
 import { vaultSourceRevision } from "@/lib/lore/vaultSourceRevision";
 
-/** Public text only. Legacy prose stays claim-gated; generated text keeps its original evidence and scope. */
+/** Public text only. Unknown legacy prose stays private; generated text requires evidence and its original scope. */
 export function projectSavedPublicBio(row: {
   bio: string | null;
   provenance: unknown;
@@ -11,7 +11,7 @@ export function projectSavedPublicBio(row: {
   evidence: Parameters<typeof vaultSourceRevision>[0][];
 }): string | null {
   if (!isRealBio(row.bio)) return null;
-  if (row.provenance === null) return row.claimId ? row.bio : null;
+  if (row.provenance === null) return null;
   if (!row.provenance || typeof row.provenance !== "object") return null;
   const p = row.provenance as Record<string, unknown>;
   if (
@@ -26,7 +26,7 @@ export function projectSavedPublicBio(row: {
   )
     return null;
   if (p.kind === "authored" && p.claimId === null) return null;
-  if (p.claimId === null && !p.sources.length) return null;
+  if ((p.claimId === null || p.kind === "generated") && !p.sources.length) return null;
   const ids = new Set<number>();
   for (const value of p.sources) {
     if (!value || typeof value !== "object") return null;

@@ -55,7 +55,7 @@ BEGIN
  IF trimmed='' OR trimmed='We don''t have enough verified information about this artist yet. If this is you, claim your profile and add a few sources to generate your About — or write your own. What you add helps Music Nerd tell your story to fans.' THEN RETURN NULL; END IF;
  SELECT id::text INTO claim_id FROM public.artist_claims WHERE artist_id=a.id AND status='approved' LIMIT 1;
  SELECT provenance INTO p FROM mn_private.artist_bio_provenance WHERE artist_id=a.id;
- IF NOT FOUND THEN RETURN CASE WHEN claim_id IS NOT NULL THEN a.bio ELSE NULL END; END IF;
+ IF NOT FOUND THEN RETURN NULL; END IF;
  IF jsonb_typeof(p) IS DISTINCT FROM 'object' OR p->'version' IS DISTINCT FROM '1'::jsonb
  OR jsonb_typeof(p->'kind') IS DISTINCT FROM 'string' OR p->>'kind' NOT IN ('generated','authored')
  OR jsonb_typeof(p->'bioHash') IS DISTINCT FROM 'string'
@@ -64,7 +64,7 @@ BEGIN
  OR (p->>'claimId' IS NOT NULL AND p->>'claimId' IS DISTINCT FROM claim_id)
  OR jsonb_typeof(p->'sources') IS DISTINCT FROM 'array' THEN RETURN NULL; END IF;
  IF p->>'kind'='authored' AND p->>'claimId' IS NULL THEN RETURN NULL; END IF;
- IF p->>'claimId' IS NULL AND jsonb_array_length(p->'sources')=0 THEN RETURN NULL; END IF;
+ IF (p->>'claimId' IS NULL OR p->>'kind'='generated') AND jsonb_array_length(p->'sources')=0 THEN RETURN NULL; END IF;
  FOR s IN SELECT value FROM jsonb_array_elements(p->'sources') LOOP
   IF jsonb_typeof(s) IS DISTINCT FROM 'object' OR jsonb_typeof(s->'id') IS DISTINCT FROM 'number' THEN RETURN NULL; END IF;
   IF (s->>'id')::numeric<1 OR (s->>'id')::numeric>9007199254740991 OR trunc((s->>'id')::numeric)<>(s->>'id')::numeric

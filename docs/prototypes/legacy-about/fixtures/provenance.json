@@ -1,0 +1,7 @@
+{
+  "webCommit": "bf40fb843e14b10b02510493c9b017962d7e3ab7",
+  "webPath": "src/server/utils/bio/projectSavedPublicBio.ts",
+  "originalSha256": "75a863bba28584bc825e52eda1ad06217271c748f0df74e972ba5ea19a7968d6",
+  "changes": "Dependency import paths and formatting adapted to API counterparts; projector logic unchanged.",
+  "apiCommit": "c6399c7157244f010a9f0897450c4a4f9cb192ef"
+}

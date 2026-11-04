@@ -152,7 +152,7 @@ it("matches JavaScript revisions for nulls, quotes, Unicode, whitespace and esca
     expect(revision).toBe(vaultSourceRevision({ ...source, extractedText: text }));
   }
 });
-it("preserves claim-gated legacy and rejects unknown lineage and unsupported subset evidence", async () => {
+it("hides claimed legacy and rejects unknown lineage and unsupported subset evidence", async () => {
   await pg.exec(migration);
   await pg.transaction(async tx => {
     await prepareUrlReceipt(tx, source.url);
@@ -163,7 +163,7 @@ it("preserves claim-gated legacy and rejects unknown lineage and unsupported sub
   await pg.exec("delete from mn_private.artist_bio_provenance");
   expect((await visible())[0]).toMatchObject({ bio: null });
   await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
-  expect((await visible())[0]).toMatchObject({ bio: "Public biography" });
+  expect((await visible())[0]).toMatchObject({ bio: null });
   for (const p of [
     { ...provenance(), kind: "unknown" },
     { ...provenance(), sources: [{ id: 1, kind: "interview", url: null }] },

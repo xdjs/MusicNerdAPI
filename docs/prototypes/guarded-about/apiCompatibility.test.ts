@@ -177,12 +177,13 @@ it("withdraws across handlers when evidence becomes private or rejected, retaini
     expect((await pg.query("select bio from artists")).rows).toEqual([{ bio: "Public biography" }]);
   }
 });
-it("retains claimed legacy visibility and uses the directory fallback for unclaimed legacy", async () => {
+it("hides claimed legacy and uses the eligible directory fallback only when available", async () => {
   await pg.exec("delete from mn_private.artist_bio_provenance");
   mocks.directory.mockResolvedValue({ bio: "Directory fallback" });
   await checkResponses("Directory fallback", { bio: "Directory fallback" });
   await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
-  await checkResponses("Public biography");
+  mocks.directory.mockResolvedValue(null);
+  await checkResponses(null);
 });
 it("returns existing 404 contracts for missing artists without attempting generation", async () => {
   mocks.artist.mockResolvedValue(undefined);

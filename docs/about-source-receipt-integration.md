@@ -1,5 +1,7 @@
 # Source receipt writer integration — #1655
 
+2026-11-04 legacy-policy update: [strict public lineage policy](about-legacy-publication-policy.md) removes the earlier claim-only legacy exception in the local candidate. Raw text/history is preserved; production visibility approval is still required.
+
 Local implementation and verification, 2026-11-04. API/Web branches: `codex/about-trusted-integration`. No live migration/grants, deployment, publication or paid/model calls occurred. This supersedes earlier documents saying receipt preparation exists only in a test decorator.
 
 ## Implemented behavior
