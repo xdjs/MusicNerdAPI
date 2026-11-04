@@ -5,9 +5,14 @@ import { z } from "zod";
 import { MODEL_CHAT } from "@/lib/ai/const";
 import { streamText } from "@/lib/ai/streamText";
 
+import { inspectChatPdf } from "@/lib/chatPdf/inspectChatPdf";
+import { pdfEvalSchema, type PdfEvalDocument } from "./pdfEvalTypes";
+import { preparePdfEvalInput } from "./preparePdfEvalInput";
+
 const manifestSchema = z
   .object({
     version: z.literal(1),
+    pdf: pdfEvalSchema.optional(),
     runId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
     modelId: z.literal(MODEL_CHAT),
     promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -31,7 +36,8 @@ const manifestSchema = z
     maxOutputCharacters: z.number().int().min(1).max(8192),
     maxCaptureBytes: z.number().int().min(1).max(1000000),
   })
-  .strict();
+  .strict()
+  .refine(m => !m.pdf || m.maxOutputTokens <= 1024, "PDF output allowance exceeds reviewed limit");
 
 /** Evaluator-only, one-turn forwarding guard. Never imported by an HTTP route. */
 export function createGuardedChatExecution({
@@ -39,18 +45,28 @@ export function createGuardedChatExecution({
   manifestSha256,
   model,
   record,
+  validatePdfSource,
 }: {
   manifestPath: string;
   manifestSha256: string;
   model: Parameters<typeof wrapLanguageModel>[0]["model"];
   /** Private synchronous evidence sink: no credentials, automatic upload or console logging. */
   record: (kind: string, value: unknown) => void;
+  /** Required in PDF mode: assert current authorized source and exact pinned revision. */
+  validatePdfSource?: (document: PdfEvalDocument) => Promise<void>;
 }): typeof streamText {
   const raw = readFileSync(manifestPath);
   if (createHash("sha256").update(raw).digest("hex") !== manifestSha256)
     throw new Error("eval_manifest_mismatch");
   const manifest = manifestSchema.parse(JSON.parse(raw.toString("utf8")));
   if (model.modelId !== manifest.modelId) throw new Error("eval_model_mismatch");
+  if (manifest.pdf && !validatePdfSource) throw new Error("eval_pdf_validator_missing");
+  const successfulReads = new Map<string, PdfEvalDocument>();
+  const uniquePdfs = new Set<string>();
+  const inspected = new Map<string, Promise<number>>();
+  let pdfReadAttempts = 0;
+  let consumedPdfBytes = 0;
+  let consumedPdfPages = 0;
   let used = false;
   let failed = false;
   let failureReason: string | undefined;
@@ -63,7 +79,12 @@ export function createGuardedChatExecution({
   const abort = new AbortController();
   const fail = (
     reason: string,
-    admission?: { inputBytes: number; attemptedCall: number },
+    admission?: {
+      inputBytes?: number;
+      attemptedCall: number;
+      pdfBytes?: number;
+      pdfPages?: number;
+    },
   ): never => {
     const firstFailure = !failed;
     failed = true;
@@ -74,6 +95,8 @@ export function createGuardedChatExecution({
         calls,
         toolExecutions,
         consumedInputBytes,
+        consumedPdfBytes,
+        consumedPdfPages,
         remainingInputBytes: manifest.maxTotalInputBytes - consumedInputBytes,
         ...admission,
       };
@@ -113,6 +136,17 @@ export function createGuardedChatExecution({
   const wrapped = wrapLanguageModel({
     model,
     middleware: {
+      // PDF acceptance's reviewed recipient is Anthropic; normal routes/text evaluators are unchanged.
+      transformParams: async ({ params }) => {
+        if (!manifest.pdf) return params;
+        const routing = params.providerOptions?.gateway;
+        if (routing && JSON.stringify(routing) !== JSON.stringify({ only: ["anthropic"] }))
+          fail("eval_pdf_routing_mismatch");
+        return {
+          ...params,
+          providerOptions: { ...params.providerOptions, gateway: { only: ["anthropic"] } },
+        };
+      },
       wrapGenerate: async () => fail("eval_generate_forbidden"),
       wrapStream: async ({ params, doStream }) => {
         check();
@@ -120,7 +154,7 @@ export function createGuardedChatExecution({
         if (params.headers && Object.keys(params.headers).length) fail("eval_headers_unsupported");
         if (params.maxOutputTokens !== manifest.maxOutputTokens) fail("eval_output_limit_missing");
         // This canary permits text inputs only; binary/PDF inputs require separate budgeting.
-        for (const message of params.prompt) {
+        for (const message of manifest.pdf ? [] : params.prompt) {
           if (
             Array.isArray(message.content) &&
             message.content.some(
@@ -135,7 +169,26 @@ export function createGuardedChatExecution({
             fail("eval_nontext_input");
         }
         const { abortSignal: _signal, headers: _headers, ...prepared } = params;
-        const inputBytes = Buffer.byteLength(JSON.stringify(prepared));
+        let pdfInput: ReturnType<typeof preparePdfEvalInput> | undefined;
+        if (manifest.pdf) {
+          try {
+            pdfInput = preparePdfEvalInput(prepared, successfulReads);
+          } catch {
+            fail("eval_pdf_input_invalid");
+          }
+        }
+        const capturedPrepared = pdfInput?.prepared ?? prepared;
+        const inputBytes = Buffer.byteLength(JSON.stringify(capturedPrepared));
+        const pdfBytes = pdfInput?.pdfBytes ?? 0;
+        const pdfPages = pdfInput?.pdfPages ?? 0;
+        if (
+          manifest.pdf &&
+          (pdfBytes > manifest.pdf.maxBytesPerCall ||
+            pdfBytes > manifest.pdf.maxTotalBytes - consumedPdfBytes ||
+            pdfPages > manifest.pdf.maxPagesPerCall ||
+            pdfPages > manifest.pdf.maxTotalPages - consumedPdfPages)
+        )
+          fail("eval_pdf_limit", { attemptedCall: calls + 1, pdfBytes, pdfPages });
         const admission = { inputBytes, attemptedCall: calls + 1 };
         if (inputBytes > manifest.maxInputBytes) fail("eval_input_limit", admission);
         if (inputBytes > manifest.maxTotalInputBytes - consumedInputBytes)
@@ -144,14 +197,48 @@ export function createGuardedChatExecution({
         // Reserve synchronously before capture/forward, including repeated or cached prefixes.
         // A failed capture or failed/uncertain forward never releases this reservation.
         consumedInputBytes += inputBytes;
+        consumedPdfBytes += pdfBytes;
+        consumedPdfPages += pdfPages;
         calls++;
         capture("model-input", {
           call: calls,
-          prepared,
+          prepared: capturedPrepared,
+          ...(manifest.pdf
+            ? {
+                binaryCapture: "verified-reference-only",
+                pdfBytes,
+                pdfPages,
+                consumedPdfBytes,
+                consumedPdfPages,
+              }
+            : {}),
           inputBytes,
           consumedInputBytes,
           remainingInputBytes: manifest.maxTotalInputBytes - consumedInputBytes,
         });
+        for (const file of pdfInput?.files ?? []) {
+          try {
+            await validatePdfSource!(file.document);
+            if (!inspected.has(file.document.sha256))
+              inspected.set(
+                file.document.sha256,
+                inspectChatPdf(
+                  file.bytes,
+                  AbortSignal.any([
+                    abort.signal,
+                    AbortSignal.timeout(5000),
+                    ...(params.abortSignal ? [params.abortSignal] : []),
+                  ]),
+                ),
+              );
+            if ((await inspected.get(file.document.sha256)) !== file.document.pages)
+              fail("eval_pdf_pages_mismatch");
+          } catch {
+            fail("eval_pdf_validation_failed");
+          }
+        }
+        check();
+        if (params.abortSignal?.aborted) fail("eval_aborted");
         const result = await doStream();
         let finished = false;
         return {
@@ -260,10 +347,45 @@ export function createGuardedChatExecution({
               fail("eval_tool_limit");
             // Synchronous reservation before any await: parallel calls cannot
             // each observe the same remaining allowance. Failures stay consumed.
+            if (manifest.pdf && ["readPdfSource", "readNamedPdf"].includes(name)) {
+              if (pdfReadAttempts >= 2) fail("eval_pdf_read_limit");
+              pdfReadAttempts++;
+            }
             toolCounts.set(name, count + 1);
             toolExecutions++;
             capture("tool-input", { name, input: args[0] });
             const result = await tool.execute!(...args);
+            if (
+              manifest.pdf &&
+              ["readPdfSource", "readNamedPdf"].includes(name) &&
+              result &&
+              typeof result === "object" &&
+              "sha256" in result
+            ) {
+              const value = result as Record<string, unknown>;
+              const document = manifest.pdf.documents.find(d => d.sourceId === value.sourceId);
+              if (
+                !document ||
+                value.sha256 !== document.sha256 ||
+                value.pages !== document.pages ||
+                value.title !== document.filename ||
+                Object.keys(value).some(
+                  k => !["sourceId", "n", "title", "pages", "sha256"].includes(k),
+                )
+              )
+                fail("eval_pdf_identity");
+              uniquePdfs.add(document!.sourceId);
+              if (uniquePdfs.size > manifest.pdf.maxUniqueDocuments) fail("eval_pdf_unique_limit");
+              try {
+                await validatePdfSource!(document!);
+              } catch {
+                fail("eval_pdf_validation_failed");
+              }
+              check();
+              const prior = successfulReads.get(args[1].toolCallId);
+              if (prior && prior.sourceId !== document!.sourceId) fail("eval_pdf_call_identity");
+              successfulReads.set(args[1].toolCallId, document!);
+            }
             capture("tool-output", { name, result });
             return result;
           },

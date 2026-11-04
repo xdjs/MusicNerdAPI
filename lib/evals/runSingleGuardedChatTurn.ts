@@ -17,6 +17,7 @@ import { loadPublicResearchOriginals } from "@/lib/questionResearch/loadPublicRe
 import { getQuestionVisitorKey } from "@/lib/questionResearch/getQuestionVisitorKey";
 import { loadChatPdfs } from "@/lib/chatPdf/loadChatPdfs";
 import { chatStreamTurn } from "@/lib/evals/chatStreamTurn";
+import { pdfEvalSchema } from "@/lib/evals/pdfEvalTypes";
 import { createGuardedChatExecution } from "@/lib/evals/createGuardedChatExecution";
 
 /** One opt-in task in the existing Evals suite. No judge, source overrides or allowance bypass. */
@@ -31,6 +32,20 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
   const manifest = z
     .object({
       enabled: z.literal(true),
+      pdf: z
+        .object({
+          execution: z
+            .object({
+              maxCalls: z.literal(6),
+              maxToolExecutions: z.literal(8),
+              maxWebSearches: z.literal(1),
+            })
+            .strict(),
+          admission: pdfEvalSchema,
+          reservationUsd: z.number().positive().max(100),
+        })
+        .strict()
+        .optional(),
       artistId: z.uuid(),
       artistName: z.string().min(1),
       question: z.string().min(1).max(500),
@@ -94,8 +109,27 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     new Request("http://localhost/preflight", { headers: { "x-real-ip": "192.0.2.1" } }),
   );
   const originals = await loadPublicResearchOriginals(manifest.artistId);
-  if (!originals.length || (await loadChatPdfs(manifest.artistId)).length)
+  const pdfs = await loadChatPdfs(manifest.artistId);
+  if (manifest.pdf) {
+    // Full eligible corpus, not a silently filtered subset or preselected document.
+    if (
+      pdfs.length !== manifest.pdf.admission.documents.length ||
+      manifest.pdf.admission.documents.some(
+        pin =>
+          !pdfs.some(
+            source =>
+              source.id === pin.sourceId &&
+              source.revision === pin.revision &&
+              source.title === pin.filename &&
+              source.size === pin.bytes,
+          ),
+      )
+    )
+      throw new Error("single_pdf_corpus_mismatch");
+  } else if (!originals.length || pdfs.length) {
     throw new Error("single_corpus_scope_mismatch");
+  }
+  const pdfSnapshot = new Map(pdfs.map(source => [source.id, { ...source }]));
   const directory = resolve(
     process.env.RUNNER_TEMP ?? ".",
     `chat-single-${process.env.GITHUB_RUN_ID}`,
@@ -121,12 +155,20 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     "source-preflight",
     originals.map(s => ({ sourceId: s.sourceId, revision: s.revision, textSha256: hash(s.text) })),
   );
+  if (manifest.pdf)
+    record("pdf-preflight", {
+      documents: manifest.pdf.admission.documents,
+      binaryCapture: "verified-reference-only",
+      reservationUsd: manifest.pdf.reservationUsd,
+      invoiceGuarantee: false,
+    });
   const prompt = await convertToModelMessages([
     { role: "user", parts: [{ type: "text", text: manifest.question }] },
   ]);
   const guardPath = resolve(directory, "guard.json");
   const guardRaw = JSON.stringify({
     version: 1,
+    ...(manifest.pdf ? { pdf: manifest.pdf.admission } : {}),
     runId: `single-${process.env.GITHUB_RUN_ID}`,
     modelId: MODEL_CHAT,
     promptSha256: hash(JSON.stringify(prompt)),
@@ -134,13 +176,13 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     toolLimits: {
       searchSources: 6,
       readSource: 6,
-      webSearch: 2,
+      webSearch: manifest.pdf?.execution.maxWebSearches ?? 2,
       searchPdfSources: 6,
       readPdfSource: 2,
       readNamedPdf: 2,
     },
-    maxToolExecutions: 12,
-    maxCalls: 6,
+    maxToolExecutions: manifest.pdf?.execution.maxToolExecutions ?? 12,
+    maxCalls: manifest.pdf?.execution.maxCalls ?? 6,
     maxInputBytes: 128000,
     maxTotalInputBytes: 196608,
     maxOutputTokens: 1024,
@@ -152,6 +194,26 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     manifestPath: guardPath,
     manifestSha256: hash(guardRaw),
     model: gateway(MODEL_CHAT),
+    ...(manifest.pdf
+      ? {
+          validatePdfSource: async (pin: (typeof manifest.pdf.admission.documents)[number]) => {
+            const baseline = pdfSnapshot.get(pin.sourceId);
+            const current = await loadChatPdfs(manifest.artistId, pin.sourceId);
+            if (
+              !baseline ||
+              current.length !== 1 ||
+              current[0].id !== pin.sourceId ||
+              current[0].revision !== pin.revision ||
+              current[0].title !== pin.filename ||
+              current[0].size !== pin.bytes ||
+              current[0].path !== baseline.path ||
+              current[0].url !== baseline.url ||
+              current[0].claimId !== baseline.claimId
+            )
+              throw new Error("single_pdf_source_changed");
+          },
+        }
+      : {}),
     record: (kind, value) => {
       if (
         kind === "model-input" &&
@@ -185,7 +247,7 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
       records,
       ledgerBytes: bytes,
       sha: process.env.GITHUB_SHA,
-      reservationUsd: 0.65,
+      reservationUsd: manifest.pdf?.reservationUsd ?? 0.65,
       invoiceGuarantee: false,
     },
   };

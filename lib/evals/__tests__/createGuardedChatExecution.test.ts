@@ -199,6 +199,102 @@ it("call bound blocks subsequent forward while retaining tool evidence", async (
   expect(model.doStreamCalls).toHaveLength(1);
   expect(events.some(e => e.kind === "tool-output")).toBe(true);
 });
+it("six-call PDF-pilot allowance refuses a seventh forward without retry or refund", async () => {
+  const model = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () => result(true),
+  });
+  const search = vi.fn(async () => ({ sources: [] }));
+  const { execute } = setup(model, {
+    maxCalls: 6,
+    maxToolExecutions: 8,
+    toolLimits: { searchSources: 6, webSearch: 1 },
+  });
+  await expect(
+    execute({
+      model: MODEL_CHAT,
+      prompt: "q",
+      stopWhen: isStepCount(7), // Exercise attempted forward beyond the normal handler's six steps.
+      tools: {
+        searchSources: tool({ inputSchema: z.object({ query: z.string() }), execute: search }),
+      },
+    }),
+  ).rejects.toThrow("eval_call_limit");
+  expect(model.doStreamCalls).toHaveLength(6);
+  expect(search).toHaveBeenCalledTimes(6);
+  expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+    calls: 6,
+    attemptedCall: 7,
+    toolExecutions: 6,
+  });
+  expect(external).not.toHaveBeenCalled();
+});
+it.each(["eight-allowed", "ninth-blocked", "second-web-blocked"])(
+  "enforces reduced parallel tool allowance: %s",
+  async mode => {
+    let step = 0;
+    const total = mode === "eight-allowed" ? 8 : mode === "ninth-blocked" ? 9 : 2;
+    const adapter = vi.fn(async () => ({ results: [] }));
+    const model = new MockLanguageModelV4({
+      modelId: MODEL_CHAT,
+      doStream: async () =>
+        step++ === 0
+          ? {
+              stream: simulateReadableStream<ModelPart>({
+                chunks: [
+                  ...Array.from({ length: total }, (_, i) => ({
+                    type: "tool-call" as const,
+                    toolCallId: `parallel-${i}`,
+                    toolName:
+                      mode === "second-web-blocked"
+                        ? "webSearch"
+                        : i % 2
+                          ? "readSource"
+                          : "searchSources",
+                    input: JSON.stringify({ query: `query-${i}` }),
+                  })),
+                  {
+                    type: "finish",
+                    finishReason: { unified: "tool-calls", raw: undefined },
+                    usage,
+                  },
+                ],
+              }),
+            }
+          : result(),
+    });
+    const { execute } = setup(model, {
+      maxCalls: 6,
+      maxToolExecutions: 8,
+      toolLimits: { searchSources: 6, readSource: 6, webSearch: 1 },
+    });
+    const turn = execute({
+      model: MODEL_CHAT,
+      prompt: "q",
+      stopWhen: isStepCount(6),
+      tools: Object.fromEntries(
+        ["searchSources", "readSource", "webSearch"].map(name => [
+          name,
+          tool({ inputSchema: z.object({ query: z.string() }), execute: adapter }),
+        ]),
+      ),
+    });
+    if (mode === "eight-allowed") {
+      await expect(turn).resolves.toEqual({ text: "Answer." });
+      expect(adapter).toHaveBeenCalledTimes(8);
+      expect(model.doStreamCalls).toHaveLength(2);
+    } else {
+      await expect(turn).rejects.toThrow("eval_tool_limit");
+      const admitted = mode === "ninth-blocked" ? 8 : 1;
+      expect(adapter).toHaveBeenCalledTimes(admitted);
+      expect(model.doStreamCalls).toHaveLength(1);
+      expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+        toolExecutions: admitted,
+      });
+    }
+    expect(external).not.toHaveBeenCalled();
+  },
+);
 it("advertised unbudgeted tool rejects before any provider forward", async () => {
   const forbidden = vi.fn();
   // The schema remains advertised, but this manifest only budgets saved-source tools.

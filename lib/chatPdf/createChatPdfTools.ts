@@ -105,7 +105,7 @@ export function createChatPdfTools(
         const matches = await loadChatPdfs(artistId, undefined, filename, true, question);
         if (matches.length !== 1 || matches[0].title.toLowerCase() !== filename.toLowerCase())
           return { error: "No unique eligible exact filename; use PDF discovery without guessing" };
-        discovered.set(matches[0].id, matches[0]);
+        if (!discovered.has(matches[0].id)) discovered.set(matches[0].id, matches[0]);
         return read(matches[0].id, matches[0]);
       },
       toModelOutput,
@@ -119,7 +119,8 @@ export function createChatPdfTools(
         const sources = await loadChatPdfs(artistId, undefined, query);
         return {
           sources: sources.slice(0, 8).map(s => {
-            discovered.set(s.id, s);
+            // Preserve the first exposed revision: earlier tool results remain in context.
+            if (!discovered.has(s.id)) discovered.set(s.id, s);
             return { sourceId: s.id, title: s.title, url: s.url };
           }),
           coverage:
@@ -138,7 +139,9 @@ export function createChatPdfTools(
   return {
     tools,
     assertCurrent: async () => {
-      for (const { source } of reads.values()) {
+      // Discovery exposes titles/URLs too; retain read snapshots if a later search changes them.
+      const exposed = [...discovered.values(), ...Array.from(reads.values(), r => r.source)];
+      for (const source of exposed) {
         const current = (await loadChatPdfs(artistId, source.id))[0];
         if (!current || JSON.stringify(current) !== JSON.stringify(source))
           throw new Error("PDF publication changed; ask again with current sources");

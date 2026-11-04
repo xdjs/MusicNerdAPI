@@ -25,7 +25,11 @@ const locatorSchema = z
  * @param cite - The turn's citation numbering.
  * @returns The tool.
  */
-export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSource) {
+export function createReadSourceTool(
+  originals: ResearchOriginal[],
+  cite: CiteSource,
+  assertCurrent?: (source: ResearchOriginal) => Promise<void>,
+) {
   return tool({
     description:
       "Read a saved source found by searchSources. Pass its locator unchanged when present to include the matching passage and surrounding context. Without a locator this reads the source prefix. Cite it in the answer as [n].",
@@ -36,6 +40,7 @@ export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSo
     execute: async ({ sourceId, locator }) => {
       const source = originals.find(original => original.sourceId === sourceId);
       if (!source) return { error: "Unknown sourceId. Use an id from searchSources." };
+      await assertCurrent?.(source);
       let window: ReturnType<typeof knowledgeWindow> | undefined;
       if (locator !== undefined) {
         const parsed = locatorSchema.safeParse(locator);

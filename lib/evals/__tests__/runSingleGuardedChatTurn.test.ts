@@ -178,3 +178,155 @@ it.each(["", " \n\t"])(
     expect(fetch).not.toHaveBeenCalled();
   },
 );
+
+const pdfPin = {
+  sourceId: "22222222-2222-4222-8222-222222222222",
+  revision: "r1",
+  filename: "fixture.pdf",
+  bytes: 100,
+  pages: 1,
+  sha256: "b".repeat(64),
+};
+const pdfRow = {
+  id: pdfPin.sourceId,
+  revision: pdfPin.revision,
+  title: pdfPin.filename,
+  size: 100,
+  path: "artist/fixture.pdf",
+  url: "https://fixture.test/artist/fixture.pdf",
+  claimId: "claim",
+};
+const pdfPlan = {
+  execution: { maxCalls: 6, maxToolExecutions: 8, maxWebSearches: 1 },
+  admission: {
+    documents: [pdfPin],
+    maxUniqueDocuments: 2,
+    maxBytesPerCall: 100,
+    maxTotalBytes: 500,
+    maxPagesPerCall: 1,
+    maxTotalPages: 5,
+  },
+  reservationUsd: 7.1,
+};
+it.each(["claim", null])(
+  "opt-in PDF runner accepts eligible claim correspondence %s without changing tools",
+  async claimId => {
+    const path = setup({ pdf: pdfPlan });
+    m.pdf.mockResolvedValue([{ ...pdfRow, claimId }]);
+    m.sources.mockResolvedValue([]);
+    const result = await runSingleGuardedChatTurn(path);
+    const config = m.guard.mock.calls[0][0];
+    const guard = JSON.parse(readFileSync(config.manifestPath, "utf8"));
+    expect(guard.pdf).toEqual(pdfPlan.admission);
+    expect(guard).toMatchObject({
+      maxCalls: 6,
+      maxToolExecutions: 8,
+      toolLimits: { webSearch: 1, readPdfSource: 2, readNamedPdf: 2 },
+      maxInputBytes: 128000,
+      maxTotalInputBytes: 196608,
+      maxOutputTokens: 1024,
+    });
+    expect(Object.keys(guard.toolLimits)).toHaveLength(6);
+    await expect(config.validatePdfSource(pdfPin)).resolves.toBeUndefined();
+    expect(m.pdf).toHaveBeenLastCalledWith("11111111-1111-4111-8111-111111111111", pdfPin.sourceId);
+    expect(result.diagnostic.reservationUsd).toBe(7.1);
+    expect(result.diagnostic.records.find(r => r.kind === "pdf-preflight")?.value).toMatchObject({
+      documents: [pdfPin],
+      binaryCapture: "verified-reference-only",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it.each(["missing", "calls", "tools", "web"])(
+  "rejects unreviewed PDF execution %s limits before model construction",
+  async kind => {
+    const execution = {
+      ...pdfPlan.execution,
+      ...(kind === "calls"
+        ? { maxCalls: 7 }
+        : kind === "tools"
+          ? { maxToolExecutions: 12 }
+          : { maxWebSearches: 2 }),
+    };
+    const path = setup({
+      pdf: { ...pdfPlan, execution: kind === "missing" ? undefined : execution },
+    });
+    m.pdf.mockResolvedValue([pdfRow]);
+    await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
+    expect(m.guard).not.toHaveBeenCalled();
+    expect(m.turn).not.toHaveBeenCalled();
+    expect(m.gateway).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it.each(["extra", "missing", "revision", "size", "title"])(
+  "rejects PDF corpus %s drift before model construction",
+  async kind => {
+    const path = setup({ pdf: pdfPlan });
+    m.pdf.mockResolvedValue(
+      kind === "extra"
+        ? [pdfRow, { ...pdfRow, id: "other" }]
+        : kind === "missing"
+          ? []
+          : [
+              {
+                ...pdfRow,
+                ...(kind === "revision"
+                  ? { revision: "new" }
+                  : kind === "size"
+                    ? { size: 101 }
+                    : { title: "other.pdf" }),
+              },
+            ],
+    );
+    await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_pdf_corpus_mismatch");
+    expect(m.gateway).not.toHaveBeenCalled();
+    expect(m.turn).not.toHaveBeenCalled();
+  },
+);
+it.each(["revoked", "revision", "path", "url", "claim", "foreign"])(
+  "revalidates %s after PDF preflight",
+  async kind => {
+    const path = setup({ pdf: pdfPlan });
+    m.pdf.mockResolvedValue([pdfRow]);
+    await runSingleGuardedChatTurn(path);
+    const validate = m.guard.mock.calls[0][0].validatePdfSource;
+    m.pdf.mockResolvedValue(
+      kind === "revoked"
+        ? []
+        : [
+            {
+              ...pdfRow,
+              ...(kind === "revision"
+                ? { revision: "new" }
+                : kind === "path"
+                  ? { path: "other" }
+                  : kind === "url"
+                    ? { url: "https://other.test" }
+                    : kind === "foreign"
+                      ? { id: "other" }
+                      : { claimId: "new" }),
+            },
+          ],
+    );
+    await expect(validate(pdfPin)).rejects.toThrow("single_pdf_source_changed");
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it("does not enable PDF admission from an unreviewed or disabled manifest", async () => {
+  const path = setup({ pdf: pdfPlan, enabled: false });
+  m.pdf.mockResolvedValue([pdfRow]);
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
+  expect(m.guard).not.toHaveBeenCalled();
+  expect(m.turn).not.toHaveBeenCalled();
+});
+
+it("rejects claim correspondence drift from an unclaimed public baseline", async () => {
+  const path = setup({ pdf: pdfPlan });
+  m.pdf.mockResolvedValue([{ ...pdfRow, claimId: null }]);
+  await runSingleGuardedChatTurn(path);
+  const validate = m.guard.mock.calls[0][0].validatePdfSource;
+  m.pdf.mockResolvedValue([pdfRow]);
+  await expect(validate(pdfPin)).rejects.toThrow("single_pdf_source_changed");
+  expect(fetch).not.toHaveBeenCalled();
+});

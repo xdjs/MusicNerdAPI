@@ -10,6 +10,11 @@ import {
 import { createOfflineChatTrace } from "@/lib/evals/__tests__/helpers/createOfflineChatTrace";
 import { originalFixture } from "./originalFixture";
 
+// Source authorization I/O is tested with PGlite in sourcePublication; this harness uses fixed eligible originals.
+vi.mock("@/lib/sourcePublication/assertPublicSourceCurrent", () => ({
+  assertPublicSourceCurrent: async () => undefined,
+}));
+
 const m = vi.hoisted(() => ({
   model: undefined as unknown,
   originals: vi.fn(),

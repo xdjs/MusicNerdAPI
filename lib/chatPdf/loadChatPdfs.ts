@@ -1,3 +1,4 @@
+import { publicVaultSourceSql } from "@/lib/sourcePublication/publicVaultSourceSql";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
@@ -35,11 +36,11 @@ export async function loadChatPdfs(
   // The extraction digest detects changes since discovery, not agreement with PDF bytes.
   return db.execute<ChatPdf>(sql`
     select v.id, coalesce(v.title, v.file_name, 'PDF') as title, v.url, v.file_path as path,
-      v.file_size as size, coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) as revision,
+      v.file_size as size, coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) || ':' || v.publication as revision,
       c.id::text as "claimId"
     from artist_vault_sources v
-    join artist_claims c on c.artist_id=v.artist_id and c.status='approved'
-    where v.artist_id=${artistId}::uuid and v.status='approved'
+    left join artist_claims c on c.artist_id=v.artist_id and c.status='approved'
+    where v.artist_id=${artistId}::uuid and ${publicVaultSourceSql()}
       and v.content_type='application/pdf' and v.file_path is not null
       and v.file_size > 0 and v.file_size <= ${MAX_CHAT_PDF_BYTES}
       and v.url = ${getPublicUrl(VAULT_BUCKET, "")} || v.file_path

@@ -542,6 +542,7 @@ export const artistVaultSources = pgTable(
   "artist_vault_sources",
   {
     origin: text().default("unknown").notNull(),
+    publication: text().default("inherit").notNull(),
     activityId: uuid("activity_id").references(() => artistActivityEvents.id, {
       onDelete: "set null",
     }),

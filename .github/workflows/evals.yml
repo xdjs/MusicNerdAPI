@@ -103,6 +103,8 @@ jobs:
       - name: Execute single case with private evidence only
         if: inputs.suite == 'chat-single'
         env:
+          # Explicit recorder keeps PDF references; do not create automatic raw SDK spans.
+          BRAINTRUST_DISABLE_INSTRUMENTATION: aisdk,vercel
           CHAT_SINGLE_MANIFEST: evals/chat-single-manifest.json
           CHAT_SINGLE_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
           CHAT_SINGLE_EXPECTED_SHA: ${{ inputs.candidate_sha }}

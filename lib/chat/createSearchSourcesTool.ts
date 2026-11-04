@@ -19,7 +19,11 @@ const SNIPPET_CHARS = 300;
  * @param artistName - The artist's name, for ranking.
  * @returns The tool.
  */
-export function createSearchSourcesTool(originals: ResearchOriginal[], artistName: string) {
+export function createSearchSourcesTool(
+  originals: ResearchOriginal[],
+  artistName: string,
+  assertCurrent?: (source: ResearchOriginal) => Promise<void>,
+) {
   return tool({
     description:
       "Search the artist's saved sources. Returns up to 8, each with a bounded navigation excerpt of its best matching passage (snippetWindow reports offsets and omitted/incomplete context); read one with readSource before citing it, passing its locator when present. For newest/recent activity use retrieval=latest, and platform when the question names one. Use evidenceNeed=release_date for latest releases. Dates describe stored evidence, not complete live coverage.",
@@ -44,7 +48,13 @@ export function createSearchSourcesTool(originals: ResearchOriginal[], artistNam
         retrieval === "latest"
           ? selectResearchReferences(originals, request, artistName)
           : rankChatSourceOriginals(originals, request, artistName, MAX_SOURCES);
-      const sources = candidates.slice(0, MAX_SOURCES).map(source => {
+      const selected = candidates.slice(0, MAX_SOURCES);
+      await Promise.all(
+        selected.map(source =>
+          assertCurrent?.(originals.find(item => item.sourceId === source.sourceId)!),
+        ),
+      );
+      const sources = selected.map(source => {
         const match = "match" in source ? source.match : undefined;
         const excerpt = match ? getDiscoveryPassage(source.text, match) : undefined;
         return {

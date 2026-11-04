@@ -7,7 +7,7 @@ const store = {
   execute: async (q: Parameters<typeof driver.execute>[0]) => (await driver.execute(q)).rows,
 };
 vi.mock("@/lib/db/db", () => ({
-  db: { transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(store) },
+  db: { execute: store.execute, transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(store) },
 }));
 vi.mock("@/lib/questionResearch/loadPublicLatestOriginals", () => ({
   loadPublicLatestOriginals: async () => [],
@@ -70,6 +70,12 @@ beforeAll(async () => {
     artist,
     JSON.stringify(social),
   ]);
+  await client.exec(
+    "alter table artist_vault_sources add column publication text not null default 'inherit'",
+  );
+  await client.exec(
+    "alter table artist_vault_sources add column url text; update artist_vault_sources set url=snapshot->>'url'",
+  );
 }, 30000);
 afterAll(async () => client.close());
 it("keeps public social originals but hides stored Lore until claim and again after revocation", async () => {
@@ -84,4 +90,52 @@ it("keeps public social originals but hides stored Lore until claim and again af
   expect((await loadPublicResearchOriginals(artist)).map(s => s.text)).toEqual([
     "Public caption remains accessible",
   ]);
+});
+
+it("publishes only explicitly public approved originals without fabricating a claim", async () => {
+  await client.exec(
+    "delete from artist_claims; update artist_vault_sources set publication='public'",
+  );
+  expect(
+    (await loadPublicResearchOriginals(artist)).some(s => s.sourceId.startsWith("vault:")),
+  ).toBe(true);
+  await client.exec(
+    "update artist_vault_sources set publication='private'; insert into artist_claims values ('00000000-0000-4000-8000-000000000001','approved')",
+  );
+  expect(
+    (await loadPublicResearchOriginals(artist)).some(s => s.sourceId.startsWith("vault:")),
+  ).toBe(false);
+  for (const status of ["pending", "rejected"]) {
+    await client.query("update artist_vault_sources set publication='public',status=$1", [status]);
+    expect(
+      (await loadPublicResearchOriginals(artist)).some(s => s.sourceId.startsWith("vault:")),
+    ).toBe(false);
+  }
+});
+
+it("revalidates publication and source revision before a read can emit a citation", async () => {
+  const { assertPublicSourceCurrent } =
+    await import("@/lib/sourcePublication/assertPublicSourceCurrent");
+  const { createReadSourceTool } = await import("@/lib/chat/createReadSourceTool");
+  await client.exec(
+    "delete from artist_claims; update artist_vault_sources set publication='public',status='approved'",
+  );
+  const originals = await loadPublicResearchOriginals(artist);
+  const source = originals.find(s => s.sourceId.startsWith("vault:"))!;
+  const cite = vi.fn().mockReturnValue(1);
+  const tool = createReadSourceTool(originals, cite, s => assertPublicSourceCurrent(artist, s));
+  const context = { toolCallId: "r", messages: [], context: {} };
+  await expect(tool.execute!({ sourceId: source.sourceId }, context)).resolves.toHaveProperty(
+    "text",
+  );
+  cite.mockClear();
+  await client.exec("update artist_vault_sources set publication='private'");
+  await expect(tool.execute!({ sourceId: source.sourceId }, context)).rejects.toThrow(
+    "no longer public",
+  );
+  expect(cite).not.toHaveBeenCalled();
+  await client.exec(
+    "update artist_vault_sources set publication='public',snapshot=jsonb_set(snapshot,'{updatedAt}','\"2026-11-03T00:00:00Z\"')",
+  );
+  await expect(assertPublicSourceCurrent(artist, source)).rejects.toThrow("Source changed");
 });

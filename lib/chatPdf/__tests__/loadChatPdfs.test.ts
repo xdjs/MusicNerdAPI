@@ -22,13 +22,16 @@ beforeAll(async () => {
  create table artist_vault_sources(id uuid,artist_id uuid,status text,content_type text,file_path text,file_size integer,title text,file_name text,url text,updated_at timestamptz,created_at timestamptz,extracted_text text);`);
   await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
   await client.query(
-    "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,'archive.pdf','archive.pdf',$4,null,now(),null)",
+    "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,'archive.pdf','archive.pdf',$4,null,now(),null)",
     [
       id,
       artist,
       `${artist}/archive.pdf`,
       `https://public.example/vault-files/${artist}/archive.pdf`,
     ],
+  );
+  await client.exec(
+    "alter table artist_vault_sources add column publication text not null default 'inherit'",
   );
 }, 30000);
 afterAll(async () => client.close());
@@ -56,7 +59,7 @@ it("filters unusable rows before the cap and ranks a named PDF beyond 32 eligibl
     const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
     const path = `${artist}/document-${i}.pdf`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,$4,$5,$5,$6,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,$4,$5,$5,$6,null,now(),null)",
       [
         sid,
         artist,
@@ -105,7 +108,7 @@ it("fails closed across transactional claim/source deletion and source rejection
   expect(cite).not.toHaveBeenCalled();
   await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
   await client.query(
-    "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,'x.pdf','x.pdf',$4,null,now(),null)",
+    "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,'x.pdf','x.pdf',$4,null,now(),null)",
     [wanted, artist, `${artist}/x.pdf`, `https://public.example/vault-files/${artist}/x.pdf`],
   );
   read.mockResolvedValue(file);
@@ -131,7 +134,7 @@ it("matches exact names before the cap and refuses duplicate names and ineligibl
     const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
     const path = `${artist}/document-${i}.pdf`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
       [
         sid,
         artist,
@@ -183,7 +186,7 @@ it("does not select a shorter filename inside an explicitly named longer eligibl
   ]) {
     const path = `${artist}/${title}`;
     await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
+      "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),null)",
       [sid, artist, path, title, `https://public.example/vault-files/${path}`],
     );
   }
@@ -290,4 +293,66 @@ it("bounds and deduplicates Unicode topic terms without interpolating query text
   } finally {
     execute.mockRestore();
   }
+});
+
+it("allows explicit approved publication without a claim and revokes PDF reads on publication change", async () => {
+  await client.exec(
+    "delete from artist_claims; update artist_vault_sources set status='approved',publication='public'",
+  );
+  const rows = await loadChatPdfs(artist);
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows[0].claimId).toBeNull();
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  const tools = createChatPdfTools(artist, vi.fn().mockReturnValue(1));
+  const context = { toolCallId: "p", messages: [], context: {} };
+  await tools.tools.searchPdfSources.execute!({ query: "document" }, context);
+  await client.query("update artist_vault_sources set publication='private' where id=$1", [
+    rows[0].id,
+  ]);
+  const result = await tools.tools.readPdfSource.execute!({ sourceId: rows[0].id }, context);
+  expect(result).toHaveProperty("error");
+  expect(await loadChatPdfs(artist, rows[0].id)).toEqual([]);
+});
+
+it("revalidates unclaimed public discovery metadata before another model step", async () => {
+  await client.exec(
+    "delete from artist_claims; update artist_vault_sources set status='approved',publication='public'",
+  );
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  const tools = createChatPdfTools(artist, vi.fn());
+  await tools.tools.searchPdfSources.execute!(
+    { query: "document" },
+    { toolCallId: "discovery", messages: [], context: {} },
+  );
+  await expect(tools.assertCurrent()).resolves.toBeUndefined();
+  await client.exec("update artist_vault_sources set publication='private'");
+  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
+});
+
+it("does not overwrite exposed discovery revision during repeated searches", async () => {
+  await client.exec("update artist_vault_sources set publication='public',status='approved'");
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  const tools = createChatPdfTools(artist, vi.fn());
+  const context = { toolCallId: "s", messages: [], context: {} };
+  await tools.tools.searchPdfSources.execute!({ query: "document" }, context);
+  await client.exec("update artist_vault_sources set extracted_text='changed body'");
+  await tools.tools.searchPdfSources.execute!({ query: "changed" }, context);
+  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
+});
+
+it("keeps discovery evidence current even when a named read obtains a newer revision", async () => {
+  await client.exec("update artist_vault_sources set publication='public',status='approved'");
+  const row = (await loadChatPdfs(artist))[0];
+  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
+  const tools = createChatPdfTools(artist, vi.fn().mockReturnValue(1), undefined, row.title);
+  const context = { toolCallId: "named", messages: [], context: {} };
+  await tools.tools.searchPdfSources.execute!({ query: row.title }, context);
+  await client.query(
+    "update artist_vault_sources set extracted_text='newer named read' where id=$1",
+    [row.id],
+  );
+  read.mockResolvedValue({ bytes: Buffer.from("%PDF-test"), pages: 1, hash: "hash" });
+  const result = await tools.tools.readNamedPdf.execute!({ filename: row.title }, context);
+  expect(result).toHaveProperty("sourceId", row.id);
+  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
 });

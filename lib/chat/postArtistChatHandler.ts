@@ -1,3 +1,5 @@
+import { assertPublicSourceCurrent } from "@/lib/sourcePublication/assertPublicSourceCurrent";
+import type { ResearchOriginal } from "@/lib/questionResearch/types";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -61,6 +63,11 @@ export async function postArtistChatHandler(
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);
+        const exposedOriginals = new Map<string, ResearchOriginal>();
+        const validateExposure = async (source: ResearchOriginal) => {
+          await assertPublicSourceCurrent(artistId, source);
+          exposedOriginals.set(source.sourceId, source);
+        };
         const pdf = createChatPdfTools(
           artistId,
           cite,
@@ -75,11 +82,18 @@ export async function postArtistChatHandler(
           anthropicEffort: "low",
           instructions: buildArtistChatInstructions(name),
           prompt,
-          beforeStep: pdf.assertCurrent,
+          beforeStep: async () => {
+            await pdf.assertCurrent();
+            await Promise.all(
+              [...exposedOriginals.values()].map(source =>
+                assertPublicSourceCurrent(artistId, source),
+              ),
+            );
+          },
           tools: {
             ...pdf.tools,
-            searchSources: createSearchSourcesTool(originals, name),
-            readSource: createReadSourceTool(originals, cite),
+            searchSources: createSearchSourcesTool(originals, name, validateExposure),
+            readSource: createReadSourceTool(originals, cite, validateExposure),
             webSearch: createWebSearchTool(cite),
           },
           stopWhen: isStepCount(6),
