@@ -30,7 +30,7 @@ it("rechecks immutable trust, claim scope, privacy and moderation without rewrit
   };
   try {
     await pg.exec(
-      `create table artists(id uuid,bio text); create schema mn_private; create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);`,
+      `create table artists(id uuid,bio text); create schema mn_private;create table mn_private.legacy_bio_publications(artist_id uuid primary key,claim_id uuid not null,bio_hash text not null); create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);`,
     );
     await pg.query("insert into artists values($1,$2)", [artist, bio]);
     await pg.query("insert into mn_private.artist_bio_provenance values($1,$2)", [
@@ -95,7 +95,7 @@ it("hides claimed legacy and unsupported generated text without modifying raw or
   const bio = "Preserved legacy bytes";
   try {
     await pg.exec(
-      "create table artists(id uuid,bio text);create schema mn_private;create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);create table artist_bio_versions(bio_text text,is_pinned boolean)",
+      "create table artists(id uuid,bio text);create schema mn_private;create table mn_private.legacy_bio_publications(artist_id uuid primary key,claim_id uuid not null,bio_hash text not null);create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(id uuid,artist_id uuid,status text);create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at text,file_path text);create table artist_bio_versions(bio_text text,is_pinned boolean)",
     );
     await pg.query("insert into artists values($1,$2)", [artist, bio]);
     await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);

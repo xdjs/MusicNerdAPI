@@ -71,7 +71,7 @@ beforeEach(async () => {
   mocks.links.mockResolvedValue([]);
   pg = new PGlite();
   await pg.exec(`create role anon;create role authenticated;create role mnweb;create role inherited_anon;grant anon to inherited_anon;
- create schema mn_private;revoke all on schema mn_private from public;grant usage on schema mn_private to mnweb;
+ create schema mn_private;create table mn_private.legacy_bio_publications(artist_id uuid primary key,claim_id uuid not null,bio_hash text not null);revoke all on schema mn_private from public;grant usage on schema mn_private to mnweb;
  create table artists(id uuid primary key,name text,bio text);
  create table artist_claims(id uuid,artist_id uuid,status text);
  create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at date,file_path text);
@@ -232,4 +232,17 @@ it("fails closed on projection read failure rather than returning raw data or di
   } finally {
     log.mockRestore();
   }
+});
+
+it("rechecks exact legacy allowance on every public handler read without exposing allowance metadata", async () => {
+  await pg.exec("delete from mn_private.artist_bio_provenance");
+  await pg.query("insert into artist_claims values($1,$2,'approved')", [claim, artist]);
+  await pg.query("insert into mn_private.legacy_bio_publications values($1,$2,$3)", [
+    artist,
+    claim,
+    createHash("sha256").update("Public biography").digest("hex"),
+  ]);
+  await checkResponses("Public biography");
+  await pg.exec("delete from mn_private.legacy_bio_publications");
+  await checkResponses(null);
 });

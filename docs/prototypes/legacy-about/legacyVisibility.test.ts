@@ -33,7 +33,7 @@ let pg: PGlite;
 beforeAll(async () => {
   pg = new PGlite();
   await pg.exec(`create role anon;create role authenticated;create role mnweb;
-    create schema mn_private;revoke all on schema mn_private from public;grant usage on schema mn_private to mnweb;
+    create schema mn_private;create table mn_private.legacy_bio_publications(artist_id uuid primary key,claim_id uuid not null,bio_hash text not null);revoke all on schema mn_private from public;grant usage on schema mn_private to mnweb;
     create table artists(id uuid primary key,name text,bio text);
     create table artist_claims(id uuid,artist_id uuid,status text);
     create table artist_vault_sources(id uuid,artist_id uuid,activity_id uuid,origin text,publication text,status text,url text,extracted_text text,title text,snippet text,published_at date,file_path text);

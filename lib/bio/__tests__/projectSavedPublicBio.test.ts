@@ -106,3 +106,21 @@ it("hides empty generated lineage while preserving explicit claim-scoped authore
     }),
   ).toBe(bio);
 });
+
+it("permits only exact explicit legacy allowance, never known lineage fallback", () => {
+  const legacyPublication = {
+    claimId: "claim",
+    bioHash: createHash("sha256").update(bio).digest("hex"),
+  };
+  const row = { bio, provenance: null, claimId: "claim", evidence: [], legacyPublication };
+  expect(projectSavedPublicBio(row)).toBe(bio);
+  for (const invalid of [
+    { ...row, claimId: "new-claim" },
+    { ...row, bio: "Edited" },
+    { ...row, legacyPublication: null },
+    { ...row, provenance: { kind: "unknown" } },
+    { ...row, provenance: { ...provenance, claimId: "claim", sources: [] } },
+    { ...row, provenance: { ...provenance, claimId: "claim" } },
+  ])
+    expect(projectSavedPublicBio(invalid)).toBeNull();
+});

@@ -385,3 +385,21 @@ it("saves fresh evidence even when regeneration produces identical text", async 
     [old, expect.objectContaining({ sources })],
   );
 });
+
+it("refuses a concurrent Lore edit while About remains empty before any writes", async () => {
+  const { tx } = setup({ bio: null });
+  tx.execute.mockResolvedValue([{ matches: false }]);
+  await expect(
+    persistArtistBio("a1", "Generated", {
+      ownership: owner,
+      generated: true,
+      expectedBio: null,
+      expectedDocument: { content: "Original", sources: [], updatedAt: null },
+      document: { content: "Generated Lore", sources: [] },
+      confirmSteps: ["interview", "publish"],
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+  expect(tx.update).not.toHaveBeenCalled();
+  expect(m.writeProvenance).not.toHaveBeenCalled();
+});

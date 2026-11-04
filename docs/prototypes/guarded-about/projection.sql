@@ -5,11 +5,12 @@ CREATE SCHEMA mn_projection AUTHORIZATION mn_projection_reader;
 CREATE SCHEMA mn_public AUTHORIZATION mn_projection_reader;
 REVOKE ALL ON SCHEMA mn_projection,mn_public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public,mn_private TO mn_projection_reader;
-GRANT SELECT ON public.artists,public.artist_claims,public.artist_vault_sources,public.artist_activity_events,mn_private.artist_bio_provenance TO mn_projection_reader;
+GRANT SELECT ON public.artists,public.artist_claims,public.artist_vault_sources,public.artist_activity_events,mn_private.artist_bio_provenance,mn_private.legacy_bio_publications TO mn_projection_reader;
 CREATE POLICY projection_read ON public.artists FOR SELECT TO mn_projection_reader USING(true);
 CREATE POLICY projection_read ON public.artist_claims FOR SELECT TO mn_projection_reader USING(true);
 CREATE POLICY projection_read ON public.artist_vault_sources FOR SELECT TO mn_projection_reader USING(true);
 CREATE POLICY projection_read ON public.artist_activity_events FOR SELECT TO mn_projection_reader USING(true);
+CREATE POLICY projection_read ON mn_private.legacy_bio_publications FOR SELECT TO mn_projection_reader USING(true);
 CREATE POLICY projection_read ON mn_private.artist_bio_provenance FOR SELECT TO mn_projection_reader USING(true);
 
 -- Exact array-of-nullable-text serialization for the current vault revision contract.
@@ -47,21 +48,23 @@ REVOKE ALL ON FUNCTION mn_projection.safe_url(text) FROM PUBLIC;
 
 CREATE FUNCTION mn_projection.public_bio(requested_id uuid) RETURNS text
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE a public.artists%ROWTYPE; p jsonb; claim_id text; s jsonb; trimmed text; seen numeric[] := '{}';
+DECLARE a public.artists%ROWTYPE; p jsonb; current_claim_id text; s jsonb; trimmed text; seen numeric[] := '{}';
 BEGIN
  SELECT * INTO a FROM public.artists WHERE id=requested_id;
  IF NOT FOUND OR a.bio IS NULL THEN RETURN NULL; END IF;
  trimmed := btrim(a.bio,U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF');
  IF trimmed='' OR trimmed='We don''t have enough verified information about this artist yet. If this is you, claim your profile and add a few sources to generate your About — or write your own. What you add helps Music Nerd tell your story to fans.' THEN RETURN NULL; END IF;
- SELECT id::text INTO claim_id FROM public.artist_claims WHERE artist_id=a.id AND status='approved' LIMIT 1;
+ SELECT id::text INTO current_claim_id FROM public.artist_claims WHERE artist_id=a.id AND status='approved' LIMIT 1;
  SELECT provenance INTO p FROM mn_private.artist_bio_provenance WHERE artist_id=a.id;
- IF NOT FOUND THEN RETURN NULL; END IF;
+ IF NOT FOUND THEN RETURN CASE WHEN EXISTS(SELECT 1 FROM mn_private.legacy_bio_publications lp
+   WHERE lp.artist_id=a.id AND lp.claim_id::text=current_claim_id
+     AND lp.bio_hash=encode(sha256(convert_to(a.bio,'UTF8')),'hex')) THEN a.bio ELSE NULL END; END IF;
  IF jsonb_typeof(p) IS DISTINCT FROM 'object' OR p->'version' IS DISTINCT FROM '1'::jsonb
  OR jsonb_typeof(p->'kind') IS DISTINCT FROM 'string' OR p->>'kind' NOT IN ('generated','authored')
  OR jsonb_typeof(p->'bioHash') IS DISTINCT FROM 'string'
  OR p->>'bioHash' IS DISTINCT FROM encode(sha256(convert_to(a.bio,'UTF8')),'hex')
  OR NOT(p ? 'claimId') OR jsonb_typeof(p->'claimId') NOT IN ('string','null')
- OR (p->>'claimId' IS NOT NULL AND p->>'claimId' IS DISTINCT FROM claim_id)
+ OR (p->>'claimId' IS NOT NULL AND p->>'claimId' IS DISTINCT FROM current_claim_id)
  OR jsonb_typeof(p->'sources') IS DISTINCT FROM 'array' THEN RETURN NULL; END IF;
  IF p->>'kind'='authored' AND p->>'claimId' IS NULL THEN RETURN NULL; END IF;
  IF (p->>'claimId' IS NULL OR p->>'kind'='generated') AND jsonb_array_length(p->'sources')=0 THEN RETURN NULL; END IF;
@@ -78,7 +81,7 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM public.artist_vault_sources v
    WHERE v.artist_id=a.id AND v.url=s->>'url' AND mn_projection.revision(v)=s->>'revision'
    AND v.status='approved' AND (v.publication='public' OR (v.publication='inherit' AND (
-    claim_id IS NOT NULL OR EXISTS(SELECT 1 FROM public.artist_activity_events e
+    current_claim_id IS NOT NULL OR EXISTS(SELECT 1 FROM public.artist_activity_events e
      WHERE e.id=v.activity_id AND e.artist_id=v.artist_id AND e.source_id=v.id
      AND e.actor_kind='user' AND e.actor_user_id IS NOT NULL AND e.trigger='trusted_submission'
      AND ((v.origin='upload' AND e.action='source_upload') OR (v.origin='submission' AND e.action='source_submission')))))))

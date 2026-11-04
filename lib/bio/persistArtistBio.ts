@@ -1,3 +1,4 @@
+import { assertSetupDocumentCurrent } from "@/lib/onboarding/assertSetupDocumentCurrent";
 import { readBioProvenance } from "@/lib/bio/readBioProvenance";
 import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
 import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
@@ -48,6 +49,7 @@ export async function persistArtistBio(
     ownership: BioWriteOwnership;
     generated?: boolean;
     expectedBio?: string | null;
+    expectedDocument?: { content: string; sources: unknown; updatedAt: string | null } | null;
     expectedLore?: { content: string; sources: DocSource[] };
     signal?: AbortSignal;
     aboutLease?: AboutLoreLease;
@@ -75,6 +77,8 @@ export async function persistArtistBio(
     }
     if (options.aboutLease) await assertLoreRefreshLease(tx, artistId, options.aboutLease);
     if (options.expectedLore) await assertAboutLoreCurrent(tx, artistId, options.expectedLore);
+    if (options.expectedDocument !== undefined)
+      await assertSetupDocumentCurrent(tx, artistId, options.expectedDocument);
     if (options.document)
       await assertLoreSourcesCurrent(tx, artistId, options.document.sources as DocSource[], {
         allowEmpty: true,

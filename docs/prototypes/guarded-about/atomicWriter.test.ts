@@ -26,6 +26,10 @@ const { getPublicSavedBio } = await import("../../../lib/bio/getPublicSavedBio")
 const migration = useExistingUrlReceipts(
   readFileSync(new URL("./projection.sql", import.meta.url), "utf8"),
 );
+const legacyMigration = readFileSync(
+  new URL("./fixtures/0063_legacy_bio_publications.sql", import.meta.url),
+  "utf8",
+);
 const receiptMigration = readFileSync(
   new URL("./fixtures/0062_public_url_receipts.sql", import.meta.url),
   "utf8",
@@ -94,6 +98,10 @@ beforeEach(async () => {
     "08c57527024da5dfce4bf943fab374b8ae11acb381a98db4ba813508d7aabf53",
   );
   await pg.exec(receiptMigration);
+  await pg.exec(
+    "alter table artists add primary key(id);alter table artist_claims add primary key(id)",
+  );
+  await pg.exec(legacyMigration);
   await pg.query(
     "insert into artists(id,name,bio) values($1,'Synthetic artist','Original manual')",
     [artist],
@@ -123,6 +131,7 @@ async function snapshot() {
     "mn_private.artist_bio_provenance",
     "mn_private.artist_bio_version_provenance",
     "mn_private.public_url_receipts",
+    "mn_private.legacy_bio_publications",
     "artist_research_jobs",
     "artist_activity_events",
   ])
@@ -264,4 +273,138 @@ it.each([
   expect((await pg.query("select to_regclass('mn_public.artists') as view")).rows).toEqual([
     { view: null },
   ]);
+});
+
+const legacyClaim = "00000000-0000-4000-8000-000000000004";
+async function seedLegacyAllowance() {
+  await pg.query("insert into artist_claims(id,artist_id,status) values($1,$2,'approved')", [
+    legacyClaim,
+    artist,
+  ]);
+  await pg.query("insert into mn_private.legacy_bio_publications values($1,$2,$3)", [
+    artist,
+    legacyClaim,
+    createHash("sha256").update("Original manual").digest("hex"),
+  ]);
+}
+async function expectLegacyHidden() {
+  expect(await getPublicSavedBio(artist)).toBeNull();
+  expect(await visible()).toEqual([{ bio: null }]);
+}
+it("preserves only the explicitly allowed exact legacy snapshot in API and SQL reads", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  expect(await getPublicSavedBio(artist)).toBe("Original manual");
+  expect(await visible()).toEqual([{ bio: "Original manual" }]);
+  await pg.exec("set role mnweb");
+  await expect(pg.query("delete from mn_private.legacy_bio_publications")).rejects.toMatchObject({
+    code: "42501",
+  });
+  await pg.exec("reset role");
+});
+it.each([
+  { kind: "unknown" },
+  { version: 1, kind: "generated", sources: [] },
+  { kind: ["generated"] },
+  null,
+])("never uses allowance as fallback for known or malformed lineage %j", async lineage => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.query("insert into mn_private.artist_bio_provenance values($1,$2)", [
+    artist,
+    JSON.stringify(lineage),
+  ]);
+  expect((await pg.query("select * from mn_private.legacy_bio_publications")).rows).toEqual([]);
+  // Even an erroneous owner reseed must not bypass known lineage, including JSON null.
+  await pg.query("insert into mn_private.legacy_bio_publications values($1,$2,$3)", [
+    artist,
+    legacyClaim,
+    createHash("sha256").update("Original manual").digest("hex"),
+  ]);
+  await expectLegacyHidden();
+});
+it.each(["status='revoked'", "user_id='00000000-0000-4000-8000-000000000009'"])(
+  "consumes allowance permanently across claim change/reapproval: %s",
+  async change => {
+    await seedLegacyAllowance();
+    await pg.exec(migration);
+    await pg.exec(`update artist_claims set ${change}`);
+    await pg.exec("update artist_claims set status='approved',user_id=null");
+    await expectLegacyHidden();
+    expect((await pg.query("select * from mn_private.legacy_bio_publications")).rows).toEqual([]);
+  },
+);
+it("claim deletion and recreation cannot restore the old allowance", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.exec("delete from artist_claims");
+  await pg.query("insert into artist_claims(id,artist_id,status) values($1,$2,'approved')", [
+    legacyClaim,
+    artist,
+  ]);
+  await expectLegacyHidden();
+});
+it("editing and restoring pinned historical bytes never revives consumed legacy publication", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.query(
+    "insert into artist_bio_versions(artist_id,bio_text,is_pinned) values($1,'Original manual',true)",
+    [artist],
+  );
+  await pg.exec("update artists set bio='Edited';update artists set bio='Original manual'");
+  await expectLegacyHidden();
+  expect((await pg.query("select bio_text,is_pinned from artist_bio_versions")).rows).toEqual([
+    { bio_text: "Original manual", is_pinned: true },
+  ]);
+});
+it.each([
+  "update artist_vault_sources set status='rejected'",
+  "update artist_vault_sources set publication='private'",
+  "delete from artist_vault_sources",
+])("consumes allowance when formerly eligible evidence is withdrawn: %s", async change => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.exec(change);
+  await expectLegacyHidden();
+});
+it("rejecting a newly pending unrelated source does not consume the existing allowance", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.query(
+    "insert into artist_vault_sources(artist_id,status,publication,url) values($1,'pending','public','https://example.org/unrelated')",
+    [artist],
+  );
+  await pg.exec("update artist_vault_sources set status='rejected' where status='pending'");
+  expect(await getPublicSavedBio(artist)).toBe("Original manual");
+});
+it("same-text generation consumes allowance; deleting lineage cannot revive legacy fallback", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await persistArtistBio(artist, "Original manual", {
+    ...options(),
+    ownership: { expectedClaimId: legacyClaim },
+  });
+  expect((await pg.query("select * from mn_private.legacy_bio_publications")).rows).toEqual([]);
+  expect(await getPublicSavedBio(artist)).toBe("Original manual");
+  await pg.exec("delete from mn_private.artist_bio_provenance");
+  await expectLegacyHidden();
+});
+it("failed generation publication rolls back allowance consumption and retains old public bytes", async () => {
+  await seedLegacyAllowance();
+  await pg.exec(migration);
+  await pg.exec(
+    "create function fail_new_provenance() returns trigger language plpgsql as $$begin raise exception 'Synthetic write failed';end$$;create trigger fail_new_provenance after insert on mn_private.artist_bio_provenance for each row execute function fail_new_provenance()",
+  );
+  await expect(
+    persistArtistBio(artist, "New generated", {
+      ...options(),
+      ownership: { expectedClaimId: legacyClaim },
+    }),
+  ).rejects.toThrow();
+  expect(await getPublicSavedBio(artist)).toBe("Original manual");
+  expect(await visible()).toEqual([{ bio: "Original manual" }]);
+  expect((await pg.query("select content from artist_docs")).rows).toEqual([
+    { content: "Original Lore" },
+  ]);
+  expect((await pg.query("select * from artist_bio_versions")).rows).toEqual([]);
 });

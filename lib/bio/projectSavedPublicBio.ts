@@ -3,15 +3,23 @@ import { isRealBio } from "@/lib/bio/isRealBio";
 import { publicKnowledgeUrl } from "@/lib/knowledge/publicKnowledgeUrl";
 import { vaultSourceRevision } from "@/lib/lore/vaultSourceRevision";
 
-/** Public text only. Unknown legacy prose stays private; generated text requires evidence and its original scope. */
+/** Public text only. Legacy prose needs an explicit exact-snapshot allowance; generated text retains evidence gates. */
 export function projectSavedPublicBio(row: {
   bio: string | null;
   provenance: unknown;
   claimId: string | null;
+  legacyPublication?: { claimId: string; bioHash: string } | null;
   evidence: Parameters<typeof vaultSourceRevision>[0][];
 }): string | null {
   if (!isRealBio(row.bio)) return null;
-  if (row.provenance === null) return null;
+  if (row.provenance === null) {
+    const allowance = row.legacyPublication;
+    return row.claimId &&
+      allowance?.claimId === row.claimId &&
+      allowance.bioHash === createHash("sha256").update(row.bio!).digest("hex")
+      ? row.bio
+      : null;
+  }
   if (!row.provenance || typeof row.provenance !== "object") return null;
   const p = row.provenance as Record<string, unknown>;
   if (

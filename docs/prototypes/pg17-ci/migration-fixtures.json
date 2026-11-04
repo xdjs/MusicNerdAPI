@@ -22,5 +22,13 @@
     "sourceRepository": "xdjs/MusicNerdWeb",
     "sourceCommit": "50a60897aa4f4d48292251859c3125c4c8420fcf",
     "sourcePath": "drizzle/0062_public_url_receipts.sql"
+  },
+  {
+    "file": "0063_legacy_bio_publications.sql",
+    "fixture": "../guarded-about/fixtures/0063_legacy_bio_publications.sql",
+    "sha256": "d992547931e8487f3bbd53a68217e5481d130a6287a40690606789a583a264dc",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "d219118f1e3b9a0fa5c3807a8bf3ea4414fad99f",
+    "sourcePath": "drizzle/0063_legacy_bio_publications.sql"
   }
 ]

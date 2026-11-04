@@ -4,7 +4,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { userInfo } from "node:os";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { getTableColumns, sql } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@/lib/db/schema";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
@@ -67,6 +67,8 @@ vi.mock("@/lib/db/db", () => ({
   },
 }));
 const { persistArtistBio } = await import("../persistArtistBio");
+const { persistSetupLore } = await import("@/lib/onboarding/persistSetupLore");
+const { LoreChangedError } = await import("@/lib/lore/LoreChangedError");
 const { resetClaimBuild } = await import("@/lib/claimBuild/resetClaimBuild");
 const { reserveAboutLoreRefresh } = await import("../reserveAboutLoreRefresh");
 const { finishAboutLoreRefresh } = await import("../finishAboutLoreRefresh");
@@ -218,6 +220,7 @@ describe.skipIf(!socket)(
         "0060_source_publication.sql",
         "0061_about_evidence_provenance.sql",
         "0062_public_url_receipts.sql",
+        "0063_legacy_bio_publications.sql",
       ])
         await admin!.unsafe(readMigration(file));
       expect(
@@ -238,7 +241,7 @@ describe.skipIf(!socket)(
       startBarrier = undefined;
       backendPids.clear();
       await admin!.unsafe(
-        `truncate mn_private.public_url_receipts,mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
+        `truncate mn_private.legacy_bio_publications,mn_private.public_url_receipts,mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
       );
       await admin!`insert into artists(id,name,bio) values(${artist},'Synthetic artist','Original')`;
       await admin!`insert into users(id,is_admin,is_white_listed) values(${user},true,true)`;
@@ -563,6 +566,129 @@ describe.skipIf(!socket)(
       expect(await client!`select bio from artists`).toEqual([{ bio: "Generated" }]);
       expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
     });
+
+    it("preserves an explicit legacy allowance on rollback but never revives it after claim revocation", async () => {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await admin!`insert into mn_private.legacy_bio_publications values(${artist},${claim},encode(sha256(convert_to('Original','UTF8')),'hex'))`;
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      const failure = await capture(
+        admin!.begin(async tx => {
+          await tx`update artist_vault_sources set publication='private' where artist_id=${artist}`;
+          throw new Error("Synthetic rollback");
+        }),
+      );
+      expect(failure.error).toBeInstanceOf(Error);
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      await client!`update artist_claims set status='revoked' where id=${claim}`;
+      await client!`update artist_claims set status='approved' where id=${claim}`;
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select bio from artists`).toEqual([{ bio: "Original" }]);
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(0);
+    });
+
+    it("setup saves then retains Lore without consuming the legacy About allowance or pin", async () => {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await admin!`insert into mn_private.legacy_bio_publications values(${artist},${claim},encode(sha256(convert_to('Original','UTF8')),'hex'))`;
+      await admin!`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},'Pinned text',true)`;
+      const ownership = { userId: user, expectedClaimId: claim };
+      await persistSetupLore(artist, ownership, { content: "Setup Lore", sources }, null);
+      const [snapshot] = await client!<
+        { content: string; sources: unknown; updatedAt: string | null }[]
+      >`select content,sources,updated_at::text as "updatedAt" from artist_docs where artist_id=${artist}`;
+      const before = await client!`select * from artist_docs`;
+      await persistSetupLore(artist, ownership, null, snapshot);
+      expect(await client!`select * from artist_docs`).toEqual(before);
+      expect(await client!`select bio from artists`).toEqual([{ bio: "Original" }]);
+      expect(await client!`select bio_text,is_pinned from artist_bio_versions`).toEqual([
+        { bio_text: "Pinned text", is_pinned: true },
+      ]);
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(1);
+      expect(await client!`select * from mn_private.artist_bio_provenance`).toHaveLength(0);
+      expect(await client!`select step from artist_onboarding_steps order by step`).toEqual([
+        { step: "interview" },
+        { step: "publish" },
+      ]);
+    });
+
+    it("setup rejects a stored Lore edit committed while waiting for the artist lock", async () => {
+      await client!`insert into artist_docs(artist_id,content,sources) values(${artist},'Old Lore','[]')`;
+      const [snapshot] = await client!<
+        { content: string; sources: unknown; updatedAt: string | null }[]
+      >`select content,sources,updated_at::text as "updatedAt" from artist_docs where artist_id=${artist}`;
+      const entered = deferred(),
+        release = deferred();
+      const holder = capture(
+        competitor!.begin(async tx => {
+          await tx`select id from artists where id=${artist} for update`;
+          await tx`update artist_docs set content='Concurrent editor Lore' where artist_id=${artist}`;
+          entered.resolve();
+          await release.promise;
+        }),
+      );
+      let waiting: ReturnType<typeof capture<void>> | undefined;
+      try {
+        await entered.promise;
+        waiting = capture(
+          persistSetupLore(artist, auth, { content: "Stale overwrite", sources }, snapshot),
+        );
+        await waitForBlockedWriter();
+      } finally {
+        release.resolve();
+        await Promise.all([holder, waiting]);
+      }
+      expect((await holder).error).toBeUndefined();
+      expect((await waiting!).error).toBeInstanceOf(LoreChangedError);
+      expect(await client!`select content from artist_docs`).toEqual([
+        { content: "Concurrent editor Lore" },
+      ]);
+      expect(await client!`select bio from artists`).toEqual([{ bio: "Original" }]);
+      expect(await client!`select * from artist_onboarding_steps`).toHaveLength(0);
+    });
+
+    it.each(["rejected", "edited"])(
+      "research auto-approval does not overwrite a concurrent %s source",
+      async change => {
+        await client!`update artist_vault_sources set status='pending',origin='research' where id=${sourceId}`;
+        const [expected] = await driver!
+          .select()
+          .from(schema.artistVaultSources)
+          .where(eq(schema.artistVaultSources.id, sourceId));
+        const entered = deferred(),
+          release = deferred();
+        const holder = capture(
+          competitor!.begin(async tx => {
+            await tx`select id from artists where id=${artist} for update`;
+            if (change === "rejected")
+              await tx`update artist_vault_sources set status='rejected' where id=${sourceId}`;
+            else
+              await tx`update artist_vault_sources set extracted_text='Concurrent replacement evidence' where id=${sourceId}`;
+            entered.resolve();
+            await release.promise;
+          }),
+        );
+        let waiting:
+          | ReturnType<typeof capture<Awaited<ReturnType<typeof updateVaultSourceStatus>>>>
+          | undefined;
+        try {
+          await entered.promise;
+          waiting = capture(updateVaultSourceStatus(sourceId, "approved", expected));
+          await waitForBlockedWriter();
+        } finally {
+          release.resolve();
+          await Promise.all([holder, waiting]);
+        }
+        expect((await holder).error).toBeUndefined();
+        expect(await waiting!).toEqual({ value: undefined, error: undefined });
+        const [current] =
+          await client!`select status,extracted_text from artist_vault_sources where id=${sourceId}`;
+        expect(current.status).toBe(change === "rejected" ? "rejected" : "pending");
+        if (change === "edited")
+          expect(current.extracted_text).toBe("Concurrent replacement evidence");
+        expect(await client!`select * from artist_research_jobs`).toHaveLength(0);
+        expect(await client!`select * from artist_activity_events`).toHaveLength(1);
+      },
+    );
 
     it("rolls back private provenance schema when the history foreign-key lock times out", async () => {
       await admin!.unsafe("drop schema mn_private cascade");

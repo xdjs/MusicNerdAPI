@@ -1,5 +1,7 @@
 # Guarded artist compatibility cutover
 
+Superseding user decision (2026-11-04): [preserve the exact 16 legacy snapshots](../../about-legacy-snapshot-exceptions.md) through explicit private snapshot permissions, not a blanket claimed-bio fallback. Earlier statements requiring approval to hide all 16 are historical and no longer the plan. New or changed content remains guarded.
+
 2026-11-04 legacy-policy update: [strict public lineage policy](../../about-legacy-publication-policy.md) removes the earlier claim-only legacy exception in the local candidate. Raw text/history is preserved; production visibility approval is still required.
 
 2026-11-04 writer-integration update: [actual API/Web receipt integration and current verification](../../about-source-receipt-integration.md) supersedes earlier statements below that receipts use only a test decorator or are not integrated. Migration0062 and real publication/history writers are now implemented locally. Historical backfill, unknown-client cutover and native17/deployed verification remain outstanding.

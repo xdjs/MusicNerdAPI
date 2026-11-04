@@ -1,5 +1,7 @@
 # Legacy About: preserve storage, require known public lineage
 
+Superseding user decision (2026-11-04): [preserve the exact 16 legacy snapshots](about-legacy-snapshot-exceptions.md) through explicit private snapshot permissions, not a blanket claimed-bio fallback. Earlier statements requiring approval to hide all 16 are historical and no longer the plan. New or changed content remains guarded.
+
 Local candidate, 2026-11-04. Recommendation: remove the claim-only legacy exception from public readers. Keep every saved biography, pin and history row intact for authorized editors. A claim establishes editing authority; it does not establish which sources an old biography used or that its text is safe to republish.
 
 ## Implemented policy

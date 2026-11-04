@@ -57,19 +57,21 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (_a: string, opts: { onSaved: (s: unknown) => void }) => {
       opts.onSaved({ url: "https://a.com/1", title: "One", ogImage: null });
-      return [];
+      return pending;
     });
   m.sources
     .mockReset()
     .mockImplementation(async (_a: string, status: string) =>
-      status === "pending" ? pending : [{ url: "https://old.com", title: "Old", ogImage: "i" }],
+      status === "pending"
+        ? pending
+        : [{ url: "https://old.com", title: "Old", ogImage: "i", extractedText: "x".repeat(500) }],
     );
   m.status.mockReset().mockResolvedValue({});
   m.confirm.mockReset().mockResolvedValue(undefined);
 });
 
 describe("autoBuildSources", () => {
-  it("streams saved sources, reports adopted links, approves everything pending and confirms the vault", async () => {
+  it("streams saved sources, reports adopted links, approves only this run’s saved sources and confirms the vault", async () => {
     const guessed = profile("instagram", "guess", { provisional: true });
     const { events, result } = await run(["instagram"], new Map([["instagram", guessed]]));
     expect(m.search).toHaveBeenCalledWith("a1", {
@@ -94,8 +96,8 @@ describe("autoBuildSources", () => {
     ).toEqual(["instagram", "bandcamp"]);
     expect(events[3]).toMatchObject({ kind: "choices", platform: "instagram", chosen: "real" });
     expect(m.status.mock.calls).toEqual([
-      ["p1", "approved"],
-      ["p2", "approved"],
+      ["p1", "approved", pending[0]],
+      ["p2", "approved", pending[1]],
     ]);
     expect(events[4]).toEqual({
       kind: "sources",
@@ -131,6 +133,7 @@ describe("autoBuildSources", () => {
 
   it("says it looked when nothing was pending", async () => {
     m.sources.mockImplementation(async () => []);
+    m.search.mockResolvedValue([]);
     const { events, result } = await run();
     expect(events.at(-1)).toEqual({
       kind: "progress",
@@ -142,7 +145,7 @@ describe("autoBuildSources", () => {
   });
 });
 
-it("retains a streamed partial source on failure and approves it on retry", async () => {
+it("retains a streamed partial source on failure without approving it on a later empty retry", async () => {
   const failure = new Error("Web search failed (tavily: http_432)");
   m.search.mockImplementationOnce(async (_a, options) => {
     options.onSaved(pending[0]);
@@ -159,8 +162,9 @@ it("retains a streamed partial source on failure and approves it on retry", asyn
   });
   expect(m.confirm).not.toHaveBeenCalled();
   expect(m.status).not.toHaveBeenCalled();
+  m.search.mockResolvedValue([]);
   await run();
-  expect(m.status).toHaveBeenCalledWith("p1", "approved");
+  expect(m.status).not.toHaveBeenCalled();
 });
 
 it("does not confirm at the old timeout boundary or hide a later provider failure", async () => {
@@ -191,4 +195,11 @@ it("does not confirm when the consumer cancels after a partial source", async ()
   expect((await stage.next()).value).toMatchObject({ kind: "source" });
   await stage.return({ citable: 0 });
   expect(m.confirm).not.toHaveBeenCalled();
+});
+
+it("does not approve preexisting pending contributions or rewrite approved trusted sources", async () => {
+  m.search.mockResolvedValue([]);
+  await run();
+  expect(m.sources).not.toHaveBeenCalledWith("a1", "pending");
+  expect(m.status).not.toHaveBeenCalled();
 });
