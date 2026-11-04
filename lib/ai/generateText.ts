@@ -18,8 +18,8 @@ export type GenerateTextOptions<OUTPUT extends OutputInterface = TextOutput> = {
   thinkingBudget?: number;
   /** Gemini 3+ reasoning level, selected explicitly by the caller. */
   thinkingLevel?: "low";
-  /** Explicit effort for Anthropic verification calls; omitted keeps the provider default. */
-  anthropicEffort?: "low";
+  /** Explicit Anthropic effort; omitted keeps the provider default. */
+  anthropicEffort?: "low" | "medium";
   /** `Output.object({ schema })` for a reply parsed as JSON. */
   output?: OUTPUT;
 };

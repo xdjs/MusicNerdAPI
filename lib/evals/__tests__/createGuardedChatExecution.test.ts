@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { MockLanguageModelV4 } from "ai/test";
-import { simulateReadableStream, isStepCount, tool, APICallError } from "ai";
+import { createGateway, simulateReadableStream, isStepCount, tool, APICallError } from "ai";
 import { z } from "zod";
 import { createGuardedChatExecution } from "@/lib/evals/createGuardedChatExecution";
 import { MODEL_CHAT } from "@/lib/ai/const";
@@ -118,7 +118,10 @@ it("forwards exact prepared inputs once, keeps beforeStep, and emits bounded fin
     JSON.parse(JSON.stringify(prepared)),
   );
   expect(actual.maxOutputTokens).toBe(128);
-  expect(actual.providerOptions).toEqual({ anthropic: { effort: "low" } });
+  expect(actual.providerOptions).toEqual({
+    anthropic: { effort: "low" },
+    gateway: { only: ["anthropic"] },
+  });
   expect(events.find(e => e.kind === "model-finish")?.value).toMatchObject({
     usage: { inputTokens: { total: 10 }, outputTokens: { total: 4 } },
   });
@@ -128,6 +131,63 @@ it("forwards exact prepared inputs once, keeps beforeStep, and emits bounded fin
     "eval_already_dispatched",
   );
   expect(model.doStreamCalls).toHaveLength(1);
+});
+it("serializes explicit effort and approved text recipient through installed SDK and Gateway", async () => {
+  const wire: any[] = [];
+  const model = createGateway({
+    apiKey: "synthetic-offline-test",
+    baseURL: "https://offline-gateway.invalid/v4/ai",
+    fetch: async (input, init) => {
+      expect(String(input)).toBe("https://offline-gateway.invalid/v4/ai/language-model");
+      wire.push(JSON.parse(String(init?.body)));
+      const parts = [
+        { type: "text-start", id: "t" },
+        { type: "text-delta", id: "t", delta: "Answer." },
+        { type: "text-end", id: "t" },
+        { type: "finish", finishReason: { unified: "stop" }, usage },
+      ];
+      return new Response(parts.map(p => `data: ${JSON.stringify(p)}\n\n`).join(""), {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    },
+  }).languageModel(MODEL_CHAT);
+  const { execute } = setup(model as never);
+  expect(await execute({ model: MODEL_CHAT, prompt: "q", anthropicEffort: "medium" })).toEqual({
+    text: "Answer.",
+  });
+  expect(wire).toHaveLength(1);
+  expect(wire[0].providerOptions).toEqual({
+    anthropic: { effort: "medium" },
+    gateway: { only: ["anthropic"] },
+  });
+  expect(external).not.toHaveBeenCalled();
+});
+it("admits standard reasoning history with metadata under the same text bounds", async () => {
+  const model = new MockLanguageModelV4({ modelId: MODEL_CHAT, doStream: async () => result() });
+  const prompt = [
+    {
+      role: "assistant" as const,
+      content: [
+        {
+          type: "reasoning" as const,
+          text: "Offline source comparison.",
+          providerOptions: { anthropic: { signature: "synthetic-signature" } },
+        },
+      ],
+    },
+    { role: "user" as const, content: "Continue." },
+  ];
+  const { execute } = setup(model, {
+    promptSha256: createHash("sha256").update(JSON.stringify(prompt)).digest("hex"),
+  });
+  await execute({ model: MODEL_CHAT, prompt, anthropicEffort: "medium" });
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain("synthetic-signature");
+  expect(model.doStreamCalls[0].providerOptions).toEqual({
+    anthropic: { effort: "medium" },
+    gateway: { only: ["anthropic"] },
+  });
+  expect(external).not.toHaveBeenCalled();
 });
 it.each(["write", "input", "capture"])(
   "blocks %s failure before underlying forward",

@@ -136,12 +136,11 @@ export function createGuardedChatExecution({
   const wrapped = wrapLanguageModel({
     model,
     middleware: {
-      // PDF acceptance's reviewed recipient is Anthropic; normal routes/text evaluators are unchanged.
+      // Single-case evidence goes only to the approved Anthropic route. HTTP chat is unchanged.
       transformParams: async ({ params }) => {
-        if (!manifest.pdf) return params;
         const routing = params.providerOptions?.gateway;
         if (routing && JSON.stringify(routing) !== JSON.stringify({ only: ["anthropic"] }))
-          fail("eval_pdf_routing_mismatch");
+          fail("eval_routing_mismatch");
         return {
           ...params,
           providerOptions: { ...params.providerOptions, gateway: { only: ["anthropic"] } },

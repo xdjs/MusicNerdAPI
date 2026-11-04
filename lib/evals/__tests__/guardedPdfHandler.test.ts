@@ -200,6 +200,21 @@ it("real handler discovers/reads original PDF, repeats exact SDK bytes and finis
   expect(turn.error).toBeUndefined();
   expect(turn.answer).toBe("Scripted fixture statement [1], physical page 1.");
   expect(prepared).toHaveLength(4);
+  for (const request of prepared) {
+    expect(request.providerOptions).toEqual({
+      anthropic: { effort: "medium" },
+      gateway: { only: ["anthropic"] },
+    });
+    expect(request.tools.map((t: { name: string }) => t.name).sort()).toEqual([
+      "readNamedPdf",
+      "readPdfSource",
+      "readSource",
+      "searchPdfSources",
+      "searchSources",
+      "webSearch",
+    ]);
+    expect(request.toolChoice).toEqual({ type: "auto" });
+  }
   expect(records.filter(r => r.kind === "tool-input").map(r => r.value.name)).toEqual([
     "searchPdfSources",
     "readPdfSource",

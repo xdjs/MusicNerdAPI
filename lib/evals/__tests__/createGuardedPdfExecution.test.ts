@@ -148,11 +148,52 @@ it("rejects a conflicting PDF recipient before any provider forward", async () =
       providerOptions: { gateway: { only: ["vertex"] } },
     });
   });
-  await expect(s.execute(s.options)).rejects.toThrow("eval_pdf_routing_mismatch");
+  await expect(s.execute(s.options)).rejects.toThrow("eval_routing_mismatch");
   expect(s.forward).not.toHaveBeenCalled();
-  expect(events.find(e => e.kind === "guard-failure")?.value.reason).toBe(
-    "eval_pdf_routing_mismatch",
-  );
+  expect(events.find(e => e.kind === "guard-failure")?.value.reason).toBe("eval_routing_mismatch");
+});
+it.each([undefined, { only: ["anthropic"] }])(
+  "pins approved recipient for text-only inputs (%j)",
+  async routing => {
+    const s = setup({}, { textOnly: true });
+    m.stream.mockImplementation(async o => {
+      const result = await o.model.doStream({
+        prompt: [],
+        maxOutputTokens: 1024,
+        providerOptions: {
+          anthropic: { effort: "medium" },
+          ...(routing ? { gateway: routing } : {}),
+        },
+      });
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {
+        /* Drain offline fixture. */
+      }
+      return { text: "" };
+    });
+    await s.execute(s.options);
+    expect(s.forward).toHaveBeenCalledTimes(1);
+    expect(events.find(e => e.kind === "model-input")?.value.prepared.providerOptions).toEqual({
+      anthropic: { effort: "medium" },
+      gateway: { only: ["anthropic"] },
+    });
+  },
+);
+it.each([
+  { only: ["vertex"] },
+  { only: ["anthropic"], order: ["anthropic"] },
+  { only: ["anthropic"], caching: "auto" },
+])("rejects additional text routing settings before forwarding (%j)", async routing => {
+  const s = setup({}, { textOnly: true });
+  m.stream.mockImplementation(async o => {
+    await o.model.doStream({
+      prompt: [],
+      maxOutputTokens: 1024,
+      providerOptions: { gateway: routing },
+    });
+  });
+  await expect(s.execute(s.options)).rejects.toThrow("eval_routing_mismatch");
+  expect(s.forward).not.toHaveBeenCalled();
 });
 it("installed SDK converts original tool output unchanged; ledger contains verified references, not binary", async () => {
   const s = setup();

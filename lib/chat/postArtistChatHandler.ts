@@ -79,7 +79,7 @@ export async function postArtistChatHandler(
         );
         await executeStream({
           model: MODEL_CHAT,
-          anthropicEffort: "low",
+          anthropicEffort: "medium",
           instructions: buildArtistChatInstructions(name),
           prompt,
           beforeStep: async () => {

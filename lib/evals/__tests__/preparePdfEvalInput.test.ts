@@ -47,6 +47,19 @@ it("keeps actual input unchanged and captures exact hash/reference instead of bi
   expect(result.pdfPages).toBe(1);
   expect(result.documents).toEqual([pin]);
 });
+it("preserves standard reasoning continuation and its metadata alongside PDF references", () => {
+  const original: any = input();
+  const reasoning = {
+    type: "reasoning",
+    text: "Offline source comparison.",
+    providerOptions: { anthropic: { signature: "synthetic-signature" } },
+  };
+  original.prompt.unshift({ role: "assistant", content: [reasoning] });
+  const result = preparePdfEvalInput(original, new Map([["t", pin]]));
+  expect((result.prepared as any).prompt[0].content).toEqual([reasoning]);
+  expect(result.pdfBytes).toBe(bytes.length);
+  expect(JSON.stringify(result.prepared)).not.toContain(bytes.toString("base64"));
+});
 it.each(["unknown call", "url", "wrong bytes", "wrong filename"])(
   "rejects %s before forwarding",
   kind => {

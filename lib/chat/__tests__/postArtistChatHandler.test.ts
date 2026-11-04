@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
-import { simulateReadableStream } from "ai";
+import { createGateway, simulateReadableStream } from "ai";
+import { MODEL_CHAT } from "@/lib/ai/const";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { originalFixture } from "./originalFixture";
 
@@ -142,6 +143,125 @@ it("streams tool steps, a source-url per read source and text citing it", async 
   expect(types.indexOf("source-url")).toBeLessThan(types.indexOf("text-delta"));
   expect(m.reserve).toHaveBeenCalledWith(artistId, "f".repeat(64));
   expect(m.webSearch).not.toHaveBeenCalled();
+  expect((m.model as MockLanguageModelV4).doStreamCalls).toHaveLength(3);
+  for (const call of (m.model as MockLanguageModelV4).doStreamCalls) {
+    expect(call.providerOptions).toEqual({ anthropic: { effort: "medium" } });
+    expect(call.tools?.map(t => t.name).sort()).toEqual([
+      "readNamedPdf",
+      "readPdfSource",
+      "readSource",
+      "searchPdfSources",
+      "searchSources",
+      "webSearch",
+    ]);
+    expect(call.toolChoice).toEqual({ type: "auto" });
+  }
+});
+
+it("serializes moderate effort and all six automatic tools on every real Gateway forward", async () => {
+  const calls: Record<string, unknown>[] = [];
+  const scripted = [
+    [
+      {
+        type: "tool-call",
+        toolCallId: "find",
+        toolName: "searchSources",
+        input: JSON.stringify({ query: "label" }),
+      },
+      finish("tool-calls"),
+    ],
+    [
+      {
+        type: "tool-call",
+        toolCallId: "read",
+        toolName: "readSource",
+        input: JSON.stringify({ sourceId: "vault:1" }),
+      },
+      finish("tool-calls"),
+    ],
+    [
+      { type: "text-start", id: "answer" },
+      { type: "text-delta", id: "answer", delta: "A scripted answer [1]." },
+      { type: "text-end", id: "answer" },
+      finish("stop"),
+    ],
+  ];
+  const noNetwork = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("offline_test_network_blocked"));
+  const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe("https://offline-gateway.invalid/v4/ai/language-model");
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("ai-language-model-id")).toBe(MODEL_CHAT);
+    const body = JSON.parse(String(init?.body));
+    calls.push(body);
+    expect(calls.length).toBeLessThanOrEqual(3);
+    return new Response(
+      scripted[calls.length - 1].map(part => `data: ${JSON.stringify(part)}\n\n`).join(""),
+      { headers: { "Content-Type": "text/event-stream" } },
+    );
+  });
+  m.model = createGateway({
+    apiKey: "synthetic-offline-test",
+    baseURL: "https://offline-gateway.invalid/v4/ai",
+    fetch: fetchStub,
+  }).languageModel(MODEL_CHAT);
+  try {
+    const chunks = await chunksOf(await post(ask("Which label?")));
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.providerOptions).toEqual({ anthropic: { effort: "medium" } });
+      expect((call.tools as { name: string }[]).map(t => t.name).sort()).toEqual([
+        "readNamedPdf",
+        "readPdfSource",
+        "readSource",
+        "searchPdfSources",
+        "searchSources",
+        "webSearch",
+      ]);
+      expect(call.toolChoice).toEqual({ type: "auto" });
+    }
+    expect(JSON.stringify(calls[2].prompt)).toContain("Dutchyyy signed to Night Label.");
+    expect(
+      chunks
+        .filter(c => c.type === "text-delta")
+        .map(c => c.delta)
+        .join(""),
+    ).toBe("A scripted answer [1].");
+    expect(noNetwork).not.toHaveBeenCalled();
+    expect(m.assertCurrent).toHaveBeenCalled();
+  } finally {
+    noNetwork.mockRestore();
+  }
+});
+
+it("keeps the six-step ceiling through Gateway serialization without an extra verifier", async () => {
+  let forwards = 0;
+  const fetchStub = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    expect(body.providerOptions).toEqual({ anthropic: { effort: "medium" } });
+    const parts = [
+      {
+        type: "tool-call",
+        toolCallId: `search-${++forwards}`,
+        toolName: "searchSources",
+        input: JSON.stringify({ query: "label" }),
+      },
+      finish("tool-calls"),
+    ];
+    return new Response(parts.map(part => `data: ${JSON.stringify(part)}\n\n`).join(""), {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  });
+  m.model = createGateway({
+    apiKey: "synthetic-offline-test",
+    baseURL: "https://offline-gateway.invalid/v4/ai",
+    fetch: fetchStub,
+  }).languageModel(MODEL_CHAT);
+  const chunks = await chunksOf(await post(ask("Which label?")));
+  expect(forwards).toBe(6);
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+  // This proves only the ceiling; exhausted research is not answer-quality success.
 });
 
 it("sends the model the artist's instructions and the conversation", async () => {
@@ -157,11 +277,12 @@ it("sends the model the artist's instructions and the conversation", async () =>
   });
 });
 
-it("asks the model for low effort, so the answer starts sooner", async () => {
+it("uses moderate effort for ordinary chat without adding a second generation", async () => {
   const model = new MockLanguageModelV4({ doStream: [textStep("Hi.")] });
   m.model = model;
   await chunksOf(await post(ask("Who is this?")));
-  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "low" } });
+  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "medium" } });
+  expect(model.doStreamCalls).toHaveLength(1);
 });
 
 it("answers for an artist without stored sources, citing a web result", async () => {
@@ -423,7 +544,7 @@ it("keeps model-visible source dates in eval evidence through the production han
     activityDate: null,
     retrievedAt: "2026-10-17T02:35:26.550Z",
   });
-  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "low" } });
+  expect(model.doStreamCalls[0].providerOptions).toEqual({ anthropic: { effort: "medium" } });
   expect(model.doStreamCalls[0].temperature).toBeUndefined();
   expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain("Base every claim");
 });

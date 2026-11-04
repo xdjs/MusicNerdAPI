@@ -17,7 +17,19 @@ const params = (text = "界🙂") => ({
   prompt: [{ role: "user" as const, content: [{ type: "text" as const, text }] }],
   maxOutputTokens: 1024,
 });
-const bytes = (p: unknown) => Buffer.byteLength(JSON.stringify(p));
+// Admission charges the complete post-routing prepared request, including the recipient pin.
+const bytes = (p: unknown) => {
+  const value = p as Record<string, unknown>;
+  return Buffer.byteLength(
+    JSON.stringify({
+      ...value,
+      providerOptions: {
+        ...((value.providerOptions ?? {}) as Record<string, unknown>),
+        gateway: { only: ["anthropic"] },
+      },
+    }),
+  );
+};
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "mn1424-admission-"));
   events = [];
@@ -102,7 +114,8 @@ it.each(["per-call", "total"])(
       inputBytes: kind === "per-call" ? n + 1 : n,
       consumedInputBytes: n,
     });
-    expect(n).toBeGreaterThan(JSON.stringify(p).length);
+    expect(Buffer.byteLength(JSON.stringify(p))).toBeGreaterThan(JSON.stringify(p).length);
+    expect(n).toBeGreaterThan(Buffer.byteLength(JSON.stringify(p)));
   },
 );
 it("charges repeated cached prefixes in full without concurrent reservation races", async () => {

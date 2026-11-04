@@ -18,6 +18,16 @@ describe("buildProviderOptions", () => {
     });
   });
 
+  it("forwards explicit moderate effort without changing omitted or low settings", () => {
+    expect(buildProviderOptions({ anthropicEffort: "medium" })).toEqual({
+      anthropic: { effort: "medium" },
+    });
+    expect(buildProviderOptions({})).toBeUndefined();
+    expect(buildProviderOptions({ anthropicEffort: "low" })).toEqual({
+      anthropic: { effort: "low" },
+    });
+  });
+
   it("combines both providers", () => {
     expect(buildProviderOptions({ thinkingBudget: 0, anthropicEffort: "low" })).toEqual({
       google: { thinkingConfig: { thinkingBudget: 0, thinkingLevel: undefined } },
