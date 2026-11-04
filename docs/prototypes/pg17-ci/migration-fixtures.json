@@ -1,0 +1,26 @@
+[
+  {
+    "file": "0060_source_publication.sql",
+    "fixture": "fixtures/0060_source_publication.sql",
+    "sha256": "091de2460bc9cccac143e85f203666733817ca0556e291dfd0b8747b98f36c0e",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "50a60897aa4f4d48292251859c3125c4c8420fcf",
+    "sourcePath": "drizzle/0060_source_publication.sql"
+  },
+  {
+    "file": "0061_about_evidence_provenance.sql",
+    "fixture": "fixtures/0061_about_evidence_provenance.sql",
+    "sha256": "c3417435ee2955e96950028a27f5943ad303b38734ed2fe209dba6c015c884ac",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "50a60897aa4f4d48292251859c3125c4c8420fcf",
+    "sourcePath": "drizzle/0061_about_evidence_provenance.sql"
+  },
+  {
+    "file": "0062_public_url_receipts.sql",
+    "fixture": "../guarded-about/fixtures/0062_public_url_receipts.sql",
+    "sha256": "08c57527024da5dfce4bf943fab374b8ae11acb381a98db4ba813508d7aabf53",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "50a60897aa4f4d48292251859c3125c4c8420fcf",
+    "sourcePath": "drizzle/0062_public_url_receipts.sql"
+  }
+]

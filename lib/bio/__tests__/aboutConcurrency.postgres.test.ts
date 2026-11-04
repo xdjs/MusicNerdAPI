@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import migrationFixtures from "../../../docs/prototypes/pg17-ci/migration-fixtures.json";
 import { readFileSync, realpathSync } from "node:fs";
 import { userInfo } from "node:os";
 import postgres from "postgres";
@@ -7,6 +9,18 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import * as schema from "@/lib/db/schema";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
 import { vaultSourceRevision } from "@/lib/lore/vaultSourceRevision";
+
+function readMigration(file: string) {
+  const fixture = migrationFixtures.find(item => item.file === file);
+  if (!fixture) throw new Error("Unrecognized synthetic migration fixture");
+  const contents = readFileSync(
+    new URL(`../../../docs/prototypes/pg17-ci/${fixture.fixture}`, import.meta.url),
+    "utf8",
+  );
+  if (createHash("sha256").update(contents).digest("hex") !== fixture.sha256)
+    throw new Error("Synthetic migration fixture checksum mismatch");
+  return contents;
+}
 
 // Opt-in only. Never consult application credentials or a network URL.
 const socket = process.env.MN_1655_PG_SOCKET;
@@ -205,7 +219,7 @@ describe.skipIf(!socket)(
         "0061_about_evidence_provenance.sql",
         "0062_public_url_receipts.sql",
       ])
-        await admin!.unsafe(readFileSync(`/tmp/mn-about-trusted-web/drizzle/${file}`, "utf8"));
+        await admin!.unsafe(readMigration(file));
       expect(
         await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
       ).toEqual([{ bio: "Legacy biography", bio_provenance: null }]);
@@ -563,10 +577,7 @@ describe.skipIf(!socket)(
         }),
       );
       await entered.promise;
-      const migration = readFileSync(
-        "/tmp/mn-about-trusted-web/drizzle/0061_about_evidence_provenance.sql",
-        "utf8",
-      );
+      const migration = readMigration("0061_about_evidence_provenance.sql");
       try {
         const attempted = await capture(
           admin!.begin(async tx => {
