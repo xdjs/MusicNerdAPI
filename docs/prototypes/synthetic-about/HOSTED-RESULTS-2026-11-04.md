@@ -1,3 +1,30 @@
+# Successful visible-browser acceptance — 2026-11-04
+
+Latest ready preview: https://api-i1qocuq9q-musicnerd.vercel.app
+
+Deployment `dpl_HVmgVT1ViiQaHKJC52VN24QBbdBj`; inspector https://vercel.com/musicnerd/api/HVmgVT1ViiQaHKJC52VN24QBbdBj. This supersedes the earlier browser blocker described below.
+
+Both approved test identities completed normal visible-browser Privy login and the Web callback with HTTP 200. Ordinary passive verification transport was permitted; no interactive CAPTCHA, security denial, wallet/link action or additional setup appeared. Tokens stayed in browser/process memory and were not included in result output. Fresh contexts closed after each attempt.
+
+| Test identity / synthetic role | Privy / Web callback | Acceptance | Before synthetic claim | Missing Lore → About | Existing Lore → About | Read |
+| --- | --- | --- | --- | --- | --- | --- |
+| Approved admin fixture | 200 / 200 | 200, passed | Not applicable | 200 | 200 | 200 |
+| Approved regular fixture | 200 / 200 | 200, passed | 403 | 200 | 200 | 200 |
+
+Each accepted request used one Lore adapter call, two About adapter calls and one summary adapter call. The regular user's claim was created only inside its disposable PGlite fixture after the actual route denied the unclaimed request. This verifies actual Privy token verification and actual route authorization against synthetic roles; it is not a live-role lookup or live claim.
+
+The initial visible attempts established login success but exposed browser timing problems. The regular attempt emitted no acceptance request. The final UI disables its test button until hydration, and the runner waits before filling the token. A separate preview tab avoids late staging-login redirects. Independent review approved these narrow changes. A local visible-browser regression verified the button emitted POST and received the expected 503 without configuration; the final hosted runs returned the successful verdicts above.
+
+The final Linux build passed (39 seconds), as did the 1,725-module boundary audit and PostgreSQL 18.3 / PGlite 0.5.8 WASM bootstrap. The existing 20 provider-free tests, TypeScript and scoped lint checks remain the application baseline; this final change only adds UI readiness.
+
+No shared artist, claim, upload or generation changes were made; no migrations, grants, security settings, credentials or production aliases were changed. Normal approved login/session effects occurred, including successful Web authentication callbacks; this report does not claim those callbacks make no user-account writes. Preview fixture writes were entirely in request-local memory. No model provider was called.
+
+Limits remain: no cross-request persistence or database concurrency proof, no live Supabase permission check, no live account-role proof, no full onboarding test and no real generation-quality validation. There is no remaining browser-challenge blocker for these successful runs.
+
+Runner retained locally at `/tmp/mn-staging-auth-check/synthetic.cjs`; no secret-bearing browser state or traces retained.
+
+---
+
 # Hosted fixed-fixture preview — 2026-11-04
 
 Ready deployment: `dpl_94QrDbfAK2JVdb17WbSSt1Pr6ffF`
