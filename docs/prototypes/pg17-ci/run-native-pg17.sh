@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# DISABLED PROPOSAL SUPPORT: run only after explicit approval on the designated CI runner.
+# Isolated native PG17 validation; run only within the authorized synthetic test scope.
 # Uses preinstalled binaries/dependencies; no install, download, Docker, credentials or TCP.
 set -euo pipefail
 umask 077
 
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 [[ "${MN_APPROVED_SYNTHETIC_PG17:-}" == "yes" ]] || fail 'Explicit synthetic PG17 approval flag required'
-[[ "$(uname -s)" == "Linux" ]] || fail 'This proposal requires Linux'
+case "$(uname -s)" in
+  Linux) ;;
+  Darwin) [[ -n "${PG17_BIN:-}" ]] || fail 'Darwin requires explicit PG17_BIN' ;;
+  *) fail 'Only Linux and Darwin are supported' ;;
+esac
 [[ "$(id -u)" != "0" ]] || fail 'Refusing root-run PostgreSQL'
 [[ -z "${MN_1655_PG_SOCKET:-}" ]] || fail 'Refusing supplied socket; script creates its own isolated directory'
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -56,7 +60,14 @@ admin_user=$(id -un)
 COMMENT ON DATABASE mn_1655_synthetic IS 'mn-1655-synthetic-only';
 CREATE ROLE mnweb LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
 SQL
-identity=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "select current_database() || '|' || current_setting('listen_addresses') || '|' || current_setting('data_directory') || '|' || shobj_description(oid,'pg_database') from pg_database where datname=current_database()")
-[[ "$identity" == "mn_1655_synthetic||$run_dir/data|mn-1655-synthetic-only" ]] || fail 'Disposable cluster identity mismatch'
+server_version=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "show server_version_num")
+[[ "$server_version" =~ ^17[0-9]{4}$ ]] || fail 'Running server must be PostgreSQL 17'
+canonical_data=$("$node24_bin" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$run_dir/data")
+identity=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "select current_database() || '|' || current_setting('listen_addresses') || '|' || shobj_description(oid,'pg_database') from pg_database where datname=current_database()")
+[[ "$identity" == "mn_1655_synthetic||mn-1655-synthetic-only" ]] || fail 'Disposable cluster identity mismatch'
+actual_data=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "show data_directory")
+actual_data=$("$node24_bin" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$actual_data")
+[[ "$actual_data" == "$canonical_data" ]] || fail 'Disposable cluster data directory mismatch'
+printf 'Validated PostgreSQL server_version_num=%s; TCP disabled; isolated cluster identity verified\n' "$server_version"
 cd -- "$repo_dir"
 MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs run lib/bio/__tests__/aboutConcurrency.postgres.test.ts

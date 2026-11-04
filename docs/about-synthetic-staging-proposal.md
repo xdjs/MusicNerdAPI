@@ -1,5 +1,7 @@
 # #1655 — isolated synthetic staging proposal
 
+Current execution update (2026-11-04): [native PostgreSQL17.11 verification passed](about-pg17-verification.md); use [the current staging/cutover plan](about-staging-cutover-current.md) for current artifact hashes and remaining steps. Earlier unavailable-engine statements below are historical.
+
 Prepared 2026-11-03. Proposal only: no deployments, remote mutations, model calls, new accounts or cleanup have been executed. This does not authorize them. Customer: an artist editor regenerating About after adding Lore. Owner acceptance and a separately approved environment remain required.
 
 ## Candidate and prerequisites

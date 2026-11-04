@@ -1,5 +1,7 @@
 # #1655 — least-disruptive release preparation
 
+Current execution update (2026-11-04): [native PostgreSQL17.11 verification passed](about-pg17-verification.md); use [the current staging/cutover plan](about-staging-cutover-current.md) for current artifact hashes and remaining steps. Earlier unavailable-engine statements below are historical.
+
 Superseding user decision (2026-11-04): [preserve the exact 16 legacy snapshots](about-legacy-snapshot-exceptions.md) through explicit private snapshot permissions, not a blanket claimed-bio fallback. Earlier statements requiring approval to hide all 16 are historical and no longer the plan. New or changed content remains guarded.
 
 Prepared 2026-11-04; nothing in this plan authorizes publication, CI dispatch, live review writes, model calls, migration, deployment or grants. Current reviewed candidates: API `37ace7e191c2336bdaae71ba98fbcfea0f023aa1`; Web `50a60897aa4f4d48292251859c3125c4c8420fcf`. Later preparation-only commits must be recorded separately.

@@ -1,5 +1,7 @@
 # Guarded projection staging and rollout plan
 
+Current execution update (2026-11-04): [native PostgreSQL17.11 verification passed](../../about-pg17-verification.md); use [the current staging/cutover plan](../../about-staging-cutover-current.md) for current artifact hashes and remaining steps. Earlier unavailable-engine statements below are historical.
+
 2026-11-04 writer-integration update: [actual API/Web receipt integration and current verification](../../about-source-receipt-integration.md) supersedes earlier statements below that receipts use only a test decorator or are not integrated. Migration0062 and real publication/history writers are now implemented locally. Historical backfill, unknown-client cutover and native17/deployed verification remain outstanding.
 
 Local planning only, 2026-11-03. No live writes, installs, deployments or credential changes are authorized by this document. The projection remains outside the app migration chain. See README for current prototype checks and limitations.

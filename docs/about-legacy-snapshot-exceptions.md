@@ -1,5 +1,7 @@
 # Exact legacy biography snapshots — current #1655 policy
 
+Current execution update (2026-11-04): [native PostgreSQL17.11 verification passed](about-pg17-verification.md); use [the current staging/cutover plan](about-staging-cutover-current.md) for current artifact hashes and remaining steps. Earlier unavailable-engine statements below are historical.
+
 User decision, 2026-11-04: leave the existing 16 claimed biographies visible as they are. This supersedes the earlier proposal to hide all unknown legacy biographies. The local implementation preserves only exact reviewed snapshots; it does not restore a blanket exception for every claimed artist.
 
 ## Publication permission, not evidence
