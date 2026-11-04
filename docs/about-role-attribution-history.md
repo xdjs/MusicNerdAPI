@@ -62,3 +62,21 @@ Read-only catalog query inspected only named roles' privilege booleans and `pg_p
 All listed roles are non-superuser/non-BYPASSRLS. anon/authenticated are NOLOGIN; custom readers and mnweb are LOGIN. Production's named-role result does not contain readonly_user. The query checks effective object privileges and displayed policies, not an exhaustive fresh membership/API/schema exposure audit. Synthetic replicas must reproduce these distinctions, not infer read visibility from grants alone or invent a Dev map-write policy. Production anon/authenticated must not gain all-row access through an owner-rights compatibility view.
 
 The parent reports absent matching sessions/retained statements/24-hour connection events, with logging/retention limitations. Those log observations were not independently re-queried here, are not used to authorize a cutover, and do not establish disuse. No consumer or credential owner was identified by this catalog check.
+
+## Newly established historical consumer, 2026-11-04
+
+The connected GitHub issue search found [MusicNerdWeb#391](https://github.com/xdjs/MusicNerdWeb/issues/391), created/assigned/closed by Carl (`clt`). His [completion comment](https://github.com/xdjs/MusicNerdWeb/issues/391#issuecomment-3049759609) explicitly says he created `webmapdata_editor` for the Artist Web Map app. This establishes the original provisioning actor and intended consumer; it supersedes the earlier statement that only an imported schema author was known. It does **not** establish today's credential assignment, all deployments, current traffic or safe retirement.
+
+Related Artist Web Map issues point to Grapevine. The Vercel inventory has a Grapevine project linked to `xdjs/Grapevine`. Read-only source review at `e95621f17fc2ed142a600031d7f6cf8a59a2b0b6` found concrete candidate client requirements:
+
+| Source | Observed contract |
+| --- | --- |
+| `api/network/[artistName].ts:66,644,667` | Reads id/name and node_pfp/spotify_id; writes webmapdata using LOWER(name) predicate |
+| `api/network-by-id/[artistId].ts:75,439,488,513` | Reads id/name/webmapdata, name-to-id lookup; writes webmapdata by id |
+| `server/musicnerd-service.ts:getArtistId` | Direct PostgreSQL SELECT * FROM artists by case-insensitive name |
+| `server/database-storage.ts:getArtistByName` | Reads id/name/spotify/node_pfp/webmapdata/x/instagram/facebook |
+| `server/supabase.ts` | Connection selected from DATABASE_URL or CONNECTION_STRING; no role name is hardcoded |
+
+No credential values or connection settings were retrieved and no Grapevine endpoints were invoked (network generation can call paid providers). Read-only Vercel deployment metadata ties the current READY production Grapevine deployment and its assigned public domains to this exact commit (`e95621f17fc2ed142a600031d7f6cf8a59a2b0b6`), region sfo1. This confirms the reviewed source commit is deployed, but not which branches execute or which DB role the connection resolves to. The role-to-current-deployment mapping remains unproven. Grapevine's direct cache query selects `spotify_id`, while the pinned MusicNerdWeb artist shape contains `spotify`; this is a concrete schema/client discrepancy, not authorization to add a column or assume that path works today. Source presence is not proof that every path runs today; the Vercel API routes and older server implementation must be reconciled with the deployed build.
+
+The previously proposed raw SELECT(id,webmapdata)-only map contract is **not sufficient for these observed candidate paths**: name predicates and profile-field reads require additional SELECT privileges or client query changes, and SELECT * would fail raw-bio denial. Do not broaden live grants as a workaround. Recommended next confirmation from Carl: which current deployment uses the role, and whether its read queries can target the guarded projection while writes remain narrowly scoped. Add these exact queries to the disposable staging compatibility matrix before finalizing migration grants. Dev readonly_user still has no identified provisioning actor or consumer; an exact-name organization issue/code search returned no evidence.
