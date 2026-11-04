@@ -1,3 +1,4 @@
+import { prepareBioUrlReceipts } from "@/lib/bio/prepareBioUrlReceipts";
 import { sql } from "drizzle-orm";
 import type { TransactionDb } from "@/lib/ownership/types";
 
@@ -7,6 +8,7 @@ export async function writeBioProvenance(
   artistId: string,
   provenance: unknown,
 ): Promise<void> {
+  await prepareBioUrlReceipts(tx, provenance);
   if (provenance == null) {
     await tx.execute(
       sql`delete from mn_private.artist_bio_provenance where artist_id=${artistId}::uuid`,

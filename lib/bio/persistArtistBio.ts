@@ -123,8 +123,13 @@ export async function persistArtistBio(
       sources: options.expectedLore?.sources ?? options.document?.sources,
       authored: !!options.document && !options.expectedLore && options.documentOrigin !== "server",
     });
-    if (artist.bio === bio && JSON.stringify(previousProvenance) === JSON.stringify(bioProvenance))
+    if (
+      artist.bio === bio &&
+      JSON.stringify(previousProvenance) === JSON.stringify(bioProvenance)
+    ) {
+      await writeBioProvenance(tx, artistId, bioProvenance);
       return bio;
+    }
     await saveBioVersions(tx, artistId, [artist.bio, bio], [previousProvenance, bioProvenance]);
     options.signal?.throwIfAborted();
     await tx.update(artists).set({ bio }).where(eq(artists.id, artistId));

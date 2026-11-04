@@ -1,3 +1,4 @@
+import { prepareBioUrlReceipts } from "@/lib/bio/prepareBioUrlReceipts";
 import { sql } from "drizzle-orm";
 import { isRealBio } from "@/lib/bio/isRealBio";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -13,6 +14,7 @@ export async function saveBioVersions(
   for (const [index, text] of texts.entries()) {
     if (!isRealBio(text)) continue;
     const provenance = provenances[index] ?? null;
+    await prepareBioUrlReceipts(tx, provenance);
     const encoded = provenance == null ? null : JSON.stringify(provenance);
     const saved = rowsOf(
       await tx.execute(sql`select v.id from artist_bio_versions v

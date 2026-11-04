@@ -56,7 +56,7 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       await pg.exec(`create table ${name}(${columns})`);
     }
     await pg.exec(
-      `create schema mn_private; create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null); create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);`,
+      `create schema mn_private;create table mn_private.public_url_receipts(url_hash bytea,url text,policy_version integer,primary key(url_hash,policy_version)); create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null); create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);`,
     );
     await pg.exec(
       "alter table artist_docs add unique(artist_id);create table artist_claims(artist_id uuid,status text)",
@@ -80,6 +80,12 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       )
     ).rows[0].bio_provenance;
     expect(first).toMatchObject({ kind: "generated", claimId: null, sources: sources() });
+    await pg.exec("delete from mn_private.public_url_receipts");
+    await persistArtistBio(artist, "Generated", options());
+    expect((await pg.query("select url from mn_private.public_url_receipts")).rows).toEqual([
+      { url: source.url },
+    ]);
+
     expect(
       (
         await pg.query(

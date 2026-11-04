@@ -1,15 +1,13 @@
-/** TEST-ONLY receipt decorator around the real writer. No HTTP/auth/provider or deployment proof. */
+import { useExistingUrlReceipts } from "./useExistingUrlReceipts";
+/** Real receipt preparation in the actual writer on a synthetic database. No HTTP/auth/provider or deployment proof. */
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { getTableColumns, sql } from "drizzle-orm";
-import { rowsOf } from "../../../lib/db/rowsOf";
+import { getTableColumns } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as schema from "../../../lib/db/schema";
 import { vaultSourceRevision } from "../../../lib/lore/vaultSourceRevision";
-import { prepareUrlReceipt, type ReceiptTransaction } from "./prepareUrlReceipt";
-import type { writeBioProvenance } from "../../../lib/bio/writeBioProvenance";
 let pg: PGlite;
 let database: ReturnType<typeof drizzle<typeof schema>>;
 vi.mock("@/lib/db/db", () => ({
@@ -23,44 +21,15 @@ vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
     throw new Error("Unexpected user authorization path");
   },
 }));
-vi.mock("@/lib/bio/writeBioProvenance", async importOriginal => {
-  const actual = await importOriginal<typeof import("../../../lib/bio/writeBioProvenance")>();
-  return {
-    writeBioProvenance: async (...args: Parameters<typeof writeBioProvenance>) => {
-      const [tx, , provenance] = args;
-      const adapter: ReceiptTransaction = {
-        query: async <T>(statement: string, params: unknown[]) => {
-          // Only static SQL supplied by prepareUrlReceipt. Values remain bound SQL parameters.
-          const chunks = statement.split(/(\$\d+)/).map(part => {
-            if (!/^\$\d+$/.test(part)) return sql.raw(part);
-            const index = Number(part.slice(1)) - 1;
-            if (index < 0 || index >= params.length) throw new Error("Invalid receipt parameter");
-            return sql`${params[index]}`;
-          });
-          const result = await tx.execute(sql.join(chunks, sql.raw("")));
-          return { rows: rowsOf(result) as T[] };
-        },
-      };
-      if (
-        provenance &&
-        typeof provenance === "object" &&
-        "sources" in provenance &&
-        Array.isArray(provenance.sources)
-      ) {
-        for (const source of provenance.sources) {
-          // Policy rejection hides public output; it must not block preserving/editing old lineage.
-          // Storage and receipt-conflict exceptions still abort the publication transaction.
-          if (source && typeof source.url === "string")
-            await prepareUrlReceipt(adapter, source.url);
-        }
-      }
-      await actual.writeBioProvenance(...args);
-    },
-  };
-});
 const { persistArtistBio } = await import("../../../lib/bio/persistArtistBio");
 const { getPublicSavedBio } = await import("../../../lib/bio/getPublicSavedBio");
-const migration = readFileSync(new URL("./projection.sql", import.meta.url), "utf8");
+const migration = useExistingUrlReceipts(
+  readFileSync(new URL("./projection.sql", import.meta.url), "utf8"),
+);
+const receiptMigration = readFileSync(
+  new URL("./fixtures/0062_public_url_receipts.sql", import.meta.url),
+  "utf8",
+);
 const artist = "00000000-0000-4000-8000-000000000001";
 const sourceId = "00000000-0000-4000-8000-000000000002";
 const job = "00000000-0000-4000-8000-000000000003";
@@ -120,6 +89,11 @@ beforeEach(async () => {
     await pg.exec(
       `alter table ${table} enable row level security;create policy app on ${table} to mnweb using(true) with check(true)`,
     );
+  // Exact reviewed Web 0062 fixture; independent of another checkout or credentials.
+  expect(createHash("sha256").update(receiptMigration).digest("hex")).toBe(
+    "08c57527024da5dfce4bf943fab374b8ae11acb381a98db4ba813508d7aabf53",
+  );
+  await pg.exec(receiptMigration);
   await pg.query(
     "insert into artists(id,name,bio) values($1,'Synthetic artist','Original manual')",
     [artist],
@@ -213,9 +187,7 @@ it.each(["storage", "conflict"])(
     const before = await snapshot();
     const attempt = persistArtistBio(artist, "Must roll back", options());
     if (failure === "storage")
-      await expect(attempt).rejects.toMatchObject({
-        cause: { message: "Synthetic receipt storage failure" },
-      });
+      await expect(attempt).rejects.toThrow("Could not prepare About URL receipts");
     else
       await expect(attempt).rejects.toThrow("URL receipt conflict: exact bytes were not persisted");
     expect(await snapshot()).toEqual(before);
@@ -277,4 +249,19 @@ it("preserves a real manual edit with policy-rejected historical URLs while both
   ]);
   expect(await visible()).toEqual([{ bio: null }]);
   expect(await getPublicSavedBio(artist)).toBeNull();
+});
+
+it.each([
+  "alter table mn_private.public_url_receipts disable row level security",
+  "grant select on mn_private.public_url_receipts to anon",
+  "drop policy mnweb_public_url_receipts_select on mn_private.public_url_receipts",
+  "alter table mn_private.public_url_receipts drop constraint public_url_receipts_hash_length",
+])("refuses drift in existing0062 receipts: %s", async change => {
+  await pg.exec(change);
+  await pg.exec("begin");
+  await expect(pg.exec(migration)).rejects.toThrow(/Existing receipt/);
+  await pg.exec("rollback");
+  expect((await pg.query("select to_regclass('mn_public.artists') as view")).rows).toEqual([
+    { view: null },
+  ]);
 });

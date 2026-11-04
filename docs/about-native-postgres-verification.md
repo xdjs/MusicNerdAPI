@@ -1,5 +1,7 @@
 # About migration and concurrency: local PostgreSQL verification
 
+Latest 2026-11-04 verification: **19 passed in 4.12s** on isolated native PostgreSQL 14.18, including actual 0062 receipts, shared-receipt concurrent publication and permissions/conflict rollback. See [current integration evidence](about-source-receipt-integration.md). The server is stopped. Earlier results below are historical; native17 remains unverified.
+
 Issue: MusicNerdWeb #1655. Verified locally on 2026-11-03; nothing released or applied to a live database.
 
 ## Private-sidecar revalidation

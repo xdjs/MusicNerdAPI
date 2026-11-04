@@ -1,5 +1,7 @@
 # Guarded About projection: isolated parity prototype
 
+2026-11-04 writer-integration update: [actual API/Web receipt integration and current verification](../../about-source-receipt-integration.md) supersedes earlier statements below that receipts use only a test decorator or are not integrated. Migration0062 and real publication/history writers are now implemented locally. Historical backfill, unknown-client cutover and native17/deployed verification remain outstanding.
+
 **Not a release migration.** No application imports this SQL; it is outside the Drizzle journal. Tests create in-memory PGlite databases with synthetic records and roles. Never apply projection.sql directly to a real database.
 
 Run from MusicNerdAPI with existing dependencies:

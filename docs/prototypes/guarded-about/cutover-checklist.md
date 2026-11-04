@@ -1,5 +1,7 @@
 # Guarded artist compatibility cutover
 
+2026-11-04 writer-integration update: [actual API/Web receipt integration and current verification](../../about-source-receipt-integration.md) supersedes earlier statements below that receipts use only a test decorator or are not integrated. Migration0062 and real publication/history writers are now implemented locally. Historical backfill, unknown-client cutover and native17/deployed verification remain outstanding.
+
 Local candidate and release checklist, 2026-11-04. No deployment, live grant changes or publication is authorized by this document. The full-row builder is a tested design artifact, outside the Drizzle migration journal; it is not yet an active reader/writer dependency.
 
 ## Concrete interface decision

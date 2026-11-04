@@ -1,5 +1,7 @@
 # Integration decision for issue1655
 
+2026-11-04 writer-integration update: [actual API/Web receipt integration and current verification](../../about-source-receipt-integration.md) supersedes earlier statements below that receipts use only a test decorator or are not integrated. Migration0062 and real publication/history writers are now implemented locally. Historical backfill, unknown-client cutover and native17/deployed verification remain outstanding.
+
 Local assessment, 2026-11-03. API input664aaa4; Web5ec2be6. Worktrees were clean. The reviewed SQL projection/receipt prototype should **not become an active application dependency in the current candidate yet**. This is a scope and compatibility decision, not an inability to put the receipt call in a transaction.
 
 ## Why the full integration is not defensible yet

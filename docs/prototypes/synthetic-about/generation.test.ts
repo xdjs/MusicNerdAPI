@@ -74,7 +74,7 @@ beforeEach(async () => {
     await pg.exec(`create table ${name}(${columns})`);
   }
   await pg.exec(
-    "create schema mn_private;create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null);create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);alter table artist_docs add unique(artist_id);alter table artist_onboarding_steps add unique(artist_id,step);create unique index active_job on artist_research_jobs(artist_id,kind) where status in ('pending','running')",
+    "create schema mn_private;create table mn_private.public_url_receipts(url_hash bytea,url text,policy_version integer,primary key(url_hash,policy_version));create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null);create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);alter table artist_docs add unique(artist_id);alter table artist_onboarding_steps add unique(artist_id,step);create unique index active_job on artist_research_jobs(artist_id,kind) where status in ('pending','running')",
   );
   await pg.query(
     "insert into artists(id,name,bio) values($1,'Synthetic artist','Original About')",

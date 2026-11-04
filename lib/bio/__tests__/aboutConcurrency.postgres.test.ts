@@ -200,7 +200,11 @@ describe.skipIf(!socket)(
         if not exists(select from pg_roles where rolname='anon') then create role anon; end if;
         if not exists(select from pg_roles where rolname='authenticated') then create role authenticated; end if;
       end $$`);
-      for (const file of ["0060_source_publication.sql", "0061_about_evidence_provenance.sql"])
+      for (const file of [
+        "0060_source_publication.sql",
+        "0061_about_evidence_provenance.sql",
+        "0062_public_url_receipts.sql",
+      ])
         await admin!.unsafe(readFileSync(`/tmp/mn-about-trusted-web/drizzle/${file}`, "utf8"));
       expect(
         await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
@@ -220,7 +224,7 @@ describe.skipIf(!socket)(
       startBarrier = undefined;
       backendPids.clear();
       await admin!.unsafe(
-        `truncate mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
+        `truncate mn_private.public_url_receipts,mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
       );
       await admin!`insert into artists(id,name,bio) values(${artist},'Synthetic artist','Original')`;
       await admin!`insert into users(id,is_admin,is_white_listed) values(${user},true,true)`;
@@ -467,7 +471,11 @@ describe.skipIf(!socket)(
         });
         expect(rows[0].bio).toBe("Generated");
         expect(rows[0]).not.toHaveProperty("bio_provenance");
-        for (const table of ["artist_bio_provenance", "artist_bio_version_provenance"]) {
+        for (const table of [
+          "artist_bio_provenance",
+          "artist_bio_version_provenance",
+          "public_url_receipts",
+        ]) {
           const result = await capture(
             admin!.begin(async tx => {
               await tx.unsafe(`set local role ${role}`);
@@ -480,6 +488,66 @@ describe.skipIf(!socket)(
       expect(
         await client!`select count(*)::int as n from mn_private.artist_bio_provenance`,
       ).toEqual([{ n: 1 }]);
+    });
+
+    it("serializes shared URL receipts across independent artist publications without duplicate receipts", async () => {
+      const otherArtist = "00000000-0000-4000-8000-000000000011";
+      const otherSource = {
+        ...source,
+        id: "00000000-0000-4000-8000-000000000012",
+        activityId: null,
+        publication: "public",
+      };
+      await admin!`insert into artists(id,name,bio) values(${otherArtist},'Other synthetic artist','Original')`;
+      await admin!`insert into artist_vault_sources(id,artist_id,origin,status,publication,url,extracted_text) values(${otherSource.id},${otherArtist},'submission','approved','public',${source.url},${source.extractedText})`;
+      const held = await heldPublication();
+      const other = capture(
+        persistArtistBio(otherArtist, "Other generated", {
+          ...publication,
+          document: {
+            content: "Other Lore",
+            sources: [{ ...sources[0], revision: vaultSourceRevision(otherSource) }],
+          },
+        }),
+      );
+      try {
+        await waitForBlockedWriter();
+      } finally {
+        held.release();
+        await Promise.all([held.outcome, other]);
+      }
+      expect((await held.outcome).error).toBeUndefined();
+      expect((await other).error).toBeUndefined();
+      expect(await client!`select url from mn_private.public_url_receipts`).toEqual([
+        { url: source.url },
+      ]);
+      expect(
+        await client!`select count(*)::int as n from mn_private.artist_bio_provenance`,
+      ).toEqual([{ n: 2 }]);
+    });
+
+    it("prepares idempotent receipts with mnweb INSERT/SELECT only and rolls back receipt conflicts", async () => {
+      await persistArtistBio(artist, "Generated", publication);
+      await persistArtistBio(artist, "Generated", { ...publication, expectedBio: "Generated" });
+      expect(await client!`select url,policy_version from mn_private.public_url_receipts`).toEqual([
+        { url: source.url, policy_version: 1 },
+      ]);
+      for (const statement of [
+        "update mn_private.public_url_receipts set policy_version=2",
+        "delete from mn_private.public_url_receipts",
+      ]) {
+        const denied = await capture(client!.unsafe(statement));
+        expect(errorCode(denied.error)).toBe("42501");
+      }
+      await admin!`update mn_private.public_url_receipts set url='https://example.org/conflict'`;
+      const history = await client!`select * from artist_bio_versions order by id`;
+      const attempt = await capture(
+        persistArtistBio(artist, "Must roll back", { ...publication, expectedBio: "Generated" }),
+      );
+      expect(attempt.error).toBeInstanceOf(Error);
+      expect((attempt.error as Error).message).toContain("URL receipt conflict");
+      expect(await client!`select bio from artists`).toEqual([{ bio: "Generated" }]);
+      expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
     });
 
     it("rolls back private provenance schema when the history foreign-key lock times out", async () => {
