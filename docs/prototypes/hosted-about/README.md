@@ -1,41 +1,46 @@
-# Deterministic About test-build adapter (local preparation only)
+# Isolated deterministic About acceptance project
 
-These files prepare an isolated local test build of #1655. **They are not installed in production configuration and are not a deployed or ready-to-deploy application.** No request header, query parameter, body field, authentication shortcut or HTTP control endpoint enables them.
+Local preparation for #1655; no resources, credentials or deployment were created. Production routes/configuration remain unchanged. The generated project exposes only the actual artistBio route, a minimal same-origin test page, and Next's internal pages. It is not MusicNerdWeb acceptance coverage.
 
-## Local verification
+## Artifacts and commands
 
-From the API checkout:
-
-```sh
-pnpm test docs/prototypes/hosted-about
-```
-
-The factory tests run without a database. The route tests use a fresh pathless PGlite instance per case and call the **real Next `GET`, `PUT` and `OPTIONS` route exports** in-process. This checks Request/Response serialization, missing/invalid-token rejection, real user lookup and edit authorization, real source/lease/persistence code, read-after-write, deterministic Lore/About failures and request cancellation. Privy signature verification is a Vitest-only mock, not part of the runtime adapter. Unused social inputs are mocked empty. Fetch is replaced with a throwing spy and asserted unused. This is not a network firewall, HTTP server, browser, native PostgreSQL locking or deployed authentication test. Fixtures never use application connection strings, private records or credentials.
-
-## Runtime and build boundary
-
-- `createHostedAboutAdapter.ts` accepts an immutable server-code plan. Supported modes per Lore/About/summary stage: success, failure, empty and wait-for-abort. The latter requires an AbortSignal and has no timer that outlives cancellation. Counters count boundary calls, not tokens/provider calls.
-- `runtime.ts` creates the isolated build's singleton with the default success plan. Changing the plan requires changing test-build source and rebuilding/restarting. There is no remote scenario setter. Separate factory instances let local tests isolate scenarios.
-- Three model wrappers replace Lore synthesis, About synthesis and summary generation. Lore uses the actual stored source loader, or the caller's exact preset manifest. The adapter never invents a source revision, approval or user identity. Summary success returns null; it does not exercise inventory prose quality.
-- `buildAliases.ts` supplies explicit absolute module mappings for an isolated bundler. Four lower-level AI wrappers throw if an unexpected model entry point is reached. Production `next.config.ts`, routes, authentication and database code are unchanged.
-- Counters are in-process and exposed only to trusted importing test code; there is no metrics route. They reset on restart and cannot prove global call counts across workers/instances. Fault configuration applies to the whole adapter instance; it is not a per-request switch.
-
-**Do not attach these aliases to a production deployment.** `createIsolatedArtifact.mjs` creates a fresh temporary Next root with only an exact copy of the actual artistBio route, generated build config, a dependency symlink and source aliases. It copies no production config or environment files. `runOfflineBuild.mjs` builds that root with a fresh credential-free environment and a Node preload denying fetch, HTTP(S), socket/TLS and DNS entry points:
+Use Node24 and existing repository dependencies:
 
 ```sh
+node node_modules/vitest/vitest.mjs run docs/prototypes/hosted-about/__tests__
 node docs/prototypes/hosted-about/runOfflineBuild.mjs "$PWD"
 ```
 
-The runner uses existing dependencies only, disables telemetry, preserves a local build log/audit, and runs `verifyIsolatedBuild.mjs` after success. Webpack records all built source modules before optimization; the verifier requires all three synthetic model wrappers plus the real Privy verifier, rejects the original model modules and AI SDK, and permits only `/api/artistBio/[id]` plus Next's internal error pages. Empty audits fail. The generated config is separate from production. The artifact refers to local source/dependency paths and is **not a portable deployment bundle**. A portable hosted artifact must be built and verified again in its approved environment. Merely copying the alias map into the full application does not isolate its other endpoints.
+The runner creates a disposable build under `/tmp`, copies the static TypeScript dependency closure plus explicitly named adapters, copies the exact route, and generates relative configuration. It copies no environment files, fixture data, production Next configuration or arbitrary assets. Exact model mappings appear in both TypeScript paths and webpack aliases; the emitted-module audit fails if original model modules or the AI SDK enter the build. It retains the real Privy verifier and checks the route allowlist. The local build gets a fresh credential-free environment, disabled telemetry and a preload denying Node outbound transports.
 
-Local verification on 2026-11-04: Next 16.3.6 webpack build and build TypeScript passed; 2,110 audited modules; expected route allowlist and three replacements verified; real token verifier retained; zero recorded network attempts. An initial build used Node23.11.0; the definitive rerun used the required Node24.16.0 and passed the same build/module/route/network checks. All17 prototype tests passed on Node24 in4.29s; project TypeScript and targeted lint also passed. Definitive logs: `/tmp/mn-hosted-about-node24-build.log` and `/tmp/mn-hosted-about-node24-tests.log`. The build timeout signals the parent process only; it is not a guaranteed process-tree or spending limit. In particular, the map is not an egress firewall and does not block arbitrary fetch/socket code. It does not replace the real database module; never boot it against staging/production credentials just to try the adapter.
+A successful runner returns three paths:
 
-## Required before any hosted execution
+- **Build root:** local verification evidence and installed-dependency symlink. Not distributable as-is.
+- **Source package:**159 allowlisted files, including pinned dependency declarations, original lockfile, relative configuration and build verifier. No dependency symlinks, native binaries, environment files or external absolute source paths. This is the intended input for a future approved Vercel **source build**: isolated root, Node24, pinned pnpm, frozen lockfile, and `pnpm build`. Dependency installation and hosted build have not been run. The source package is not Vercel Build Output API output.
+- **Standalone runtime:** Next's traced runtime/dependencies plus static assets and `server.cjs`. The packager rejects unexpected external links and credential/config filenames, reconstructs only traced package links, and normalizes build-only launcher metadata. Links resolve inside the bundle. It can be renamed and started with `node server.cjs` on the verified platform. **This bundle contains Darwin-arm64 Sharp binaries and is not a Linux/Vercel deployment artifact.** Build standalone on the actual target platform for a conventional Node/container host. It is not directly uploadable as Vercel Build Output API output.
 
-1. An explicitly approved disposable target and artifact root containing only the required test routes; repeat the emitted-module/route audit to prove model replacements and no production inclusion. Local webpack aliases were verified; the chosen hosted bundler/runtime still requires verification. No hosted build has been validated here.
-2. A synthetic-only database/branch, full reviewed migrations/RLS/grants and bounded cleanup. PGlite fixtures are local test scaffolding, not deployment migrations or cross-session concurrency proof.
-3. Real Privy configuration and a specifically approved test identity mapped to a synthetic claimant/admin in that isolated database. Existing production auth stays intact. No credentials have been obtained or changed here. A real Privy token does not bypass Vercel Deployment Protection: protected cross-origin Web-to-API requests also require an approved cookie/topology or server proxy. Never expose a protection bypass secret in browser code.
-4. Explicit provider/network egress denial and no provider credentials/OIDC billing capability. The throwing AI aliases are defense in depth, not a substitute for deployment egress controls. Allow necessary authentication transport only after that boundary is defined.
-5. Approved cost/time limits, isolated logs and a trusted way to observe per-instance counters. No public diagnostic/control endpoint should be added merely for convenience. Real HTTP/UI, serverless lifetime, deadlines and native concurrent transactions remain to validate.
+Next retains absolute build identifiers in some compiled client-reference metadata; these are not external dependency links. Local relocation is tested with module resolution outside the bundle denied. Do not claim that every string in the standalone runtime is path-free. The source package has no such checkout references.
 
-No deployment, remote database change, provider request, package installation or production behavior change was performed for this prototype.
+`smokePortableRuntime.mjs` copies the runtime again and tests a loopback server: page/static asset200, invalid artist400, unknown route404. It denies runtime outbound fetch/HTTP(S)/socket/TLS/DNS and external module resolution. Only literal127.0.0.1 lookup is answered locally so Node can bind its listener; no DNS request is made. This local check may require sandbox approval to listen. It does not use credentials or exercise a positive authenticated database write.
+
+## Same-origin access
+
+The page performs no generation on load. An operator enters a synthetic artist UUID and a real test-account bearer token; the token stays in component memory/password input, is never stored or logged, and can be cleared. Requests use a relative API URL with same-origin cookies. This avoids a separate protected Web-to-API origin: first obtain access to the protected deployment itself, then use a real Privy token for application authorization. No protection bypass secret, mock identity, auth shortcut or scenario flag is exposed to the browser.
+
+Real Privy app configuration, a specifically approved test identity, synthetic database user/claim rows, and deployment access still need to be established. The page does not implement Privy login. A Privy token alone does not bypass Vercel Deployment Protection. Full MusicNerdWeb/SDK behavior is not covered.
+
+## Determinism and network boundary
+
+`createHostedAboutAdapter.ts` accepts an immutable server-code plan with success, failure, empty or wait-for-abort modes. Runtime defaults to success. Fault changes require a test-build source change and rebuild/restart; there is no HTTP control endpoint. Lore uses actual stored material/preset manifests, never fabricated approval or identity. Summary success returns null. Counters are process-local and count adapter boundaries, not provider calls/tokens or global cross-instance totals.
+
+The audited route closure replaces the three model functions, excludes the AI SDK/original model entry points, and provides throwing lower-level AI aliases. This supplies deterministic provider-free model behavior for this artifact. Do not configure provider keys or provider OIDC billing capability. It is **not a general hosted network firewall**. Local build/smoke guards are not installed as production hosting egress controls: real hosted token verification and database access need their legitimate transports. Stored Lore/social source gathering on this route reads the database; it does not trigger research or remote extraction. The standard Next server also includes framework internals. Reaudit any added routes/dependencies; do not infer an unverified hosting add-on requirement or claim blanket egress enforcement.
+
+## Verification and remaining limits
+
+2026-11-04, Node24.16.0 / Next16.3.6 webpack: offline build and build types passed;2,111 audited modules; three synthetic adapters and real token verifier present; expected route/page allowlist; zero recorded network attempts. The final relocated Mac runtime returned page/static200, invalid artist400, unknown route404, with zero outbound attempts and external module resolution denied. Prototype tests and project TypeScript passed; targeted lint passed for covered files. The repository lint configuration ignores TSX, so the page is checked by TypeScript, Next build and Prettier, not claimed lint coverage.
+
+Earlier alias-only artifacts referenced checkout sources/dependencies and were not portable; the source/standalone packaging above supersedes that limitation. Earlier Node23 results are historical; current verification uses Node24.
+
+Route tests use fresh pathless PGlite and real Next route exports in-process. Only token signature verification is mocked within Vitest; real user lookup/edit authorization and source/lease/persistence code run. Fetch attempts throw and are asserted absent. This is not hosted token verification, native multi-session concurrency, complete migrations/RLS, browser interaction automation or real-provider quality/billing validation. Separate bootstrap/native tests cover their own documented scope.
+
+Before hosted execution: approve the isolated target and costs; establish the reviewed synthetic database bootstrap and least-privilege credentials; configure real Privy/deployment access; install/build the source package on the actual host and repeat module/route audits; then test positive authenticated flow. No production/shared environment variables, real records, provider calls or remote changes are needed to prepare these local artifacts.

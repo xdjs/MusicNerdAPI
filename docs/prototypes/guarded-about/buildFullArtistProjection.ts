@@ -71,7 +71,7 @@ ${baseSql.replace(original, () => replacement)}
 GRANT USAGE ON SCHEMA mn_public TO ${clients};
 GRANT SELECT ON mn_public.artists TO ${clients};
 GRANT EXECUTE ON FUNCTION mn_projection.public_bio(uuid) TO ${clients};
-GRANT SELECT(id,webmapdata) ON public.artists TO ${editor};
+GRANT SELECT(id,name,webmapdata) ON public.artists TO ${editor};
 ${roles.publicReaders ? "" : "REVOKE ALL ON mn_public.artists FROM anon,authenticated;REVOKE USAGE ON SCHEMA mn_public FROM anon,authenticated;REVOKE EXECUTE ON FUNCTION mn_projection.public_bio(uuid),mn_projection.artist_shape_current() FROM anon,authenticated;"}
 DO $$ BEGIN
  IF has_column_privilege('${roles.mapEditor}','public.artists','bio','SELECT')

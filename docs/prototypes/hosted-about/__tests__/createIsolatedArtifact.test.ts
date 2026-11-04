@@ -16,6 +16,23 @@ it("creates only the real About route and explicit isolated config without copyi
     expect(config).toContain("synthesizeArtistDoc$");
     expect(config).toContain("module-audit.json");
     expect(config).not.toContain("ignoreBuildErrors");
+    expect(config).not.toContain(resolve("."));
+    const tsconfig = JSON.parse(await readFile(join(root, "tsconfig.json"), "utf8"));
+    expect(tsconfig.compilerOptions.paths["@/lib/lore/generateAboutFromDoc"]).toEqual([
+      "./docs/prototypes/hosted-about/generateAboutFromDoc.ts",
+    ]);
+    const manifest = JSON.parse(
+      await readFile(join(root, "source-manifest.json"), "utf8"),
+    ) as string[];
+    expect(manifest).toContain("lib/auth/verifyPrivyAccessToken.ts");
+    expect(
+      manifest.every(
+        name => name.endsWith(".ts") && !name.includes("__tests__") && !name.includes(".."),
+      ),
+    ).toBe(true);
+    const page = await readFile(join(root, "app/page.tsx"), "utf8");
+    expect(page).toContain('credentials: "same-origin"');
+    expect(page).not.toMatch(/localStorage|sessionStorage|useEffect|console\./);
   } finally {
     await rm(parent, { recursive: true, force: true });
   }

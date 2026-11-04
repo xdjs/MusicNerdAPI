@@ -313,3 +313,126 @@ it("returns eligible About through the full shape and withdraws it after source 
     expect((await pg.query("select bio from mn_public.artists")).rows).toEqual([{ bio: null }]),
   );
 });
+
+it.each(["Dev", "Production"])(
+  "supports pinned Artist Web Map queries with guarded reads and existing %s write policy",
+  async target => {
+    if (target === "Dev") await pg.exec("drop policy map_update on artists");
+    else
+      await pg.exec(
+        "revoke select on artists from readonly_user;drop role readonly_user;drop policy public_read on artists;create policy map_select on artists for select to webmapdata_editor using(true)",
+      );
+    await pg.exec(
+      buildFullArtistProjection(migration, {
+        reader: target === "Dev" ? "readonly_user" : null,
+        mapEditor: "webmapdata_editor",
+        publicReaders: target === "Dev",
+      }),
+    );
+    await prepareUrlReceipt(pg, source.url);
+    const original = (await pg.query<{ webmapdata: unknown }>("select webmapdata from artists"))
+      .rows[0];
+    await asRole("webmapdata_editor", async () => {
+      const rows = (
+        await pg.query<Record<string, unknown>>(
+          "SELECT * FROM mn_public.artists WHERE LOWER(name) = LOWER($1)",
+          ["SYNTHETIC ARTIST"],
+        )
+      ).rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].bio).toBe("Public biography");
+      expect(Object.keys(rows[0])).toEqual(manifest.columns.map(column => column.name));
+      expect(
+        (
+          await pg.query("SELECT id, name, webmapdata FROM mn_public.artists WHERE id = $1", [
+            artist,
+          ])
+        ).rows,
+      ).toEqual([{ id: artist, name: "Synthetic artist", ...original }]);
+      expect(
+        (
+          await pg.query("SELECT id FROM mn_public.artists WHERE LOWER(name) = LOWER($1)", [
+            "SYNTHETIC ARTIST",
+          ])
+        ).rows,
+      ).toEqual([{ id: artist }]);
+      expect(
+        (
+          await pg.query(
+            "SELECT id, name, spotify, node_pfp, webmapdata, x, instagram, facebook FROM mn_public.artists WHERE LOWER(name) = LOWER($1)",
+            ["SYNTHETIC ARTIST"],
+          )
+        ).rows,
+      ).toEqual([
+        {
+          id: artist,
+          name: "Synthetic artist",
+          spotify: "synthetic-spotify",
+          node_pfp: { marker: "node_pfp" },
+          ...original,
+          x: "synthetic-x",
+          instagram: "synthetic-instagram",
+          facebook: "synthetic-facebook",
+        },
+      ]);
+      expect(
+        (
+          await pg.query(
+            "SELECT node_pfp, spotify AS spotify_id FROM mn_public.artists WHERE id=$1",
+            [artist],
+          )
+        ).rows,
+      ).toEqual([{ node_pfp: { marker: "node_pfp" }, spotify_id: "synthetic-spotify" }]);
+      // The pinned consumer also contains spotify_id, absent from the pinned database contract.
+      await expect(
+        pg.query("SELECT node_pfp, spotify_id FROM mn_public.artists WHERE id=$1", [artist]),
+      ).rejects.toMatchObject({ code: "42703" });
+      for (const query of [
+        "SELECT * FROM public.artists",
+        "SELECT bio FROM public.artists",
+        "SELECT node_pfp FROM public.artists",
+      ])
+        await expect(pg.query(query)).rejects.toMatchObject({ code: "42501" });
+      await pg.query("UPDATE public.artists SET webmapdata = $1 WHERE LOWER(name) = LOWER($2)", [
+        JSON.stringify({ via: "name" }),
+        "SYNTHETIC ARTIST",
+      ]);
+      expect(
+        (await pg.query("SELECT webmapdata FROM mn_public.artists WHERE id=$1", [artist])).rows,
+      ).toEqual([target === "Dev" ? original : { webmapdata: { via: "name" } }]);
+      await pg.query("UPDATE public.artists SET webmapdata = $1 WHERE id = $2", [
+        JSON.stringify({ via: "id" }),
+        artist,
+      ]);
+      expect(
+        (await pg.query("SELECT webmapdata FROM mn_public.artists WHERE id=$1", [artist])).rows,
+      ).toEqual([target === "Dev" ? original : { webmapdata: { via: "id" } }]);
+      await expect(
+        pg.query("UPDATE public.artists SET name='forbidden' WHERE id=$1", [artist]),
+      ).rejects.toMatchObject({ code: "42501" });
+      await expect(
+        pg.query(
+          "UPDATE public.artists SET webmapdata='{}' WHERE LOWER(name)=LOWER($1) RETURNING *",
+          ["Synthetic artist"],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+    });
+    await pg.exec("update artist_vault_sources set publication='private'");
+    await asRole("webmapdata_editor", async () => {
+      const [withdrawn] = (
+        await pg.query<Record<string, unknown>>(
+          "SELECT * FROM mn_public.artists WHERE LOWER(name)=LOWER($1)",
+          ["SYNTHETIC ARTIST"],
+        )
+      ).rows;
+      expect(withdrawn.bio).toBeNull();
+      expect(withdrawn.name).toBe("Synthetic artist");
+      await expect(pg.query("SELECT bio FROM public.artists")).rejects.toMatchObject({
+        code: "42501",
+      });
+    });
+    expect((await pg.query("SELECT bio FROM public.artists")).rows).toEqual([
+      { bio: "Public biography" },
+    ]);
+  },
+);

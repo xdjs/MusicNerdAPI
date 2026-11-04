@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { packageIsolatedSource } from "./packageIsolatedSource.mjs";
+import { packageIsolatedRuntime } from "./packageIsolatedRuntime.mjs";
 import { verifyIsolatedBuild } from "./verifyIsolatedBuild.mjs";
 import { createIsolatedArtifact } from "./createIsolatedArtifact.mjs";
 
 /** Build only the disposable artifact with a fresh environment and denied Node network transports. */
 export async function runOfflineBuild(sourceRoot) {
-  const root = await createIsolatedArtifact(resolve(sourceRoot), tmpdir());
+  const root = await createIsolatedArtifact(resolve(sourceRoot), "/tmp");
   await mkdir(join(root, "home"));
   await mkdir(join(root, "tmp"));
   const preload = fileURLToPath(new URL("./deny-network.cjs", import.meta.url));
@@ -46,11 +47,13 @@ export async function runOfflineBuild(sourceRoot) {
     await writeFile(join(root, "build.log"), log);
   }
   const attempts = await readFile(audit, "utf8");
-  const verification = code === 0 ? await verifyIsolatedBuild(root, resolve(sourceRoot)) : null;
+  const verification = code === 0 ? await verifyIsolatedBuild(root, root) : null;
   const result = {
     root,
     exitCode: code,
     verification,
+    source: code === 0 && !attempts.trim() ? await packageIsolatedSource(root, "/tmp") : null,
+    runtime: code === 0 && !attempts.trim() ? await packageIsolatedRuntime(root, "/tmp") : null,
     networkAttempts: attempts.trim() ? attempts.trim().split("\n") : [],
   };
   await writeFile(join(root, "offline-build-result.json"), JSON.stringify(result, null, 2));

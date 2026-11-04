@@ -1,3 +1,6 @@
+import webArtistManifest from "../../../docs/prototypes/guarded-about/webArtistColumns.json";
+import { buildFullArtistProjection } from "../../../docs/prototypes/guarded-about/buildFullArtistProjection";
+import { useExistingUrlReceipts } from "../../../docs/prototypes/guarded-about/useExistingUrlReceipts";
 import { createHash } from "node:crypto";
 import migrationFixtures from "../../../docs/prototypes/pg17-ci/migration-fixtures.json";
 import { readFileSync, realpathSync } from "node:fs";
@@ -687,6 +690,93 @@ describe.skipIf(!socket)(
           expect(current.extracted_text).toBe("Concurrent replacement evidence");
         expect(await client!`select * from artist_research_jobs`).toHaveLength(0);
         expect(await client!`select * from artist_activity_events`).toHaveLength(1);
+      },
+    );
+
+    it.each(["Dev", "Production"])(
+      "native Artist Web Map guarded reads and name/id writes preserve %s policy",
+      async target => {
+        await persistArtistBio(artist, "Generated", publication);
+        const rollback = new Error("Synthetic map fixture rollback");
+        const result = await capture(
+          admin!.begin(async tx => {
+            // Entire replacement fixture, role and projection roll back; other native cases keep their original tables.
+            await tx.unsafe("alter table public.artists rename to native_original_artists");
+            await tx.unsafe(
+              `create table public.artists(${webArtistManifest.columns.map(c => `"${c.name}" ${c.type}`).join(",")})`,
+            );
+            await tx`insert into public.artists(id,name,bio,spotify,node_pfp,webmapdata) values(${artist},'Synthetic artist','Generated','synthetic-spotify','{"url":"synthetic"}','{}')`;
+            await tx.unsafe(
+              "create role native_map_editor login;grant usage on schema public to native_map_editor,anon,authenticated;grant select on public.artists to native_map_editor,anon,authenticated;grant update(webmapdata) on public.artists to native_map_editor;alter table public.artists enable row level security",
+            );
+            if (target === "Dev")
+              await tx.unsafe(
+                "create policy map_read on public.artists for select to public using(true)",
+              );
+            else
+              await tx.unsafe(
+                "create policy map_read on public.artists for select to native_map_editor using(true);create policy map_update on public.artists for update to native_map_editor using(true) with check(true)",
+              );
+            const base = readFileSync(
+              new URL("../../../docs/prototypes/guarded-about/projection.sql", import.meta.url),
+              "utf8",
+            );
+            const cutover = buildFullArtistProjection(useExistingUrlReceipts(base), {
+              reader: null,
+              mapEditor: "native_map_editor",
+              publicReaders: target === "Dev",
+            });
+            // The test supplies the transaction; don't let prototype BEGIN/COMMIT escape its rollback boundary.
+            expect(cutover.startsWith("BEGIN;\n")).toBe(true);
+            expect(cutover.endsWith("COMMIT;")).toBe(true);
+            await tx.unsafe(cutover.slice("BEGIN;\n".length, -"COMMIT;".length));
+            await tx.unsafe("set local role native_map_editor");
+            const [row] =
+              await tx`SELECT * FROM mn_public.artists WHERE LOWER(name)=LOWER('SYNTHETIC ARTIST')`;
+            expect(Object.keys(row)).toEqual(webArtistManifest.columns.map(c => c.name));
+            expect(row.bio).toBe("Generated");
+            expect(
+              await tx`SELECT node_pfp,spotify AS spotify_id FROM mn_public.artists WHERE id=${artist}`,
+            ).toEqual([{ node_pfp: { url: "synthetic" }, spotify_id: "synthetic-spotify" }]);
+            for (const denied of [
+              "SELECT * FROM public.artists",
+              "SELECT bio FROM public.artists",
+              "SELECT node_pfp FROM public.artists",
+              "UPDATE public.artists SET name='forbidden'",
+              "UPDATE public.artists SET webmapdata='{}' RETURNING *",
+            ]) {
+              const failure = await capture(tx.savepoint(async sp => sp.unsafe(denied)));
+              expect(errorCode(failure.error)).toBe("42501");
+            }
+            const absent = await capture(
+              tx.savepoint(async sp => sp.unsafe("SELECT spotify_id FROM mn_public.artists")),
+            );
+            expect(errorCode(absent.error)).toBe("42703");
+            await tx`UPDATE public.artists SET webmapdata=${tx.json({ via: "name" })}::jsonb WHERE LOWER(name)=LOWER('SYNTHETIC ARTIST')`;
+            expect(await tx`SELECT webmapdata FROM mn_public.artists WHERE id=${artist}`).toEqual([
+              { webmapdata: target === "Dev" ? {} : { via: "name" } },
+            ]);
+            await tx`UPDATE public.artists SET webmapdata=${tx.json({ via: "id" })}::jsonb WHERE id=${artist}`;
+            expect(await tx`SELECT webmapdata FROM mn_public.artists WHERE id=${artist}`).toEqual([
+              { webmapdata: target === "Dev" ? {} : { via: "id" } },
+            ]);
+            await tx.unsafe("reset role");
+            await tx`UPDATE artist_vault_sources SET publication='private' WHERE id=${sourceId}`;
+            await tx.unsafe("set local role native_map_editor");
+            expect(
+              await tx`SELECT bio FROM mn_public.artists WHERE LOWER(name)=LOWER('SYNTHETIC ARTIST')`,
+            ).toEqual([{ bio: null }]);
+            await tx.unsafe("reset role");
+            expect(await tx`SELECT bio FROM public.artists`).toEqual([{ bio: "Generated" }]);
+            throw rollback;
+          }),
+        );
+        if (result.error !== undefined && result.error !== rollback) throw result.error;
+        expect(result.error).toBe(rollback);
+        expect(await admin!`select to_regclass('mn_public.artists') as relation`).toEqual([
+          { relation: null },
+        ]);
+        expect(await getPublicSavedBio(artist)).toBe("Generated");
       },
     );
 

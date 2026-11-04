@@ -1,5 +1,7 @@
 # #1655 disposable hosted validation proposal
 
+> Superseded for the first hosted run by [the one-application minimal staging plan](about-minimal-staging-run.md). This document preserves the earlier two-project estimate and initial preparation failures; it is not the current execution checklist.
+
 Read-only resource discovery on 2026-11-04. **Nothing has been provisioned, deployed, written remotely or cost-confirmed.** Names below are proposed resources, not existing/reserved targets. The local application pair remains API `ecc6e405712b6af3496574518551e9390abc2071` and Web `d219118f1e3b9a0fa5c3807a8bf3ea4414fad99f`; validation documentation/runner is API `4b036d21b430fd5e6d4b37386acf65c2d0845969`. Pin the adapter follow-up commit before any deployment.
 
 ## Specific target and verified availability

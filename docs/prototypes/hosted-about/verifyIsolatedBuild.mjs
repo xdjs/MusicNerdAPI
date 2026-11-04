@@ -24,7 +24,12 @@ export async function verifyIsolatedBuild(root, sourceRoot) {
   const paths = JSON.parse(
     await readFile(join(root, ".next/server/app-paths-manifest.json"), "utf8"),
   );
-  const allowed = new Set(["/api/artistBio/[id]/route", "/_not-found/page", "/_global-error/page"]);
+  const allowed = new Set([
+    "/api/artistBio/[id]/route",
+    "/_not-found/page",
+    "/_global-error/page",
+    "/page",
+  ]);
   for (const route of Object.keys(paths))
     if (!allowed.has(route)) throw new Error(`Unexpected route: ${route}`);
   if (!paths["/api/artistBio/[id]/route"]) throw new Error("About route missing");
