@@ -27,3 +27,38 @@ Neither role's actual consumer, credential custodian, present traffic, full quer
 No nonsecret role-to-application ownership register was found in the tracked files searched. The next useful source would be an existing authorized provisioning/access inventory exposing only role name, application label, responsible-owner label and linked change record. No such accessible inventory has been established in this environment. Do not retrieve connection strings or secret values to infer the mapping. A separately available historical connection audit must support server-side field exclusion and account for pooled/effective roles; do not pull unrestricted logs for later redaction.
 
 Until a mapping is established, preserve both roles' existing access and intended map editing. Their unknown raw-table interfaces remain a compatibility/privacy release gate for the guarded projection. Local synthetic tests cannot resolve their ownership.
+
+## Expanded checkout search, 2026-11-04
+
+Read only tracked source/SQL/Markdown/YAML at each local HEAD, excluding dependency/vendor/lock/schema-snapshot files. No env or credential file contents were opened. Exact role-name searches and a separate filename-only `webmapdata` search found no matches in these checkouts:
+
+| Checkout        | HEAD                                       |
+| --------------- | ------------------------------------------ |
+| MusicNerdMono   | `36b501b1ba9aed58bc0b9d3354cadfc91a121b06` |
+| MusicNerdTV     | `56db805805aca29281a63c7b05e154c66865aa97` |
+| mnagentflow     | `a8841ffa0a451615fa2b213e10c662141e52016b` |
+| musicnerd-agent | `69cd909940f55bc86fc6c928271e8c3d0028c647` |
+| musicnerd1      | `8d213f41e52fa487840bdbe76c69e1fe1af738d3` |
+| musicnerd2      | `68407d84fca98b05b8024af149967936c28caf79` |
+| musicnerd3      | `60a9612ed4d3977326903eee3112e333c56a4bea` |
+| musicnerd3.1    | `02617d7504a3ffed8931ced55079af25a0031132` |
+| musicnerd3.2    | `c1a8859c05b9bc5245cac2f386cd22b7753dcd34` |
+
+This expands the bounded evidence; it still does not identify either role's consumer or prove there is none. No new hosted role/session inventory or historical logs were accessed. There is no evidence to treat an unidentified consumer as migrated, retired or safe to revoke. A synthetic map-writer test can establish which SQL contract works with restricted grants; it cannot establish that the real client uses that contract.
+
+## Independently checked access shape, 2026-11-04
+
+Read-only catalog query inspected only named roles' privilege booleans and `pg_policies` for artists; no artist rows, credentials, statements, client addresses or logs were read. This independently corroborates the parallel investigation's relevant policy claims:
+
+| Target | Role | Base SELECT / bio SELECT | Artist SELECT policy | Map UPDATE grant/policy |
+| --- | --- | --- | --- | --- |
+| Dev | anon, authenticated | yes / yes | PUBLIC USING(true) | grant exists; no applicable UPDATE policy shown |
+| Dev | readonly_user | yes / yes | PUBLIC USING(true) | no grant |
+| Dev | webmapdata_editor | yes / yes | PUBLIC USING(true) | grant exists; no applicable UPDATE policy shown |
+| Production | anon, authenticated | yes / yes | none shown for these roles | grant exists; no applicable UPDATE policy shown |
+| Production | webmapdata_editor | yes / yes | role-specific USING(true) | grant and role-specific UPDATE USING(true) |
+| Both | mnweb | yes / yes | role-specific USING(true) | grant and role-specific UPDATE USING/WITH CHECK(true) |
+
+All listed roles are non-superuser/non-BYPASSRLS. anon/authenticated are NOLOGIN; custom readers and mnweb are LOGIN. Production's named-role result does not contain readonly_user. The query checks effective object privileges and displayed policies, not an exhaustive fresh membership/API/schema exposure audit. Synthetic replicas must reproduce these distinctions, not infer read visibility from grants alone or invent a Dev map-write policy. Production anon/authenticated must not gain all-row access through an owner-rights compatibility view.
+
+The parent reports absent matching sessions/retained statements/24-hour connection events, with logging/retention limitations. Those log observations were not independently re-queried here, are not used to authorize a cutover, and do not establish disuse. No consumer or credential owner was identified by this catalog check.

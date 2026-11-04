@@ -41,7 +41,7 @@ Known HTTP clients can retain their contract through existing safe handlers. The
 ## Release sequence and environment blockers
 
 1. Review and integrate the receipt writer into every production publication path; run full differential/adversarial cases and explicitly version validator/runtime semantics. This prototype is not yet a drop-in deployment.
-2. Identify role owners/clients and agree the new relation/schema contract, including all public column names/types/order and API relationship metadata. The prototype tests only three fields. Verify consumer behavior before changing their grants.
+2. Identify role owners/clients and agree the new relation/schema contract, including all public column names/types/order and API relationship metadata. The original projection fixture tests only three fields; the separate full-row extension now verifies the pinned 65-column Web shape. Neither proves hosted API relationship discovery. Verify consumer behavior before changing their grants.
 3. Audit actual/default/inherited grants, privileged forwarding functions and API schema exposure; explicitly classify trusted service roles. No inferred allowlist.
 4. Rehearse transactional migration and genuine multi-session source/claim/trust races on native PostgreSQL17 with target-equivalent schema/roles. Then test the actual authorized API/GraphQL environment. Keep providers stubbed unless approved.
 5. Gate traffic/old workers; deploy compatible writers/readers and switch approved clients; restrict old raw paths in the same controlled cutover. Dual-interface access while raw grants remain is still exposure, not completed protection.
@@ -56,3 +56,13 @@ Final receipt review found no remaining blocker within this isolated scope. The 
 ## Production integration decision
 
 [Integration assessment](integration-assessment.md): retain this as an isolated prototype until the role/client and interface decisions are resolved. `atomicWriter.test.ts` now decorates the actual API publication writer with receipt preparation on the same transaction. It verifies real About/Lore/history/lineage/lease writes, storage/conflict rollback and source withdrawal. Policy-rejected historical URLs do not block manual edits; they receive no receipt and stay publicly hidden. This is test-only integration evidence, not active application wiring or deployed end-to-end proof. Unknown-role access remains untouched.
+
+## Full-row and target-policy extension (2026-11-04)
+
+`buildFullArtistProjection.ts`, `webArtistColumns.json` and `fullArtistShape.test.ts` implement an explicit, synthetic cutover for audited existing full-row readers. The builder preserves all 65 pinned Web column names/types/order, masks only bio, rejects schema drift, and accepts an explicit target-specific audience. Non-bio fields (including notes, added_by, wallets and inprocess) are unchanged; this is not a new public-field approval. The qualified relation changes to mn_public.artists; writable/RETURNING-star and API relationship contracts are not preserved automatically.
+
+Dev and production replicas use independently checked artist policy shapes. Dev map UPDATE remains a no-op without an applicable UPDATE policy. Production anon/authenticated do not receive the full-row view; production's absent readonly_user is supported. Explicit map clients retain only SELECT(id,webmapdata) plus their pre-existing UPDATE(webmapdata) grant/policy. Unknown readers, broad map mutation rights, role-name aliases, privileged roles and inherited/NOINHERIT SET ROLE escapes abort cutover. Caller must roll back an errored transaction before reuse. Tests verify aborted cutover preserves original grants, not that original exposure is safe.
+
+All **40 prototype tests passed in 8.46 seconds**, including 13 new shape/access cases; full API typecheck and targeted lint passed. Independent exact-code review found no remaining blocker within this isolated scope. The new positive receipt case shows eligible About followed by moderation withdrawal; emergency null-About fallback preserves row shape/raw denial and permitted map edits. No active writer, migration journal, production grant or application reader changed.
+
+See [concrete cutover and rollback checklist](cutover-checklist.md). Consumer attribution, explicit audience/client migration, full receipt writer integration, native PostgreSQL17 and deployed API discovery remain gates. The earlier integration assessment is still valid on those gates; its three-column limitation is resolved only by this local full-row candidate.
