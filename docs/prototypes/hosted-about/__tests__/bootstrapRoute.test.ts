@@ -69,6 +69,7 @@ beforeEach(async () => {
     "bootstrap-audit.sql",
   ])
     await pg.exec(readFileSync(new URL("../" + file, import.meta.url), "utf8"));
+  await pg.exec("begin");
   await pg.query(
     "insert into artists(id,name,bio) values($1,'Synthetic artist','Original About')",
     [artist],
@@ -81,6 +82,13 @@ beforeEach(async () => {
     "insert into artist_vault_sources(id,artist_id,origin,publication,status,url,extracted_text) values($1,$2,'submission','public','approved','https://example.org/synthetic',$3)",
     [source, artist, "Synthetic verified evidence. ".repeat(30)],
   );
+  // A new artist's trigger queues catalog matching. Suppress only the fictional
+  // fixture job before commit so no worker can observe a runnable job.
+  await pg.query(
+    "update artist_research_jobs set status='done',state=state || '{\"outcome\":\"synthetic_fixture_do_not_run\"}'::jsonb where artist_id=$1 and kind='catalog_match'",
+    [artist],
+  );
+  await pg.exec("commit");
   await pg.exec("set role mnweb");
   adapter = createHostedAboutAdapter({}, async () => toSourceList(await gatherDocMaterial(artist)));
 });
@@ -148,4 +156,112 @@ it("full bootstrap accepts the approved claimant while refusing an unrelated aut
   const response = await PUT(request("PUT"), context());
   expect(response.status).toBe(200);
   expect(adapter.counters()).toEqual({ lore: 1, about: 1, summary: 1 });
+});
+
+it("invalid-body About probe verifies actual role guard without generation or writes", async () => {
+  const probe = (token: string | null) =>
+    new Request(`http://synthetic.invalid/api/artistBio/${artist}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: "null",
+    });
+  const approved = await PUT(probe("synthetic-token"), context());
+  expect(approved.status).toBe(400);
+  expect(await approved.json()).toEqual({ status: "error", error: "Invalid bio" });
+  expect((await PUT(probe(null), context())).status).toBe(401);
+  await pg.exec("reset role");
+  await pg.query("update users set is_admin=false where id=$1", [user]);
+  await pg.exec("set role mnweb");
+  expect((await PUT(probe("synthetic-token"), context())).status).toBe(403);
+  expect(adapter.counters()).toEqual({ lore: 0, about: 0, summary: 0 });
+  await pg.exec("reset role");
+  expect(
+    (await pg.query<{ bio: string }>("select bio from artists where id=$1", [artist])).rows[0].bio,
+  ).toBe("Original About");
+  for (const table of [
+    "artist_docs",
+    "artist_bio_versions",
+    "artist_research_jobs",
+    "artist_activity_events",
+  ])
+    expect(
+      (await pg.query<{ count: number }>(`select count(*)::int count from ${table}`)).rows[0].count,
+    ).toBe(table === "artist_research_jobs" ? 1 : 0);
+});
+
+it("trusted contributor eligibility does not grant About-write permission", async () => {
+  await pg.exec("reset role");
+  await pg.query("update users set is_admin=false,is_white_listed=true where id=$1", [user]);
+  await pg.exec("set role mnweb");
+  expect(toSourceList(await gatherDocMaterial(artist)).length).toBeGreaterThan(0);
+  expect((await PUT(request("PUT"), context())).status).toBe(403);
+  expect(adapter.counters()).toEqual({ lore: 0, about: 0, summary: 0 });
+});
+it.each([true, false])("approved claimant preserves content with pinned=%s", async pinned => {
+  await pg.exec("reset role");
+  await pg.query("update users set is_admin=false where id=$1", [user]);
+  await pg.query("insert into artist_claims(artist_id,user_id,status) values($1,$2,'approved')", [
+    artist,
+    user,
+  ]);
+  await pg.query(
+    "insert into artist_bio_versions(artist_id,bio_text,is_pinned) values($1,'Prior About',$2)",
+    [artist, pinned],
+  );
+  await pg.exec("set role mnweb");
+  adapter = createHostedAboutAdapter({ about: "fail" }, async () =>
+    toSourceList(await gatherDocMaterial(artist)),
+  );
+  const response = await PUT(request("PUT"), context());
+  expect(response.status).toBe(pinned ? 200 : 500);
+  expect(adapter.counters().about).toBe(pinned ? 0 : 1);
+  await pg.exec("reset role");
+  expect(
+    (await pg.query<{ bio: string }>("select bio from artists where id=$1", [artist])).rows[0].bio,
+  ).toBe("Original About");
+  expect(
+    (
+      await pg.query("select bio_text,is_pinned from artist_bio_versions where artist_id=$1", [
+        artist,
+      ])
+    ).rows,
+  ).toEqual([{ bio_text: "Prior About", is_pinned: pinned }]);
+  expect(
+    (await pg.query("select status from artist_claims where artist_id=$1", [artist])).rows,
+  ).toEqual([{ status: "approved" }]);
+  expect(
+    (await pg.query("select status,publication from artist_vault_sources where id=$1", [source]))
+      .rows,
+  ).toEqual([{ status: "approved", publication: "public" }]);
+  expect(
+    (
+      await pg.query(
+        "select id from artist_research_jobs where artist_id=$1 and kind='catalog_match' and status in ('pending','running')",
+        [artist],
+      )
+    ).rows,
+  ).toHaveLength(0);
+  expect(
+    (
+      await pg.query(
+        "select status,state->>'outcome' outcome from artist_research_jobs where artist_id=$1 and kind='catalog_match'",
+        [artist],
+      )
+    ).rows,
+  ).toEqual([{ status: "done", outcome: "synthetic_fixture_do_not_run" }]);
+});
+it("an authorized actor cannot regenerate from rejected evidence", async () => {
+  await pg.exec("reset role");
+  await pg.query("update artist_vault_sources set status='rejected' where id=$1", [source]);
+  await pg.exec("set role mnweb");
+  const result = await PUT(request("PUT"), context());
+  expect(result.status).not.toBe(200);
+  expect(adapter.counters()).toEqual({ lore: 0, about: 0, summary: 0 });
+  await pg.exec("reset role");
+  expect(
+    (await pg.query<{ bio: string }>("select bio from artists where id=$1", [artist])).rows[0].bio,
+  ).toBe("Original About");
 });
