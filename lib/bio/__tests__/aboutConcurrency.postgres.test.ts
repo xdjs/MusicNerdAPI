@@ -570,6 +570,33 @@ describe.skipIf(!socket)(
       expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
     });
 
+    it("reads committed text, history and evidence from a fresh application connection", async () => {
+      await persistArtistBio(artist, "Durable synthetic About", publication);
+      const reader = postgres({ ...options, user: "mnweb", max: 1 });
+      try {
+        const [identity] = await reader`select current_user as role, pg_backend_pid() as pid`;
+        expect(identity.role).toBe("mnweb");
+        expect(backendPids.has(identity.pid)).toBe(false);
+        expect(await reader`select bio from artists where id=${artist}`).toEqual([
+          { bio: "Durable synthetic About" },
+        ]);
+        expect(
+          await reader`select bio_text from artist_bio_versions where artist_id=${artist} order by bio_text`,
+        ).toEqual([{ bio_text: "Durable synthetic About" }, { bio_text: "Original" }]);
+        expect(
+          await reader`select count(*)::int as n from mn_private.artist_bio_provenance where artist_id=${artist}`,
+        ).toEqual([{ n: 1 }]);
+        expect(
+          await reader`select count(*)::int as n from mn_private.artist_bio_version_provenance p join artist_bio_versions v on v.id=p.version_id where v.artist_id=${artist}`,
+        ).toEqual([{ n: 1 }]);
+        expect(await reader`select url,policy_version from mn_private.public_url_receipts`).toEqual(
+          [{ url: source.url, policy_version: 1 }],
+        );
+      } finally {
+        await reader.end({ timeout: 1 });
+      }
+    });
+
     it("preserves an explicit legacy allowance on rollback but never revives it after claim revocation", async () => {
       await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
       await admin!`insert into mn_private.legacy_bio_publications values(${artist},${claim},encode(sha256(convert_to('Original','UTF8')),'hex'))`;

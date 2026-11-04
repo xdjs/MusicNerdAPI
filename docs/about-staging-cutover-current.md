@@ -1,5 +1,7 @@
 # #1655 current staging and cutover execution plan
 
+Latest acceptance and remaining execution scope: [post-hosted #1655 review](about-1655-acceptance-after-hosted.md). Real staging login is verified; the separate onboarding visibility follow-up is local only. Use that report for the current Web commit and remaining durable-storage/client gates.
+
 Prepared 2026-11-04. This replaces obsolete candidate hashes and pending-writer tasks in earlier proposals. It is an execution plan, not permission to mutate a hosted environment. No model calls are needed for the mandatory run.
 
 ## Frozen application scope

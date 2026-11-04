@@ -1,5 +1,7 @@
 # #1655 — least-disruptive release preparation
 
+Latest acceptance and remaining execution scope: [post-hosted #1655 review](about-1655-acceptance-after-hosted.md). Real staging login is verified; the separate onboarding visibility follow-up is local only. Use that report for the current Web commit and remaining durable-storage/client gates.
+
 Current execution update (2026-11-04): [native PostgreSQL17.11 verification passed](about-pg17-verification.md); use [the current staging/cutover plan](about-staging-cutover-current.md) for current artifact hashes and remaining steps. Earlier unavailable-engine statements below are historical.
 
 Superseding user decision (2026-11-04): [preserve the exact 16 legacy snapshots](about-legacy-snapshot-exceptions.md) through explicit private snapshot permissions, not a blanket claimed-bio fallback. Earlier statements requiring approval to hide all 16 are historical and no longer the plan. New or changed content remains guarded.
