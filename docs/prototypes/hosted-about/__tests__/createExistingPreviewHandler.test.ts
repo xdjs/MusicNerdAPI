@@ -91,3 +91,18 @@ it.each([
   expect((await handler(new Request("http://test.invalid"), context())).status).toBe(503);
   expect(load).not.toHaveBeenCalled();
 });
+
+it.each(["synthetic-oidc-token", ""])(
+  "refuses request-scoped OIDC before loading any real handler",
+  async value => {
+    const load = vi.fn(async () => async () => new Response("unreachable"));
+    const handler = createExistingPreviewHandler(id, baseline, load);
+    const request = new Request("http://test.invalid", {
+      headers: { "x-vercel-oidc-token": value },
+    });
+    const result = await handler(request, context());
+    expect(result.status).toBe(503);
+    expect(await result.text()).not.toContain("synthetic-oidc-token");
+    expect(load).not.toHaveBeenCalled();
+  },
+);

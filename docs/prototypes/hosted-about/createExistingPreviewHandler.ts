@@ -53,7 +53,9 @@ export function createExistingPreviewHandler(
     } catch {
       /* Invalid or absent configuration is refused below. */
     }
+    // Vercel can inject runtime OIDC through the request, independently of env.
     const unexpected =
+      request.headers.has("x-vercel-oidc-token") ||
       required.some(key => !environment[key]?.trim()) ||
       Object.entries(environment).some(([key, value]) => value && !allowed.has(key)) ||
       !explicitDatabase;
