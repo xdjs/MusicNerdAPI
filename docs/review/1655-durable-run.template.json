@@ -1,0 +1,35 @@
+{
+  "issue": "xdjs/MusicNerdWeb#1655",
+  "status": "proposal_not_authorized_for_execution",
+  "target": null,
+  "approval_reference": null,
+  "cost_confirmation": null,
+  "expires_at": null,
+  "cleanup_owner": null,
+  "artifacts": {"api_sha": null, "web_sha": null, "migration_checksums": [], "deployment_ids": []},
+  "fixtures": {"artist_ids": [], "claim_ids": [], "source_ids": [], "setup_run_id": null},
+  "constraints": {
+    "shared_database_allowed": false,
+    "customer_records_allowed": false,
+    "model_calls_allowed": 0,
+    "request_time_seeding_allowed": false,
+    "reset_between_write_and_read_allowed": false,
+    "new_auth_app_required": false
+  },
+  "required_evidence": [
+    "target identity and actual application role; no superuser or BYPASSRLS",
+    "private table/receipt privileges and real public interface denial",
+    "operator setup ran exactly once before request A",
+    "request A status and committed biography/document/history/provenance/receipt hashes",
+    "request B different connection/application instance; no reseeding; same committed hashes",
+    "application restart/new deployment readback without fixture initialization",
+    "actual Web Regenerate About control and unfinished-to-completed setup",
+    "retained About/pin/trusted source originals and attribution unchanged; pending stays pending",
+    "stale/withdrawn source, duplicate request, preparation/About failure and recovery",
+    "whole onboarding provider/job closure stubbed; zero external generation/extraction",
+    "bounded timing and no false success after partial completion",
+    "exact fixture cleanup verified; no shared objects removed"
+  ],
+  "results": [],
+  "cleanup_result": null
+}
