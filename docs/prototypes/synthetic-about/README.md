@@ -20,7 +20,6 @@ No fixture cleanup can touch a shared database: the only database is constructed
 
 Remaining staging work: real token authentication/UI, actual API response integration, native PG17 and full migrations/RLS, fault-injected settlement/deadline recovery, legacy/pin/onboarding/revocation variants and direct-reader compatibility. Use `../../about-synthetic-staging-proposal.md` for the separately approved deployment plan; no deployment or paid call is authorized here.
 
-
 ## Fixed synthetic About acceptance preview
 
 This separately bundled test application runs the actual About PUT/GET route using real staging Privy verification, three deterministic generation adapters, and a fresh request-local PGlite database. It does not replace or relax the strict credential guard used by the shared-database test design.

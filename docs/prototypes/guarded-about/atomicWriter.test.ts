@@ -102,6 +102,13 @@ beforeEach(async () => {
     "alter table artists add primary key(id);alter table artist_claims add primary key(id)",
   );
   await pg.exec(legacyMigration);
+  await pg.exec(
+    readFileSync(
+      new URL("../pg17-ci/fixtures/0064_lore_activity_lock.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  await pg.exec("revoke update,delete on artist_activity_events from mnweb");
   await pg.query(
     "insert into artists(id,name,bio) values($1,'Synthetic artist','Original manual')",
     [artist],

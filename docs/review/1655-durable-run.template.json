@@ -6,8 +6,13 @@
   "cost_confirmation": null,
   "expires_at": null,
   "cleanup_owner": null,
-  "artifacts": {"api_sha": null, "web_sha": null, "migration_checksums": [], "deployment_ids": []},
-  "fixtures": {"artist_ids": [], "claim_ids": [], "source_ids": [], "setup_run_id": null},
+  "artifacts": {
+    "api_sha": null,
+    "web_sha": null,
+    "migration_checksums": [],
+    "deployment_ids": []
+  },
+  "fixtures": { "artist_ids": [], "claim_ids": [], "source_ids": [], "setup_run_id": null },
   "constraints": {
     "shared_database_allowed": false,
     "customer_records_allowed": false,

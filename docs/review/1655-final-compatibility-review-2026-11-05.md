@@ -35,7 +35,11 @@ Four logical generation operations completed in this successful retry, following
 - API TypeScript, changed-file ESLint and whitespace checks passed.
 - Independent exact-code review accepted the locking correction; default-ACL and bootstrap dependency findings were fixed and retested.
 
-These are scoped results, not a claim that full CI has passed on the final checkpoint. API CI still needs frozen pnpm installation on Node 24, full type/lint/format/test and build. Web CI needs its pinned Node/npm installation, types/lint/test:ci, release/migration regression tests and build. Native PostgreSQL/browser tests are opt-in and are not automatically exercised by the default unit command; run the provided native harness with PostgreSQL 17, both browser flags and the paired offline Next artifact. Review the disabled PG17 workflow before enabling it; do not assume hosted CI already ran it. Do not use real provider credentials for offline checks.
+Local CI follow-up corrected the missing function-only Web snapshot, two API fixtures that omitted 0064, and two formatting failures. Application code and migration SQL were unchanged. Full API checks now pass: types, lint, formatting, build and 980 test files (4,985 tests passed; 41 skipped). Full Web checks pass: types, lint, build and 434 suites (3,768 passed; six skipped), plus 116 release/migration regression tests.
+
+One native run during parallel workloads timed out waiting for the setup biography; 31 other tests passed. An isolated rerun passed all 32 tests and immediate-restart readback without code or timeout changes. Retain this as a browser timing/reliability observation, not proof of its cause. Both browser suites and the restricted-role checks were enabled on the passing run.
+
+These are local CI-command results using existing dependencies, clean source archives and credential-free environments, not fresh lockfile installs or hosted CI. API used Node 24 and pnpm-resolved dependencies; Web used its installed npm dependency tree. Fresh frozen installs remain for hosted CI. Native PostgreSQL/browser tests remain opt-in rather than part of the default unit command. No paid provider or hosted resource was used in this follow-up. Web checkpoint after metadata repair: `5166e4e7f17a9e6245aa825e73a703c73f0b277b`.
 
 ## Production dependencies — not proved by staging acceptance
 
@@ -47,4 +51,4 @@ These are scoped results, not a claim that full CI has passed on the final check
 
 ## Concrete next step
 
-Review the paired local draft PRs and dependency stack, run full CI plus the opt-in native acceptance on the checkpointed pair, and finish the production raw-reader/legacy activation plan. Publication is a separate approval step; no push, PR publication, merge or production release was performed. The staging bug acceptance is complete and does not need another paid retry merely to prepare review.
+Review the paired local draft PRs and dependency stack, run hosted CI with fresh dependencies, and finish the production raw-reader/legacy activation plan. Publication is a separate approval step; no push, PR publication, merge or production release was performed. The staging bug acceptance is complete and does not need another paid retry merely to prepare review.

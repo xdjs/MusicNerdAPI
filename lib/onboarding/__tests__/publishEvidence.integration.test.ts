@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
@@ -35,6 +36,16 @@ beforeAll(async () => {
   await pg.exec(`create schema mn_private;create table mn_private.public_url_receipts(url_hash bytea,url text,policy_version integer,primary key(url_hash,policy_version));create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb);create table artist_claims(artist_id uuid,status text);
  create table artist_activity_events(id text,artist_id uuid,source_id text,actor_kind text,actor_user_id text,trigger text,action text);
  create table artist_vault_sources(id text,artist_id uuid,activity_id text,type text,origin text,status text,publication text,url text,extracted_text text,file_path text,title text,snippet text,published_at text);`);
+  await pg.exec("create role mnweb;create role anon;create role authenticated;");
+  await pg.exec(
+    readFileSync(
+      new URL(
+        "../../../docs/prototypes/pg17-ci/fixtures/0064_lore_activity_lock.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
 });
 afterAll(() => pg.close());
 beforeEach(async () => {
