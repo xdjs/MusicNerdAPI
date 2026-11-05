@@ -71,3 +71,33 @@ actual_data=$("$node24_bin" -e 'process.stdout.write(require("node:fs").realpath
 printf 'Validated PostgreSQL server_version_num=%s; TCP disabled; isolated cluster identity verified\n' "$server_version"
 cd -- "$repo_dir"
 MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs run lib/bio/__tests__/aboutConcurrency.postgres.test.ts
+
+# Seed via real route handlers, leaving their committed result for an independent process.
+MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs run lib/bio/__tests__/aboutConcurrency.postgres.test.ts -t 'persists actual independent route requests'
+snapshot() {
+  "$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username=mnweb --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 <<'SQL'
+select jsonb_build_object(
+  'artists',(select jsonb_agg(to_jsonb(t) order by id) from artists t),
+  'docs',(select jsonb_agg(to_jsonb(t) order by id) from artist_docs t),
+  'history',(select jsonb_agg(to_jsonb(t) order by id) from artist_bio_versions t),
+  'provenance',(select jsonb_agg(to_jsonb(t) order by artist_id) from mn_private.artist_bio_provenance t),
+  'history_provenance',(select jsonb_agg(to_jsonb(t) order by version_id) from mn_private.artist_bio_version_provenance t),
+  'receipts',(select jsonb_agg(to_jsonb(t) order by url) from mn_private.public_url_receipts t),
+  'sources',(select jsonb_agg(to_jsonb(t) order by id) from artist_vault_sources t),
+  'jobs',(select jsonb_agg(to_jsonb(t) order by id) from artist_research_jobs t)
+);
+SQL
+}
+before_restart=$(snapshot)
+[[ "$before_restart" == *'Synthetic About'* ]] || fail 'Route fixture was not committed'
+# Immediate stop exercises WAL recovery, not just a clean checkpoint. No requests are active.
+"$pg17_bin/pg_ctl" -D "$run_dir/data" -m immediate -w stop
+"$pg17_bin/pg_ctl" -D "$run_dir/data" -l "$run_dir/server.log" -o "-c listen_addresses='' -c unix_socket_directories='$run_dir' -c unix_socket_permissions=0700 -p 55465" -w start
+restart_identity=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "select current_database() || '|' || current_setting('listen_addresses') || '|' || current_setting('server_version_num') from pg_database where datname=current_database()")
+[[ "$restart_identity" == "mn_1655_synthetic||$server_version" ]] || fail 'Restart target identity changed'
+restart_data=$("$pg17_bin/psql" -XAt --no-password --host="$run_dir" --port=55465 --username="$admin_user" --dbname=mn_1655_synthetic --set=ON_ERROR_STOP=1 -c "show data_directory")
+restart_data=$("$node24_bin" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$restart_data")
+[[ "$restart_data" == "$canonical_data" ]] || fail 'Restart data directory changed'
+after_restart=$(snapshot)
+[[ "$before_restart" == "$after_restart" ]] || fail 'Committed fixture changed across restart'
+printf '%s\n' 'PASS: independent mnweb process read identical About, Lore, history, evidence, sources and jobs after immediate PostgreSQL restart'

@@ -1,3 +1,4 @@
+import { createHostedAboutAdapter } from "../../../docs/prototypes/hosted-about/createHostedAboutAdapter";
 import webArtistManifest from "../../../docs/prototypes/guarded-about/webArtistColumns.json";
 import { buildFullArtistProjection } from "../../../docs/prototypes/guarded-about/buildFullArtistProjection";
 import { useExistingUrlReceipts } from "../../../docs/prototypes/guarded-about/useExistingUrlReceipts";
@@ -44,7 +45,7 @@ const driver = client ? drizzle(client, { schema }) : undefined;
 let holdCommit: (() => Promise<void>) | undefined;
 let startBarrier: (() => Promise<void>) | undefined;
 const backendPids = new Set<number>();
-const database = {
+const databaseOverrides = {
   execute: (query: Parameters<NonNullable<typeof driver>["execute"]>[0]) => driver!.execute(query),
   transaction: (
     fn: (
@@ -64,6 +65,30 @@ const database = {
       return result;
     }),
 };
+const database = new Proxy(databaseOverrides, {
+  get(target, key) {
+    if (key in target) return Reflect.get(target, key);
+    const value = Reflect.get(driver!, key);
+    return typeof value === "function" ? value.bind(driver) : value;
+  },
+});
+let routeAdapter: ReturnType<typeof createHostedAboutAdapter>;
+vi.mock("@/lib/auth/verifyPrivyAccessToken", () => ({
+  verifyPrivyAccessToken: async (token: string) =>
+    token === "local-synthetic" ? "local-subject" : null,
+}));
+vi.mock("@/lib/lore/synthesizeArtistDoc", () => ({
+  synthesizeArtistDoc: (...args: Parameters<typeof routeAdapter.synthesizeArtistDoc>) =>
+    routeAdapter.synthesizeArtistDoc(...args),
+}));
+vi.mock("@/lib/lore/generateAboutFromDoc", () => ({
+  generateAboutFromDoc: (...args: Parameters<typeof routeAdapter.generateAboutFromDoc>) =>
+    routeAdapter.generateAboutFromDoc(...args),
+}));
+vi.mock("@/lib/lore/generateLoreSummary", () => ({
+  generateLoreSummary: (...args: Parameters<typeof routeAdapter.generateLoreSummary>) =>
+    routeAdapter.generateLoreSummary(...args),
+}));
 vi.mock("@/lib/db/db", () => ({
   get db() {
     return database;
@@ -79,6 +104,8 @@ const { getPublicSavedBio } = await import("../getPublicSavedBio");
 const { insertVaultSource } = await import("@/lib/vault/insertVaultSource");
 const { updateVaultSourceStatus } = await import("@/lib/vault/updateVaultSourceStatus");
 
+const { buildDocSources } = await import("@/lib/lore/buildDocSources");
+const routes = await import("@/app/api/artistBio/[id]/route");
 const artist = "00000000-0000-4000-8000-000000000001",
   user = "00000000-0000-4000-8000-000000000002",
   sourceId = "00000000-0000-4000-8000-000000000003",
@@ -568,6 +595,60 @@ describe.skipIf(!socket)(
       expect((attempt.error as Error).message).toContain("URL receipt conflict");
       expect(await client!`select bio from artists`).toEqual([{ bio: "Generated" }]);
       expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
+    });
+
+    it("persists actual independent route requests and preserves About on preparation and generation failures", async () => {
+      await admin!`update users set privy_user_id='local-subject' where id=${user}`;
+      const call = (body: object = { regenerate: true }) =>
+        routes.PUT(
+          new Request(`http://local.invalid/api/artistBio/${artist}`, {
+            method: "PUT",
+            headers: {
+              Authorization: "Bearer local-synthetic",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          }),
+          { params: Promise.resolve({ id: artist }) },
+        );
+      const read = () =>
+        routes.GET(new Request(`http://local.invalid/api/artistBio/${artist}`), {
+          params: Promise.resolve({ id: artist }),
+        });
+      routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+      await admin!`update users set is_admin=false where id=${user}`;
+      expect((await call()).status).toBe(403);
+      expect(routeAdapter.counters().lore).toBe(0);
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      expect((await call()).status).toBe(200);
+      expect(routeAdapter.counters()).toEqual({ lore: 1, about: 1, summary: 1 });
+      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+      expect((await call()).status).toBe(200);
+      expect(routeAdapter.counters()).toEqual({ lore: 1, about: 2, summary: 1 });
+      routeAdapter = createHostedAboutAdapter({ about: "fail" }, buildDocSources);
+      const failedAbout = await call();
+      expect(failedAbout.status).toBe(500);
+      expect(await failedAbout.json()).toMatchObject({
+        error: expect.stringContaining("existing About has been kept"),
+      });
+      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+      await admin!`delete from artist_docs where artist_id=${artist}`;
+      routeAdapter = createHostedAboutAdapter({ lore: "fail" }, buildDocSources);
+      expect((await call()).status).toBe(500);
+      expect(routeAdapter.counters().about).toBe(0);
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Synthetic About" },
+      ]);
+      expect(
+        await client!`select count(*)::int as n from artist_research_jobs where status='running'`,
+      ).toEqual([{ n: 0 }]);
+      expect(
+        await client!`select status,claimed_at,attempts from artist_research_jobs where status='pending'`,
+      ).toEqual([{ status: "pending", claimed_at: null, attempts: 1 }]);
+      // Repair through another independent request; this committed state is used by the restart runner.
+      routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+      expect((await call()).status).toBe(200);
+      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
     });
 
     it("reads committed text, history and evidence from a fresh application connection", async () => {

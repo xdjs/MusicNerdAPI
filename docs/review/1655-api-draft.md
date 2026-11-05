@@ -15,3 +15,5 @@ Release remains blocked on the catalog/client migration and the durable integrat
 Current local review branch: `codex/1655-api-review-20261105`, based on fetched main `4f7c2705bde7545c53270fbd732d804aa5d7ca77`. Paired Web branch: `codex/1655-web-review-20261105`. See `1655-review-handoff-2026-11-05.md` for exact checkpoints and durable rehearsal scope. The current accumulated branch includes upload/revocation-fencing prerequisites; these require explicit review or extraction before publication, not omission from the PR description.
 
 Endpoint documentation text is prepared locally in `1655-endpoint-docs-draft.md`; it has not been published in the separate documentation codebase.
+
+Local acceptance update (2026-11-05): 28 native PostgreSQL tests plus independent-process recovery readback; 313 offline API/domain/prototype tests; paired Web 246 tests, types and offline production build. Actual native route handlers were called with separate Request objects, not browser HTTP. See `1655-local-acceptance-2026-11-05.md` for commands/evidence, harness corrections and remaining end-to-end limits. No shared database or credential was created.
