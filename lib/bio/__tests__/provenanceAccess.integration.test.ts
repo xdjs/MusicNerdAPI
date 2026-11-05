@@ -16,7 +16,13 @@ it("keeps provenance private while preserving existing public artist reads and l
       create policy app_access on artists to mnweb using(true) with check(true);
       insert into artists values('00000000-0000-4000-8000-000000000001','Legacy');`);
     await pg.exec(
-      readFileSync("/tmp/mn-about-trusted-web/drizzle/0061_about_evidence_provenance.sql", "utf8"),
+      readFileSync(
+        new URL(
+          "../../../docs/prototypes/pg17-ci/fixtures/0061_about_evidence_provenance.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
     );
     await pg.exec("set role mnweb");
     await pg.exec(

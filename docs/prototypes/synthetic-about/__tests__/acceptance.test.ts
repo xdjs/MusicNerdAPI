@@ -59,6 +59,9 @@ it("refuses an otherwise verified subject not in the fixed test manifest", async
   expect((await h(request("token"))).status).toBe(403);
   expect(loadRoutes).not.toHaveBeenCalled();
 });
+// These integration cases boot fresh PostgreSQL WASM instances and install the full
+// synthetic schema. Allow the same 30s budget as the other PGlite integration tests;
+// request cancellation/body deadlines below retain their original assertions.
 it("keeps concurrent admin and regular/claimant fixtures and counters separate", async () => {
   const h = create();
   const replies = await Promise.all([h(request("admin-token")), h(request("regular-token"))]);
@@ -79,7 +82,7 @@ it("keeps concurrent admin and regular/claimant fixtures and counters separate",
     calls: { lore: 1, about: 2, summary: 1 },
   });
   expect(() => db.query).toThrow("outside request scope");
-});
+}, 30000);
 it("closes request scope after a route throws", async () => {
   const h = createAcceptance({
     subjects: { [hash("synthetic-admin")]: true },
@@ -91,7 +94,7 @@ it("closes request scope after a route throws", async () => {
   });
   expect((await h(request("admin-token"))).status).toBe(500);
   expect(() => db.query).toThrow("outside request scope");
-});
+}, 30000);
 it("rejects an aborted request before verification", async () => {
   const verify = vi.fn();
   const loadRoutes = vi.fn();
