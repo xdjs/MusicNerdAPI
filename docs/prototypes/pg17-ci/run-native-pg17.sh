@@ -41,6 +41,10 @@ cleanup() {
       exit 1
     fi
   fi
+  if [[ "$result" != 0 && -f "$run_dir/server.log" ]]; then
+    # Synthetic-only cluster diagnostics; never reads a shared server log.
+    tail -n 80 "$run_dir/server.log" >&2
+  fi
   # Only remove the exact mktemp directory created by this invocation, after shutdown.
   rm -rf -- "$run_dir"
   exit "$result"
@@ -70,7 +74,11 @@ actual_data=$("$node24_bin" -e 'process.stdout.write(require("node:fs").realpath
 [[ "$actual_data" == "$canonical_data" ]] || fail 'Disposable cluster data directory mismatch'
 printf 'Validated PostgreSQL server_version_num=%s; TCP disabled; isolated cluster identity verified\n' "$server_version"
 cd -- "$repo_dir"
-MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs run lib/bio/__tests__/aboutConcurrency.postgres.test.ts
+vitest_args=(run lib/bio/__tests__/aboutConcurrency.postgres.test.ts)
+if [[ -n "${MN_1655_NATIVE_PATTERN:-}" ]]; then vitest_args+=(-t "$MN_1655_NATIVE_PATTERN"); fi
+MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs "${vitest_args[@]}"
+
+MN_APPROVED_SYNTHETIC_PG17=yes MN_1655_PG_SOCKET="$run_dir" "$node24_bin" docs/prototypes/pg17-ci/bootstrap-role-rehearsal.mjs
 
 # Seed via real route handlers, leaving their committed result for an independent process.
 MN_1655_PG_SOCKET="$run_dir" "$node24_bin" node_modules/vitest/vitest.mjs run lib/bio/__tests__/aboutConcurrency.postgres.test.ts -t 'persists actual independent route requests'

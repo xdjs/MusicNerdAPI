@@ -9,11 +9,16 @@ type Handler = (
 export async function serveAboutRoutes(
   routes: { PUT: Handler; GET: Handler; OPTIONS: () => Promise<Response> },
   artist: string,
+  extra: Readonly<Record<string, (request: Request) => Promise<Response>>> = {},
 ) {
   const pathname = `/api/artistBio/${artist}`;
   const server = createServer(async (incoming, outgoing) => {
     try {
-      if (incoming.url !== pathname || !["GET", "PUT", "OPTIONS"].includes(incoming.method ?? "")) {
+      const extraHandler = extra[`${incoming.method} ${incoming.url}`];
+      if (
+        !extraHandler &&
+        (incoming.url !== pathname || !["GET", "PUT", "OPTIONS"].includes(incoming.method ?? ""))
+      ) {
         outgoing.writeHead(404).end();
         return;
       }
@@ -31,13 +36,16 @@ export async function serveAboutRoutes(
       for (const [name, value] of Object.entries(incoming.headers))
         if (value) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
       const method = incoming.method!;
-      const request = new Request(`http://127.0.0.1:43165${pathname}`, {
+      const request = new Request(`http://127.0.0.1:43165${incoming.url}`, {
         method,
         headers,
-        ...(method === "PUT" ? { body: Buffer.concat(chunks).toString("utf8") } : {}),
+        ...(["PUT", "POST"].includes(method)
+          ? { body: Buffer.concat(chunks).toString("utf8") }
+          : {}),
       });
-      const response =
-        method === "OPTIONS"
+      const response = extraHandler
+        ? await extraHandler(request)
+        : method === "OPTIONS"
           ? await routes.OPTIONS()
           : await routes[method as "GET" | "PUT"](request, {
               params: Promise.resolve({ id: artist }),

@@ -1,3 +1,5 @@
+import { extendWebFixture } from "../../../docs/prototypes/pg17-ci/extendWebFixture";
+import { PgTable } from "drizzle-orm/pg-core";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { serveAboutRoutes } from "../../../docs/prototypes/pg17-ci/serveAboutRoutes";
@@ -11,7 +13,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { userInfo } from "node:os";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { eq, getTableColumns, getTableName, is, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "@/lib/db/schema";
 import { BioConflictError } from "@/lib/bio/BioConflictError";
@@ -92,6 +94,42 @@ vi.mock("@/lib/lore/generateLoreSummary", () => ({
   generateLoreSummary: (...args: Parameters<typeof routeAdapter.generateLoreSummary>) =>
     routeAdapter.generateLoreSummary(...args),
 }));
+const localBuilds = new Map<string, Promise<unknown>>();
+const localBuildErrors: unknown[] = [];
+vi.mock("workflow/api", () => ({
+  start: async (run: (...args: never[]) => Promise<unknown>, args: never[]) => {
+    const runId = `local-build-${localBuilds.size + 1}`;
+    const task = new Promise(resolve => setTimeout(resolve, 100)).then(() => run(...args));
+    localBuilds.set(
+      runId,
+      task.catch(error => {
+        localBuildErrors.push(error);
+      }),
+    );
+    return { runId };
+  },
+}));
+vi.mock("workflow", () => ({
+  FatalError: class extends Error {},
+  createHook: () => ({ getConflict: async () => null, [Symbol.dispose]() {} }),
+}));
+vi.mock("@/lib/discovery/discoverArtistProfilesStream", () => ({
+  discoverArtistProfilesStream: async function* () {
+    yield { kind: "checked", displayName: "Synthetic catalog" };
+  },
+}));
+vi.mock("@/lib/vault/runSourceSearch", () => ({
+  runSourceSearch: async (artistId: string) => {
+    const saved = await insertVaultSource({
+      artistId,
+      url: "https://example.org/synthetic-research",
+      title: "Synthetic researched source",
+      status: "pending",
+      extractedText: "Synthetic verified research evidence. ".repeat(30),
+    });
+    return saved ? [saved] : [];
+  },
+}));
 vi.mock("@/lib/db/db", () => ({
   get db() {
     return database;
@@ -109,6 +147,13 @@ const { updateVaultSourceStatus } = await import("@/lib/vault/updateVaultSourceS
 
 const { buildDocSources } = await import("@/lib/lore/buildDocSources");
 const routes = await import("@/app/api/artistBio/[id]/route");
+const stateRoutes = await import("@/app/api/onboarding/[artistId]/state/route");
+const buildRoutes = await import("@/app/api/onboarding/[artistId]/build/route");
+const claimReadRoutes = await import("@/app/api/user/has-claim/route");
+const ugcRoutes = await import("@/app/api/ugcCount/route");
+const platformRoutes = await import("@/app/api/platformRegexes/route");
+const latestReadRoutes = await import("@/app/api/artist/[id]/latest-refresh/route");
+const discoveryReadRoutes = await import("@/app/api/artist/[id]/research/discoveries/route");
 const artist = "00000000-0000-4000-8000-000000000001",
   user = "00000000-0000-4000-8000-000000000002",
   sourceId = "00000000-0000-4000-8000-000000000003",
@@ -150,6 +195,13 @@ const tables = {
   artist_activity_events: schema.artistActivityEvents,
   artist_research_jobs: schema.artistResearchJobs,
 };
+if (process.env.MN_1655_FULL_NEXT === "yes") {
+  for (const table of Object.values(schema)) {
+    if (is(table, PgTable) && !getTableName(table).includes("provenance"))
+      Object.assign(tables, { [getTableName(table)]: table });
+  }
+}
+const fixtureTables = new Set(Object.keys(tables));
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>(r => (resolve = r));
@@ -222,11 +274,19 @@ describe.skipIf(!socket)(
         const columns = Object.values(getTableColumns(table))
           .filter(c => c.name !== "bio_provenance" && c.name !== "publication")
           .map(c => {
-            const type = "enumValues" in c && Array.isArray(c.enumValues) ? "text" : c.getSQLType();
+            const rawType = c.getSQLType();
+            const type =
+              "enumValues" in c && Array.isArray(c.enumValues)
+                ? "text"
+                : rawType === "platform_type[]"
+                  ? "text[]"
+                  : rawType;
             const defaultValue =
               c.name === "id"
-                ? " primary key default gen_random_uuid()"
-                : c.name === "created_at" || c.name === "updated_at"
+                ? c.getSQLType() === "uuid"
+                  ? " primary key default gen_random_uuid()"
+                  : " primary key"
+                : c.name === "created_at" || c.name === "updated_at" || c.name === "confirmed_at"
                   ? " default now()"
                   : c.name === "attempts"
                     ? " default 0"
@@ -256,6 +316,7 @@ describe.skipIf(!socket)(
         "0063_legacy_bio_publications.sql",
       ])
         await admin!.unsafe(readMigration(file));
+      if (process.env.MN_1655_FULL_NEXT === "yes") await extendWebFixture(admin!, fixtureTables);
       expect(
         await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
       ).toEqual([{ bio: "Legacy biography", bio_provenance: null }]);
@@ -274,7 +335,7 @@ describe.skipIf(!socket)(
       startBarrier = undefined;
       backendPids.clear();
       await admin!.unsafe(
-        `truncate mn_private.legacy_bio_publications,mn_private.public_url_receipts,mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${Object.keys(tables).join(",")}`,
+        `truncate mn_private.legacy_bio_publications,mn_private.public_url_receipts,mn_private.artist_bio_provenance,mn_private.artist_bio_version_provenance,${[...fixtureTables].join(",")}`,
       );
       await admin!`insert into artists(id,name,bio) values(${artist},'Synthetic artist','Original')`;
       await admin!`insert into users(id,is_admin,is_white_listed) values(${user},true,true)`;
@@ -599,6 +660,109 @@ describe.skipIf(!socket)(
       expect(await client!`select bio from artists`).toEqual([{ bio: "Generated" }]);
       expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
     });
+
+    it.skipIf(process.env.MN_1655_FULL_NEXT !== "yes")(
+      "runs the full Next profile and setup through real API stages",
+      async () => {
+        const artifact = process.env.MN_1655_NEXT_ARTIFACT;
+        if (!artifact || !/^\/tmp\/mn-1655-next-[A-Za-z0-9]+$/.test(artifact))
+          throw new Error("Explicit isolated Next artifact required");
+        await admin!`update users set privy_user_id='local-subject',is_admin=false where id=${user}`;
+        await admin!`update artists set bio=null where id=${artist}`;
+        await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+        await admin!`insert into artist_vault_sources(id,artist_id,origin,status,publication,url,extracted_text) values('00000000-0000-4000-8000-000000000006',${artist},'submission','pending','inherit','https://example.org/pending-contribution','Pending synthetic contribution must remain pending')`;
+        const originalTrustedSource =
+          await client!`select * from artist_vault_sources where id=${sourceId}`;
+        routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+        localBuildErrors.length = 0;
+        localBuilds.clear();
+        const context = () => ({ params: Promise.resolve({ artistId: artist }) });
+        const statePath = `/api/onboarding/${artist}/state`;
+        const buildPath = `/api/onboarding/${artist}/build`;
+        const close = await serveAboutRoutes(routes, artist, {
+          [`GET ${statePath}`]: request => stateRoutes.GET(request, context()),
+          [`OPTIONS ${statePath}`]: () => stateRoutes.OPTIONS(),
+          [`POST ${buildPath}`]: request => buildRoutes.POST(request, context()),
+          [`OPTIONS ${buildPath}`]: () => buildRoutes.OPTIONS(),
+          [`GET /api/artist/${artist}/latest-refresh`]: request =>
+            latestReadRoutes.GET(request, { params: Promise.resolve({ id: artist }) }),
+          [`OPTIONS /api/artist/${artist}/latest-refresh`]: () => latestReadRoutes.OPTIONS(),
+          [`GET /api/artist/${artist}/research/discoveries?limit=10`]: request =>
+            discoveryReadRoutes.GET(request, { params: Promise.resolve({ id: artist }) }),
+          [`OPTIONS /api/artist/${artist}/research/discoveries?limit=10`]: async () =>
+            discoveryReadRoutes.OPTIONS(),
+          "GET /api/user/has-claim": request => claimReadRoutes.GET(request),
+          "OPTIONS /api/user/has-claim": () => claimReadRoutes.OPTIONS(),
+          "GET /api/ugcCount": request => ugcRoutes.GET(request),
+          "OPTIONS /api/ugcCount": () => ugcRoutes.OPTIONS(),
+          "GET /api/platformRegexes": () => platformRoutes.GET(),
+          "OPTIONS /api/platformRegexes": () => platformRoutes.OPTIONS(),
+        });
+        const runProfile = async (mode = "") => {
+          const result = await promisify(execFile)(
+            process.execPath,
+            ["docs/testing/local-1655-next/run.mjs", artifact, mode],
+            {
+              cwd: "/tmp/mn-1655-web-review-20261105",
+              timeout: 180000,
+              env: {
+                NODE_ENV: "test",
+                PATH: "/usr/bin:/bin",
+                HOME: userInfo().homedir,
+                TMPDIR: "/tmp",
+                MN_1655_PG_SOCKET: socket!,
+              },
+              maxBuffer: 1024 * 1024,
+            },
+          );
+          console.log(result.stdout.trim());
+        };
+        try {
+          await runProfile();
+          await Promise.all(localBuilds.values());
+          const beforePreserve = await client!`select bio from artists where id=${artist}`;
+          expect(beforePreserve).toEqual([{ bio: "Local claimant-authored About" }]);
+          const priorHistory = await client!`select * from artist_bio_versions order by id`;
+          expect(priorHistory.some(version => version.is_pinned === true)).toBe(true);
+          const priorLore =
+            await client!`select content,sources from artist_docs where artist_id=${artist}`;
+          const priorCounters = routeAdapter.counters();
+          await admin!`delete from artist_onboarding_steps where artist_id=${artist}`;
+          await runProfile("preserve");
+          await Promise.all(localBuilds.values());
+          expect(await client!`select bio from artists where id=${artist}`).toEqual(beforePreserve);
+          expect(await client!`select * from artist_bio_versions order by id`).toEqual(
+            priorHistory,
+          );
+          expect(
+            await client!`select content,sources from artist_docs where artist_id=${artist}`,
+          ).toEqual(priorLore);
+          expect(routeAdapter.counters()).toEqual(priorCounters);
+          expect(
+            await client!`select status,extracted_text from artist_vault_sources where id='00000000-0000-4000-8000-000000000006'`,
+          ).toEqual([
+            {
+              status: "pending",
+              extracted_text: "Pending synthetic contribution must remain pending",
+            },
+          ]);
+          expect(localBuildErrors).toEqual([]);
+          expect(
+            await client!`select count(*)::int as n from artist_onboarding_steps where artist_id=${artist}`,
+          ).toEqual([{ n: 4 }]);
+          expect(await client!`select * from artist_vault_sources where id=${sourceId}`).toEqual(
+            originalTrustedSource,
+          );
+          expect(
+            await client!`select count(*)::int as n from artist_docs where artist_id=${artist}`,
+          ).toEqual([{ n: 1 }]);
+        } finally {
+          await Promise.all(localBuilds.values());
+          await close();
+        }
+      },
+      240000,
+    );
 
     it.skipIf(process.env.MN_1655_BROWSER !== "yes")(
       "drives the Web About component through HTTP into durable PostgreSQL",
