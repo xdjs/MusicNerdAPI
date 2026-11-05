@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { serveAboutRoutes } from "../../../docs/prototypes/pg17-ci/serveAboutRoutes";
 import { createHostedAboutAdapter } from "../../../docs/prototypes/hosted-about/createHostedAboutAdapter";
 import webArtistManifest from "../../../docs/prototypes/guarded-about/webArtistColumns.json";
 import { buildFullArtistProjection } from "../../../docs/prototypes/guarded-about/buildFullArtistProjection";
@@ -596,6 +599,62 @@ describe.skipIf(!socket)(
       expect(await client!`select bio from artists`).toEqual([{ bio: "Generated" }]);
       expect(await client!`select * from artist_bio_versions order by id`).toEqual(history);
     });
+
+    it.skipIf(process.env.MN_1655_BROWSER !== "yes")(
+      "drives the Web About component through HTTP into durable PostgreSQL",
+      async () => {
+        await admin!`update users set privy_user_id='local-subject',is_admin=false where id=${user}`;
+        await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+        const close = await serveAboutRoutes(routes, artist);
+        const browser = async (mode: string, expected: string, initialBio = "Synthetic About") => {
+          const result = await promisify(execFile)(
+            process.execPath,
+            ["docs/testing/local-1655-browser/run.mjs", mode, expected, initialBio],
+            {
+              cwd: "/tmp/mn-1655-web-review-20261105",
+              timeout: 45000,
+              env: {
+                NODE_ENV: "test",
+                PATH: "/usr/bin:/bin",
+                HOME: userInfo().homedir,
+                TMPDIR: "/tmp",
+              },
+              maxBuffer: 1024 * 1024,
+            },
+          );
+          console.log(result.stdout.trim());
+        };
+        try {
+          routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+          await browser("success", "Synthetic About", "Original");
+          expect(routeAdapter.counters()).toEqual({ lore: 1, about: 1, summary: 1 });
+          await browser("success", "Synthetic About");
+          expect(routeAdapter.counters()).toEqual({ lore: 1, about: 2, summary: 1 });
+          const historyBeforeFailure = await client!`select * from artist_bio_versions order by id`;
+          routeAdapter = createHostedAboutAdapter({ about: "fail" }, buildDocSources);
+          await browser("failure", "Could not generate About from Lore");
+          expect(await client!`select bio from artists where id=${artist}`).toEqual([
+            { bio: "Synthetic About" },
+          ]);
+          await admin!`delete from artist_docs where artist_id=${artist}`;
+          routeAdapter = createHostedAboutAdapter({ lore: "fail" }, buildDocSources);
+          await browser("failure", "Could not prepare Lore for About");
+          expect(routeAdapter.counters().about).toBe(0);
+          expect(await client!`select * from artist_bio_versions order by id`).toEqual(
+            historyBeforeFailure,
+          );
+          expect(await client!`select bio from artists where id=${artist}`).toEqual([
+            { bio: "Synthetic About" },
+          ]);
+          expect(
+            await client!`select count(*)::int as n from artist_research_jobs where status='running'`,
+          ).toEqual([{ n: 0 }]);
+        } finally {
+          await close();
+        }
+      },
+      180000,
+    );
 
     it("persists actual independent route requests and preserves About on preparation and generation failures", async () => {
       await admin!`update users set privy_user_id='local-subject' where id=${user}`;

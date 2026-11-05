@@ -17,3 +17,5 @@ Current local review branch: `codex/1655-api-review-20261105`, based on fetched 
 Endpoint documentation text is prepared locally in `1655-endpoint-docs-draft.md`; it has not been published in the separate documentation codebase.
 
 Local acceptance update (2026-11-05): 28 native PostgreSQL tests plus independent-process recovery readback; 313 offline API/domain/prototype tests; paired Web 246 tests, types and offline production build. Actual native route handlers were called with separate Request objects, not browser HTTP. See `1655-local-acceptance-2026-11-05.md` for commands/evidence, harness corrections and remaining end-to-end limits. No shared database or credential was created.
+
+Later local browser acceptance now connects the actual About component to the real API route over HTTP and native PostgreSQL: missing/current Lore and both failure-preservation paths passed, including cache-cleared public GET reloads. This supersedes the earlier focused browser gap, but not full Next-page/onboarding or real hosted durability. See `1655-browser-acceptance-2026-11-05.md` for exact test-only adapters and limits.
