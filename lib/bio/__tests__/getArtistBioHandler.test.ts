@@ -127,3 +127,14 @@ describe("getArtistBioHandler", () => {
     expect(await res.json()).toEqual({ status: "error", code: "LORE_REQUIRED", error: "No Lore" });
   });
 });
+
+it("passes the legacy regenerate GET its request cancellation and handler-entry deadline", async () => {
+  mock.generate.mockResolvedValue({ httpStatus: 200, bio: "New About" });
+  const request = new Request(`https://api.test/api/artistBio/${id}?regenerate=true`);
+  const before = Date.now();
+  await getArtistBioHandler(request, id);
+  const budget = mock.generate.mock.calls[0][2];
+  expect(budget?.signal).toBe(request.signal);
+  expect(budget?.deadline).toBeGreaterThanOrEqual(before + 45_000);
+  expect(budget?.deadline).toBeLessThanOrEqual(Date.now() + 45_000);
+});

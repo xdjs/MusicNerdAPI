@@ -33,6 +33,7 @@ export async function runLoreRefresh(job: ResearchJob, deadline: number): Promis
     expectedClaimId,
   });
   if (result === "failed") throw new Error("Could not rebuild Lore from current sources");
+  if (result === "changed") throw new Error("Lore sources changed during rebuild; retry required");
   const done = await settleLoreRefresh(job.id, String(job.state?.requestedAt ?? ""));
   if (!done) return { progress: "Sources changed during rebuild; another refresh is queued", done };
   if (result === "cancelled")
