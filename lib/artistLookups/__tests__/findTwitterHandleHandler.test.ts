@@ -4,8 +4,8 @@ const { byWallet, byName } = vi.hoisted(() => ({ byWallet: vi.fn(), byName: vi.f
 vi.mock("@/lib/artistLookups/findArtistByWalletOrEns", () => ({
   findArtistByWalletOrEns: byWallet,
 }));
-vi.mock("@/lib/artistLookups/searchArtistByName", () => ({
-  searchArtistByName: byName,
+vi.mock("@/lib/artistLookups/findArtistByExactName", () => ({
+  findArtistByExactName: byName,
 }));
 const { findTwitterHandleHandler } = await import("@/lib/artistLookups/findTwitterHandleHandler");
 
