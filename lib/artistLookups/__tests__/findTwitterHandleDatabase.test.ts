@@ -38,10 +38,14 @@ const lookup = async (name: string) => {
   return response.json();
 };
 
-it("keeps White Magic's null instead of a near-name artist's handle", async () => {
-  await add("White Magic Band", "other_artist");
+it("keeps White Magic's null when the actual wrongly tagged band MAGIC! is also present", async () => {
+  await add("Magic!", "ournameismagic");
   await add("White Magic", null);
   expect(await lookup("White Magic")).toEqual({ result: null });
+});
+it("does not return MAGIC! for White Magic before White Magic has a directory record", async () => {
+  await add("Magic!", "ournameismagic");
+  expect(await lookup("White Magic")).toEqual({});
 });
 it("does not select a substring or similar name when no exact artist exists", async () => {
   await add("White Magic Band", "other_artist");
