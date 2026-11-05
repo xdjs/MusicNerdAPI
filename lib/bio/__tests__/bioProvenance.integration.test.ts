@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { getTableColumns } from "drizzle-orm";
@@ -60,6 +61,16 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
     );
     await pg.exec(
       "alter table artist_docs add unique(artist_id);create table artist_claims(artist_id uuid,status text)",
+    );
+    await pg.exec("create role mnweb;create role anon;create role authenticated;");
+    await pg.exec(
+      readFileSync(
+        new URL(
+          "../../../docs/prototypes/pg17-ci/fixtures/0064_lore_activity_lock.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
     );
     await pg.query("insert into artists(id,bio) values($1,'Original manual')", [artist]);
     await pg.query(

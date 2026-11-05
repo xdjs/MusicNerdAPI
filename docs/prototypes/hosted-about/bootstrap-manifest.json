@@ -25,6 +25,10 @@
     {
       "file": "0063_legacy_bio_publications.sql",
       "sha256": "d992547931e8487f3bbd53a68217e5481d130a6287a40690606789a583a264dc"
+    },
+    {
+      "file": "0064_lore_activity_lock.sql",
+      "sha256": "3b2ec181364f3f414ee9f73a920716546fec3c68b23a62c3cc22386ee652b0e0"
     }
   ],
   "functions": [
@@ -40,7 +44,8 @@
     "musicnerd_private.queue_catalog_counterpart_after_write",
     "musicnerd_private.validate_catalog_identity_write",
     "musicnerd_private.lock_catalog_exclusion_artist",
-    "mn_private.consume_legacy_bio_publication"
+    "mn_private.consume_legacy_bio_publication",
+    "mn_private.lock_lore_activity_events"
   ],
   "triggers": [
     "retain_vault_source_version",
@@ -54,5 +59,5 @@
     "consume_legacy_bio_source"
   ],
   "baselineSha256": "29ff7b5756097b883250ea4d51d685ef638c9de44bc026631815edb7a9948850",
-  "functionsSha256": "635a1321838e05d02587bd59583aaa0a4caea56588cdeba75a2e756cc1b6ecb4"
+  "functionsSha256": "a65ffb28c92df1f31a66045f4900fe60ae0c4d94f707ba6916c50c9eed72b245"
 }

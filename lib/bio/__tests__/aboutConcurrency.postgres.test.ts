@@ -314,8 +314,10 @@ describe.skipIf(!socket)(
         "0061_about_evidence_provenance.sql",
         "0062_public_url_receipts.sql",
         "0063_legacy_bio_publications.sql",
+        "0064_lore_activity_lock.sql",
       ])
         await admin!.unsafe(readMigration(file));
+      await admin!.unsafe("revoke update,delete on artist_activity_events from mnweb");
       if (process.env.MN_1655_FULL_NEXT === "yes") await extendWebFixture(admin!, fixtureTables);
       expect(
         await client!`select a.bio,p.provenance as bio_provenance from artists a left join mn_private.artist_bio_provenance p on p.artist_id=a.id`,
@@ -351,6 +353,42 @@ describe.skipIf(!socket)(
         admin?.end({ timeout: 1 }),
       ]);
     });
+    it("validates actual Lore evidence with restricted event privileges", async () => {
+      await admin!.unsafe("revoke update,delete on artist_activity_events from mnweb");
+      try {
+        const { assertLoreSourcesCurrent } = await import("@/lib/lore/assertLoreSourcesCurrent");
+        await expect(
+          driver!.transaction(tx => assertLoreSourcesCurrent(tx, artist, sources)),
+        ).resolves.toBeUndefined();
+      } finally {
+        await expect(
+          client!`update artist_activity_events set actor_user_id=null`,
+        ).rejects.toMatchObject({ code: "42501" });
+      }
+    });
+    it("locks the newly linked event and rejects its later trust withdrawal", async () => {
+      const nextEvent = "00000000-0000-4000-8000-000000000099";
+      await admin!`insert into artist_activity_events(id,artist_id,source_id,actor_kind,actor_user_id,trigger,action) values(${nextEvent},${artist},${sourceId},'user',${user},'trusted_submission','source_submission')`;
+      await admin!`update artist_vault_sources set activity_id=${nextEvent} where id=${sourceId}`;
+      const current = sources.map(item => ({
+        ...item,
+        revision: vaultSourceRevision({ ...source, activityId: nextEvent }),
+      }));
+      const { assertLoreSourcesCurrent } = await import("@/lib/lore/assertLoreSourcesCurrent");
+      await driver!.transaction(async tx => {
+        await assertLoreSourcesCurrent(tx, artist, current);
+        await expect(
+          admin!.begin(async other => {
+            await other`set local lock_timeout='100ms'`;
+            await other`update artist_activity_events set actor_user_id=null where id=${nextEvent}`;
+          }),
+        ).rejects.toMatchObject({ code: "55P03" });
+      });
+      await admin!`update artist_activity_events set actor_user_id=null where id=${nextEvent}`;
+      await expect(
+        driver!.transaction(tx => assertLoreSourcesCurrent(tx, artist, current)),
+      ).rejects.toThrow("Lore sources changed");
+    });
     it("reserves one lease across two real simultaneous backend sessions", async () => {
       const both = deferred();
       let count = 0;
@@ -376,7 +414,7 @@ describe.skipIf(!socket)(
         let outcome;
         try {
           outcome = capture(
-            competitor!.begin(async tx => {
+            (change === "event" ? admin! : competitor!).begin(async tx => {
               await tx`set local lock_timeout='250ms'`;
               if (change === "private")
                 await tx`update artist_vault_sources set publication='private' where id=${sourceId}`;
@@ -400,7 +438,7 @@ describe.skipIf(!socket)(
         if (change === "rejected")
           await competitor!`update artist_vault_sources set status='rejected' where id=${sourceId}`;
         if (change === "event")
-          await competitor!`update artist_activity_events set actor_user_id=null where id=${event}`;
+          await admin!`update artist_activity_events set actor_user_id=null where id=${event}`;
         if (change === "admin")
           await competitor!`update users set is_admin=false,is_white_listed=false where id=${user}`;
         expect(await getPublicSavedBio(artist)).toBe(change === "admin" ? "Generated" : null);

@@ -16,10 +16,11 @@ export async function assertLoreSourcesCurrent(
   sources: DocSource[],
   options: { summaryKey?: string; allowEmpty?: boolean } = {},
 ): Promise<void> {
-  // Immutable trust still depends on its retained event. Fence deletion/anonymization
-  // through publication, just as the vault row locks fence moderation changes.
-  await tx.execute(sql`select id from artist_activity_events where artist_id=${artistId}::uuid
-    and id in (select activity_id from artist_vault_sources where artist_id=${artistId}::uuid) for share`);
+  // Freeze source-to-event links before locking retained provenance. The private
+  // helper grants only row-lock capability; eligibility remains checked as mnweb.
+  await tx.execute(sql`select id from public.artist_vault_sources
+    where artist_id=${artistId}::uuid order by id for share`);
+  await tx.execute(sql`select mn_private.lock_lore_activity_events(${artistId}::uuid)`);
   const rows = rowsOf(
     await tx.execute(sql`
     select v.id,v.activity_id as "activityId",v.origin,v.publication,v.type,url,extracted_text as "extractedText",file_path as "filePath",status,

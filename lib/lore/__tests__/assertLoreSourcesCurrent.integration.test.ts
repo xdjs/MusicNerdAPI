@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { expect, it } from "vitest";
@@ -26,6 +27,18 @@ it("fences trusted unclaimed evidence across claiming, privacy, rejection and pr
     await pg.query(
       "insert into artist_activity_events values('e',$1,'s','user','u','trusted_submission','source_submission')",
       [artist],
+    );
+    await pg.exec(
+      "create schema mn_private;create role mnweb;create role anon;create role authenticated;",
+    );
+    await pg.exec(
+      readFileSync(
+        new URL(
+          "../../../docs/prototypes/pg17-ci/fixtures/0064_lore_activity_lock.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
     );
     const manifest = [
       {

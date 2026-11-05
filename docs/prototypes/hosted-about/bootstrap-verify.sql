@@ -23,6 +23,6 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM mn_private.legacy_bio_publications) THEN RAISE EXCEPTION 'allowance not consumed';END IF;
  IF has_table_privilege('mnweb','mn_private.legacy_bio_publications','INSERT') THEN RAISE EXCEPTION 'allowance insert exposed';END IF;
  IF has_table_privilege('anon','public.artists','SELECT') OR has_table_privilege('authenticated','public.artists','SELECT') THEN RAISE EXCEPTION 'raw public access';END IF;
- IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','mn_private','musicnerd_private') AND p.prosecdef AND has_function_privilege('mnweb',p.oid,'EXECUTE')) THEN RAISE EXCEPTION 'unrelated definer capability exposed';END IF;
+ IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','mn_private','musicnerd_private') AND p.prosecdef AND p.oid<>'mn_private.lock_lore_activity_events(uuid)'::regprocedure AND has_function_privilege('mnweb',p.oid,'EXECUTE')) THEN RAISE EXCEPTION 'unrelated definer capability exposed';END IF;
 END $$;
 ROLLBACK;

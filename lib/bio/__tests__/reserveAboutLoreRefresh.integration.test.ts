@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
@@ -40,6 +41,18 @@ beforeAll(async () => {
     insert into artists values('${artist}');
     insert into users(id,is_admin) values('${owner}',false),('${outsider}',false);
   `);
+  await client.exec(
+    "create schema mn_private;create role mnweb;create role anon;create role authenticated;",
+  );
+  await client.exec(
+    readFileSync(
+      new URL(
+        "../../../docs/prototypes/pg17-ci/fixtures/0064_lore_activity_lock.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
 }, 30000);
 beforeEach(async () => {
   await client.exec(`delete from artist_research_jobs; delete from artist_vault_sources; delete from artist_docs; delete from artist_claims; delete from artist_activity_events;

@@ -1,48 +1,50 @@
-# Final local review package and deployment compatibility — 2026-11-05
+# Release review checkpoint — 2026-11-05
 
-## Pinned application/test candidates
+## Exact scope and evidence
 
-- API main: 4f7c2705bde7545c53270fbd732d804aa5d7ca77; candidate: 6a538a05ca94713b201c2718b47390716336a4cd.
-- Web main: 03b2d9a556644d4ec7121fca398977057ad8c90f; candidate: f58408fae9703f54d7522423f904965b473afe41.
+API baseline main: `4f7c2705bde7545c53270fbd732d804aa5d7ca77`. Web baseline main: `03b2d9a556644d4ec7121fca398977057ad8c90f`. Both were verified unchanged with read-only remote checks on 2026-11-05.
 
-Both upstream main refs were rechecked using read-only `git ls-remote`; unchanged. The later review-doc checkpoint does not change tested application code. Exact full patches and name/status manifests are exported locally under `/tmp/mn1655-final-pr-review-20261105`, with SHA-256 checksums. They are complete review diffs, not deployment scripts or an assertion that the accumulated branch is a small PR.
+The staged API was commit `7c0f9c031cf93b780c3afa005b1a535667737d4c` plus the tested change to `assertLoreSourcesCurrent.ts` (SHA-256 `7487c7d66af6c763e3c72f8ce33fd45dbc134c5b7bbb332cde3ede5514b7a63a`). Staged Web application code was `313a9069dd20a4bcda76448fd16b9d591176a56b`, with a deployment-only API URL pairing. Web checkpoint `2957b9bec0a5c730d39bfff09a4f76ec18d4f96e` adds migration 0064 and review documentation, not application changes. The API commit containing this record checkpoints the tested correction and fixtures; staging used CLI source archives, not Git-linked deployment metadata.
 
-API diff at the tested candidate: 298 files, +20008/-469. This includes 95 prototype files (+11768), 11 review documents (+382), 78 test files (+4935/-217), and 114 other application/documentation files (+2923/-252). Web: 110 files, +41309/-363, dominated by four generated migration snapshots and a synthetic Web-schema fixture. Trusted uploads/revocation, source-publication policy, private evidence, public readers, onboarding and harnesses are intertwined. Publish as an explicitly described dependency stack or extract and retest; do not silently omit dependencies. Endpoint documentation is a separate local draft.
+Migration 0064 SHA-256: `3b2ec181364f3f414ee9f73a920716546fec3c68b23a62c3cc22386ee652b0e0`. It creates one controlled-owner, void-returning SECURITY DEFINER function with fixed search_path, grants only mnweb EXECUTE, and fails on collisions/unexpected ACLs. It grants no event UPDATE/DELETE. Source rows lock before referenced events; ordinary-role eligibility/revision checks remain unchanged.
 
-## Independent compatibility review
+This is an accumulated coordinated stack, not an endpoint-only PR: trusted uploads/revocation preservation, source publication, private evidence/history, URL receipts, public readers, setup and test harnesses are included. Before the final correction, the API branch already changed 302 files. Review dependencies explicitly; extraction requires retesting.
 
-The pair is ready for code review, not shared deployment. No new application defect was found in this review; operational compatibility remains unresolved:
+## Actual staging result
 
-1. Migration 0060 unconditionally adds publication, which recorded Dev metadata already contains. Reconcile shape and migration ledger first. Inspect 0061–0063 private schemas, policies, grants and trigger ownership against the chosen target; do not blindly replay migrations or mark drift as applied.
-2. Old writers do not maintain complete evidence/receipts; old readers ignore them. Additive tables do not establish safe mixed-version operation. Gate/drain application traffic, old previews and background writers before coordinated activation.
-3. Known custom raw readers can bypass application projections. The guarded relation and map-compatible write contract are prototypes, not an approved migration. Unknown consumers and inherited grants must be resolved; absent logs do not establish disuse.
-4. Migration 0063 intentionally seeds no legacy allowances. Validate the exact approved 16 artist/claim/text-hash tuples against current state and activate them before the new readers receive traffic. Any mismatch stops activation; never generalize this exception or invent evidence. Source withdrawal, claim change, text change and provenance writes consume allowances transactionally.
-5. Alias rollback to old unguarded readers is unsafe. Retain private evidence, receipts, consumed-allowance state and raw-read restrictions. Use a compatible guarded application pair for rollback; otherwise keep the traffic gate closed. The local tests do not establish a complete operational gate/rollback implementation.
+The approved test used existing Dev, additive migrations 0061–0064, ordinary API/Web previews and one synthetic artist/source. No new database, database credentials, subscription, production deployment or shared alias change was made. Genuine test-account login sessions did occur.
 
-## Coordinated release sequence to prepare, not execute
+The first earlier attempt exposed PostgreSQL 42501: event-row locking required permission absent from the actual app role. It preserved About; its synthetic job was made terminal to prevent retries. Native tests were corrected to reflect the real SELECT/INSERT-only event grants.
 
-Finalize target-specific raw-reader projection/grants and identify client owners; reconcile target migration drift; pin schema/API/Web/worker artifacts and a compatible rollback pair. Rehearse those exact permissions and clients on the approved synthetic target. Obtain the separately scoped migration/grant approval. Gate and drain old readers/writers/jobs; retain recoverable backups. Install private structures, validate/activate exact legacy allowances and perform the approved client/grant cutover. Start the compatible pair behind the gate. Verify preserved legacy text, source withdrawal, biography/history visibility, select-star shape and map name-based writes before reopening. Do not drop security structures or restore old raw grants during rollback.
+After the reviewed 0064 correction, genuine Privy login, Web callback and bearer own-account/admin verification succeeded. Optional username setup writes remained blocked. Two deliberate UI regenerations returned HTTP 200:
 
-## Hosted test executable status
+- Missing document: Lore and About persisted; one source, evidence and receipt retained.
+- Existing document: About regenerated; document hash and timestamp were unchanged.
 
-Not executable with the presently verified access path. Read-only inspection confirms Dev PostgreSQL 17.6, postgres CREATEDB/CREATEROLE (not superuser), and no extra logical database. Prior dashboard inspection established the session pooler host/port. Official Supavisor docs support database/user/mode routing. However, alternate-role login to a database that does not yet exist cannot be verified without the approved creation step.
+Readback confirmed three history rows, the original About retained in history, two history-provenance rows, a current provenance row, one URL receipt, source preservation, two completed retry jobs, and zero pending/running fixture jobs. Runtime logs showed two PUTs and one Lore rebuild. The synthetic fixture and terminal jobs remain for review; no permanent deletion was performed.
 
-A standalone ordinary PostgreSQL driver/psql connection is the documented technical route and passed the local non-superuser rehearsal. It requires an already authorized operator connection with CREATEDB, CREATEROLE and SET ROLE authority for the new owner. Such a direct operator connection has not been established here. No credentials were searched for, revealed, reset or created.
+Four logical generation operations completed in this successful retry, following two Lore operations in the earlier failed attempt: six logical operations across both attempts. Exact gateway retries, token counts and billed cost are unavailable because scoped metrics require paid Observability Plus, which was not enabled. The earlier estimate was not a verified charge. No request outcome remains uncertain.
 
-The installed Management API connector accepts query/project only, not an alternate database or an explicit nontransactional mode. A read-only own-statement diagnostic showed the submitted SELECT plus audit comments and read_only=off; that does not prove there was no preceding BEGIN or guarantee DDL transport behavior. Public postgres-meta code delegates to a node-postgres query and can prepend SET statements for timeouts; the hosted management service and its deployed configuration are not established by that upstream source. Do not turn this into a trial CREATE or a claim that the connector is definitively incapable.
+## Local verification and CI
 
-Sources: https://supabase.com/docs/reference/api/v1-run-a-query ; https://supabase.com/docs/guides/database/connecting-to-postgres ; https://supabase.com/kb/troubleshooting/supavisor-faq-YyP5tI ; https://raw.githubusercontent.com/supabase/postgres-meta/master/src/lib/db.ts ; https://www.postgresql.org/docs/17/sql-createdatabase.html .
+- 404 focused Lore/About tests passed; the native-only file is exercised separately.
+- 90 adapter/bootstrap tests passed.
+- 32 native PostgreSQL 17.11 tests passed with both browser suites enabled, including actual routes, source relinking, restricted-role behavior and failure preservation.
+- Independent process readback was identical after immediate PostgreSQL restart.
+- Nine native least-privilege/migration checks passed; fresh bootstrap passed.
+- API TypeScript, changed-file ESLint and whitespace checks passed.
+- Independent exact-code review accepted the locking correction; default-ACL and bootstrap dependency findings were fixed and retested.
 
-## Exact hosted permission scope, if a supported operator path is established
+These are scoped results, not a claim that full CI has passed on the final checkpoint. API CI still needs frozen pnpm installation on Node 24, full type/lint/format/test and build. Web CI needs its pinned Node/npm installation, types/lint/test:ci, release/migration regression tests and build. Native PostgreSQL/browser tests are opt-in and are not automatically exercised by the default unit command; run the provided native harness with PostgreSQL 17, both browser flags and the paired offline Next artifact. Review the disabled PG17 workflow before enabling it; do not assume hosted CI already ran it. Do not use real provider credentials for offline checks.
 
-The existing proposal requires one TEMPLATE0 database mn_1655_acceptance, one NOLOGIN owner mn_1655_owner, one two-hour restricted LOGIN mn_1655_app (connection limit 2), temporary SET ROLE membership only in that new owner, explicit synthetic-table privileges, two synthetic artists/two account rows/two Lore sources/one claim, and a server-only connection secret scoped to up to three protected existing test previews. Bound to two hours and twenty API calls, no real content/models/shared workers. Bootstrap SQL must first be adapted from hardcoded mnweb grants and reviewed. Close bootstrap sessions, revoke membership and verify fresh runtime denials before testing.
+## Production dependencies — not proved by staging acceptance
 
-Cleanup includes disabling that exact login, stopping its previews, removing the deployment secret, terminating only matching database-and-role sessions, and dropping the exact new database/roles after identity checks. No existing role membership, pooler setting, shared schema, production grant or subscription change. Shared compute/storage/WAL/auth/preview usage remains nonzero; no guaranteed zero-dollar invoice is claimed. Full details remain in 1655-minimal-hosted-plan-2026-11-05.md.
+1. Reconcile target migration shape and ledger. Dev already had publication, so 0060 was not blindly replayed. Production needs its own read-only comparison. Apply private structures and 0064 before compatible writers; do not mark unexplained drift as applied.
+2. Raw database readers can bypass guarded application projections. Known custom roles and inherited/view/RPC access require an explicit client/grant cutover. The guarded relation and Artist Web Map compatibility remain reviewed prototypes, not an installed production solution. Missing usage logs do not prove disuse. Keep the cutover preflight fail-closed while unknown raw-reader paths remain.
+3. Preserve the user's exact 16 claimed legacy bios. Before new readers receive production traffic, validate the approved artist/claim/text-hash snapshots against current state and activate only matching allowances. A mismatch stops that activation; do not broaden trust or fabricate evidence. Migration 0063 seeds no rows. Allowances are consumed on relevant claim, text, source or provenance changes.
+4. Coordinate API, Web, workers and older previews. Old writers do not maintain complete receipts; old readers ignore evidence. The admin synthetic test does not establish hosted claimant onboarding, full research quality, every external client or safe mixed-version production operation.
+5. Prepare a compatible guarded rollback pair and explicit gate/drain procedure. Retain evidence, receipts, consumed allowances and approved raw-read restrictions. Never roll back to old unguarded readers, restore broad raw grants, resurrect consumed allowances or drop the helper while new callers use it. Dropping 0064 fails closed; restoring the old API reproduces the permission failure.
 
-## Recommendation and alternatives
+## Concrete next step
 
-Proceed with draft code review from the local verified pair while keeping release blocked on compatibility work. Do not make an extra hosted database a prerequisite for reviewing the fix.
-
-If hosted durability is required, the smallest direct option is an existing authorized operator running the reviewed standalone bootstrap over the verified session pooler, then the restricted application test. Establish that operator path without asking anyone to paste a password into chat. No known owner/recipient is fabricated here.
-
-A Supabase project/branch is an alternative with separate cost and credential approval, not the default. A schema inside shared postgres is not equivalent isolation: existing workers and hardcoded schema paths require additional changes. Exposing local PostgreSQL to a preview would add networking/access scope and is not needed for the already-passing local browser/persistence tests. No alternative was executed.
+Review the paired local draft PRs and dependency stack, run full CI plus the opt-in native acceptance on the checkpointed pair, and finish the production raw-reader/legacy activation plan. Publication is a separate approval step; no push, PR publication, merge or production release was performed. The staging bug acceptance is complete and does not need another paid retry merely to prepare review.

@@ -30,5 +30,13 @@
     "sourceRepository": "xdjs/MusicNerdWeb",
     "sourceCommit": "d219118f1e3b9a0fa5c3807a8bf3ea4414fad99f",
     "sourcePath": "drizzle/0063_legacy_bio_publications.sql"
+  },
+  {
+    "file": "0064_lore_activity_lock.sql",
+    "fixture": "fixtures/0064_lore_activity_lock.sql",
+    "sha256": "3b2ec181364f3f414ee9f73a920716546fec3c68b23a62c3cc22386ee652b0e0",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "2957b9bec0a5c730d39bfff09a4f76ec18d4f96e",
+    "sourcePath": "drizzle/0064_lore_activity_lock.sql"
   }
 ]

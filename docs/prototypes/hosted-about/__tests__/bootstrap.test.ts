@@ -136,7 +136,7 @@ it("removes simulated hosted anonymous defaults and rejects unexpected object gr
           "select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','mn_private','musicnerd_private') and p.prosecdef and has_function_privilege('mnweb',p.oid,'EXECUTE')",
         )
       ).rows,
-    ).toEqual([]);
+    ).toEqual([{ proname: "lock_lore_activity_events" }]);
     await pg.exec("grant select on artists to unexpected");
     await expect(pg.exec(sql("bootstrap-audit.sql"))).rejects.toThrow(
       "Unexpected prototype object grants",
