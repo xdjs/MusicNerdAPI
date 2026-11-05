@@ -198,9 +198,7 @@ it("retains unknown-role grants on aborted cutover; never classifies an unknown 
 });
 it("emergency post-cutover rollback retains full shape and map edits while keeping raw biographies denied", async () => {
   await pg.exec(cutover());
-  await pg.exec(
-    "create or replace function mn_projection.public_bio(requested_id uuid) returns text language sql stable security definer set search_path=pg_catalog as $$select null::text$$",
-  );
+  await pg.exec(readFileSync(new URL("./rollback-public-bio.sql", import.meta.url), "utf8"));
   await asRole("readonly_user", async () => {
     const row = (await pg.query<Record<string, unknown>>("select * from mn_public.artists"))
       .rows[0];
@@ -436,3 +434,16 @@ it.each(["Dev", "Production"])(
     ]);
   },
 );
+
+it("refuses emergency fallback before the guarded projection is installed", async () => {
+  await expect(
+    pg.exec(readFileSync(new URL("./rollback-public-bio.sql", import.meta.url), "utf8")),
+  ).rejects.toThrow("Expected guarded projection");
+});
+it("refuses emergency fallback when the projector owner differs", async () => {
+  await pg.exec(cutover());
+  await pg.exec("alter function mn_projection.public_bio(uuid) owner to postgres");
+  await expect(
+    pg.exec(readFileSync(new URL("./rollback-public-bio.sql", import.meta.url), "utf8")),
+  ).rejects.toThrow("Expected guarded projection");
+});

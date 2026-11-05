@@ -95,7 +95,7 @@ beforeEach(async () => {
     );
   // Exact reviewed Web 0062 fixture; independent of another checkout or credentials.
   expect(createHash("sha256").update(receiptMigration).digest("hex")).toBe(
-    "08c57527024da5dfce4bf943fab374b8ae11acb381a98db4ba813508d7aabf53",
+    "e664ce6315d1689da025bedce5f1b0f17bcc1f97e7067c303eacd5a43a374288",
   );
   await pg.exec(receiptMigration);
   await pg.exec(

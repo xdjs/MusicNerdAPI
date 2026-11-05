@@ -34,7 +34,7 @@ const expectedInputs = {
   "0059_catalog_counterpart_jobs.sql":
     "3489c2af1f763197ebb28df012c9d310c938a00d0b5d54c45bd9768b831cc99e",
   "0063_legacy_bio_publications.sql":
-    "d992547931e8487f3bbd53a68217e5481d130a6287a40690606789a583a264dc",
+    "3a8ba693b10d4a45017f19ffd94643d885d547f1eeac7ee3e65e33f1d5bc88eb",
 };
 const files = [
   "0035_account_merge_attribution",

@@ -1137,6 +1137,23 @@ describe.skipIf(!socket)(
             ).toEqual([{ bio: null }]);
             await tx.unsafe("reset role");
             expect(await tx`SELECT bio FROM public.artists`).toEqual([{ bio: "Generated" }]);
+            await tx.unsafe(
+              readFileSync(
+                new URL(
+                  "../../../docs/prototypes/guarded-about/rollback-public-bio.sql",
+                  import.meta.url,
+                ),
+                "utf8",
+              ),
+            );
+            await tx.unsafe("set local role native_map_editor");
+            expect(await tx`SELECT bio FROM mn_public.artists`).toEqual([{ bio: null }]);
+            const raw = await capture(
+              tx.savepoint(async sp => sp.unsafe("SELECT bio FROM public.artists")),
+            );
+            expect(errorCode(raw.error)).toBe("42501");
+            await tx.unsafe("reset role");
+            expect(await tx`SELECT bio FROM public.artists`).toEqual([{ bio: "Generated" }]);
             throw rollback;
           }),
         );
