@@ -1,4 +1,6 @@
-import { publicVaultSourceSql } from "@/lib/sourcePublication/publicVaultSourceSql";
+import { publicTextVaultSourceSql } from "@/lib/sourcePublication/publicTextVaultSourceSql";
+import { loadPrivateResearchUrlKeys } from "@/lib/sourcePublication/loadPrivateResearchUrlKeys";
+import { canonicalResearchUrl } from "@/lib/questionResearch/canonicalResearchUrl";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { authorizeArtistKnowledge } from "@/lib/knowledge/authorizeArtistKnowledge";
@@ -31,10 +33,9 @@ export async function readResearchEvidence(
       )
         throw new KnowledgeError("not_found", 404, "Original unavailable");
       if (auth.kind === "service") {
-        const hidden = await tx.execute(
-          sql`select id from artist_vault_sources where artist_id=${artistId}::uuid and url=${row.url} and publication='private' limit 1`,
-        );
-        if (hidden.length) throw new KnowledgeError("not_found", 404, "Original unavailable");
+        const privateKeys = await loadPrivateResearchUrlKeys(tx, artistId);
+        if (privateKeys.has(canonicalResearchUrl(row.url)))
+          throw new KnowledgeError("not_found", 404, "Original unavailable");
       }
       if (row.revision !== revision)
         throw new KnowledgeError("revision_changed", 409, "Original revision unavailable");
@@ -44,7 +45,7 @@ export async function readResearchEvidence(
         row.destination === "lore"
       ) {
         const eligible = await tx.execute(
-          sql`select v.id from artist_vault_sources v where v.id=${row.source_id}::uuid and v.artist_id=${artistId}::uuid and v.file_path is null and ${publicVaultSourceSql()}`,
+          sql`select v.id from artist_vault_sources v where v.id=${row.source_id}::uuid and v.artist_id=${artistId}::uuid and ${publicTextVaultSourceSql()}`,
         );
         if (!eligible.length) throw new KnowledgeError("not_found", 404, "Original unavailable");
       }

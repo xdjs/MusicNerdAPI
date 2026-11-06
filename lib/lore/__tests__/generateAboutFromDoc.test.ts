@@ -56,3 +56,20 @@ describe("generateAboutFromDoc", () => {
     vi.useRealTimers();
   });
 });
+
+it("rejects partial streamed output when the per-call timeout aborts before the race rejects", async () => {
+  const localTimeout = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(localTimeout.signal);
+  try {
+    streamText.mockImplementationOnce(async ({ abortSignal }) => {
+      localTimeout.abort(new Error("local timeout"));
+      expect(abortSignal.aborted).toBe(true);
+      return { text: "Incomplete but nonempty About" };
+    });
+    await expect(
+      generateAboutFromDoc("Artist", "Lore", [], { abortSignal: new AbortController().signal }),
+    ).rejects.toThrow("Gemini timeout");
+  } finally {
+    timeout.mockRestore();
+  }
+});

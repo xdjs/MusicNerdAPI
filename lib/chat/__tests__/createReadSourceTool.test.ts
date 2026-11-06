@@ -13,7 +13,10 @@ it("returns the stored text with its citation number, without fetching the page"
     cite,
   );
   const result = await readSource.execute!({ sourceId: "vault:1" }, call);
-  expect(result).toEqual({
+  expect(result).toMatchObject({
+    sourceId: "vault:1",
+    start: 0,
+    end: 12,
     n: 3,
     title: "news.example",
     url: "https://www.news.example/a",
@@ -125,7 +128,12 @@ it("keeps two search locators independent and source-only prefix reads unchanged
   expect(afterSecondSearch.text).toContain("Dub session detail.");
   const legacy = (await read.execute!({ sourceId: source.sourceId }, call)) as { text: string };
   expect(legacy.text).toBe(text.slice(0, 12000));
-  expect(legacy).not.toHaveProperty("start");
+  expect(legacy).toMatchObject({
+    start: 0,
+    end: 12000,
+    sourceId: source.sourceId,
+    revision: source.revision,
+  });
 });
 
 it("preserves UTF-16 boundaries and the full matched window at the read ceiling", async () => {

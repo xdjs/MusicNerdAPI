@@ -1,9 +1,9 @@
 import { findTwitterHandleHandler } from "@/lib/artistLookups/findTwitterHandleHandler";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
-/** Artist lookup: an artist's X handle by ethAddress or name, in MusicNerdWeb's shape.
+/** Artist lookup: an artist's X handle by ethAddress or a unique exact name, in MusicNerdWeb's shape.
  *
  * @param request - POST with `{ "ethAddress"?: string, "name"?: string }`.
- * @returns `{ result: handle }` (or `{}` for an unmatched name), or a plain-text 400, 404 or 500.
+ * @returns `{ result: handle }` (or `{}` for an unmatched or ambiguous name), or a plain-text 400, 404 or 500.
  */
 export async function POST(request: Request) {
   return findTwitterHandleHandler(request);

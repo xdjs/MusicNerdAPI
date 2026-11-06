@@ -3,8 +3,24 @@ import { createUIMessageStream, createUIMessageStreamResponse, type UIMessageChu
 import { NextResponse } from "next/server";
 
 const postArtistChatHandler = vi.fn();
+const observedFixtures = new WeakMap<Response, UIMessageChunk[]>();
 vi.mock("@/lib/chat/postArtistChatHandler", () => ({
-  postArtistChatHandler: (...a: unknown[]) => postArtistChatHandler(...a),
+  postArtistChatHandler: async (...a: unknown[]) => {
+    const response = await postArtistChatHandler(...a);
+    const observe = a[3] as ((part: UIMessageChunk) => void) | undefined;
+    for (const chunk of observedFixtures.get(response) ?? [])
+      if (
+        [
+          "source-url",
+          "tool-input-start",
+          "tool-input-available",
+          "tool-output-available",
+          "tool-output-error",
+        ].includes(chunk.type)
+      )
+        observe?.(chunk);
+    return response;
+  },
 }));
 const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
 
@@ -14,12 +30,15 @@ const fakeClock = () => {
   return { now: () => (t += 100) };
 };
 
-const streamOf = (chunks: UIMessageChunk[]) =>
-  createUIMessageStreamResponse({
+const streamOf = (chunks: UIMessageChunk[]) => {
+  const response = createUIMessageStreamResponse({
     stream: createUIMessageStream({
       execute: ({ writer }) => chunks.forEach(c => writer.write(c)),
     }),
   });
+  observedFixtures.set(response, chunks);
+  return response;
+};
 
 describe("chatStreamTurn", () => {
   beforeEach(() => postArtistChatHandler.mockReset());
@@ -64,6 +83,7 @@ describe("chatStreamTurn", () => {
     expect(turn.answer).toBe("Born in Richmond [1].");
     expect(turn.sources).toEqual([{ n: 1, title: "A", url: "https://a.example" }]);
     expect(turn.evidence).toHaveLength(1);
+    expect(turn.evidenceCaptureComplete).toBe(true);
     expect(turn.evidence?.[0]).toMatchObject({
       n: 1,
       url: "https://a.example",
@@ -72,6 +92,38 @@ describe("chatStreamTurn", () => {
       toolCallId: "t",
     });
     expect(turn.firstTextMs).toBeLessThan(turn.totalMs);
+    expect(turn.error).toBeUndefined();
+  });
+
+  it("flags an uncaptured PDF read even when a captured web result shares its citation URL", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "web", toolName: "webSearch", input: {} },
+        { type: "source-url", sourceId: "1", url: "https://same.example", title: "Source" },
+        {
+          type: "tool-output-available",
+          toolCallId: "web",
+          output: {
+            results: [{ n: 1, url: "https://same.example", snippet: "A short search snippet." }],
+          },
+        },
+        { type: "tool-input-available", toolCallId: "pdf", toolName: "readPdfSource", input: {} },
+        {
+          type: "tool-output-available",
+          toolCallId: "pdf",
+          output: { n: 1, pages: 13, sha256: "original-hash" },
+        },
+        { type: "text-start", id: "answer" },
+        { type: "text-delta", id: "answer", delta: "An answer citing only that snippet [1]." },
+        { type: "text-end", id: "answer" },
+        { type: "finish", finishReason: "stop" },
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "What happened?" }, fakeClock());
+    expect(turn.sources).toHaveLength(1);
+    expect(turn.evidence).toHaveLength(1);
+    expect(turn.evidence?.[0].tool).toBe("webSearch");
+    expect(turn.evidenceCaptureComplete).toBe(false);
     expect(turn.error).toBeUndefined();
   });
 
@@ -329,4 +381,64 @@ it("does not classify an empty-message terminal capture failure as success", asy
   const result = await chatStreamTurn({ artistId: "a1", question: "q" }, fakeClock(), c);
   expect(result.answer).toBe("Answer [1].");
   expect(result.error).toBe("capture_failed");
+});
+
+it.each(["error-error", "error-success", "success-error"])(
+  "duplicate tool completion fails capture closed: %s",
+  async order => {
+    postArtistChatHandler.mockReset();
+    const failure = {
+      type: "tool-output-error" as const,
+      toolCallId: "attempt",
+      errorText: "Synthetic unavailable",
+    };
+    const success = {
+      type: "tool-output-available" as const,
+      toolCallId: "attempt",
+      output: { n: 1, url: "https://example.test/read", text: "Literal source text." },
+    };
+    const endings = order.split("-").map(kind => (kind === "error" ? failure : success));
+    postArtistChatHandler.mockResolvedValue(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "attempt", toolName: "readSource", input: {} },
+        ...endings,
+        ...textChunks,
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "synthetic", question: "What happened?" });
+    expect(turn.capture?.complete).toBe(false);
+    expect(turn.evidenceCaptureComplete).toBe(false);
+  },
+);
+
+it.each([undefined, 6000, 12000] as const)(
+  "explicit evaluator response capability%s preserves the strict body",
+  async attributedTextCharacters => {
+    postArtistChatHandler.mockResolvedValue(
+      new Response('data: {"type":"finish","finishReason":"stop"}\n\n', {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    );
+    await chatStreamTurn({ artistId: "a", question: "Q", attributedTextCharacters });
+    const request = postArtistChatHandler.mock.calls.at(-1)![0];
+    expect(request.headers.get("accept")).toBe(
+      attributedTextCharacters === 12000
+        ? "text/event-stream; musicnerd-attributed-text=12000"
+        : null,
+    );
+    expect(Object.keys(await request.json())).toEqual(["messages"]);
+  },
+);
+it("invalid evaluator capability fails before claim or handler invocation", async () => {
+  const before = postArtistChatHandler.mock.calls.length,
+    claim = vi.fn(),
+    record = vi.fn();
+  const result = await chatStreamTurn(
+    { artistId: "a", question: "Q", attributedTextCharacters: 24000 as 12000 },
+    undefined,
+    { requestId: "invalid-cap", claim, record },
+  );
+  expect(result.error).toBe("unsupported_attributed_text_limit");
+  expect(claim).not.toHaveBeenCalled();
+  expect(postArtistChatHandler.mock.calls).toHaveLength(before);
 });

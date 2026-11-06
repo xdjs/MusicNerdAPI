@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 import { NextResponse } from "next/server";
 
 const mock = vi.hoisted(() => ({
@@ -9,6 +10,14 @@ const mock = vi.hoisted(() => ({
   submit: vi.fn(),
 }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/bio/getPublicSavedBio", () => ({
+  getPublicSavedBio: async () =>
+    (await mock.findApprovedClaim())
+      ? (await mock.getArtistById())?.bio === ABOUT_EMPTY_STATE
+        ? null
+        : (await mock.getArtistById())?.bio
+      : null,
+}));
 vi.mock("@/lib/auth/authenticateRequest", () => ({ authenticateRequest: mock.auth }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: mock.getArtistById }));
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim: mock.findApprovedClaim }));

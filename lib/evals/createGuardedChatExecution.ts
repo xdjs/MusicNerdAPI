@@ -2,19 +2,22 @@ import { createHash } from "node:crypto";
 import { closeSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
-import { MODEL_CHAT } from "@/lib/ai/const";
+import { MODEL_CHAT, MODEL_FLASH } from "@/lib/ai/const";
 import { streamText } from "@/lib/ai/streamText";
 
 import { inspectChatPdf } from "@/lib/chatPdf/inspectChatPdf";
 import { pdfEvalSchema, type PdfEvalDocument } from "./pdfEvalTypes";
 import { preparePdfEvalInput } from "./preparePdfEvalInput";
+import { assertPdfEvalToolOutput } from "./assertPdfEvalToolOutput";
 
 const manifestSchema = z
   .object({
     version: z.literal(1),
     pdf: pdfEvalSchema.optional(),
     runId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
-    modelId: z.literal(MODEL_CHAT),
+    // Only already-configured models are available to this internal evaluator.
+    modelId: z.enum([MODEL_CHAT, MODEL_FLASH]),
+    provider: z.enum(["anthropic", "google", "vertex"]).optional(),
     promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
     instructionsSha256: z.string().regex(/^[a-f0-9]{64}$/),
     toolLimits: z.partialRecord(
@@ -30,14 +33,20 @@ const manifestSchema = z
     ),
     maxToolExecutions: z.number().int().min(1).max(12),
     maxCalls: z.number().int().min(1).max(6),
-    maxInputBytes: z.number().int().min(1).max(128000),
-    maxTotalInputBytes: z.number().int().min(1).max(196608),
+    maxInputBytes: z.number().int().min(1).max(262144),
+    maxTotalInputBytes: z.number().int().min(1).max(1048576),
     maxOutputTokens: z.number().int().min(1).max(2048),
     maxOutputCharacters: z.number().int().min(1).max(8192),
-    maxCaptureBytes: z.number().int().min(1).max(1000000),
+    maxCaptureBytes: z.number().int().min(1).max(4194304),
   })
   .strict()
-  .refine(m => !m.pdf || m.maxOutputTokens <= 1024, "PDF output allowance exceeds reviewed limit");
+  .refine(m => !m.pdf || m.maxOutputTokens <= 1024, "PDF output allowance exceeds reviewed limit")
+  .refine(
+    m =>
+      !!m.pdf ||
+      (m.maxInputBytes <= 128000 && m.maxTotalInputBytes <= 196608 && m.maxCaptureBytes <= 1000000),
+    "Text-only admission ceilings remain unchanged",
+  );
 
 /** Evaluator-only, one-turn forwarding guard. Never imported by an HTTP route. */
 export function createGuardedChatExecution({
@@ -46,6 +55,7 @@ export function createGuardedChatExecution({
   model,
   record,
   validatePdfSource,
+  validatePdfCatalog,
 }: {
   manifestPath: string;
   manifestSha256: string;
@@ -54,12 +64,20 @@ export function createGuardedChatExecution({
   record: (kind: string, value: unknown) => void;
   /** Required in PDF mode: assert current authorized source and exact pinned revision. */
   validatePdfSource?: (document: PdfEvalDocument) => Promise<void>;
+  /** Optional trusted evaluator check of the full eligible PDF catalog; never filters results. */
+  validatePdfCatalog?: () => Promise<void>;
 }): typeof streamText {
   const raw = readFileSync(manifestPath);
   if (createHash("sha256").update(raw).digest("hex") !== manifestSha256)
     throw new Error("eval_manifest_mismatch");
   const manifest = manifestSchema.parse(JSON.parse(raw.toString("utf8")));
   if (model.modelId !== manifest.modelId) throw new Error("eval_model_mismatch");
+  const provider = manifest.provider ?? (manifest.modelId === MODEL_FLASH ? "google" : "anthropic");
+  if (
+    (manifest.modelId === MODEL_CHAT && !["anthropic", "vertex"].includes(provider)) ||
+    (manifest.modelId === MODEL_FLASH && provider === "anthropic")
+  )
+    throw new Error("eval_model_provider_mismatch");
   if (manifest.pdf && !validatePdfSource) throw new Error("eval_pdf_validator_missing");
   const successfulReads = new Map<string, PdfEvalDocument>();
   const uniquePdfs = new Set<string>();
@@ -136,14 +154,14 @@ export function createGuardedChatExecution({
   const wrapped = wrapLanguageModel({
     model,
     middleware: {
-      // Single-case evidence goes only to the approved Anthropic route. HTTP chat is unchanged.
+      // Pin the manifest-selected recipient; HTTP model selection stays unchanged.
       transformParams: async ({ params }) => {
         const routing = params.providerOptions?.gateway;
-        if (routing && JSON.stringify(routing) !== JSON.stringify({ only: ["anthropic"] }))
+        if (routing && JSON.stringify(routing) !== JSON.stringify({ only: [provider] }))
           fail("eval_routing_mismatch");
         return {
           ...params,
-          providerOptions: { ...params.providerOptions, gateway: { only: ["anthropic"] } },
+          providerOptions: { ...params.providerOptions, gateway: { only: [provider] } },
         };
       },
       wrapGenerate: async () => fail("eval_generate_forbidden"),
@@ -236,6 +254,13 @@ export function createGuardedChatExecution({
             fail("eval_pdf_validation_failed");
           }
         }
+        if (manifest.pdf && validatePdfCatalog) {
+          try {
+            await validatePdfCatalog();
+          } catch {
+            fail("eval_pdf_catalog_changed");
+          }
+        }
         check();
         if (params.abortSignal?.aborted) fail("eval_aborted");
         const result = await doStream();
@@ -303,7 +328,8 @@ export function createGuardedChatExecution({
   return async options => {
     if (used) fail("eval_already_dispatched");
     used = true;
-    if (options.model !== manifest.modelId) fail("eval_model_mismatch");
+    // Observe the unchanged ordinary handler configuration before any eval-only override.
+    if (options.model !== MODEL_CHAT) fail("eval_model_mismatch");
     if (
       createHash("sha256").update(JSON.stringify(options.prompt)).digest("hex") !==
       manifest.promptSha256
@@ -346,7 +372,7 @@ export function createGuardedChatExecution({
               fail("eval_tool_limit");
             // Synchronous reservation before any await: parallel calls cannot
             // each observe the same remaining allowance. Failures stay consumed.
-            if (manifest.pdf && ["readPdfSource", "readNamedPdf"].includes(name)) {
+            if (["readPdfSource", "readNamedPdf"].includes(name)) {
               if (pdfReadAttempts >= 2) fail("eval_pdf_read_limit");
               pdfReadAttempts++;
             }
@@ -354,27 +380,37 @@ export function createGuardedChatExecution({
             toolExecutions++;
             capture("tool-input", { name, input: args[0] });
             const result = await tool.execute!(...args);
-            if (
-              manifest.pdf &&
-              ["readPdfSource", "readNamedPdf"].includes(name) &&
-              result &&
-              typeof result === "object" &&
-              "sha256" in result
-            ) {
-              const value = result as Record<string, unknown>;
-              const document = manifest.pdf.documents.find(d => d.sourceId === value.sourceId);
-              if (
-                !document ||
-                value.sha256 !== document.sha256 ||
-                value.pages !== document.pages ||
-                value.title !== document.filename ||
-                Object.keys(value).some(
-                  k => !["sourceId", "n", "title", "pages", "sha256"].includes(k),
-                )
-              )
+            if (name === "searchPdfSources" && manifest.pdf && validatePdfCatalog) {
+              try {
+                await validatePdfCatalog();
+              } catch {
+                fail("eval_pdf_catalog_changed");
+              }
+            }
+            if (["readPdfSource", "readNamedPdf"].includes(name)) {
+              const value = (result && typeof result === "object" ? result : {}) as Record<
+                string,
+                unknown
+              >;
+              const document = manifest.pdf?.documents.find(d => d.sourceId === value.sourceId);
+              try {
+                assertPdfEvalToolOutput(
+                  result,
+                  document,
+                  name as "readPdfSource" | "readNamedPdf",
+                  args[1].toolCallId,
+                );
+              } catch {
                 fail("eval_pdf_identity");
+              }
+              if ("error" in value) {
+                capture("tool-output", { name, result });
+                return result;
+              }
+              const pdfAdmission = manifest.pdf;
+              if (!pdfAdmission) return fail("eval_pdf_identity");
               uniquePdfs.add(document!.sourceId);
-              if (uniquePdfs.size > manifest.pdf.maxUniqueDocuments) fail("eval_pdf_unique_limit");
+              if (uniquePdfs.size > pdfAdmission.maxUniqueDocuments) fail("eval_pdf_unique_limit");
               try {
                 await validatePdfSource!(document!);
               } catch {
@@ -395,6 +431,9 @@ export function createGuardedChatExecution({
       const result = await streamText({
         ...options,
         model: wrapped,
+        ...(manifest.modelId === MODEL_FLASH
+          ? { anthropicEffort: undefined, thinkingLevel: undefined, thinkingBudget: 0 }
+          : {}),
         tools,
         maxRetries: 0,
         streamRetries: 0,

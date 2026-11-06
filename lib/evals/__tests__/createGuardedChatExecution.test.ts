@@ -94,6 +94,12 @@ function setup(
   };
   return { execute: createGuardedChatExecution(config), config, path };
 }
+it("rejects a model/provider tuple outside the explicit local profiles before dispatch", () => {
+  const model = new MockLanguageModelV4({ modelId: MODEL_CHAT, doStream: async () => result() });
+  expect(() => setup(model, { provider: "google" })).toThrow("eval_model_provider_mismatch");
+  expect(model.doStreamCalls).toHaveLength(0);
+  expect(external).not.toHaveBeenCalled();
+});
 it("forwards exact prepared inputs once, keeps beforeStep, and emits bounded finish usage", async () => {
   const model = new MockLanguageModelV4({ modelId: MODEL_CHAT, doStream: async () => result() });
   const beforeStep = vi.fn();
@@ -152,12 +158,12 @@ it("serializes explicit effort and approved text recipient through installed SDK
     },
   }).languageModel(MODEL_CHAT);
   const { execute } = setup(model as never);
-  expect(await execute({ model: MODEL_CHAT, prompt: "q", anthropicEffort: "medium" })).toEqual({
+  expect(await execute({ model: MODEL_CHAT, prompt: "q", anthropicEffort: "low" })).toEqual({
     text: "Answer.",
   });
   expect(wire).toHaveLength(1);
   expect(wire[0].providerOptions).toEqual({
-    anthropic: { effort: "medium" },
+    anthropic: { effort: "low" },
     gateway: { only: ["anthropic"] },
   });
   expect(external).not.toHaveBeenCalled();
@@ -180,11 +186,11 @@ it("admits standard reasoning history with metadata under the same text bounds",
   const { execute } = setup(model, {
     promptSha256: createHash("sha256").update(JSON.stringify(prompt)).digest("hex"),
   });
-  await execute({ model: MODEL_CHAT, prompt, anthropicEffort: "medium" });
+  await execute({ model: MODEL_CHAT, prompt, anthropicEffort: "low" });
   expect(model.doStreamCalls).toHaveLength(1);
   expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain("synthetic-signature");
   expect(model.doStreamCalls[0].providerOptions).toEqual({
-    anthropic: { effort: "medium" },
+    anthropic: { effort: "low" },
     gateway: { only: ["anthropic"] },
   });
   expect(external).not.toHaveBeenCalled();
@@ -511,10 +517,10 @@ it.each([
           }
         : result(),
   });
-  const adapter = vi.fn(async (_input: { query: string }) => ({
-    text: "Recorded public result",
-    sourceId: "fixture",
-  }));
+  const adapterResult = ["readPdfSource", "readNamedPdf"].includes(name)
+    ? { error: "PDF unavailable" }
+    : { text: "Recorded public result", sourceId: "fixture" };
+  const adapter = vi.fn(async (_input: { query: string }) => adapterResult);
   const tools = {
     [name]: tool({
       description: "Unchanged tool description",
@@ -532,7 +538,7 @@ it.each([
   });
   expect(events.find(e => e.kind === "tool-output")?.value).toEqual({
     name,
-    result: { text: "Recorded public result", sourceId: "fixture" },
+    result: adapterResult,
   });
   expect(external).not.toHaveBeenCalled();
 });
@@ -589,7 +595,7 @@ it.each(["per-tool", "total", "capture"])(
   },
 );
 
-it("blocks nested PDF tool-result content before the next model forward", async () => {
+it("blocks an unbudgeted PDF result before capture and the next model forward", async () => {
   let step = 0;
   const model = new MockLanguageModelV4({
     modelId: MODEL_CHAT,
@@ -639,9 +645,10 @@ it("blocks nested PDF tool-result content before the next model forward", async 
         }),
       },
     }),
-  ).rejects.toThrow("eval_nontext_input");
+  ).rejects.toThrow("eval_pdf_identity");
   expect(executePdf).toHaveBeenCalledTimes(1);
   expect(model.doStreamCalls).toHaveLength(1);
+  expect(events.some(event => event.kind === "tool-output")).toBe(false);
   expect(external).not.toHaveBeenCalled();
 });
 

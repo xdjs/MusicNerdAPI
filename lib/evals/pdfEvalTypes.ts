@@ -5,6 +5,11 @@ export const pdfEvalDocumentSchema = z
     sourceId: z.uuid(),
     revision: z.string().min(1).max(500),
     filename: z.string().min(1).max(300),
+    /** Required when a typed PDF output exposes a public source URL. */
+    url: z
+      .url()
+      .regex(/^https?:\/\//)
+      .optional(),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
     bytes: z
       .number()

@@ -3,13 +3,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mock = vi.hoisted(() => ({
   getArtistById: vi.fn(),
   hasPinnedBio: vi.fn(),
-  getArtistDocStrict: vi.fn(),
+  prepareAboutLore: vi.fn(),
   generateAboutFromDoc: vi.fn(),
   persistArtistBio: vi.fn(),
 }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: mock.getArtistById }));
 vi.mock("@/lib/bio/hasPinnedBio", () => ({ hasPinnedBio: mock.hasPinnedBio }));
-vi.mock("@/lib/lore/getArtistDocStrict", () => ({ getArtistDocStrict: mock.getArtistDocStrict }));
+vi.mock("@/lib/bio/prepareAboutLore", () => ({ prepareAboutLore: mock.prepareAboutLore }));
 vi.mock("@/lib/lore/generateAboutFromDoc", () => ({
   generateAboutFromDoc: mock.generateAboutFromDoc,
 }));
@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mock.getArtistById.mockResolvedValue({ id: "a1", name: "Artist", bio: "Original About" });
   mock.hasPinnedBio.mockResolvedValue(false);
-  mock.getArtistDocStrict.mockResolvedValue({ content: "Stored Lore [1]", sources: manifest });
+  mock.prepareAboutLore.mockResolvedValue({ content: "Stored Lore [1]", sources: manifest });
   mock.generateAboutFromDoc.mockResolvedValue("About from Lore [1]");
   mock.persistArtistBio.mockImplementation((_id: string, bio: string) => Promise.resolve(bio));
 });
@@ -38,28 +38,29 @@ describe("generateArtistBio", () => {
       httpStatus: 200,
       bio: "About from Lore",
     });
-    expect(mock.generateAboutFromDoc).toHaveBeenCalledWith("Artist", "Stored Lore [1]", manifest);
+    expect(mock.generateAboutFromDoc).toHaveBeenCalledWith("Artist", "Stored Lore [1]", manifest, {
+      abortSignal: expect.any(AbortSignal),
+    });
     expect(mock.persistArtistBio).toHaveBeenCalledWith("a1", "About from Lore", {
       generated: true,
+      signal: expect.any(AbortSignal),
       expectedBio: "Original About",
+      expectedLore: { content: "Stored Lore [1]", sources: manifest },
       ownership: auth,
     });
   });
 
-  it.each([undefined, { content: "  ", sources: [] }])(
-    "without a Lore document it writes nothing: %#",
-    async doc => {
-      mock.getArtistDocStrict.mockResolvedValue(doc);
-      expect(await generateArtistBio("a1", auth)).toEqual({
-        httpStatus: 409,
-        code: "LORE_REQUIRED",
-        error:
-          "Build your Lore document before generating About. Your existing About has been kept.",
-      });
-      expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
-      expect(mock.persistArtistBio).not.toHaveBeenCalled();
-    },
-  );
+  it("returns preparation errors without starting About or saving it", async () => {
+    const error = {
+      httpStatus: 500,
+      code: "LORE_PREPARATION_FAILED",
+      error: "Could not prepare Lore",
+    };
+    mock.prepareAboutLore.mockResolvedValue(error);
+    expect(await generateArtistBio("a1", auth)).toEqual(error);
+    expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
+    expect(mock.persistArtistBio).not.toHaveBeenCalled();
+  });
 
   it("returns a pinned bio unchanged without generating", async () => {
     mock.hasPinnedBio.mockResolvedValue(true);
@@ -84,7 +85,7 @@ describe("generateArtistBio", () => {
   );
 
   it("a failed Lore read is a 500, not an empty document", async () => {
-    mock.getArtistDocStrict.mockRejectedValue(new Error("DB offline"));
+    mock.prepareAboutLore.mockRejectedValue(new Error("DB offline"));
     expect(await generateArtistBio("a1", auth)).toMatchObject({ httpStatus: 500 });
     expect(mock.persistArtistBio).not.toHaveBeenCalled();
   });
@@ -129,4 +130,28 @@ describe("generateArtistBio", () => {
       bio: "東京の音楽家です。",
     });
   });
+});
+
+it("aborts the request budget and never starts About after a delayed prerequisite", async () => {
+  vi.useFakeTimers();
+  try {
+    mock.prepareAboutLore.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 46_000));
+      return { content: "Lore", sources: manifest };
+    });
+    const result = generateArtistBio("a1", auth);
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(await result).toMatchObject({ httpStatus: 408 });
+    expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
+    expect(mock.persistArtistBio).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("does not start any reads or models when the handler budget is already exhausted", async () => {
+  expect(await generateArtistBio("a1", auth, { deadline: Date.now() - 1 })).toMatchObject({
+    httpStatus: 408,
+  });
+  expect(mock.getArtistById).not.toHaveBeenCalled();
+  expect(mock.generateAboutFromDoc).not.toHaveBeenCalled();
 });

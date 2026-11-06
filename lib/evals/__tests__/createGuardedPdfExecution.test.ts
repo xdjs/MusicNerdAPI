@@ -74,6 +74,7 @@ function setup(
     textOnly?: boolean;
     record?: (kind: string, value: unknown) => void;
     validate?: () => Promise<void>;
+    catalog?: () => Promise<void>;
   } = {},
 ) {
   const forward = vi.fn(async () => ({
@@ -91,7 +92,7 @@ function setup(
     modelId: MODEL_CHAT,
     promptSha256: hash(JSON.stringify("q")),
     instructionsSha256: hash("null"),
-    toolLimits: { readPdfSource: 2 },
+    toolLimits: { readPdfSource: 2, searchPdfSources: 6 },
     maxToolExecutions: 12,
     maxCalls: 6,
     maxInputBytes: 128000,
@@ -123,6 +124,7 @@ function setup(
     model,
     record: opts.record ?? ((kind, value) => events.push({ kind, value })),
     validatePdfSource: validate,
+    validatePdfCatalog: opts.catalog,
   });
   const read = tool({
     inputSchema: z.object({}),
@@ -139,6 +141,36 @@ function setup(
 async function register(o: any) {
   await o.tools.readPdfSource.execute({}, { toolCallId: "t", messages: [] });
 }
+it.each([
+  { revision: "stale" },
+  { revision: pin.revision, textPages: [{}] },
+  { unreviewedPrivateField: "must not be captured or forwarded" },
+])("rejects stale, incomplete or unexpected current PDF metadata", async extra => {
+  const s = setup();
+  s.options.tools.readPdfSource.execute = (async () => ({ ...result, ...extra })) as never;
+  m.stream.mockImplementation(async o => {
+    await register(o);
+    await o.model.doStream(input);
+  });
+  await expect(s.execute(s.options)).rejects.toThrow("eval_pdf_identity");
+  expect(s.forward).not.toHaveBeenCalled();
+  expect(events.filter(e => e.kind === "tool-output")).toHaveLength(0);
+});
+it("rejects an error-only PDF result carrying unexpected base64 before capture or forwarding", async () => {
+  const s = setup();
+  s.options.tools.readPdfSource.execute = (async () => ({
+    error: "PDF unavailable",
+    unexpectedPrivateField: binary.toString("base64"),
+  })) as never;
+  m.stream.mockImplementation(async o => {
+    await register(o);
+    await o.model.doStream(input);
+  });
+  await expect(s.execute(s.options)).rejects.toThrow("eval_pdf_identity");
+  expect(s.forward).not.toHaveBeenCalled();
+  expect(events.some(e => e.kind === "tool-output")).toBe(false);
+  expect(JSON.stringify(events)).not.toContain(binary.toString("base64"));
+});
 it("rejects a conflicting PDF recipient before any provider forward", async () => {
   const s = setup();
   m.stream.mockImplementation(async o => {
@@ -356,4 +388,42 @@ it("caller cancellation during current-source validation prevents forwarding wit
   await expect(s.execute(s.options)).rejects.toThrow();
   expect(s.forward).not.toHaveBeenCalled();
   expect(events.find(e => e.kind === "guard-failure")?.value.consumedPdfBytes).toBe(binary.length);
+});
+
+it("blocks a changed full PDF catalog before a text-only next model input", async () => {
+  const s = setup(
+    {},
+    {
+      catalog: async () => {
+        throw new Error("new eligible PDF");
+      },
+    },
+  );
+  m.stream.mockImplementation(async o => o.model.doStream({ prompt: [], maxOutputTokens: 1024 }));
+  await expect(s.execute(s.options)).rejects.toThrow("eval_pdf_catalog_changed");
+  expect(s.forward).not.toHaveBeenCalled();
+  expect(events.find(e => e.kind === "guard-failure")?.value.calls).toBe(1);
+});
+it("does not capture or forward discovery metadata after catalog drift", async () => {
+  const s = setup(
+    {},
+    {
+      catalog: async () => {
+        throw new Error("new eligible PDF");
+      },
+    },
+  );
+  (s.options.tools as any).searchPdfSources = tool({
+    inputSchema: z.object({}),
+    execute: async () => ({
+      sources: [{ sourceId: "new", title: "new public PDF", url: "https://example.test/new.pdf" }],
+    }),
+  });
+  m.stream.mockImplementation(async o => {
+    await o.tools.searchPdfSources.execute({}, { toolCallId: "discover", messages: [] });
+    await o.model.doStream({ prompt: [], maxOutputTokens: 1024 });
+  });
+  await expect(s.execute(s.options)).rejects.toThrow("eval_pdf_catalog_changed");
+  expect(s.forward).not.toHaveBeenCalled();
+  expect(events.some(e => e.kind === "tool-output")).toBe(false);
 });

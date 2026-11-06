@@ -90,9 +90,18 @@ function setup(
       manifestSha256: hash(raw),
       model,
       record,
+      validatePdfSource: async () => {},
     }),
   };
 }
+it.each([
+  ["maxInputBytes", 128001],
+  ["maxTotalInputBytes", 196609],
+  ["maxCaptureBytes", 1000001],
+])("does not silently broaden %s while enabling available PDF pages", (key, value) => {
+  expect(() => setup({ [key]: value })).toThrow();
+  expect(events).toEqual([]);
+});
 it.each(["per-call", "total"])(
   "admits exact %s byte boundary and rejects a subsequent overflow",
   async kind => {
@@ -206,4 +215,67 @@ it("retains the six-call bound", async () => {
   await expect(execute({ model: MODEL_CHAT, prompt: "q" })).rejects.toThrow();
   expect(forward).toHaveBeenCalledTimes(6);
   expect(events.find(e => e.kind === "guard-failure")?.value.reason).toBe("eval_call_limit");
+});
+
+const pdfAdmission = {
+  documents: [
+    {
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      revision: "r1",
+      filename: "fixture.pdf",
+      sha256: "a".repeat(64),
+      bytes: 100,
+      pages: 1,
+    },
+  ],
+  maxUniqueDocuments: 2,
+  maxBytesPerCall: 100,
+  maxTotalBytes: 400,
+  maxPagesPerCall: 1,
+  maxTotalPages: 4,
+};
+it("requires an explicit PDF manifest for the finite larger envelope and keeps text-only ceilings", () => {
+  expect(() =>
+    setup({
+      pdf: pdfAdmission,
+      maxInputBytes: 262144,
+      maxTotalInputBytes: 1048576,
+      maxCaptureBytes: 4194304,
+    }),
+  ).not.toThrow();
+});
+it.each([
+  ["maxInputBytes", 262145],
+  ["maxTotalInputBytes", 1048577],
+  ["maxCaptureBytes", 4194305],
+])("rejects PDF %s beyond its explicit ceiling", (key, value) => {
+  expect(() => setup({ pdf: pdfAdmission, [key]: value })).toThrow();
+});
+it("charges large PDF-mode repeated text inputs atomically within the explicit total", async () => {
+  const p = params("界".repeat(70000));
+  const n = bytes(p);
+  const { execute, forward } = setup({
+    pdf: pdfAdmission,
+    maxInputBytes: 262144,
+    maxTotalInputBytes: n * 2,
+    maxCaptureBytes: 4194304,
+  });
+  m.stream.mockImplementation(async o => {
+    const outcomes = await Promise.allSettled([
+      o.model.doStream(p),
+      o.model.doStream(p),
+      o.model.doStream(p),
+    ]);
+    expect(outcomes.filter(x => x.status === "fulfilled")).toHaveLength(2);
+    throw new Error("expected overflow");
+  });
+  await expect(execute({ model: MODEL_CHAT, prompt: "q" })).rejects.toThrow();
+  expect(forward).toHaveBeenCalledTimes(2);
+  expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+    reason: "eval_total_input_limit",
+    calls: 2,
+    attemptedCall: 3,
+    consumedInputBytes: n * 2,
+    remainingInputBytes: 0,
+  });
 });

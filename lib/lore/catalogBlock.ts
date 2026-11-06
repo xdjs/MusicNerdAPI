@@ -10,9 +10,16 @@ import { getSpotifyHeaders } from "@/lib/spotify/getSpotifyHeaders";
  * @param spotifyId - The artist's Spotify id.
  * @returns The prompt block, or null with no catalog. Never throws: the sources are the substance, this is grounding.
  */
-export async function catalogBlock(spotifyId: string): Promise<string | null> {
+export async function catalogBlock(
+  spotifyId: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
   try {
-    const catalog = await getSpotifyCatalogDetail(spotifyId, await getSpotifyHeaders());
+    signal?.throwIfAborted();
+    const headers = signal ? await getSpotifyHeaders(signal) : await getSpotifyHeaders();
+    const catalog = signal
+      ? await getSpotifyCatalogDetail(spotifyId, headers, signal)
+      : await getSpotifyCatalogDetail(spotifyId, headers);
     if (catalog.length === 0) return null;
     const lines = catalog
       .slice(0, CATALOG_LINES)

@@ -3,7 +3,7 @@ import { db } from "@/lib/db/db";
 import { normalizeKnowledgeSourceSnapshot } from "@/lib/knowledge/normalizeKnowledgeSourceSnapshot";
 import { readResearchEvidence } from "@/lib/questionResearch/readResearchEvidence";
 import type { ResearchOriginal } from "@/lib/questionResearch/types";
-import { publicVaultSourceSql } from "./publicVaultSourceSql";
+import { publicTextVaultSourceSql } from "./publicTextVaultSourceSql";
 
 /** Revalidate claim/publication and revision before a saved vault original is reused. */
 export async function assertPublicSourceCurrent(artistId: string, source: ResearchOriginal) {
@@ -11,7 +11,7 @@ export async function assertPublicSourceCurrent(artistId: string, source: Resear
     const [row] = await db.execute<{ snapshot: unknown }>(sql`
       select public.knowledge_vault_source_snapshot(v) || jsonb_build_object('publication',v.publication) as snapshot from artist_vault_sources v
       where v.artist_id=${artistId}::uuid and v.id=${source.sourceId.slice(6)}::uuid
-        and v.file_path is null and ${publicVaultSourceSql()}`);
+        and ${publicTextVaultSourceSql()}`);
     const current =
       row &&
       normalizeKnowledgeSourceSnapshot(row.snapshot, artistId).find(

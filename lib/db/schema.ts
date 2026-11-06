@@ -4,7 +4,8 @@
  * this file declares only the columns this API uses. Keep them in step.
  *
  * Row-level-security policies (`pgPolicy`, `enableRLS`) are left out: they
- * only matter to the migrations, which MusicNerdWeb owns.
+ * only matter to the migrations, which MusicNerdWeb owns. Private evidence
+ * sidecars explicitly mirror the security boundary in both schemas.
  */
 import { relations, sql } from "drizzle-orm";
 import {
@@ -18,6 +19,8 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  pgSchema,
+  pgPolicy,
   primaryKey,
   text,
   timestamp,
@@ -706,6 +709,52 @@ export const artistBioVersions = pgTable(
     }).onDelete("cascade"),
   ],
 );
+
+// Evidence manifests are never columns on publicly exposed artist/history rows.
+export const mnPrivate = pgSchema("mn_private");
+export const artistBioProvenance = mnPrivate
+  .table(
+    "artist_bio_provenance",
+    {
+      artistId: uuid("artist_id")
+        .primaryKey()
+        .references(() => artists.id, { onDelete: "cascade" }),
+      provenance: jsonb("provenance").notNull(),
+    },
+    table => [
+      check("artist_bio_provenance_object", sql`jsonb_typeof(${table.provenance}) = 'object'`),
+      pgPolicy("mnweb_artist_bio_provenance", {
+        for: "all",
+        to: ["mnweb"],
+        using: sql`true`,
+        withCheck: sql`true`,
+      }),
+    ],
+  )
+  .enableRLS();
+export const artistBioVersionProvenance = mnPrivate
+  .table(
+    "artist_bio_version_provenance",
+    {
+      versionId: uuid("version_id")
+        .primaryKey()
+        .references(() => artistBioVersions.id, { onDelete: "cascade" }),
+      provenance: jsonb("provenance").notNull(),
+    },
+    table => [
+      check(
+        "artist_bio_version_provenance_object",
+        sql`jsonb_typeof(${table.provenance}) = 'object'`,
+      ),
+      pgPolicy("mnweb_artist_bio_version_provenance", {
+        for: "all",
+        to: ["mnweb"],
+        using: sql`true`,
+        withCheck: sql`true`,
+      }),
+    ],
+  )
+  .enableRLS();
 
 // Post-claim onboarding: the artist knowledgebase doc (one current doc per artist).
 export const artistDocs = pgTable(

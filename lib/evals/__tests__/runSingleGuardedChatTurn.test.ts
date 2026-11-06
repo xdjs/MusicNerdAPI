@@ -1,4 +1,5 @@
 import { runSingleGuardedChatTurn } from "@/lib/evals/runSingleGuardedChatTurn";
+import { getChatCorpusFingerprint } from "@/lib/chat/getChatCorpusFingerprint";
 import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -10,6 +11,7 @@ const m = vi.hoisted(() => ({
   sources: vi.fn(),
   visitor: vi.fn(),
   pdf: vi.fn(),
+  pdfRead: vi.fn(),
   turn: vi.fn(),
   guard: vi.fn(),
   gateway: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock("@/lib/questionResearch/getQuestionVisitorKey", () => ({
   getQuestionVisitorKey: m.visitor,
 }));
 vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdf }));
+vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: m.pdfRead }));
 vi.mock("@/lib/evals/chatStreamTurn", () => ({ chatStreamTurn: m.turn }));
 vi.mock("@/lib/evals/createGuardedChatExecution", () => ({ createGuardedChatExecution: m.guard }));
 vi.mock("ai", async original => ({
@@ -40,11 +43,21 @@ function setup(overrides = {}) {
   const dir = mkdtempSync(join(tmpdir(), "single-case-"));
   dirs.push(dir);
   const manifest = {
+    version: 2,
+    provider: "anthropic",
     enabled: true,
+    utcDate: new Date().toISOString().slice(0, 10),
+    attributedTextCharacters: 12000,
+    corpusSha256: getChatCorpusFingerprint(
+      (overrides as any).pdf ? [] : [{ sourceId: "one", revision: "r", text: "Public fixture" }],
+    ),
+    promptSha256: hash(
+      JSON.stringify([{ role: "user", content: [{ type: "text", text: "Question" }] }]),
+    ),
     artistId: "11111111-1111-4111-8111-111111111111",
     artistName: "Artist",
     question: "Question",
-    stagingOriginSha256: hash("https://fixture.supabase.co"),
+    stagingOriginSha256: hash("https://abcdefghijklmnopqrst.supabase.co"),
     instructionsSha256: hash(JSON.stringify(buildArtistChatInstructions("Artist"))),
     toolSchemasSha256: "a".repeat(64),
     files: { "package.json": hash(readFileSync("package.json", "utf8")) },
@@ -55,25 +68,37 @@ function setup(overrides = {}) {
   writeFileSync(path, raw);
   for (const [k, v] of Object.entries({
     CHAT_SINGLE_MANIFEST_SHA256: hash(raw),
+    VERCEL: "1",
     GITHUB_RUN_ATTEMPT: "1",
     GITHUB_RUN_ID: "123",
     GITHUB_SHA: "a".repeat(40),
     CHAT_SINGLE_EXPECTED_SHA: "a".repeat(40),
     AI_GATEWAY_API_KEY: "fixture",
     TAVILY_API_KEY: "fixture",
-    SUPABASE_DB_CONNECTION: "postgres://fixture:fixture@db.fixture.supabase.co/postgres",
-    SUPABASE_URL: "https://fixture.supabase.co",
+    SUPABASE_DB_CONNECTION:
+      "postgres://fixture:fixture@db.abcdefghijklmnopqrst.supabase.co/postgres",
+    SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
     MUSICNERD_RESEARCH_API_KEY: "fixture",
     BRAINTRUST_API_KEY: "fixture",
     RUNNER_TEMP: dir,
   }))
     vi.stubEnv(k, v);
   m.artist.mockResolvedValue({ name: "Artist" });
-  m.sources.mockResolvedValue([{ sourceId: "one", revision: "r", text: "Public fixture" }]);
+  m.sources.mockResolvedValue(
+    (overrides as any).pdf ? [] : [{ sourceId: "one", revision: "r", text: "Public fixture" }],
+  );
   m.visitor.mockResolvedValue("visitor");
   m.pdf.mockResolvedValue([]);
+  m.pdfRead.mockResolvedValue({ hash: "b".repeat(64), pages: 1, bytes: Buffer.alloc(100) });
   m.guard.mockReturnValue(vi.fn());
-  m.turn.mockResolvedValue({ answer: "fixture", sources: [], firstTextMs: 1, totalMs: 2 });
+  m.turn.mockImplementation(async (_input, _clock, capture) => {
+    capture.claim();
+    capture.record("server-tool-event", {
+      type: "data-chat-corpus-pin",
+      data: { sha256: manifest.corpusSha256 },
+    });
+    return { answer: "fixture", sources: [], firstTextMs: 1, totalMs: 2 };
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(() => {
@@ -82,14 +107,14 @@ function setup(overrides = {}) {
   );
   return path;
 }
-it.each(["disabled", "rerun", "target", "instructions", "pdf"])(
+it.each(["disabled", "rerun", "target", "date", "pdf"])(
   "rejects %s before handler admission or model construction",
   async failure => {
     const path = setup(
       failure === "disabled"
         ? { enabled: false }
-        : failure === "instructions"
-          ? { instructionsSha256: "f".repeat(64) }
+        : failure === "date"
+          ? { utcDate: "2000-01-01" }
           : {},
     );
     if (failure === "rerun") vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
@@ -103,7 +128,7 @@ it.each(["disabled", "rerun", "target", "instructions", "pdf"])(
 );
 it("claims once, uses real-boundary names without fixture overrides, and retains private evidence", async () => {
   const path = setup();
-  const result = await runSingleGuardedChatTurn(path);
+  const result = (await runSingleGuardedChatTurn(path)) as any;
   expect(m.sources).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
   expect(m.turn).toHaveBeenCalledTimes(1);
   expect(result.diagnostic.records[0].kind).toBe("source-preflight");
@@ -121,6 +146,7 @@ it("claims once, uses real-boundary names without fixture overrides, and retains
   expect(m.turn.mock.calls[0][0]).toEqual({
     artistId: "11111111-1111-4111-8111-111111111111",
     question: "Question",
+    attributedTextCharacters: 12000,
   });
   await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
   expect(m.turn).toHaveBeenCalledTimes(1);
@@ -144,6 +170,14 @@ it("schema pin rejects changed prepared catalog through the guard record callbac
   );
   m.turn.mockImplementation(async (_input, _clock, capture, execute) => {
     capture.claim();
+    capture.record("server-tool-event", {
+      type: "data-chat-corpus-pin",
+      data: {
+        sha256: getChatCorpusFingerprint([
+          { sourceId: "one", revision: "r", text: "Public fixture" },
+        ]),
+      },
+    });
     return execute({});
   });
   await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_tool_schema_mismatch");
@@ -171,7 +205,7 @@ it.each(["", " \n\t"])(
       totalMs: 8144,
       error: "Aborted UI stream.",
     });
-    const result = await runSingleGuardedChatTurn(path);
+    const result = (await runSingleGuardedChatTurn(path)) as any;
     expect(result.firstTextMs).toBeNull();
     expect(result.totalMs).toBe(8144);
     expect(result.error).toBe("Aborted UI stream.");
@@ -197,7 +231,15 @@ const pdfRow = {
   claimId: "claim",
 };
 const pdfPlan = {
-  execution: { maxCalls: 6, maxToolExecutions: 8, maxWebSearches: 1 },
+  urlSha256: { [pdfPin.sourceId]: hash("https://fixture.test/artist/fixture.pdf") },
+  execution: {
+    maxCalls: 6,
+    maxToolExecutions: 8,
+    maxWebSearches: 1,
+    maxInputBytes: 262144,
+    maxTotalInputBytes: 1048576,
+    maxCaptureBytes: 4194304,
+  },
   admission: {
     documents: [pdfPin],
     maxUniqueDocuments: 2,
@@ -214,23 +256,28 @@ it.each(["claim", null])(
     const path = setup({ pdf: pdfPlan });
     m.pdf.mockResolvedValue([{ ...pdfRow, claimId }]);
     m.sources.mockResolvedValue([]);
-    const result = await runSingleGuardedChatTurn(path);
+    const result = (await runSingleGuardedChatTurn(path)) as any;
     const config = m.guard.mock.calls[0][0];
     const guard = JSON.parse(readFileSync(config.manifestPath, "utf8"));
-    expect(guard.pdf).toEqual(pdfPlan.admission);
+    expect(guard.pdf).toEqual({
+      ...pdfPlan.admission,
+      documents: [{ ...pdfPin, url: pdfRow.url }],
+    });
     expect(guard).toMatchObject({
       maxCalls: 6,
       maxToolExecutions: 8,
       toolLimits: { webSearch: 1, readPdfSource: 2, readNamedPdf: 2 },
-      maxInputBytes: 128000,
-      maxTotalInputBytes: 196608,
+      maxInputBytes: 262144,
+      maxTotalInputBytes: 1048576,
       maxOutputTokens: 1024,
     });
     expect(Object.keys(guard.toolLimits)).toHaveLength(6);
     await expect(config.validatePdfSource(pdfPin)).resolves.toBeUndefined();
     expect(m.pdf).toHaveBeenLastCalledWith("11111111-1111-4111-8111-111111111111", pdfPin.sourceId);
     expect(result.diagnostic.reservationUsd).toBe(7.1);
-    expect(result.diagnostic.records.find(r => r.kind === "pdf-preflight")?.value).toMatchObject({
+    expect(
+      result.diagnostic.records.find((r: any) => r.kind === "pdf-preflight")?.value,
+    ).toMatchObject({
       documents: [pdfPin],
       binaryCapture: "verified-reference-only",
     });
@@ -329,4 +376,157 @@ it("rejects claim correspondence drift from an unclaimed public baseline", async
   m.pdf.mockResolvedValue([pdfRow]);
   await expect(validate(pdfPin)).rejects.toThrow("single_pdf_source_changed");
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("read-only preflight can report an unpinned corpus without claims, model construction or a turn", async () => {
+  const path = setup({ enabled: false, corpusSha256: undefined });
+  const result = await runSingleGuardedChatTurn(path, { preflightOnly: true });
+  expect(result.preflight).toMatchObject({
+    ready: false,
+    sourceCount: 1,
+    pdfCount: 0,
+    model: "anthropic/claude-sonnet-5.5",
+  });
+  expect(m.guard).not.toHaveBeenCalled();
+  expect(m.gateway).not.toHaveBeenCalled();
+  expect(m.turn).not.toHaveBeenCalled();
+});
+it("checks complete source corpus changes before model construction", async () => {
+  const path = setup();
+  m.sources.mockResolvedValue([{ sourceId: "one", revision: "changed", text: "Public fixture" }]);
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_source_corpus_mismatch");
+  expect(m.gateway).not.toHaveBeenCalled();
+  expect(m.turn).not.toHaveBeenCalled();
+});
+
+it.each([
+  "postgres://actor.abcdefghijklmnopqrst:synthetic@foreign.invalid/postgres",
+  "https://actor.abcdefghijklmnopqrst:synthetic@aws-0-us-east-1.pooler.supabase.com/postgres",
+])("rejects foreign or non-Postgres endpoints before loaders", async value => {
+  const path = setup();
+  vi.stubEnv("SUPABASE_DB_CONNECTION", value);
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_staging_target_mismatch");
+  expect(m.artist).not.toHaveBeenCalled();
+  expect(m.sources).not.toHaveBeenCalled();
+  expect(m.turn).not.toHaveBeenCalled();
+});
+it("rejects actual-handler corpus drift after preflight without substituting sources", async () => {
+  const path = setup();
+  m.turn.mockImplementation(async (_input, _clock, capture) => {
+    capture.claim();
+    capture.record("server-tool-event", {
+      type: "data-chat-corpus-pin",
+      data: { sha256: "f".repeat(64) },
+    });
+  });
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_handler_corpus_mismatch");
+  expect(m.turn).toHaveBeenCalledTimes(1);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("returns a safe failed receipt when a private write leaves an unreadable JSONL tail", async () => {
+  const path = setup();
+  m.turn.mockImplementation(async (_input, _clock, capture) => {
+    capture.claim();
+    capture.record("server-tool-event", {
+      type: "data-chat-corpus-pin",
+      data: {
+        sha256: getChatCorpusFingerprint([
+          { sourceId: "one", revision: "r", text: "Public fixture" },
+        ]),
+      },
+    });
+    writeFileSync(join(process.env.RUNNER_TEMP!, "chat-single-123", "trace.jsonl"), "{partial", {
+      flag: "a",
+    });
+    return {
+      answer: "Already delivered fixture",
+      sources: [],
+      firstTextMs: 1,
+      totalMs: 2,
+      evidenceCaptureComplete: true,
+    };
+  });
+  const result = (await runSingleGuardedChatTurn(path)) as any;
+  expect(result.error).toBe("single_trace_unreadable");
+  expect(result.diagnostic.traceReadable).toBe(false);
+  expect(result.diagnostic.records).toEqual([]);
+  expect(result.evidenceCaptureComplete).toBe(false);
+  expect(
+    readFileSync(join(process.env.RUNNER_TEMP!, "chat-single-123", "trace.jsonl"), "utf8"),
+  ).toContain("{partial");
+});
+it("accepts only the recognized pooled hostname and matching project correspondence", async () => {
+  const path = setup();
+  vi.stubEnv(
+    "SUPABASE_DB_CONNECTION",
+    "postgres://mnapi.abcdefghijklmnopqrst:synthetic@aws-0-us-east-1.pooler.supabase.com:6543/postgres",
+  );
+  const result = await runSingleGuardedChatTurn(path, { preflightOnly: true });
+  expect(result.preflight?.ready).toBe(true);
+  expect(m.turn).not.toHaveBeenCalled();
+});
+
+it("pins the entire eligible PDF catalog, including new discovery-only entries", async () => {
+  const path = setup({ pdf: pdfPlan });
+  m.pdf.mockResolvedValue([pdfRow]);
+  await runSingleGuardedChatTurn(path);
+  const validate = m.guard.mock.calls[0][0].validatePdfCatalog;
+  await expect(validate()).resolves.toBeUndefined();
+  m.pdf.mockResolvedValue([pdfRow, { ...pdfRow, id: "33333333-3333-4333-8333-333333333333" }]);
+  await expect(validate()).rejects.toThrow("single_pdf_catalog_changed");
+});
+
+it("can pin another supported provider of the SAME production model, never a different evaluator model", async () => {
+  const path = setup({ provider: "vertex" });
+  await runSingleGuardedChatTurn(path);
+  expect(m.gateway).toHaveBeenCalledWith("anthropic/claude-sonnet-5.5");
+  expect(JSON.parse(readFileSync(m.guard.mock.calls[0][0].manifestPath, "utf8"))).toMatchObject({
+    modelId: "anthropic/claude-sonnet-5.5",
+    provider: "vertex",
+  });
+});
+it("rejects a model substitution in the actual-flow manifest", async () => {
+  const path = setup({ modelId: "google/gemini-2.5-flash" });
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
+  expect(m.gateway).not.toHaveBeenCalled();
+});
+
+it.each([
+  "https://user:synthetic@abcdefghijklmnopqrst.supabase.co",
+  "https://abcdefghijklmnopqrst.supabase.co/foreign",
+])("rejects non-public-origin binding before loaders", async origin => {
+  const path = setup();
+  vi.stubEnv("SUPABASE_URL", origin);
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_staging_target_mismatch");
+  expect(m.artist).not.toHaveBeenCalled();
+  expect(m.turn).not.toHaveBeenCalled();
+});
+
+it.each(["hash", "pages", "bytes"])(
+  "rejects original PDF %s drift before model/claim/turn",
+  async kind => {
+    const path = setup({ pdf: pdfPlan });
+    m.pdf.mockResolvedValue([pdfRow]);
+    m.pdfRead.mockResolvedValue({
+      hash: kind === "hash" ? "f".repeat(64) : pdfPin.sha256,
+      pages: kind === "pages" ? 2 : 1,
+      bytes: Buffer.alloc(kind === "bytes" ? 101 : 100),
+    });
+    await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("single_pdf_original_mismatch");
+    expect(m.gateway).not.toHaveBeenCalled();
+    expect(m.turn).not.toHaveBeenCalled();
+  },
+);
+
+it("rejects a manifest containing database-origin URLs instead of static URL hashes", async () => {
+  const path = setup({
+    pdf: {
+      ...pdfPlan,
+      admission: { ...pdfPlan.admission, documents: [{ ...pdfPin, url: pdfRow.url }] },
+    },
+  });
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
+  expect(m.artist).not.toHaveBeenCalled();
+  expect(m.gateway).not.toHaveBeenCalled();
 });

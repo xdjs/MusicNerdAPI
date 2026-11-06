@@ -60,7 +60,10 @@ describe("putArtistBioHandler", () => {
       message: "Bio regenerated",
       bio: "New.",
     });
-    expect(mock.update).toHaveBeenCalledWith(id, { regenerate: true }, expect.anything());
+    expect(mock.update).toHaveBeenCalledWith(id, { regenerate: true }, expect.anything(), {
+      deadline: expect.any(Number),
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("maps a failed update to its status and code, 500 by default", async () => {
@@ -102,4 +105,20 @@ describe("putArtistBioHandler", () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ status: "error", error: "Error updating bio" });
   });
+});
+it("carries the original handler deadline through slow authorization", async () => {
+  vi.useFakeTimers();
+  const start = Date.now();
+  try {
+    mock.validate.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      return { userId: "u1" };
+    });
+    const pending = put({ regenerate: true });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await pending;
+    expect(mock.update.mock.calls[0][3].deadline).toBe(start + 45_000);
+  } finally {
+    vi.useRealTimers();
+  }
 });

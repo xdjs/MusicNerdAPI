@@ -130,17 +130,16 @@ describe("streamText", () => {
   });
 });
 
-it("forwards explicit stream limits and leaves omitted limits absent", async () => {
+it("forwards explicit request/output/stream retry limits and leaves omitted limits absent", async () => {
   sdkStreamText.mockReturnValue(streamOf([]));
-  await streamText({ prompt: "q" });
-  const normal = sdkStreamText.mock.calls[0][0];
-  expect(Object.hasOwn(normal, "maxRetries")).toBe(false);
-  expect(Object.hasOwn(normal, "maxOutputTokens")).toBe(false);
-  expect(Object.hasOwn(normal, "streamRetries")).toBe(false);
-  await streamText({ prompt: "q", maxRetries: 0, maxOutputTokens: 128, streamRetries: 0 });
-  expect(sdkStreamText.mock.calls[1][0]).toMatchObject({
+  await streamText({ prompt: "bounded", maxRetries: 0, maxOutputTokens: 1024, streamRetries: 0 });
+  expect(sdkStreamText.mock.calls[0][0]).toMatchObject({
     maxRetries: 0,
-    maxOutputTokens: 128,
+    maxOutputTokens: 1024,
     streamRetries: 0,
   });
+  await streamText({ prompt: "ordinary" });
+  const ordinary = sdkStreamText.mock.calls[1][0];
+  for (const name of ["maxRetries", "maxOutputTokens", "streamRetries"])
+    expect(Object.hasOwn(ordinary, name)).toBe(false);
 });

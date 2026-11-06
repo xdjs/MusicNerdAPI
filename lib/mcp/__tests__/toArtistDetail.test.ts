@@ -2,12 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 import { artistRow } from "@/lib/mcp/__tests__/artistRow";
 
-const { getArtistLinks, findApprovedClaim, getPublicArtistAbout } = vi.hoisted(() => ({
-  getArtistLinks: vi.fn(async (_a: unknown): Promise<unknown[]> => []),
-  findApprovedClaim: vi.fn(async (_db: unknown, _id: string): Promise<unknown> => undefined),
-  getPublicArtistAbout: vi.fn(async (_id: string): Promise<unknown> => null),
-}));
+const { getArtistLinks, findApprovedClaim, getPublicArtistAbout, getPublicSavedBio } = vi.hoisted(
+  () => ({
+    getPublicSavedBio: vi.fn(),
+    getArtistLinks: vi.fn(async (_a: unknown): Promise<unknown[]> => []),
+    findApprovedClaim: vi.fn(async (_db: unknown, _id: string): Promise<unknown> => undefined),
+    getPublicArtistAbout: vi.fn(async (_id: string): Promise<unknown> => null),
+  }),
+);
 vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/bio/getPublicSavedBio", () => ({ getPublicSavedBio }));
 vi.mock("@/lib/artists/getArtistLinks", () => ({ getArtistLinks }));
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim }));
 vi.mock("@/lib/bio/getPublicArtistAbout", () => ({ getPublicArtistAbout }));
@@ -28,6 +32,7 @@ const link = (siteName: string, artistUrl: string) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   findApprovedClaim.mockResolvedValue(undefined);
+  getPublicSavedBio.mockResolvedValue(null);
   getPublicArtistAbout.mockResolvedValue(null);
   getArtistLinks.mockResolvedValue([]);
 });
@@ -91,15 +96,16 @@ describe("toArtistDetail", () => {
 
   it("returns a claimed artist's real bio and never asks the directory", async () => {
     findApprovedClaim.mockResolvedValue({ id: "claim" });
+    getPublicSavedBio.mockResolvedValue("Artist biography here");
     const result = await toArtistDetail(artistRow({ bio: "Artist biography here" }));
     expect(result.bio).toBe("Artist biography here");
     expect(getPublicArtistAbout).not.toHaveBeenCalled();
   });
 
-  it("returns null for a claimed artist whose bio is the claim nudge, without asking the directory", async () => {
+  it("returns null when no saved or directory About is public", async () => {
     findApprovedClaim.mockResolvedValue({ id: "claim" });
     expect((await toArtistDetail(artistRow({ bio: ABOUT_EMPTY_STATE }))).bio).toBeNull();
-    expect(getPublicArtistAbout).not.toHaveBeenCalled();
+    expect(getPublicArtistAbout).toHaveBeenCalled();
   });
 
   it("returns the directory About's bio for an unclaimed artist, and null when there is none", async () => {

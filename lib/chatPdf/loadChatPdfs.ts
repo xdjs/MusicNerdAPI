@@ -13,8 +13,7 @@ export async function loadChatPdfs(
   exactTitle = false,
   mentionedIn?: string,
 ): Promise<ChatPdf[]> {
-  // Keep short non-Latin topics; punctuation is not query syntax. The public
-  // tool already caps queries at 300 characters; also bound direct loader calls.
+  // Bound direct calls too, while retaining short Unicode topic terms.
   const terms = [
     ...new Set(
       query
@@ -33,7 +32,7 @@ export async function loadChatPdfs(
         sql` + `,
       )
     : sql`cast(0 as integer)`;
-  // The extraction digest detects changes since discovery, not agreement with PDF bytes.
+  // This digest detects extraction changes since discovery, not agreement with original bytes.
   return db.execute<ChatPdf>(sql`
     select v.id, coalesce(v.title, v.file_name, 'PDF') as title, v.url, v.file_path as path,
       v.file_size as size, coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) || ':' || v.publication as revision,

@@ -1,7 +1,6 @@
 import { getReusableDirectoryDraft } from "@/lib/directoryPreparation/getReusableDirectoryDraft";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { ARTIST_DOC_MAX_CHARS } from "@/lib/lore/const";
-import { extractCitedIds } from "@/lib/lore/extractCitedIds";
 import { generateAboutFromDoc } from "@/lib/lore/generateAboutFromDoc";
 import { synthesizeFallbackAbout } from "@/lib/lore/synthesizeFallbackAbout";
 import { NARRATION, PUBLISH_RETRY_BUDGET_MS, TURN_MESSAGES } from "@/lib/onboarding/const";
@@ -45,13 +44,13 @@ export async function* handleAboutChoiceTurn(
   const prepared = await getReusableDirectoryDraft(artistId);
   if (prepared?.document === doc) {
     yield { kind: "chat", text: NARRATION.draftReady };
-    const citedIds = new Set([...extractCitedIds(doc), ...extractCitedIds(prepared.about)]);
     yield {
       kind: "draft",
       stage: "about",
       doc,
       about: prepared.about,
-      sources: prepared.sources.filter(s => citedIds.has(s.id)),
+      // Preserve every input revision; uncited evidence also influenced generation.
+      sources: prepared.sources,
       expectedBio,
     };
     return;
@@ -77,14 +76,13 @@ export async function* handleAboutChoiceTurn(
     about = await synthesizeFallbackAbout(artistId, artistName, doc, sources);
   }
   yield { kind: "progress", label: "Writing your About", done: true };
-  const citedIds = new Set([...extractCitedIds(doc), ...extractCitedIds(about)]);
   yield { kind: "chat", text: NARRATION.draftReady };
   yield {
     kind: "draft",
     stage: "about",
     doc,
     about,
-    sources: sources.filter(s => citedIds.has(s.id)),
+    sources,
     expectedBio,
   };
 }

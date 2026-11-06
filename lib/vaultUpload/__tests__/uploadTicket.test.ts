@@ -4,6 +4,7 @@ import { verifyUploadTicket } from "@/lib/vaultUpload/verifyUploadTicket";
 
 const ticket = {
   userId: "owner",
+  expectedClaimId: "claim-1",
   artistId: "11111111-1111-4111-8111-111111111111",
   path: "11111111-1111-4111-8111-111111111111/fixture.pdf",
   name: "fixture.pdf",
@@ -45,4 +46,24 @@ describe("signUploadTicket / verifyUploadTicket", () => {
     const expired = { ...ticket, expires: 0 };
     expect(verifyUploadTicket(signUploadTicket(expired), "owner").expires).toBe(0);
   });
+});
+
+it("rejects legacy tickets without a claim generation", () => {
+  const { expectedClaimId: _claim, ...legacy } = ticket;
+  expect(() => verifyUploadTicket(signUploadTicket(legacy as typeof ticket), "owner")).toThrow(
+    "Invalid upload ticket",
+  );
+});
+
+it("rejects contribution authority with a claim generation or mismatched source path", () => {
+  const sourceId = "00000000-0000-4000-8000-000000000009";
+  expect(() =>
+    verifyUploadTicket(signUploadTicket({ ...ticket, scope: "contribution", sourceId }), "owner"),
+  ).toThrow();
+  expect(() =>
+    verifyUploadTicket(
+      signUploadTicket({ ...ticket, expectedClaimId: null, scope: "contribution", sourceId }),
+      "owner",
+    ),
+  ).toThrow();
 });

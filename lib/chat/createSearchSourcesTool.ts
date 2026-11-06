@@ -23,6 +23,7 @@ export function createSearchSourcesTool(
   originals: ResearchOriginal[],
   artistName: string,
   assertCurrent?: (source: ResearchOriginal) => Promise<void>,
+  assertCurrentBatch?: (sources: ResearchOriginal[]) => Promise<void>,
 ) {
   return tool({
     description:
@@ -49,11 +50,11 @@ export function createSearchSourcesTool(
           ? selectResearchReferences(originals, request, artistName)
           : rankChatSourceOriginals(originals, request, artistName, MAX_SOURCES);
       const selected = candidates.slice(0, MAX_SOURCES);
-      await Promise.all(
-        selected.map(source =>
-          assertCurrent?.(originals.find(item => item.sourceId === source.sourceId)!),
-        ),
+      const selectedOriginals = selected.map(source =>
+        originals.find(item => item.sourceId === source.sourceId)!,
       );
+      if (assertCurrentBatch) await assertCurrentBatch(selectedOriginals);
+      else await Promise.all(selectedOriginals.map(source => assertCurrent?.(source)));
       const sources = selected.map(source => {
         const match = "match" in source ? source.match : undefined;
         const excerpt = match ? getDiscoveryPassage(source.text, match) : undefined;

@@ -109,3 +109,12 @@ describe("runLoreRefresh", () => {
     expect(m.settleLoreRefresh).not.toHaveBeenCalled();
   });
 });
+
+it("retries changed evidence through the existing bounded failure path without reporting rebuilt", async () => {
+  m.refreshArtistDoc.mockResolvedValueOnce("changed");
+  await expect(runLoreRefresh(job({ claimId: "c" }), plenty())).rejects.toThrow(
+    "Lore sources changed during rebuild",
+  );
+  expect(m.settleLoreRefresh).not.toHaveBeenCalled();
+  expect(m.saveJobProgress).not.toHaveBeenCalled();
+});

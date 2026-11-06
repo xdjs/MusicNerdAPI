@@ -1,3 +1,4 @@
+import { isTrustedLoreContributor } from "./isTrustedLoreContributor";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
@@ -8,7 +9,6 @@ import { queueLoreRefresh } from "@/lib/research/queueLoreRefresh";
 import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
 import { isSupabaseStorageConfigured } from "@/lib/storage/isSupabaseStorageConfigured";
-import { removeObjects } from "@/lib/storage/removeObjects";
 import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import {
@@ -36,7 +36,6 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
   const headers = getCorsHeaders();
   const error = (status: number, message: string) =>
     NextResponse.json({ status: "error", error: message }, { status, headers });
-  let unpublishedPath: string | undefined;
   try {
     const auth = await authenticateRequest(request);
     if (auth instanceof NextResponse) return auth;
@@ -46,6 +45,16 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
     const { file, artistId } = form;
 
     const expectedClaimId = await getLoreClaimGeneration(artistId);
+    if (expectedClaimId === null) {
+      if (!(await isTrustedLoreContributor(userId)))
+        return error(403, "Not authorized for this artist");
+      // A multipart retry has no durable client identity. Independent contributions
+      // use sign/complete, whose user-bound ticket is available before any bytes.
+      return error(
+        409,
+        "Use /api/vault/upload/sign and /complete for independent Lore contributions so retries preserve the same upload identity.",
+      );
+    }
     if (!(await canEditArtist(userId, artistId)))
       return error(403, "Not authorized for this artist");
 
@@ -123,7 +132,6 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
       return error(500, "Failed to upload file to storage");
     }
 
-    unpublishedPath = storagePath;
     const publicUrl = getPublicUrl(VAULT_BUCKET, storagePath);
 
     // Text for Lore: decoded for text formats, parsed for PDFs.
@@ -161,10 +169,9 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
         contentType: resolvedType,
         extractedText: extractedText ?? null,
       },
-      { userId, trigger: "upload" },
+      { userId, trigger: "upload", recordSubmissionTrust: true },
       { userId, expectedClaimId },
     );
-    unpublishedPath = undefined;
 
     let refreshWarning: string | undefined;
     try {
@@ -187,13 +194,8 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
       { status: 200, headers },
     );
   } catch (caught) {
-    if (caught instanceof OwnershipChangedError && unpublishedPath) {
-      try {
-        await removeObjects(VAULT_BUCKET, [unpublishedPath]);
-      } catch (cleanupError) {
-        console.error("[vault/upload] Rejected upload cleanup failed", cleanupError);
-      }
-    }
+    // Retain bytes: a failed/ambiguous write does not prove this path is
+    // unreferenced or safe to delete. Lifecycle reconciliation is deferred.
     console.error("[vault/upload] Error:", caught);
     if (caught instanceof OwnershipChangedError) return error(403, caught.message);
     return error(500, "Failed to upload file");

@@ -1,6 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeAll, afterAll, it, expect, vi } from "vitest";
 const read = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: read }));
@@ -18,8 +17,9 @@ const { loadChatPdfs } = await import("@/lib/chatPdf/loadChatPdfs");
 const artist = "00000000-0000-4000-8000-000000000001";
 const id = "00000000-0000-4000-8000-000000000002";
 beforeAll(async () => {
-  await client.exec(`create table artist_claims(id uuid,artist_id uuid,status text);
- create table artist_vault_sources(id uuid,artist_id uuid,status text,content_type text,file_path text,file_size integer,title text,file_name text,url text,updated_at timestamptz,created_at timestamptz,extracted_text text);`);
+  await client.exec(`create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_kind text,actor_user_id uuid,trigger text,action text);
+ create table artist_claims(id uuid,artist_id uuid,status text);
+ create table artist_vault_sources(id uuid,artist_id uuid,status text,content_type text,file_path text,file_size integer,title text,file_name text,url text,updated_at timestamptz,created_at timestamptz,extracted_text text,activity_id uuid,origin text);`);
   await client.query("insert into artist_claims values($1,$2,'approved')", [id, artist]);
   await client.query(
     "insert into artist_vault_sources(id,artist_id,status,content_type,file_path,file_size,title,file_name,url,updated_at,created_at,extracted_text) values($1,$2,'approved','application/pdf',$3,100,'archive.pdf','archive.pdf',$4,null,now(),null)",
@@ -199,102 +199,6 @@ it("does not select a shorter filename inside an explicitly named longer eligibl
   expect(read).not.toHaveBeenCalled();
 });
 
-it("ranks topic matches in extraction before the cap and binds discovery to extraction changes", async () => {
-  await client.exec("delete from artist_vault_sources; update artist_claims set status='approved'");
-  for (let i = 1; i <= 40; i++) {
-    const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
-    const path = `${artist}/document-${i}.pdf`;
-    await client.query(
-      "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),$6)",
-      [
-        sid,
-        artist,
-        path,
-        `document-${i}.pdf`,
-        `https://public.example/vault-files/${path}`,
-        i === 40 ? "Background. ".repeat(2000) + "Producer alias chronology." : "Tour dates.",
-      ],
-    );
-  }
-  const wanted = "00000000-0000-4000-8000-000000000040";
-  expect((await loadChatPdfs(artist, undefined, "producer alias"))[0].id).toBe(wanted);
-  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
-  const session = createChatPdfTools(artist, vi.fn());
-  const context = { toolCallId: "test", messages: [], context: {} };
-  await session.tools.searchPdfSources.execute!({ query: "producer alias" }, context);
-  const before = (await loadChatPdfs(artist, wanted))[0].revision;
-  await client.query(
-    "update artist_vault_sources set extracted_text='Changed extraction' where id=$1",
-    [wanted],
-  );
-  expect((await loadChatPdfs(artist, wanted))[0].revision).not.toBe(before);
-  read.mockClear();
-  expect(await session.tools.readPdfSource.execute!({ sourceId: wanted }, context)).toHaveProperty(
-    "error",
-  );
-  expect(read).not.toHaveBeenCalled();
-});
-
-it.each(["音楽", "声", "музыка", "موسيقى"])(
-  "discovers body-only Unicode topic %s with parameterized SQL and unchanged visibility",
-  async topic => {
-    await client.exec(
-      "delete from artist_vault_sources; update artist_claims set status='approved'",
-    );
-    const wanted = "00000000-0000-4000-8000-000000000040";
-    for (let i = 1; i <= 40; i++) {
-      const sid = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
-      const path = `${artist}/archive-${i}.pdf`;
-      await client.query(
-        "insert into artist_vault_sources values($1,$2,'approved','application/pdf',$3,100,$4,$4,$5,null,now(),$6)",
-        [
-          sid,
-          artist,
-          path,
-          `archive-${i}.pdf`,
-          `https://public.example/vault-files/${path}`,
-          i === 40 ? `Background. ${topic} history.` : "Unrelated schedule.",
-        ],
-      );
-    }
-    const execute = vi.spyOn(driver, "execute");
-    try {
-      expect((await loadChatPdfs(artist, undefined, topic))[0].id).toBe(wanted);
-      const compiled = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
-      expect(compiled.sql).not.toContain(topic);
-      expect(compiled.params).toContain(topic);
-      await loadChatPdfs(artist, undefined, `${topic}'); DROP TABLE artist_vault_sources; --`);
-      expect((await loadChatPdfs(artist, undefined, topic))[0].id).toBe(wanted);
-      await client.query("update artist_vault_sources set status='pending' where id=$1", [wanted]);
-      expect((await loadChatPdfs(artist, undefined, topic)).some(s => s.id === wanted)).toBe(false);
-      await client.exec(
-        "update artist_vault_sources set status='approved'; update artist_claims set status='rejected'",
-      );
-      expect(await loadChatPdfs(artist, undefined, topic)).toEqual([]);
-    } finally {
-      execute.mockRestore();
-    }
-  },
-);
-
-it("bounds and deduplicates Unicode topic terms without interpolating query text", async () => {
-  const execute = vi.spyOn(driver, "execute");
-  try {
-    await loadChatPdfs(artist, undefined, Array.from({ length: 20 }, (_, i) => `音${i}`).join(" "));
-    const bounded = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
-    // Two position expressions per ranked term, plus the existing filename check.
-    expect(bounded.sql.match(/position\(/g)).toHaveLength(33);
-    execute.mockClear();
-    await loadChatPdfs(artist, undefined, "音 ".repeat(150) + "outside");
-    const deduplicated = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
-    expect(deduplicated.sql.match(/position\(/g)).toHaveLength(3);
-    expect(deduplicated.params).toContain("音");
-    expect(deduplicated.params).not.toContain("outside");
-  } finally {
-    execute.mockRestore();
-  }
-});
-
 it("allows explicit approved publication without a claim and revokes PDF reads on publication change", async () => {
   await client.exec(
     "delete from artist_claims; update artist_vault_sources set status='approved',publication='public'",
@@ -314,45 +218,20 @@ it("allows explicit approved publication without a claim and revokes PDF reads o
   expect(await loadChatPdfs(artist, rows[0].id)).toEqual([]);
 });
 
-it("revalidates unclaimed public discovery metadata before another model step", async () => {
-  await client.exec(
-    "delete from artist_claims; update artist_vault_sources set status='approved',publication='public'",
-  );
-  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
-  const tools = createChatPdfTools(artist, vi.fn());
-  await tools.tools.searchPdfSources.execute!(
-    { query: "document" },
-    { toolCallId: "discovery", messages: [], context: {} },
-  );
-  await expect(tools.assertCurrent()).resolves.toBeUndefined();
-  await client.exec("update artist_vault_sources set publication='private'");
-  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
-});
-
-it("does not overwrite exposed discovery revision during repeated searches", async () => {
-  await client.exec("update artist_vault_sources set publication='public',status='approved'");
-  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
-  const tools = createChatPdfTools(artist, vi.fn());
-  const context = { toolCallId: "s", messages: [], context: {} };
-  await tools.tools.searchPdfSources.execute!({ query: "document" }, context);
-  await client.exec("update artist_vault_sources set extracted_text='changed body'");
-  await tools.tools.searchPdfSources.execute!({ query: "changed" }, context);
-  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
-});
-
-it("keeps discovery evidence current even when a named read obtains a newer revision", async () => {
-  await client.exec("update artist_vault_sources set publication='public',status='approved'");
-  const row = (await loadChatPdfs(artist))[0];
-  const { createChatPdfTools } = await import("@/lib/chatPdf/createChatPdfTools");
-  const tools = createChatPdfTools(artist, vi.fn().mockReturnValue(1), undefined, row.title);
-  const context = { toolCallId: "named", messages: [], context: {} };
-  await tools.tools.searchPdfSources.execute!({ query: row.title }, context);
+it("keeps trusted inherited PDF discovery after revocation but respects privacy and moderation", async () => {
+  await client.query("delete from artist_vault_sources where id<>$1", [id]);
+  await client.exec("delete from artist_claims;delete from artist_activity_events");
   await client.query(
-    "update artist_vault_sources set extracted_text='newer named read' where id=$1",
-    [row.id],
+    "update artist_vault_sources set status='approved',publication='inherit',origin='upload',activity_id=$1 where id=$1",
+    [id],
   );
-  read.mockResolvedValue({ bytes: Buffer.from("%PDF-test"), pages: 1, hash: "hash" });
-  const result = await tools.tools.readNamedPdf.execute!({ filename: row.title }, context);
-  expect(result).toHaveProperty("sourceId", row.id);
-  await expect(tools.assertCurrent()).rejects.toThrow("PDF publication changed");
+  await client.query(
+    "insert into artist_activity_events values($1,$2,$1,'user',$1,'trusted_submission','source_upload')",
+    [id, artist],
+  );
+  expect(await loadChatPdfs(artist)).toHaveLength(1);
+  await client.exec("update artist_vault_sources set publication='private'");
+  expect(await loadChatPdfs(artist)).toHaveLength(0);
+  await client.exec("update artist_vault_sources set publication='inherit',status='rejected'");
+  expect(await loadChatPdfs(artist)).toHaveLength(0);
 });

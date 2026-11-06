@@ -21,7 +21,8 @@ const DUTCHYYY = "6cb3d81a-3d02-4c57-a711-bb7902a9af1b";
 /**
  * The chat suite's dataset: staging fixture artists with approved sources whose stored text
  * (`artist_vault_sources.extracted_text`) answers each question, read and checked by hand on
- * 2026-10-27. Every id here is a STAGING id; production ids differ.
+ * 2026-10-27, with later reference corrections from retained-evidence review.
+ * Every id here is a STAGING id; production ids differ.
  */
 export const CHAT_CASES: ChatCase[] = [
   {
@@ -88,8 +89,9 @@ export const CHAT_CASES: ChatCase[] = [
     artistId: WILLIE_COLON,
     question: "What was the first album Willie Colón made with Rubén Blades?",
     answerable: true,
-    reference: "Metiendo Mano! (1977), before Siembra (Glide Magazine review of the reissue).",
-    note: "A collaboration question answered by one review.",
+    reference:
+      "Glide calls Metiendo Mano! (1977) the first Colón–Blades collaboration; Rolling Stone's 1975 section describes an earlier recording with Blades, Lavoe and Yomo Toro. Attribute both accounts without a forced unique winner or invented guest/full/billing categories. A distinction is permissible only if a read source explicitly supports it; the section date alone is not independent verification of an album release date.",
+    note: "Competing saved accounts: assesses useful coverage and supported distinctions, not recall of one review's answer.",
   },
   {
     key: "willie-colon-instrument",
@@ -108,7 +110,7 @@ export const CHAT_CASES: ChatCase[] = [
     question: "What other names has Dutchyyy released music under?",
     answerable: true,
     reference:
-      "Dutchmassive (MC alias, from 1998, with the group Equilibrium), Dutchy (producer alias, 2012–2019), Dutchyyy since 2019 (his uploaded discography timeline PDF).",
+      "Source-supported other names include Dutchmassive, Dutchy and The Chill Factor: the PDF explicitly identifies the latter as a source-attributed credited alias in its 2001 We're Here Now entry (p.2), full use span unknown. Role or current-name context is optional: Dutchmassive is the MC alias, Dutchy the producer alias, Dutchyyy the primary alias. Equilibrium and Walkmen are groups; The Hobbyshop Hero is a parenthetical credit, not a required established alias on this evidence. If dates are given, preserve the PDF's roles: Dutchmassive 1998–present, Dutchy 2012–2019, Dutchyyy 2019–present as primary alias, not first-ever use. Dated examples or credits alone do not establish complete use/overlap bounds. This is not an exhaustive historical alias list; accept additional names only when supported by read evidence. Dates and extra context are not required when the question only asks for names.",
     note: "An uploaded-file source rather than a web page.",
   },
   {

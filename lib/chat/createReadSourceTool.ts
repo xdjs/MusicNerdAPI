@@ -1,4 +1,5 @@
 import { tool } from "ai";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
 import type { CiteSource } from "@/lib/chat/createChatCitations";
@@ -13,6 +14,10 @@ const locatorSchema = z
     revision: z.string().min(1).max(300),
     start: z.number().int().nonnegative(),
     end: z.number().int().positive(),
+    sha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .strict();
 
@@ -32,7 +37,7 @@ export function createReadSourceTool(
 ) {
   return tool({
     description:
-      "Read a saved source found by searchSources. Pass its locator unchanged when present to include the matching passage and surrounding context. Without a locator this reads the source prefix. Cite it in the answer as [n].",
+      "Read a saved source found by searchSources. Pass its locator unchanged when present to include the matching passage and surrounding context. A hash-bound prior passage locator reopens only that verified window; it is not authorization. Without a locator this reads the source prefix. Cite it in the answer as [n].",
     inputSchema: z.object({
       sourceId: z.string().min(1).max(300),
       locator: locatorSchema.optional(),
@@ -56,6 +61,11 @@ export function createReadSourceTool(
           parsed.data.end <= parsed.data.start ||
           parsed.data.end > source.text.length ||
           parsed.data.end - parsed.data.start > MAX_SOURCE_CHARACTERS ||
+          (parsed.data.sha256 !== undefined &&
+            (parsed.data.end - parsed.data.start > 2400 ||
+              createHash("sha256")
+                .update(source.text.slice(parsed.data.start, parsed.data.end))
+                .digest("hex") !== parsed.data.sha256)) ||
           splitsPair(parsed.data.start) ||
           splitsPair(parsed.data.end)
         )
@@ -63,20 +73,27 @@ export function createReadSourceTool(
             error: "Invalid or stale source locator. Search this source again; no text was read.",
           };
         const { start, end } = parsed.data;
-        const preceding = Math.min(800, MAX_SOURCE_CHARACTERS - (end - start));
-        window = knowledgeWindow(
-          source.text,
-          Math.max(0, start - preceding),
-          MAX_SOURCE_CHARACTERS,
-        );
-        if (window.end < end) window = knowledgeWindow(source.text, start, MAX_SOURCE_CHARACTERS);
+        if (parsed.data.sha256 !== undefined) {
+          window = knowledgeWindow(source.text, start, end - start);
+        } else {
+          const preceding = Math.min(800, MAX_SOURCE_CHARACTERS - (end - start));
+          window = knowledgeWindow(
+            source.text,
+            Math.max(0, start - preceding),
+            MAX_SOURCE_CHARACTERS,
+          );
+          if (window.end < end) window = knowledgeWindow(source.text, start, MAX_SOURCE_CHARACTERS);
+        }
       }
+      window ??= knowledgeWindow(source.text, 0, MAX_SOURCE_CHARACTERS);
       const title = getSourceTitle(source.url);
       return {
         n: cite({ url: source.url, title }),
         title,
         url: source.url,
-        text: window?.text ?? source.text.slice(0, MAX_SOURCE_CHARACTERS),
+        text: window.text,
+        sourceId: source.sourceId,
+        sha256: createHash("sha256").update(window.text).digest("hex"),
         ...(window
           ? {
               revision: source.revision,

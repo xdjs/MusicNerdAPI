@@ -11,17 +11,17 @@ import { resolve } from "node:path";
 import { convertToModelMessages, gateway } from "ai";
 import { z } from "zod";
 import { MODEL_CHAT } from "@/lib/ai/const";
-import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
-import { loadResearchArtist } from "@/lib/questionResearch/loadResearchArtist";
-import { loadPublicResearchOriginals } from "@/lib/questionResearch/loadPublicResearchOriginals";
-import { getQuestionVisitorKey } from "@/lib/questionResearch/getQuestionVisitorKey";
-import { loadChatPdfs } from "@/lib/chatPdf/loadChatPdfs";
-import { chatStreamTurn } from "@/lib/evals/chatStreamTurn";
+import { createBoundedChatCapture } from "@/lib/evals/createBoundedChatCapture";
+import { getChatCorpusFingerprint } from "@/lib/chat/getChatCorpusFingerprint";
 import { pdfEvalSchema } from "@/lib/evals/pdfEvalTypes";
 import { createGuardedChatExecution } from "@/lib/evals/createGuardedChatExecution";
 
 /** One opt-in task in the existing Evals suite. No judge, source overrides or allowance bypass. */
-export async function runSingleGuardedChatTurn(manifestPath: string) {
+export async function runSingleGuardedChatTurn(
+  manifestPath: string,
+  options: { preflightOnly?: boolean } = {},
+) {
+  const preflightStarted = performance.now();
   const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
   const raw = readFileSync(manifestPath);
   if (
@@ -31,7 +31,16 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     throw new Error("single_manifest_mismatch");
   const manifest = z
     .object({
-      enabled: z.literal(true),
+      version: z.literal(2),
+      provider: z.enum(["anthropic", "vertex"]),
+      enabled: z.boolean(),
+      utcDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      attributedTextCharacters: z.literal(12000),
+      corpusSha256: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
       pdf: z
         .object({
           execution: z
@@ -39,9 +48,16 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
               maxCalls: z.literal(6),
               maxToolExecutions: z.literal(8),
               maxWebSearches: z.literal(1),
+              maxInputBytes: z.literal(262144),
+              maxTotalInputBytes: z.literal(1048576),
+              maxCaptureBytes: z.literal(4194304),
             })
             .strict(),
-          admission: pdfEvalSchema,
+          admission: pdfEvalSchema.refine(
+            p => p.documents.every(d => d.url === undefined),
+            "Publish URL hashes, not database origins",
+          ),
+          urlSha256: z.record(z.uuid(), z.string().regex(/^[a-f0-9]{64}$/)),
           reservationUsd: z.number().positive().max(100),
         })
         .strict()
@@ -56,11 +72,20 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     })
     .strict()
     .parse(JSON.parse(raw.toString()));
+  if (manifest.utcDate !== new Date().toISOString().slice(0, 10))
+    throw new Error("single_date_pin_mismatch");
+  if (!options.preflightOnly && !manifest.enabled) throw new Error("single_manifest_disabled");
+  if (!options.preflightOnly && !manifest.corpusSha256)
+    throw new Error("single_corpus_pin_missing");
   if (!Object.keys(manifest.files).length) throw new Error("single_missing_code_pins");
   for (const [path, expected] of Object.entries(manifest.files)) {
     if (
       path.startsWith("/") ||
       path.split("/").includes("..") ||
+      !/^(?:lib\/|app\/|evals\/|\.github\/workflows\/|package\.json$|pnpm-lock\.yaml$|tsconfig\.json$)/.test(
+        path,
+      ) ||
+      path.split("/").some(part => part.startsWith(".env")) ||
       hash(readFileSync(path)) !== expected
     )
       throw new Error("single_code_pin_mismatch");
@@ -92,19 +117,32 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
   const project = origin.hostname.split(".")[0];
   if (
     origin.protocol !== "https:" ||
+    !!origin.username ||
+    !!origin.password ||
+    !!origin.port ||
+    origin.pathname !== "/" ||
+    !!origin.search ||
+    !!origin.hash ||
+    !/^[a-z0-9]{20}$/.test(project) ||
     origin.hostname !== `${project}.supabase.co` ||
     hash(origin.origin) !== manifest.stagingOriginSha256 ||
+    !["postgres:", "postgresql:"].includes(connection.protocol) ||
     !(
       connection.hostname === `db.${project}.supabase.co` ||
-      decodeURIComponent(connection.username).endsWith(`.${project}`)
+      (/^[a-z0-9-]+\.pooler\.supabase\.com$/.test(connection.hostname) &&
+        decodeURIComponent(connection.username).endsWith(`.${project}`))
     )
   )
     throw new Error("single_staging_target_mismatch");
+  // Validate target/config before importing lazy DB boundaries; invalid URL
+  // inputs must never escape through dependency initialization errors.
+  const { loadResearchArtist } = await import("@/lib/questionResearch/loadResearchArtist");
+  const { loadPublicResearchOriginals } =
+    await import("@/lib/questionResearch/loadPublicResearchOriginals");
+  const { getQuestionVisitorKey } = await import("@/lib/questionResearch/getQuestionVisitorKey");
+  const { loadChatPdfs } = await import("@/lib/chatPdf/loadChatPdfs");
   const actor = await loadResearchArtist(manifest.artistId);
   if (actor.name !== manifest.artistName) throw new Error("single_artist_mismatch");
-  const instructions = buildArtistChatInstructions(actor.name);
-  if (hash(JSON.stringify(instructions)) !== manifest.instructionsSha256)
-    throw new Error("single_instructions_mismatch");
   await getQuestionVisitorKey(
     new Request("http://localhost/preflight", { headers: { "x-real-ip": "192.0.2.1" } }),
   );
@@ -121,7 +159,8 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
               source.id === pin.sourceId &&
               source.revision === pin.revision &&
               source.title === pin.filename &&
-              source.size === pin.bytes,
+              source.size === pin.bytes &&
+              hash(source.url) === manifest.pdf!.urlSha256[pin.sourceId],
           ),
       )
     )
@@ -129,7 +168,43 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
   } else if (!originals.length || pdfs.length) {
     throw new Error("single_corpus_scope_mismatch");
   }
+  if (manifest.pdf) {
+    const { readChatPdf } = await import("@/lib/chatPdf/readChatPdf");
+    // Read-only local validation of every eligible original before ANY paid call.
+    // Do not cache/substitute these bytes into the later autonomous tool reads.
+    for (const pin of manifest.pdf.admission.documents) {
+      const source = pdfs.find(source => source.id === pin.sourceId)!;
+      const file = await readChatPdf(source, AbortSignal.timeout(3000));
+      if (file.hash !== pin.sha256 || file.pages !== pin.pages || file.bytes.length !== pin.bytes)
+        throw new Error("single_pdf_original_mismatch");
+    }
+  }
+  const corpusSha256 = getChatCorpusFingerprint(originals);
+  const preflight = {
+    ready: !!manifest.corpusSha256 && corpusSha256 === manifest.corpusSha256,
+    corpusSha256,
+    sourceCount: originals.length,
+    pdfCount: pdfs.length,
+    model: MODEL_CHAT,
+    provider: manifest.provider,
+    utcDate: manifest.utcDate,
+    candidateSha: process.env.GITHUB_SHA!,
+    preflightMs: Math.round(performance.now() - preflightStarted),
+  };
+  // This branch performs only ordinary reads and visitor/config validation. No model,
+  // allowance reservation, operator claim, trace destination or experiment creation.
+  if (options.preflightOnly) return { preflight };
+  if (!preflight.ready) throw new Error("single_source_corpus_mismatch");
   const pdfSnapshot = new Map(pdfs.map(source => [source.id, { ...source }]));
+  const pdfAdmission = manifest.pdf
+    ? {
+        ...manifest.pdf.admission,
+        documents: manifest.pdf.admission.documents.map(document => ({
+          ...document,
+          url: pdfSnapshot.get(document.sourceId)!.url,
+        })),
+      }
+    : undefined;
   const directory = resolve(
     process.env.RUNNER_TEMP ?? ".",
     `chat-single-${process.env.GITHUB_RUN_ID}`,
@@ -142,14 +217,26 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     JSON.stringify({ sha: process.env.GITHUB_SHA, run: process.env.GITHUB_RUN_ID }),
   );
   closeSync(fd);
-  const records: { kind: string; value: unknown }[] = [];
-  let bytes = 0;
+  const tracePath = resolve(directory, "trace.jsonl");
+  const traceFd = openSync(tracePath, "wx", 0o600);
+  closeSync(traceFd);
+  const capture = createBoundedChatCapture({
+    maxBytes: manifest.pdf?.execution.maxCaptureBytes ?? 1000000,
+    write: line => {
+      appendFileSync(tracePath, line);
+    },
+  });
+  let actualCorpusValidated = false;
   const record = (kind: string, value: unknown) => {
-    const line = JSON.stringify({ kind, value }) + "\n";
-    if (bytes + Buffer.byteLength(line) > 1000000) throw new Error("single_event_ledger_limit");
-    appendFileSync(resolve(directory, "trace.jsonl"), line, { mode: 0o600 });
-    bytes += Buffer.byteLength(line);
-    records.push({ kind, value });
+    if (
+      kind === "server-tool-event" &&
+      (value as { type?: string })?.type === "data-chat-corpus-pin"
+    ) {
+      if ((value as { data?: { sha256?: string } }).data?.sha256 !== manifest.corpusSha256)
+        throw new Error("single_handler_corpus_mismatch");
+      actualCorpusValidated = true;
+    }
+    capture.record(kind, value);
   };
   record(
     "source-preflight",
@@ -165,13 +252,16 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
   const prompt = await convertToModelMessages([
     { role: "user", parts: [{ type: "text", text: manifest.question }] },
   ]);
+  if (hash(JSON.stringify(prompt)) !== manifest.promptSha256)
+    throw new Error("single_prompt_mismatch");
   const guardPath = resolve(directory, "guard.json");
   const guardRaw = JSON.stringify({
     version: 1,
-    ...(manifest.pdf ? { pdf: manifest.pdf.admission } : {}),
+    ...(pdfAdmission ? { pdf: pdfAdmission } : {}),
     runId: `single-${process.env.GITHUB_RUN_ID}`,
     modelId: MODEL_CHAT,
-    promptSha256: hash(JSON.stringify(prompt)),
+    promptSha256: manifest.promptSha256,
+    provider: manifest.provider,
     instructionsSha256: manifest.instructionsSha256,
     toolLimits: {
       searchSources: 6,
@@ -183,11 +273,11 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     },
     maxToolExecutions: manifest.pdf?.execution.maxToolExecutions ?? 12,
     maxCalls: manifest.pdf?.execution.maxCalls ?? 6,
-    maxInputBytes: 128000,
-    maxTotalInputBytes: 196608,
+    maxInputBytes: manifest.pdf?.execution.maxInputBytes ?? 128000,
+    maxTotalInputBytes: manifest.pdf?.execution.maxTotalInputBytes ?? 196608,
     maxOutputTokens: 1024,
     maxOutputCharacters: 8192,
-    maxCaptureBytes: 1000000,
+    maxCaptureBytes: manifest.pdf?.execution.maxCaptureBytes ?? 1000000,
   });
   writeFileSync(guardPath, guardRaw, { flag: "wx", mode: 0o600 });
   const execution = createGuardedChatExecution({
@@ -196,6 +286,13 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     model: gateway(MODEL_CHAT),
     ...(manifest.pdf
       ? {
+          validatePdfCatalog: async () => {
+            if (
+              getChatCorpusFingerprint(await loadChatPdfs(manifest.artistId)) !==
+              getChatCorpusFingerprint(pdfs)
+            )
+              throw new Error("single_pdf_catalog_changed");
+          },
           validatePdfSource: async (pin: (typeof manifest.pdf.admission.documents)[number]) => {
             const baseline = pdfSnapshot.get(pin.sourceId);
             const current = await loadChatPdfs(manifest.artistId, pin.sourceId);
@@ -215,6 +312,8 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
         }
       : {}),
     record: (kind, value) => {
+      if (kind === "model-input" && !actualCorpusValidated)
+        throw new Error("single_handler_corpus_observation_missing");
       if (
         kind === "model-input" &&
         hash(JSON.stringify((value as { prepared: { tools: unknown } }).prepared.tools)) !==
@@ -225,8 +324,13 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
     },
   });
   let admitted = false;
+  const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
   const turn = await chatStreamTurn(
-    { artistId: manifest.artistId, question: manifest.question },
+    {
+      artistId: manifest.artistId,
+      question: manifest.question,
+      attributedTextCharacters: manifest.attributedTextCharacters,
+    },
     undefined,
     {
       requestId: `single-${process.env.GITHUB_RUN_ID}`,
@@ -235,17 +339,36 @@ export async function runSingleGuardedChatTurn(manifestPath: string) {
         admitted = true;
       },
       record,
-      signal: AbortSignal.timeout(150000),
+      signal: AbortSignal.any([AbortSignal.timeout(150000), capture.signal]),
     },
     execution,
   );
+  let records: { kind: string; value: unknown }[] = [];
+  let traceReadable = true;
+  try {
+    records = readFileSync(tracePath, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(line => JSON.parse(line));
+  } catch {
+    // Preserve the private uncertain-write file unchanged. Never repair a prefix
+    // into complete evidence or lose the bounded safe failure receipt.
+    traceReadable = false;
+    turn.error = "single_trace_unreadable";
+    turn.evidenceCaptureComplete = false;
+    if (turn.capture) turn.capture.complete = false;
+  }
   // Returned only to the existing private Braintrust project, never public logs/artifacts.
   return {
     ...turn,
     firstTextMs: turn.answer.trim().length ? turn.firstTextMs : null,
     diagnostic: {
       records,
-      ledgerBytes: bytes,
+      traceReadable,
+      capture: capture.snapshot(),
+      preflight,
+      ledgerBytes: capture.snapshot().writtenBytes,
       sha: process.env.GITHUB_SHA,
       reservationUsd: manifest.pdf?.reservationUsd ?? 0.65,
       invoiceGuarantee: false,

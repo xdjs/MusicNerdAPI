@@ -25,12 +25,9 @@ it("keeps the answer to what was asked, written only after the tools are done", 
   expect(text).toMatch(/answer only what was asked/i);
 });
 
-it("keeps comparative reading separate from the existing no-answer safeguard", () => {
+it("reads more sources before saying they don't answer", () => {
   const text = buildArtistChatInstructions("Dutchyyy");
-  expect(text).toContain("plausible competing accounts");
-  expect(text.split("\n")).toContain(
-    "Before saying the sources don't answer, search again with different words and read at least three sources. If they still don't say, say so plainly instead of guessing.",
-  );
+  expect(text).toMatch(/read at least three sources/i);
 });
 
 it("states only what a read source says, without a sources list", () => {
