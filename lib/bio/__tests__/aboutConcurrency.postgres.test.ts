@@ -353,6 +353,89 @@ describe.skipIf(!socket)(
         admin?.end({ timeout: 1 }),
       ]);
     });
+    // Historical SQL contract from API main 0f315b5a persistArtistBio/saveBioVersions.
+    // This tests DB compatibility and the real new reader, not an entire old deployed binary.
+    async function legacyWrite(text: string) {
+      await client!.begin(async tx => {
+        await tx`select id from artists where id=${artist} for update`;
+        await tx`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},${text},false)`;
+        await tx`update artists set bio=${text} where id=${artist}`;
+      });
+    }
+    async function allowLegacy() {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await admin!`insert into mn_private.legacy_bio_publications values(${artist},${claim},encode(sha256(convert_to('Original','UTF8')),'hex'))`;
+    }
+    it("mixed-version: changed legacy write succeeds but consumes allowance and hides new public read", async () => {
+      await allowLegacy();
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      await legacyWrite("Legacy writer changed text");
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Legacy writer changed text" },
+      ]);
+      expect(await client!`select bio_text from artist_bio_versions`).toEqual([
+        { bio_text: "Legacy writer changed text" },
+      ]);
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(0);
+    });
+    it("mixed-version: an unchanged legacy write preserves the exact allowance", async () => {
+      await allowLegacy();
+      await legacyWrite("Original");
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(1);
+    });
+    it("mixed-version: old overwrite invalidates new evidence hash without deleting stored evidence", async () => {
+      await persistArtistBio(artist, "New evidenced About", publication);
+      expect(await getPublicSavedBio(artist)).toBe("New evidenced About");
+      const before = await client!`select provenance from mn_private.artist_bio_provenance`;
+      await legacyWrite("Late old result");
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select provenance from mn_private.artist_bio_provenance`).toEqual(
+        before,
+      );
+    });
+    it("mixed-version: source withdrawal hides new reader while historical claimed raw-read contract still sees bytes", async () => {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await persistArtistBio(artist, "New evidenced About", {
+        ...publication,
+        ownership: { userId: user, expectedClaimId: claim },
+      });
+      await client!`update artist_vault_sources set publication='private' where id=${sourceId}`;
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(
+        await client!`select a.bio from artists a where a.id=${artist} and exists(select 1 from artist_claims c where c.artist_id=a.id and c.status='approved')`,
+      ).toEqual([{ bio: "New evidenced About" }]);
+    });
+    it("mixed-version: additive source migration accepts old insert columns without inventing trust", async () => {
+      await client!`insert into artist_vault_sources(id,artist_id,origin,status,url,extracted_text) values('00000000-0000-4000-8000-000000000077',${artist},'submission','approved','https://example.org/legacy','Legacy extracted text')`;
+      expect(
+        await client!`select publication,activity_id from artist_vault_sources where id='00000000-0000-4000-8000-000000000077'`,
+      ).toEqual([{ publication: "inherit", activity_id: null }]);
+    });
+    it("mixed-version: snapshot lock delays an old write but cannot fence its later commit", async () => {
+      await allowLegacy();
+      const locked = deferred(),
+        release = deferred();
+      const blocker = competitor!.begin(async tx => {
+        await tx`lock table artists,artist_claims,artist_bio_versions,artist_vault_sources in share row exclusive mode`;
+        locked.resolve();
+        await release.promise;
+      });
+      await locked.promise;
+      const writing = legacyWrite("Late old result after cutover");
+      try {
+        await waitForBlockedWriter();
+      } finally {
+        release.resolve();
+      }
+      await blocker;
+      await writing;
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Late old result after cutover" },
+      ]);
+    });
     it("validates actual Lore evidence with restricted event privileges", async () => {
       await admin!.unsafe("revoke update,delete on artist_activity_events from mnweb");
       try {
