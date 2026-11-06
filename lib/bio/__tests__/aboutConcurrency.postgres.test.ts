@@ -505,7 +505,7 @@ describe.skipIf(!socket)(
         release = deferred();
       const old = capture(
         competitor!.begin(async tx => {
-          await tx`select 1`;
+          await tx`select id from artists where id=${artist} for update`;
           begun.resolve();
           await release.promise;
           await tx`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},'Late history',false)`;
