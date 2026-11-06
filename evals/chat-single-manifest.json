@@ -4,6 +4,7 @@
   "provider": "anthropic",
   "utcDate": "2026-11-06",
   "attributedTextCharacters": 12000,
+  "corpusSha256": "93c397c2798cc43040b2a42b7465c3f9153f25a6f43d60a3a6c963ff5bc9f656",
   "artistId": "6cb3d81a-3d02-4c57-a711-bb7902a9af1b",
   "artistName": "Dutchyyy",
   "question": "Which years did Dutchyyy use each artist alias, and which were used at the same time?",
