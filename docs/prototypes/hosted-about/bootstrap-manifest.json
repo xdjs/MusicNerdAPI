@@ -24,7 +24,7 @@
     },
     {
       "file": "0063_legacy_bio_publications.sql",
-      "sha256": "3a8ba693b10d4a45017f19ffd94643d885d547f1eeac7ee3e65e33f1d5bc88eb"
+      "sha256": "a062f93231b7416ba8c8eb06d4d7f4a243cd1f48c5831ce86270e065d4b1fe15"
     },
     {
       "file": "0064_lore_activity_lock.sql",

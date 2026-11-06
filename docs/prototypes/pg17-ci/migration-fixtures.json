@@ -10,25 +10,25 @@
   {
     "file": "0061_about_evidence_provenance.sql",
     "fixture": "fixtures/0061_about_evidence_provenance.sql",
-    "sha256": "f6ea31e0d59b5aecd5fd4ee5d95e1bceebe81e679b9d964e1b8e418705a8fe19",
+    "sha256": "fcae4026b73b37aa61c7613c38c71d57092a2b83a191a88c1e94e5a73d2bc582",
     "sourceRepository": "xdjs/MusicNerdWeb",
-    "sourceCommit": "f0ae763e4b1711bcdcdca0aaa2fdf0877a9085c3",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
     "sourcePath": "drizzle/0061_about_evidence_provenance.sql"
   },
   {
     "file": "0062_public_url_receipts.sql",
     "fixture": "../guarded-about/fixtures/0062_public_url_receipts.sql",
-    "sha256": "e664ce6315d1689da025bedce5f1b0f17bcc1f97e7067c303eacd5a43a374288",
+    "sha256": "d93d34e56aed271bf1fc83f1616195a0964ebecb0530a8ed566d7c6189a2752c",
     "sourceRepository": "xdjs/MusicNerdWeb",
-    "sourceCommit": "f0ae763e4b1711bcdcdca0aaa2fdf0877a9085c3",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
     "sourcePath": "drizzle/0062_public_url_receipts.sql"
   },
   {
     "file": "0063_legacy_bio_publications.sql",
     "fixture": "../guarded-about/fixtures/0063_legacy_bio_publications.sql",
-    "sha256": "3a8ba693b10d4a45017f19ffd94643d885d547f1eeac7ee3e65e33f1d5bc88eb",
+    "sha256": "a062f93231b7416ba8c8eb06d4d7f4a243cd1f48c5831ce86270e065d4b1fe15",
     "sourceRepository": "xdjs/MusicNerdWeb",
-    "sourceCommit": "f0ae763e4b1711bcdcdca0aaa2fdf0877a9085c3",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
     "sourcePath": "drizzle/0063_legacy_bio_publications.sql"
   },
   {

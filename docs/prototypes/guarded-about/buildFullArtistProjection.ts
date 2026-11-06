@@ -4,7 +4,15 @@ import manifest from "./webArtistColumns.json";
 export function buildFullArtistProjection(
   baseSql: string,
   roles: { reader: string | null; mapEditor: string; publicReaders: boolean },
+  targetColumns: { name: string; type: string }[] = manifest.columns,
 ): string {
+  const expectedTypes = new Map(manifest.columns.map(c => [c.name, c.type]));
+  if (
+    targetColumns.length !== manifest.columns.length ||
+    new Set(targetColumns.map(c => c.name)).size !== manifest.columns.length ||
+    targetColumns.some(c => expectedTypes.get(c.name) !== c.type)
+  )
+    throw new Error("Reviewed column permutation required");
   const identifier = (name: string) => {
     if (
       !/^[a-z_][a-z0-9_]*$/.test(name) ||
@@ -29,12 +37,12 @@ export function buildFullArtistProjection(
     editor = identifier(roles.mapEditor);
   if (reader === editor) throw new Error("Distinct audited roles required");
   const clients = [reader, editor].filter(Boolean).join(",");
-  const expected = JSON.stringify(manifest.columns).replaceAll("'", "''");
+  const expected = JSON.stringify(targetColumns).replaceAll("'", "''");
   const shapeCheck = `IF (SELECT jsonb_agg(jsonb_build_object('name',attname,'type',format_type(atttypid,atttypmod)) ORDER BY attnum) FROM pg_attribute WHERE attrelid='public.artists'::regclass AND attnum>0 AND NOT attisdropped) IS DISTINCT FROM '${expected}'::jsonb THEN RAISE EXCEPTION 'Pinned artist column contract changed'; END IF;`;
   const original =
     "CREATE VIEW mn_public.artists WITH(security_barrier=true) AS\n SELECT a.id,a.name,mn_projection.public_bio(a.id) AS bio FROM public.artists a;";
   if (!baseSql.includes(original)) throw new Error("Projection template changed; review required");
-  const columns = manifest.columns
+  const columns = targetColumns
     .map(c => (c.name === "bio" ? 'mn_projection.public_bio(a.id) AS "bio"' : `a."${c.name}"`))
     .join(",");
   const replacement = `CREATE FUNCTION mn_projection.artist_shape_current() RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN ${shapeCheck} RETURN true; END $$;
