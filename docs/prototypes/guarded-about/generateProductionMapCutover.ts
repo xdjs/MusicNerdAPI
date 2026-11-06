@@ -6,7 +6,6 @@ const read = (name: string) => readFileSync(directory + name, "utf8");
 writeFileSync(
   directory + "productionMapCutover.sql",
   buildProductionMapCutover(
-    read("projection.sql"),
     read("productionMapOperatorPreflight.sql"),
     read("productionMapPostflight.sql"),
   ),

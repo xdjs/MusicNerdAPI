@@ -56,11 +56,8 @@ DO $$ BEGIN
  AND (pg_has_role(r.oid,'postgres','MEMBER') OR pg_has_role(r.oid,'supabase_admin','MEMBER') OR pg_has_role(r.oid,'pg_read_all_data','MEMBER')
  OR EXISTS(SELECT 1 FROM pg_roles target WHERE target.rolname IN ('cli_login_postgres','supabase_etl_admin','supabase_read_only_user') AND pg_has_role(r.oid,target.oid,'MEMBER'))))
  THEN RAISE EXCEPTION 'Unexpected operator membership path'; END IF;
- IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='webmapdata_editor' AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls AND NOT rolcreaterole AND NOT rolcreatedb AND NOT rolreplication)
+ -- A retired role may be absent or NOLOGIN. It must not be an operator or shared role.
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='webmapdata_editor' AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication))
  OR EXISTS(SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member OR r.oid=m.roleid WHERE r.rolname='webmapdata_editor')
- OR has_table_privilege('webmapdata_editor','public.artists','INSERT')
- OR has_table_privilege('webmapdata_editor','public.artists','DELETE')
- OR NOT has_column_privilege('webmapdata_editor','public.artists','webmapdata','UPDATE')
- OR EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.artists'::regclass AND attnum>0 AND NOT attisdropped AND attname<>'webmapdata' AND has_column_privilege('webmapdata_editor','public.artists',attname,'UPDATE'))
- THEN RAISE EXCEPTION 'Production map write contract drift'; END IF;
+ THEN RAISE EXCEPTION 'Retired reader identity or membership drift'; END IF;
 END $$;

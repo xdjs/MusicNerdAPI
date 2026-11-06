@@ -7,7 +7,6 @@ import { vaultSourceRevision } from "../../../lib/lore/vaultSourceRevision";
 import manifest from "./productionArtistColumns.json";
 import { buildProductionMapCutover } from "./buildProductionMapCutover";
 
-const migration = readFileSync(new URL("./projection.sql", import.meta.url), "utf8");
 const socket = process.env.MN_1655_TARGET_SOCKET;
 const native = socket ? it : it.skip;
 if (socket && !/^\/tmp\/mn1655-map-native-[A-Za-z0-9]+\/socket$/.test(socket))
@@ -164,155 +163,146 @@ afterEach(async () => {
 });
 const stage = () =>
   buildProductionMapCutover(
-    migration,
     readFileSync(new URL("./productionMapOperatorPreflight.sql", import.meta.url), "utf8"),
     readFileSync(new URL("./productionMapPostflight.sql", import.meta.url), "utf8"),
   );
-async function asMap(query: string, params: unknown[] = []) {
-  await pg.exec("set role webmapdata_editor");
+async function asRole(
+  role: "mnweb" | "webmapdata_editor" | "anon" | "authenticated",
+  query: string,
+) {
+  await pg.exec(`set role ${role}`);
   try {
-    return await pg.query(query, params);
+    return await pg.query(query);
   } finally {
-    await pg.exec("set role fixture_admin");
+    await pg.exec("set role fixture_admin").catch(error => {
+      if (error.code !== "25P02") throw error;
+    });
   }
 }
+async function commitStage() {
+  await pg.exec("begin;set local role postgres");
+  await pg.exec(stage());
+  await pg.exec("commit;set role fixture_admin");
+}
+async function absentProjection() {
+  expect(
+    (
+      await pg.query(
+        "select nspname from pg_namespace where nspname in ('mn_public','mn_projection')",
+      )
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (await pg.query("select rolname from pg_roles where rolname='mn_projection_reader'")).rows,
+  ).toEqual([]);
+}
+native("requires the enclosing migration and legacy transaction", async () => {
+  await pg.exec("set role postgres");
+  await expect(pg.exec(stage())).rejects.toMatchObject({ code: "25P01" });
+  await pg.exec("set role fixture_admin");
+  expect((await asRole("webmapdata_editor", "select bio from artists")).rows).toEqual([
+    { bio: "Public biography" },
+  ]);
+});
 native(
-  "preserves production order, search masking and existing name/id writes in the outer transaction",
+  "revokes raw reads as nonsuperuser without installing objects or changing saved evidence",
   async () => {
-    await pg.exec("begin;set local role postgres");
-    await pg.exec(stage());
-    expect(
-      (
-        await asMap("select id,name,bio from mn_public.artists where lower(name)=lower($1)", [
-          "Synthetic artist",
-        ])
-      ).rows,
-    ).toEqual([{ id: artist, name: "Synthetic artist", bio: null }]);
+    const before = (await pg.query("select to_jsonb(a) as artist from artists a")).rows;
+    const evidence = (await pg.query("select * from mn_private.artist_bio_provenance")).rows;
+    await commitStage();
+    await absentProjection();
+    expect((await asRole("mnweb", "select to_jsonb(a) as artist from artists a")).rows).toEqual(
+      before,
+    );
+    expect((await pg.query("select * from mn_private.artist_bio_provenance")).rows).toEqual(
+      evidence,
+    );
     expect(
       (
         await pg.query(
-          "select attname from pg_attribute where attrelid='mn_public.artists'::regclass and attnum>0 and not attisdropped order by attnum",
-        )
-      ).rows.map(r => r.attname),
-    ).toEqual(manifest.columns.map(c => c.name));
-    expect(
-      (
-        await asMap(
-          "update public.artists set webmapdata='{}' where lower(name)=lower($1) returning id",
-          ["Synthetic artist"],
+          "select has_column_privilege('webmapdata_editor','artists','webmapdata','UPDATE') as allowed",
         )
       ).rows,
-    ).toEqual([{ id: artist }]);
-    await pg.exec("rollback");
-    expect((await pg.query("select to_regclass('mn_public.artists') as relation")).rows).toEqual([
-      { relation: null },
-    ]);
-    expect((await asMap("select bio from public.artists")).rows).toEqual([
-      { bio: "Public biography" },
-    ]);
+    ).toEqual([{ allowed: true }]);
+    for (const role of ["webmapdata_editor", "anon", "authenticated"] as const) {
+      for (const query of [
+        "select bio from artists",
+        "select * from artists",
+        "select id,name from artists",
+        "select * from mn_private.public_url_receipts",
+      ])
+        await expect(asRole(role, query)).rejects.toMatchObject({ code: "42501" });
+    }
   },
 );
+native("outer rollback restores prior ACLs and leaves artist text intact", async () => {
+  const before = (await pg.query("select relacl::text from pg_class where oid='artists'::regclass"))
+    .rows;
+  await pg.exec("begin;set local role postgres");
+  await pg.exec(stage());
+  await pg.exec("rollback;set role fixture_admin");
+  expect(
+    (await pg.query("select relacl::text from pg_class where oid='artists'::regclass")).rows,
+  ).toEqual(before);
+  expect((await asRole("webmapdata_editor", "select bio from artists")).rows).toEqual([
+    { bio: "Public biography" },
+  ]);
+  await absentProjection();
+});
 native.each([
   "create role unknown_reader login;grant select on artists to unknown_reader",
+  "create role unknown_reader nologin;grant select(bio) on artists to unknown_reader",
+  "create role unknown_reader nologin;grant select(bio) on artists to unknown_reader;create role unknown_operator login noinherit;grant unknown_reader to unknown_operator with inherit false",
   "create role unknown_operator login noinherit;grant supabase_read_only_user to unknown_operator with inherit false",
   "alter role cli_login_postgres inherit",
-  "grant update(node_pfp) on artists to webmapdata_editor",
+  "create role unknown_reader login;grant webmapdata_editor to unknown_reader",
   "grant mnweb to supabase_read_only_user",
-  "create role unknown_reader login;set role postgres;alter default privileges grant select on tables to unknown_reader;alter default privileges grant usage on schemas to unknown_reader;set role fixture_admin",
-  "create role unknown_reader login;set role postgres;alter default privileges grant execute on functions to unknown_reader;set role fixture_admin",
-  "create role unknown_reader login;set role postgres;alter default privileges grant select on tables to webmapdata_editor with grant option;set role fixture_admin",
-])("refuses drift atomically without changing existing access: %s", async change => {
+])("rejects unexpected authority and rolls back retirement: %s", async change => {
   await pg.exec(change);
   await pg.exec("begin;set local role postgres");
   await expect(pg.exec(stage())).rejects.toThrow();
-  await pg.exec("rollback");
-  expect((await asMap("select bio from artists")).rows).toEqual([{ bio: "Public biography" }]);
-  expect((await pg.query("select to_regclass('mn_public.artists') as relation")).rows).toEqual([
-    { relation: null },
-  ]);
-});
-native(
-  "denies raw biography/private receipts and broad writes after committed cutover",
-  async () => {
-    await pg.exec("begin;set local role postgres");
-    await pg.exec(stage());
-    await pg.exec("commit");
-    for (const sql of [
-      "select bio from artists",
-      "select * from mn_private.public_url_receipts",
-      "update artists set node_pfp='{}'",
-      "insert into artists(name) values('forbidden')",
-      "select * from mn_public.artists",
-    ]) {
-      if (sql.includes("mn_public")) {
-        await pg.exec("set role anon");
-        await expect(pg.query(sql)).rejects.toMatchObject({ code: "42501" });
-        await pg.exec("set role fixture_admin");
-      } else await expect(asMap(sql)).rejects.toMatchObject({ code: "42501" });
-    }
-    const rollback = readFileSync(new URL("./rollback-public-bio.sql", import.meta.url), "utf8");
-    await pg.exec(rollback);
-    expect((await asMap("select bio from mn_public.artists")).rows).toEqual([{ bio: null }]);
-  },
-);
-native(
-  "executes as the non-superuser production owner rather than relying on fixture superuser",
-  async () => {
-    await pg.exec(`alter database target_fixture owner to postgres;alter schema mn_private owner to postgres;
-  do $$ declare t record; begin for t in select schemaname,tablename from pg_tables where schemaname in ('public','mn_private') loop execute format('alter table %I.%I owner to postgres',t.schemaname,t.tablename);end loop;end $$;
-  set role postgres;begin;`);
-    await pg.exec(stage());
-    await pg.exec("commit;set role fixture_admin");
-    expect((await asMap("select id from mn_public.artists")).rows).toEqual([{ id: artist }]);
-    expect(
-      (
-        await pg.query(
-          "select pg_has_role('postgres','mn_projection_reader','SET') as can_set,pg_has_role('postgres','mn_projection_reader','USAGE') as inherited",
-        )
-      ).rows,
-    ).toEqual([{ can_set: false, inherited: false }]);
-  },
-);
-
-native(
-  "serves evidenced bio then hides it on source withdrawal without changing stored text",
-  async () => {
-    await pg.query(
-      "insert into mn_private.public_url_receipts values(sha256(convert_to($1,'UTF8')),$1,1)",
-      [source.url],
-    );
-    await pg.exec("begin;set local role postgres");
-    await pg.exec(stage());
-    await pg.exec("commit;set role fixture_admin");
-    expect((await asMap("select bio from mn_public.artists")).rows).toEqual([
-      { bio: "Public biography" },
-    ]);
-    await pg.exec("update artist_vault_sources set publication='private'");
-    expect((await asMap("select bio from mn_public.artists")).rows).toEqual([{ bio: null }]);
-    expect((await pg.query("select bio from artists")).rows).toEqual([{ bio: "Public biography" }]);
-  },
-);
-native("rejects unexpected schema USAGE independently of view privileges", async () => {
-  await pg.exec("create role unknown_reader login;begin;set local role postgres");
-  const sql = buildProductionMapCutover(
-    migration,
-    readFileSync(new URL("./productionMapOperatorPreflight.sql", import.meta.url), "utf8"),
-    "GRANT USAGE ON SCHEMA mn_public TO unknown_reader;\n" +
-      readFileSync(new URL("./productionMapPostflight.sql", import.meta.url), "utf8"),
-  );
-  await expect(pg.exec(sql)).rejects.toThrow("Unexpected projection schema access");
   await pg.exec("rollback;set role fixture_admin");
-  expect((await asMap("select bio from public.artists")).rows).toEqual([
+  expect((await asRole("webmapdata_editor", "select bio from artists")).rows).toEqual([
     { bio: "Public biography" },
   ]);
+  await absentProjection();
 });
-native("rejects unexpected default view SELECT independently of schema privileges", async () => {
+native.each([
+  "revoke all on artists from webmapdata_editor;drop policy map_update on artists;drop policy map_select on artists;drop role webmapdata_editor",
+  "revoke update(webmapdata) on artists from webmapdata_editor;alter role webmapdata_editor nologin",
+  "grant select(bio) on artists to webmapdata_editor;alter role webmapdata_editor nologin",
+  "grant select(bio) on artists to public,anon,authenticated",
+])("retires direct reads without requiring the obsolete role: %s", async change => {
+  await pg.exec(change);
+  await commitStage();
+  await absentProjection();
+  expect((await asRole("mnweb", "select bio from artists")).rows).toEqual([
+    { bio: "Public biography" },
+  ]);
+  expect(
+    (
+      await pg.query(
+        "select rolname from pg_roles where rolname in ('webmapdata_editor','anon','authenticated') and has_any_column_privilege(oid,'artists','SELECT')",
+      )
+    ).rows,
+  ).toEqual([]);
+});
+native("does not consume unrelated default grants because it creates no objects", async () => {
   await pg.exec(
-    "create role unknown_reader login;set role postgres;alter default privileges grant select on tables to unknown_reader;set role fixture_admin;begin;set local role postgres",
+    "create role unknown_reader login;set role postgres;alter default privileges grant select on tables to unknown_reader;alter default privileges grant usage on schemas to unknown_reader;alter default privileges grant execute on functions to unknown_reader;set role fixture_admin",
   );
-  await expect(pg.exec(stage())).rejects.toThrow("Unexpected projection view access");
-  await pg.exec("rollback;set role fixture_admin");
-  expect((await asMap("select bio from public.artists")).rows).toEqual([
-    { bio: "Public biography" },
-  ]);
+  const before = (
+    await pg.query(
+      "select defaclrole,defaclnamespace,defaclobjtype,defaclacl::text from pg_default_acl order by oid",
+    )
+  ).rows;
+  await commitStage();
+  await absentProjection();
+  expect(
+    (
+      await pg.query(
+        "select defaclrole,defaclnamespace,defaclobjtype,defaclacl::text from pg_default_acl order by oid",
+      )
+    ).rows,
+  ).toEqual(before);
 });
