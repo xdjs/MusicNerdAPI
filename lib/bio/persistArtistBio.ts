@@ -1,5 +1,6 @@
 import { assertSetupDocumentCurrent } from "@/lib/onboarding/assertSetupDocumentCurrent";
 import { readBioProvenance } from "@/lib/bio/readBioProvenance";
+import { markAboutWriter } from "@/lib/bio/markAboutWriter";
 import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
 import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
 import { assertLoreSourcesCurrent } from "@/lib/lore/assertLoreSourcesCurrent";
@@ -60,6 +61,7 @@ export async function persistArtistBio(
   },
 ): Promise<string | null> {
   return db.transaction(async tx => {
+    await markAboutWriter(tx);
     if (options.aboutLease) await limitAboutTransaction(tx);
     await lockArtistRow(tx, artistId);
     if (!options?.ownership) throw new OwnershipChangedError();

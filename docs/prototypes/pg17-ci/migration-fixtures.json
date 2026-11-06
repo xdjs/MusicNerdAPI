@@ -38,5 +38,13 @@
     "sourceRepository": "xdjs/MusicNerdWeb",
     "sourceCommit": "2957b9bec0a5c730d39bfff09a4f76ec18d4f96e",
     "sourcePath": "drizzle/0064_lore_activity_lock.sql"
+  },
+  {
+    "file": "0065_about_writer_fence.sql",
+    "fixture": "fixtures/0065_about_writer_fence.sql",
+    "sha256": "3ffb9c95069b0680bc070e646ea41aca3dbc1c0fc9992515f6fc29b8a25d4a96",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "774ad5af21b75d50d8d12c452083250fcf033753",
+    "sourcePath": "drizzle/0065_about_writer_fence.sql"
   }
 ]

@@ -52,3 +52,13 @@ Precommit rollback restores transaction schema/ACL/data state. Postcommit retain
 ## Exact remaining decisions and evidence
 
 Approve only the defined production promotion control, bounded mutation/worker pause and narrow old-reader handling once concrete platform predicates and active-run inventory are verified. No new infrastructure or database login is needed. The least disruptive implementation is not yet proven executable solely by this local rehearsal: live durable-run drain state and deployment-specific predicates require read-only checks at release time. Runtime head changes from #1424 require rechecking this inventory, not silently composing branches.
+
+## Local writer-fence integration (not published)
+
+The subsequent paired candidate adds Web migration 0065 and transaction-local markers to API publication/reset and Web save/pin/revocation-clear. It rejects changed biography UPDATEs from old deployments before legacy-allowance consumption. This supersedes the need for complete historical workflow-drain proof for that specific late-overwrite failure. It does not establish that old workflows stopped.
+
+For this candidate, include 0065 in the bounded cutover transaction after 0060–0064 and before reopening compatible writes. Preserve the exact-16 preflight before 0060. New markers are harmless before 0065; after 0065, unmarked changed writes fail with SQLSTATE55000 and roll back their transaction. No additional grants or credentials are required. An incompatible transaction already holding a table write lock can prevent trigger installation; bounded lock timeout must abort the whole cutover and require a fresh preflight, never silently skip the fence.
+
+Keep the production mutation pause through paired promotion to protect source, standalone history/pin, claim/revocation and INSERT paths that this narrow trigger does not cover. Same-text old publication can still change Lore/history/steps. Current receipt/source validation remains fail-closed, but that is not prevention of every old mutation. Old raw public readers still need switching or targeted retirement. Do not claim this trigger protects their reads or avoids all provider retries. Do not add broad permanent firewall restrictions to compensate silently.
+
+Postcommit rollback must use both marked, privacy-compatible applications and retain 0065. Removing 0065 reopens late-write risk; downgrading to unmarked apps instead makes changed biography writes fail. No production execution or publication is authorized by this local integration.

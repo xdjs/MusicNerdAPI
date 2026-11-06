@@ -1,4 +1,5 @@
 import { lockArtistRow } from "@/lib/db/lockArtistRow";
+import { markAboutWriter } from "@/lib/bio/markAboutWriter";
 import { readBioProvenance } from "@/lib/bio/readBioProvenance";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
@@ -35,6 +36,7 @@ const DISCOVERABLE_LINK_COLUMNS = [
  */
 export async function resetClaimBuild(artistId: string) {
   return db.transaction(async tx => {
+    await markAboutWriter(tx);
     // Capture the text and its private lineage from one generation, before any deletion.
     await lockArtistRow(tx, artistId);
     // 1. Steps
