@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { getArtistKnowledgeHandler } from "@/lib/knowledge/getArtistKnowledgeHandler";
+import { deleteVaultSourceHandler } from "@/lib/vaultSources/deleteVaultSourceHandler";
+import { patchVaultSourceHandler } from "@/lib/vaultSources/patchVaultSourceHandler";
 
 export const dynamic = "force-dynamic";
 
@@ -28,4 +30,38 @@ export async function GET(
 ) {
   const { id, sourceId } = await context.params;
   return getArtistKnowledgeHandler(request, id, "read", sourceId);
+}
+
+/**
+ * Approve or reject one of the artist's sources, or change its type.
+ * Requires the approved claimant or administrator's Privy bearer token.
+ *
+ * @param request - The request, with `{ status?, expectedStatus?, type? }`.
+ * @param context - The route context.
+ * @param context.params - The artist and source identity.
+ * @returns 200, or a typed validation, access, not-found or conflict error.
+ */
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string; sourceId: string }> },
+) {
+  const { id, sourceId } = await context.params;
+  return patchVaultSourceHandler(request, id, sourceId);
+}
+
+/**
+ * Delete one of the artist's sources.
+ * Requires the approved claimant or administrator's Privy bearer token.
+ *
+ * @param request - The request.
+ * @param context - The route context.
+ * @param context.params - The artist and source identity.
+ * @returns 200, or a typed validation, access or not-found error.
+ */
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string; sourceId: string }> },
+) {
+  const { id, sourceId } = await context.params;
+  return deleteVaultSourceHandler(request, id, sourceId);
 }
