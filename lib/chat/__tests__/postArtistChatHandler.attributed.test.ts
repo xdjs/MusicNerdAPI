@@ -1351,6 +1351,8 @@ it.each([undefined, "text/event-stream; musicnerd-attributed-text=12000"])(
       doStream: async options => {
         const prompt = JSON.stringify(options.prompt);
         expect(prompt).toContain(`Use at most ${limit} literal UTF-16 text characters total`);
+        expect(prompt).not.toContain("few short sentences");
+        expect(prompt).not.toContain("cite it inline as [n]");
         if (++step === 1) return toolStep("readSource", { sourceId: "vault:cap" });
         expect(prompt).toContain(`within ${limit} literal UTF-16 text characters total`);
         return textStep(

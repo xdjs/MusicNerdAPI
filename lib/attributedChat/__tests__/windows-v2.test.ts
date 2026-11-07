@@ -238,3 +238,44 @@ it("keeps bounded block offsets on Unicode boundaries", async () => {
     expect(p.text).toBe(text.slice(p.start, p.end));
   }
 });
+
+it("offers full-page heading and late qualification context without declaring narrower PDF windows complete", async () => {
+  // Synthetic diagnostic: geometry cannot know which heading governs a credit.
+  const text =
+    "Archive section 2007\n" +
+    "A line of unrelated contextual detail.\n".repeat(45) +
+    "Paper Lark and Glass Finch both receive credits on this release.\n" +
+    "More contextual detail.\n".repeat(45) +
+    "These credits document use here, not continuous use or the start and end of either name.\n";
+  const registry = createAttributionRegistry({
+    artistId: "synthetic-artist",
+    turnId: "synthetic-turn",
+    assertCurrent: async () => {},
+  });
+  const original = {
+    ...originalFixture("pdf:synthetic", "https://source.example/archive.pdf", text),
+    kind: "pdf-page-text" as const,
+    originalSha256: "a".repeat(64),
+    physicalPage: 1,
+    physicalPages: 1,
+    pageSha256: hash(text),
+  };
+  const result = registry.registerTextRead(original, {
+    n: 1,
+    title: "Synthetic archive",
+    url: original.url,
+    text,
+  });
+  const candidates = await Promise.all(
+    result.blocks.map(async b => (await registry.resolve([b.id], new AbortController().signal))[0]),
+  );
+  const full = candidates.find(p => p.start === 0 && p.end === text.length)!;
+  expect(full.text).toBe(text);
+  expect(full.text).toContain("not continuous use");
+  const narrow = candidates.find(
+    p => p.text.includes("both receive credits") && !p.text.includes("Archive section 2007"),
+  )!;
+  expect(narrow).toBeDefined();
+  expect(narrow.text).toBe(text.slice(narrow.start, narrow.end));
+  expect(candidates.every(p => p.contextIncomplete)).toBe(true);
+});
