@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "enabled": false,
+  "enabled": true,
   "provider": "anthropic",
   "utcDate": "2026-11-07",
   "attributedTextCharacters": 12000,
@@ -9,7 +9,7 @@
   "artistName": "Dutchyyy",
   "question": "Which years did Dutchyyy use each artist alias, and which were used at the same time?",
   "stagingOriginSha256": "f8350d3631d8e76f00b601c021cd2ee682d40ab01d27c78da1d2bb644ab16c13",
-  "instructionsSha256": "d6243d2fce62fade91aa81677ca0f626c95b49f2daf8eedb908211c3578fa76d",
+  "instructionsSha256": "cf422df16172f7780feae0af62fbb55b5052a12ccc4a82c78ded78d4a3a11b31",
   "promptSha256": "3fb8f062ddb757bc9422e829a6bf937bb16c508db73cea1d199700ff24e7b937",
   "toolSchemasSha256": "a36a0658f5aa350411e846bbefb377a3108fb04303fada53764669e9000f1682",
   "files": {
