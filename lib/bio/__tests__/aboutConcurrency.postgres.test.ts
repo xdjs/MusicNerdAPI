@@ -353,6 +353,231 @@ describe.skipIf(!socket)(
         admin?.end({ timeout: 1 }),
       ]);
     });
+    // Historical SQL contract from API main 0f315b5a persistArtistBio/saveBioVersions.
+    // This tests DB compatibility and the real new reader, not an entire old deployed binary.
+    async function legacyWrite(text: string) {
+      await client!.begin(async tx => {
+        await tx`select id from artists where id=${artist} for update`;
+        await tx`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},${text},false)`;
+        await tx`update artists set bio=${text} where id=${artist}`;
+      });
+    }
+    async function allowLegacy() {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await admin!`insert into mn_private.legacy_bio_publications values(${artist},${claim},encode(sha256(convert_to('Original','UTF8')),'hex'))`;
+    }
+    it("mixed-version: changed legacy write succeeds but consumes allowance and hides new public read", async () => {
+      await allowLegacy();
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      await legacyWrite("Legacy writer changed text");
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Legacy writer changed text" },
+      ]);
+      expect(await client!`select bio_text from artist_bio_versions`).toEqual([
+        { bio_text: "Legacy writer changed text" },
+      ]);
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(0);
+    });
+    it("mixed-version: an unchanged legacy write preserves the exact allowance", async () => {
+      await allowLegacy();
+      await legacyWrite("Original");
+      expect(await getPublicSavedBio(artist)).toBe("Original");
+      expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(1);
+    });
+    it("mixed-version: old overwrite invalidates new evidence hash without deleting stored evidence", async () => {
+      await persistArtistBio(artist, "New evidenced About", publication);
+      expect(await getPublicSavedBio(artist)).toBe("New evidenced About");
+      const before = await client!`select provenance from mn_private.artist_bio_provenance`;
+      await legacyWrite("Late old result");
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select provenance from mn_private.artist_bio_provenance`).toEqual(
+        before,
+      );
+    });
+    it("mixed-version: source withdrawal hides new reader while historical claimed raw-read contract still sees bytes", async () => {
+      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+      await persistArtistBio(artist, "New evidenced About", {
+        ...publication,
+        ownership: { userId: user, expectedClaimId: claim },
+      });
+      await client!`update artist_vault_sources set publication='private' where id=${sourceId}`;
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(
+        await client!`select a.bio from artists a where a.id=${artist} and exists(select 1 from artist_claims c where c.artist_id=a.id and c.status='approved')`,
+      ).toEqual([{ bio: "New evidenced About" }]);
+    });
+    it("mixed-version: additive source migration accepts old insert columns without inventing trust", async () => {
+      await client!`insert into artist_vault_sources(id,artist_id,origin,status,url,extracted_text) values('00000000-0000-4000-8000-000000000077',${artist},'submission','approved','https://example.org/legacy','Legacy extracted text')`;
+      expect(
+        await client!`select publication,activity_id from artist_vault_sources where id='00000000-0000-4000-8000-000000000077'`,
+      ).toEqual([{ publication: "inherit", activity_id: null }]);
+    });
+    it("mixed-version: snapshot lock delays an old write but cannot fence its later commit", async () => {
+      await allowLegacy();
+      const locked = deferred(),
+        release = deferred();
+      const blocker = competitor!.begin(async tx => {
+        await tx`lock table artists,artist_claims,artist_bio_versions,artist_vault_sources in share row exclusive mode`;
+        locked.resolve();
+        await release.promise;
+      });
+      await locked.promise;
+      const writing = legacyWrite("Late old result after cutover");
+      try {
+        await waitForBlockedWriter();
+      } finally {
+        release.resolve();
+      }
+      await blocker;
+      await writing;
+      expect(await getPublicSavedBio(artist)).toBeNull();
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Late old result after cutover" },
+      ]);
+    });
+    it("writer fence: rejects a late legacy transaction and preserves history and exact allowance", async () => {
+      await allowLegacy();
+      await admin!.unsafe(readMigration("0065_about_writer_fence.sql"));
+      try {
+        await expect(legacyWrite("Late old result")).rejects.toMatchObject({ code: "55000" });
+        expect(await getPublicSavedBio(artist)).toBe("Original");
+        expect(await client!`select * from artist_bio_versions`).toHaveLength(0);
+        expect(await client!`select * from mn_private.legacy_bio_publications`).toHaveLength(1);
+        await legacyWrite("Original");
+        expect(await getPublicSavedBio(artist)).toBe("Original");
+      } finally {
+        await admin!.unsafe(
+          "drop trigger if exists require_about_writer_version on artists; drop function if exists mn_private.require_about_writer_version()",
+        );
+      }
+    });
+    it("writer fence: transaction-local opt-in permits current writes without leaking to pooled old writes", async () => {
+      await admin!.unsafe(readMigration("0065_about_writer_fence.sql"));
+      try {
+        await competitor!.begin(async tx => {
+          await tx`select set_config('musicnerd.about_writer_version','1655-v1',true)`;
+          await tx`update artists set bio='Current writer' where id=${artist}`;
+        });
+        await expect(
+          competitor!`update artists set bio='Old pooled writer' where id=${artist}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        await expect(
+          competitor!.begin(async tx => {
+            await tx`select set_config('musicnerd.about_writer_version','1655-v1',true)`;
+            await tx`update artists set bio='Rolled back' where id=${artist}`;
+            throw new Error("rollback fixture");
+          }),
+        ).rejects.toThrow("rollback fixture");
+        await expect(
+          competitor!`update artists set bio=null where id=${artist}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        expect(await client!`select bio from artists where id=${artist}`).toEqual([
+          { bio: "Current writer" },
+        ]);
+      } finally {
+        await admin!.unsafe(
+          "drop trigger if exists require_about_writer_version on artists; drop function if exists mn_private.require_about_writer_version()",
+        );
+      }
+    });
+    it("writer fence: real API publication and reset retain authority and work with the fence enabled", async () => {
+      await admin!.unsafe(readMigration("0065_about_writer_fence.sql"));
+      try {
+        await persistArtistBio(artist, "Fenced evidenced About", publication);
+        expect(await getPublicSavedBio(artist)).toBe("Fenced evidenced About");
+        await expect(
+          persistArtistBio(artist, "Unauthorized", { ownership: { expectedClaimId: claim } }),
+        ).rejects.toThrow();
+        expect(await getPublicSavedBio(artist)).toBe("Fenced evidenced About");
+        const backup = await resetClaimBuild(artist);
+        expect(backup?.bio).toBe("Fenced evidenced About");
+        expect(await client!`select bio from artists where id=${artist}`).toEqual([{ bio: null }]);
+        await expect(legacyWrite("Delayed old workflow")).rejects.toMatchObject({ code: "55000" });
+      } finally {
+        await admin!.unsafe(
+          "drop trigger if exists require_about_writer_version on artists; drop function if exists mn_private.require_about_writer_version()",
+        );
+      }
+    });
+    it("writer fence: an old transaction started before activation is rejected and migration rollback is atomic", async () => {
+      const begun = deferred(),
+        release = deferred();
+      const old = capture(
+        competitor!.begin(async tx => {
+          await tx`select id from artists where id=${artist} for update`;
+          begun.resolve();
+          await release.promise;
+          await tx`insert into artist_bio_versions(artist_id,bio_text,is_pinned) values(${artist},'Late history',false)`;
+          await tx`update artists set bio='Late old result' where id=${artist}`;
+        }),
+      );
+      await begun.promise;
+      const ddl = readMigration("0065_about_writer_fence.sql");
+      try {
+        await admin!.unsafe(ddl);
+      } finally {
+        release.resolve();
+      }
+      try {
+        expect((await old).error).toMatchObject({ code: "55000" });
+        expect(await client!`select * from artist_bio_versions`).toHaveLength(0);
+        expect(await client!`select bio from artists where id=${artist}`).toEqual([
+          { bio: "Original" },
+        ]);
+      } finally {
+        await admin!.unsafe(
+          "drop trigger if exists require_about_writer_version on artists; drop function if exists mn_private.require_about_writer_version()",
+        );
+      }
+      await expect(
+        admin!.begin(async tx => {
+          await tx.unsafe(ddl);
+          throw new Error("abort migration");
+        }),
+      ).rejects.toThrow("abort migration");
+      await legacyWrite("After aborted migration");
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "After aborted migration" },
+      ]);
+    });
+    it("writer fence: activation fails atomically while an old writer already holds a table write lock", async () => {
+      const locked = deferred(),
+        release = deferred();
+      const old = competitor!.begin(async tx => {
+        await tx`update artists set bio=bio where id=${artist}`;
+        locked.resolve();
+        await release.promise;
+        await tx`update artists set bio='Committed before activation' where id=${artist}`;
+      });
+      await locked.promise;
+      const ddl = readMigration("0065_about_writer_fence.sql");
+      try {
+        await expect(
+          admin!.begin(async tx => {
+            await tx`set local lock_timeout='100ms'`;
+            await tx.unsafe(ddl);
+          }),
+        ).rejects.toMatchObject({ code: "55P03" });
+      } finally {
+        release.resolve();
+        await old;
+      }
+      expect(
+        await admin!`select to_regprocedure('mn_private.require_about_writer_version()') as function`,
+      ).toEqual([{ function: null }]);
+      expect(await client!`select bio from artists where id=${artist}`).toEqual([
+        { bio: "Committed before activation" },
+      ]);
+      await admin!.unsafe(ddl);
+      try {
+        await expect(legacyWrite("After activation")).rejects.toMatchObject({ code: "55000" });
+      } finally {
+        await admin!.unsafe(
+          "drop trigger require_about_writer_version on artists; drop function mn_private.require_about_writer_version()",
+        );
+      }
+    });
     it("validates actual Lore evidence with restricted event privileges", async () => {
       await admin!.unsafe("revoke update,delete on artist_activity_events from mnweb");
       try {
@@ -859,57 +1084,64 @@ describe.skipIf(!socket)(
     );
 
     it("persists actual independent route requests and preserves About on preparation and generation failures", async () => {
-      await admin!`update users set privy_user_id='local-subject' where id=${user}`;
-      const call = (body: object = { regenerate: true }) =>
-        routes.PUT(
-          new Request(`http://local.invalid/api/artistBio/${artist}`, {
-            method: "PUT",
-            headers: {
-              Authorization: "Bearer local-synthetic",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-          }),
-          { params: Promise.resolve({ id: artist }) },
-        );
-      const read = () =>
-        routes.GET(new Request(`http://local.invalid/api/artistBio/${artist}`), {
-          params: Promise.resolve({ id: artist }),
+      await admin!.unsafe(readMigration("0065_about_writer_fence.sql"));
+      try {
+        await admin!`update users set privy_user_id='local-subject' where id=${user}`;
+        const call = (body: object = { regenerate: true }) =>
+          routes.PUT(
+            new Request(`http://local.invalid/api/artistBio/${artist}`, {
+              method: "PUT",
+              headers: {
+                Authorization: "Bearer local-synthetic",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            }),
+            { params: Promise.resolve({ id: artist }) },
+          );
+        const read = () =>
+          routes.GET(new Request(`http://local.invalid/api/artistBio/${artist}`), {
+            params: Promise.resolve({ id: artist }),
+          });
+        routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+        await admin!`update users set is_admin=false where id=${user}`;
+        expect((await call()).status).toBe(403);
+        expect(routeAdapter.counters().lore).toBe(0);
+        await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
+        expect((await call()).status).toBe(200);
+        expect(routeAdapter.counters()).toEqual({ lore: 1, about: 1, summary: 1 });
+        expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+        expect((await call()).status).toBe(200);
+        expect(routeAdapter.counters()).toEqual({ lore: 1, about: 2, summary: 1 });
+        routeAdapter = createHostedAboutAdapter({ about: "fail" }, buildDocSources);
+        const failedAbout = await call();
+        expect(failedAbout.status).toBe(500);
+        expect(await failedAbout.json()).toMatchObject({
+          error: expect.stringContaining("existing About has been kept"),
         });
-      routeAdapter = createHostedAboutAdapter({}, buildDocSources);
-      await admin!`update users set is_admin=false where id=${user}`;
-      expect((await call()).status).toBe(403);
-      expect(routeAdapter.counters().lore).toBe(0);
-      await admin!`insert into artist_claims(id,artist_id,user_id,status) values(${claim},${artist},${user},'approved')`;
-      expect((await call()).status).toBe(200);
-      expect(routeAdapter.counters()).toEqual({ lore: 1, about: 1, summary: 1 });
-      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
-      expect((await call()).status).toBe(200);
-      expect(routeAdapter.counters()).toEqual({ lore: 1, about: 2, summary: 1 });
-      routeAdapter = createHostedAboutAdapter({ about: "fail" }, buildDocSources);
-      const failedAbout = await call();
-      expect(failedAbout.status).toBe(500);
-      expect(await failedAbout.json()).toMatchObject({
-        error: expect.stringContaining("existing About has been kept"),
-      });
-      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
-      await admin!`delete from artist_docs where artist_id=${artist}`;
-      routeAdapter = createHostedAboutAdapter({ lore: "fail" }, buildDocSources);
-      expect((await call()).status).toBe(500);
-      expect(routeAdapter.counters().about).toBe(0);
-      expect(await client!`select bio from artists where id=${artist}`).toEqual([
-        { bio: "Synthetic About" },
-      ]);
-      expect(
-        await client!`select count(*)::int as n from artist_research_jobs where status='running'`,
-      ).toEqual([{ n: 0 }]);
-      expect(
-        await client!`select status,claimed_at,attempts from artist_research_jobs where status='pending'`,
-      ).toEqual([{ status: "pending", claimed_at: null, attempts: 1 }]);
-      // Repair through another independent request; this committed state is used by the restart runner.
-      routeAdapter = createHostedAboutAdapter({}, buildDocSources);
-      expect((await call()).status).toBe(200);
-      expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+        expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+        await admin!`delete from artist_docs where artist_id=${artist}`;
+        routeAdapter = createHostedAboutAdapter({ lore: "fail" }, buildDocSources);
+        expect((await call()).status).toBe(500);
+        expect(routeAdapter.counters().about).toBe(0);
+        expect(await client!`select bio from artists where id=${artist}`).toEqual([
+          { bio: "Synthetic About" },
+        ]);
+        expect(
+          await client!`select count(*)::int as n from artist_research_jobs where status='running'`,
+        ).toEqual([{ n: 0 }]);
+        expect(
+          await client!`select status,claimed_at,attempts from artist_research_jobs where status='pending'`,
+        ).toEqual([{ status: "pending", claimed_at: null, attempts: 1 }]);
+        // Repair through another independent request; this committed state is used by the restart runner.
+        routeAdapter = createHostedAboutAdapter({}, buildDocSources);
+        expect((await call()).status).toBe(200);
+        expect(await (await read()).json()).toMatchObject({ bio: "Synthetic About" });
+      } finally {
+        await admin!.unsafe(
+          "drop trigger if exists require_about_writer_version on artists; drop function if exists mn_private.require_about_writer_version()",
+        );
+      }
     });
 
     it("reads committed text, history and evidence from a fresh application connection", async () => {
