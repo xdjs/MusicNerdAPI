@@ -24,6 +24,7 @@ const row = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  m.execute.mockResolvedValue([]);
   m.transaction.mockImplementation(fn => fn({ execute: m.execute }));
 });
 it("returns exact UTF-16 text with stable original references", async () => {

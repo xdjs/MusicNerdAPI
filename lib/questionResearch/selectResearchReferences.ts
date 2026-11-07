@@ -2,7 +2,7 @@ import { getEligibleResearchOriginals } from "./getEligibleResearchOriginals";
 import { latestActivityTime } from "@/lib/latestProviders/latestActivityTime";
 import { searchArtistKnowledge } from "@/lib/knowledge/searchArtistKnowledge";
 import { knowledgeWindow } from "@/lib/knowledge/knowledgeWindow";
-import type { Evidence, KnowledgeSnapshot } from "@/lib/knowledge/types";
+import { createResearchKnowledgeSnapshot } from "./createResearchKnowledgeSnapshot";
 import type {
   ResearchOriginal,
   ResearchRequest,
@@ -38,59 +38,7 @@ export function selectResearchReferences(
         ...knowledgeWindow(original.text, 0, overview ? 2000 : 4000),
       }));
   }
-  const sources: Evidence[] = eligible.map(o => ({
-    text: o.text,
-    metadata: {
-      sourceId: o.sourceId,
-      revision: o.revision,
-      kind:
-        o.evidenceKind === "caption"
-          ? "social_caption"
-          : o.evidenceKind === "provider_transcript"
-            ? "reel_transcript"
-            : "vault",
-      title: null,
-      titleTruncated: false,
-      description: null,
-      descriptionTruncated: false,
-      url: o.url,
-      publishedAt: o.publishedAt,
-      ingestedAt: o.retrievedAt,
-      uploadedAt: null,
-      eventDate: null,
-      originalSourceUrl: null,
-      provenance: {
-        origin: "vault_link",
-        provider: null,
-        method: null,
-        speaker: o.speaker,
-        publisher: null,
-        speakerName: null,
-        relationship: "unknown",
-      },
-      extraction: {
-        readiness: "ready",
-        storedChars: o.text.length,
-        truncated: o.truncated,
-        limitations: [],
-      },
-    },
-  }));
-  const snapshot: KnowledgeSnapshot = {
-    artist: { id: "public", name: artistName, bio: null },
-    sources,
-    summary: null,
-    history: [],
-    latestAnswer: null,
-    jobs: [],
-    coverage: {
-      eligibleSources: sources.length,
-      readableSources: sources.length,
-      searchedSources: 0,
-      complete: true,
-      limitations: [],
-    },
-  };
+  const snapshot = createResearchKnowledgeSnapshot(eligible, artistName);
   const result = searchArtistKnowledge(
     snapshot,
     {

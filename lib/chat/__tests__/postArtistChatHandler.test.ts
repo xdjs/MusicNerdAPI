@@ -1,3 +1,4 @@
+import { getChatCorpusFingerprint } from "@/lib/chat/getChatCorpusFingerprint";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import { simulateReadableStream } from "ai";
@@ -6,6 +7,7 @@ import { originalFixture } from "./originalFixture";
 
 const m = vi.hoisted(() => ({
   model: undefined as unknown,
+  assertCurrent: vi.fn(),
   artist: vi.fn(),
   visitor: vi.fn(),
   reserve: vi.fn(),
@@ -23,6 +25,9 @@ vi.mock("ai", async importOriginal => {
       actual.streamText({ ...options, model: m.model as never }),
   };
 });
+vi.mock("@/lib/sourcePublication/assertPublicSourceCurrent", () => ({
+  assertPublicSourceCurrent: m.assertCurrent,
+}));
 vi.mock("@/lib/questionResearch/loadResearchArtist", () => ({ loadResearchArtist: m.artist }));
 vi.mock("@/lib/questionResearch/getQuestionVisitorKey", () => ({
   getQuestionVisitorKey: m.visitor,
@@ -92,6 +97,7 @@ async function chunksOf(response: Response) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  m.assertCurrent.mockReset().mockResolvedValue(undefined);
   m.pdfLoad.mockResolvedValue([]);
   m.artist.mockResolvedValue({ id: artistId, name: "Dutchyyy" });
   m.visitor.mockResolvedValue("f".repeat(64));
@@ -386,4 +392,180 @@ it("reads an explicitly named original in one tool call and two real SDK steps w
   ]);
   expect(m.pdfRead).toHaveBeenCalledTimes(1);
   expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("carries a returned late-context locator through the real SDK read and streamed citation", async () => {
+  const source = originalFixture(
+    "late",
+    "https://label.example/late",
+    "Preface. ".repeat(1700) +
+      "\n\nDub sessions\n\nQualification: this was a rehearsal, not a commercial release.\nDub recording notes.",
+  );
+  m.originals.mockResolvedValue([source]);
+  let forwards = 0;
+  const model = new MockLanguageModelV4({
+    doStream: async params => {
+      forwards++;
+      if (forwards === 1) return toolStep("searchSources", { query: "dub" });
+      if (forwards === 2) {
+        const part = params.prompt
+          .flatMap(p => (p.role === "tool" ? p.content : []))
+          .find(p => p.type === "tool-result" && p.toolName === "searchSources") as {
+          output: { value: string | { sources: { sourceId: string; locator: object }[] } };
+        };
+        const output =
+          typeof part.output.value === "string" ? JSON.parse(part.output.value) : part.output.value;
+        expect(output.sources[0].locator.start).toBeGreaterThan(12000);
+        return toolStep("readSource", {
+          sourceId: output.sources[0].sourceId,
+          locator: output.sources[0].locator,
+        });
+      }
+      expect(forwards).toBe(3);
+      expect(JSON.stringify(params.prompt)).toContain("Qualification: this was a rehearsal");
+      return textStep("A saved rehearsal account [1].");
+    },
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("Tell me about the dub sessions.")));
+  const output = chunks.find(
+    c => c.type === "tool-output-available" && typeof c.output?.text === "string",
+  )!.output;
+  expect(output.text).toBe(source.text.slice(output.start, output.end));
+  expect(output.text.length).toBeLessThanOrEqual(12000);
+  expect(chunks.filter(c => c.type === "source-url")).toMatchObject([
+    { sourceId: "1", url: source.url },
+  ]);
+  expect(chunks.findIndex(c => c.type === "source-url")).toBeLessThan(
+    chunks.findIndex(c => c.type === "text-delta"),
+  );
+  expect(model.doStreamCalls).toHaveLength(3);
+  for (const call of model.doStreamCalls) {
+    expect(call.tools).toHaveLength(6);
+    expect(call.toolChoice).toEqual({ type: "auto" });
+  }
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("rereads on a follow-up, rejects a withdrawn prior source and restarts citation numbering", async () => {
+  m.model = new MockLanguageModelV4({
+    doStream: [toolStep("readSource", { sourceId: "vault:1" }), textStep("First fixture [1].")],
+  });
+  await chunksOf(await post(ask("First question")));
+  m.originals.mockResolvedValue([
+    originalFixture("vault:2", "https://other.example/b", "Second current fixture."),
+  ]);
+  const model = new MockLanguageModelV4({
+    doStream: [
+      toolStep("readSource", { sourceId: "vault:1" }),
+      toolStep("readSource", { sourceId: "vault:2" }),
+      textStep("Second fixture [1]."),
+    ],
+  });
+  m.model = model;
+  const chunks = await chunksOf(
+    await post({
+      messages: [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "First question" }] },
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "First fixture [1]." },
+            { type: "source-url", sourceId: "1", url: "https://label.example/a" },
+          ],
+        },
+        { id: "u2", role: "user", parts: [{ type: "text", text: "What about the other source?" }] },
+      ],
+    }),
+  );
+  expect(model.doStreamCalls[0].prompt.map(p => p.role)).toEqual([
+    "system",
+    "user",
+    "assistant",
+    "user",
+  ]);
+  expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain("https://label.example/a");
+  const outputs = chunks.filter(c => c.type === "tool-output-available").map(c => c.output);
+  expect(outputs[0]).toHaveProperty("error");
+  expect(outputs[0]).not.toHaveProperty("text");
+  expect(outputs[1]).toMatchObject({ n: 1, text: "Second current fixture." });
+  expect(chunks.filter(c => c.type === "source-url")).toEqual([
+    { type: "source-url", sourceId: "1", url: "https://other.example/b", title: "other.example" },
+  ]);
+  expect(m.reserve).toHaveBeenCalledTimes(2);
+  expect(m.webSearch).not.toHaveBeenCalled();
+});
+
+it("stops before the next model forward when a read source publication is revoked", async () => {
+  m.assertCurrent
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValue(new Error("Source changed or is no longer public"));
+  const model = new MockLanguageModelV4({
+    doStream: [toolStep("readSource", { sourceId: "vault:1" }), textStep("Must not be delivered")],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What label is Dutchyyy on?")));
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(chunks.some(c => c.type === "error")).toBe(true);
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+  expect(m.assertCurrent).toHaveBeenCalledTimes(2);
+});
+
+it("revalidates search previews, including before the next model forward", async () => {
+  let checks = 0;
+  m.assertCurrent.mockImplementation(async () => {
+    if (++checks > 2) throw new Error("Source no longer public");
+  });
+  const model = new MockLanguageModelV4({
+    doStream: [toolStep("searchSources", { query: "label" }), textStep("Must not be delivered")],
+  });
+  m.model = model;
+  const chunks = await chunksOf(await post(ask("What label?")));
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(chunks.some(c => c.type === "error")).toBe(true);
+  expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+});
+
+it("observes the actual loaded corpus only through the trusted callback, never the UI stream", async () => {
+  const originals = [
+    originalFixture("vault:1", "https://label.example/a", "Exact current fixture"),
+  ];
+  m.originals.mockResolvedValue(originals);
+  const observe = vi.fn();
+  const execute = vi.fn(async () => ({ text: "" }));
+  const response = await postArtistChatHandler(
+    new Request("http://localhost/chat", {
+      method: "POST",
+      body: JSON.stringify(ask("What label?")),
+    }),
+    artistId,
+    execute,
+    observe,
+  );
+  const body = await response.text();
+  expect(observe).toHaveBeenCalledWith({
+    type: "data-chat-corpus-pin",
+    data: { sha256: getChatCorpusFingerprint(originals) },
+  });
+  expect(body).not.toContain("data-chat-corpus-pin");
+  expect(body).not.toContain(getChatCorpusFingerprint(originals));
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(m.originals).toHaveBeenCalledTimes(1);
+});
+it("a rejecting actual-corpus assertion stops before any stream/model execution", async () => {
+  const execute = vi.fn(async () => ({ text: "unreachable" }));
+  const response = await postArtistChatHandler(
+    new Request("http://localhost/chat", {
+      method: "POST",
+      body: JSON.stringify(ask("What label?")),
+    }),
+    artistId,
+    execute,
+    () => {
+      throw new Error("fixture corpus mismatch");
+    },
+  );
+  expect(response.status).toBe(503);
+  expect(execute).not.toHaveBeenCalled();
 });

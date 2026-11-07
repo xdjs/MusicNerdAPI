@@ -49,3 +49,73 @@ describe("updateVaultSourceStatus", () => {
     error.mockRestore();
   });
 });
+
+it("declines changed research snapshots before updating moderation", async () => {
+  const source = {
+    id: "s1",
+    artistId: "a1",
+    origin: "research",
+    activityId: "e",
+    status: "pending",
+    publication: "inherit",
+    url: "https://a.test",
+    extractedText: "x".repeat(500),
+    updatedAt: "old",
+  };
+  Object.assign(tx, {
+    select: () => ({
+      from: () => ({ where: () => ({ for: async () => [{ ...source, status: "rejected" }] }) }),
+    }),
+  });
+  expect(await updateVaultSourceStatus("s1", "approved", source as never)).toBeUndefined();
+  expect(set).not.toHaveBeenCalled();
+});
+
+it.each([
+  { status: "rejected" },
+  { publication: "private" },
+  { extractedText: "edited" },
+  { title: "edited" },
+  { activityId: "other" },
+  { origin: "submission" },
+  { updatedAt: "later" },
+  { status: "approved" },
+])("preserves concurrent source changes %j", async change => {
+  const source = {
+    id: "s1",
+    artistId: "a1",
+    origin: "research",
+    activityId: "e",
+    status: "pending",
+    publication: "inherit",
+    url: "https://a.test",
+    extractedText: "x".repeat(500),
+    updatedAt: "old",
+  };
+  Object.assign(tx, {
+    select: () => ({
+      from: () => ({ where: () => ({ for: async () => [{ ...source, ...change }] }) }),
+    }),
+  });
+  expect(await updateVaultSourceStatus("s1", "approved", source as never)).toBeUndefined();
+  expect(set).not.toHaveBeenCalled();
+  expect(record).not.toHaveBeenCalled();
+});
+it("approves unchanged readable research with activity on the same transaction", async () => {
+  const source = {
+    id: "s1",
+    artistId: "a1",
+    origin: "research",
+    activityId: "e",
+    status: "pending",
+    publication: "inherit",
+    url: "https://a.test",
+    extractedText: "x".repeat(500),
+    updatedAt: "old",
+  };
+  Object.assign(tx, {
+    select: () => ({ from: () => ({ where: () => ({ for: async () => [source] }) }) }),
+  });
+  expect(await updateVaultSourceStatus("s1", "approved", source as never)).toBeDefined();
+  expect(record).toHaveBeenCalled();
+});

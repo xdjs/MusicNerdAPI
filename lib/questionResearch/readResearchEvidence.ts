@@ -1,3 +1,6 @@
+import { publicTextVaultSourceSql } from "@/lib/sourcePublication/publicTextVaultSourceSql";
+import { loadPrivateResearchUrlKeys } from "@/lib/sourcePublication/loadPrivateResearchUrlKeys";
+import { canonicalResearchUrl } from "@/lib/questionResearch/canonicalResearchUrl";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { authorizeArtistKnowledge } from "@/lib/knowledge/authorizeArtistKnowledge";
@@ -29,11 +32,20 @@ export async function readResearchEvidence(
           (row.identity !== "confirmed" || !["pending", "approved"].includes(row.curation)))
       )
         throw new KnowledgeError("not_found", 404, "Original unavailable");
+      if (auth.kind === "service") {
+        const privateKeys = await loadPrivateResearchUrlKeys(tx, artistId);
+        if (privateKeys.has(canonicalResearchUrl(row.url)))
+          throw new KnowledgeError("not_found", 404, "Original unavailable");
+      }
       if (row.revision !== revision)
         throw new KnowledgeError("revision_changed", 409, "Original revision unavailable");
-      if (auth.kind === "service" && row.reviewed_revision && row.destination === "lore") {
+      if (
+        auth.kind === "service" &&
+        (row.reviewed_revision || row.source_id) &&
+        row.destination === "lore"
+      ) {
         const eligible = await tx.execute(
-          sql`select id from artist_vault_sources where id=${row.source_id}::uuid and artist_id=${artistId}::uuid and status='approved' and file_path is null and exists(select 1 from artist_claims claim where claim.artist_id=${artistId}::uuid and claim.status='approved')`,
+          sql`select v.id from artist_vault_sources v where v.id=${row.source_id}::uuid and v.artist_id=${artistId}::uuid and ${publicTextVaultSourceSql()}`,
         );
         if (!eligible.length) throw new KnowledgeError("not_found", 404, "Original unavailable");
       }

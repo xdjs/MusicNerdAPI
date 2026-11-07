@@ -51,6 +51,7 @@ describe("toSourceList", () => {
         label: "https://www.discogs.com/a/1",
         url: "https://www.discogs.com/a/1",
         publishedAt: "2019-01-01",
+        revision: expect.any(String),
       },
       {
         id: 2,
@@ -58,6 +59,7 @@ describe("toSourceList", () => {
         label: "Clubhouse",
         url: "https://clubhousedb.com/user/x",
         publishedAt: null,
+        revision: expect.any(String),
       },
       { id: 3, kind: "interview", label: 'Their own words — "Sound?"', url: null },
       { id: 4, kind: "social", label: "Instagram collaboration with @dameatlas", url: "u1" },

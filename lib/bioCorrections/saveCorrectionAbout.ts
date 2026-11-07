@@ -1,3 +1,6 @@
+import { readBioProvenance } from "@/lib/bio/readBioProvenance";
+import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
+import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { MAX_BIO_LENGTH } from "@/lib/bio/const";
@@ -35,7 +38,10 @@ export async function saveCorrectionAbout(
     );
     if (!admin) throw new CorrectionAboutConflict("Administrator access is required.");
     // Same artist-first lock order as bio, pin, claim and research writers.
-    const [artist] = await tx.execute<{ id: string }>(sql`select a.id from artists a
+    const [artist] = await tx.execute<{
+      id: string;
+      bio: string | null;
+    }>(sql`select a.id,a.bio from artists a
       join artist_bio_corrections r on r.artist_id=a.id where r.id=${reportId}::uuid for update of a`);
     if (!artist) throw new CorrectionAboutConflict("This report no longer exists.");
     await tx.execute(
@@ -49,9 +55,18 @@ export async function saveCorrectionAbout(
       throw new CorrectionAboutConflict(
         "The About or artist ownership changed. Your draft is kept; cancel and reopen the editor to review the latest version.",
       );
-    await saveBioVersions(tx, artist.id, [current.bio, bio]);
-    if (current.claimed) {
+    const stored = current.claimed || current.storage === "artist";
+    // Directory preparations have their own assessed manifest, not saved-About
+    // provenance. A newly saved history row must not turn that text into legacy
+    // manual prose that could bypass source withdrawal after a later pin.
+    const previousProvenance = stored
+      ? await readBioProvenance(tx, artist.id)
+      : nextBioProvenance(current.bio, null, null, { generated: true, claimId: null });
+    const bioProvenance = nextBioProvenance(bio, artist.bio ?? current.bio, previousProvenance);
+    await saveBioVersions(tx, artist.id, [current.bio, bio], [previousProvenance, bioProvenance]);
+    if (stored) {
       await tx.execute(sql`update artists set bio=${bio} where id=${artist.id}::uuid`);
+      await writeBioProvenance(tx, artist.id, bioProvenance);
     } else {
       // Keep identity/source gates and the private pre-claim preparation untouched.
       await tx.execute(sql`update artist_directory_preparations

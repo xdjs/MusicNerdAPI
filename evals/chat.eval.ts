@@ -1,3 +1,4 @@
+import { correctedChatCases } from "@/lib/evals/attributed/correctedChatCases";
 import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_CHAT } from "@/lib/ai/const";
@@ -20,76 +21,107 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  *   pnpm eval evals/chat.eval.ts
  */
 
-// Carry attempt 1 forward under Pete's original $5 ceiling (run 40975550504).
-const budget = createEvalBudgetFetch(globalThis.fetch, 104224);
-globalThis.fetch = budget.fetch;
-
-const SHA = process.env.GITHUB_SHA ?? "local";
-
-Eval("music-nerd", {
-  experimentName: experimentName("chat", MODEL_CHAT, SHA),
-  metadata: {
-    suite: "chat",
-    model: MODEL_CHAT,
-    sha: SHA,
-    rubric: "cited-evidence-v1",
-    budgetUsd: 5,
-    priorReservedUsd: 0.104224,
-    maxOutputTokens: 2048,
-  },
-  // One question at a time, so the timings are not measuring each other.
-  maxConcurrency: 1,
-  data: () =>
-    CHAT_CASES.map(c => ({
-      input: c,
-      expected: { answerable: c.answerable, reference: c.reference },
-      metadata: { key: c.key, artist: c.artistName, note: c.note },
-    })),
-  task: async (input: ChatCase) => {
-    // A latched guard must not consume further question-admission rows or SDK retries.
-    if (budget.snapshot().blocked)
-      return {
-        answer: "",
-        sources: [],
-        evidence: [],
-        firstTextMs: 0,
-        totalMs: 0,
-        error: `Not attempted: ${budget.snapshot().stopReason}`,
-      };
-    const turn = await chatStreamTurn(input);
-    console.log(
-      `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
-    );
-    return turn;
-  },
-  scores: [
-    ({ output }) =>
-      output.error
-        ? null
-        : scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
-    ({ output }) =>
-      output.error ? null : scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),
-    // An unanswerable question is right to cite nothing, so citations are not scored there.
-    ({ output, expected }) =>
-      expected.answerable
-        ? scoreCitations(
-            output.answer,
-            output.sources.map(s => s.n),
-          )
-        : null,
-    async ({ input, output, expected }) => {
-      const result = await judgeCitedAnswer({
-        question: input.question,
-        reference: expected.reference,
-        answerable: expected.answerable,
-        turn: output,
-      });
-      const metadata = { reason: result.verdict?.reason ?? result.unscoredReason };
-      return [
-        { name: "evidence_scorable", score: result.verdict ? 1 : 0, metadata },
-        { name: "answer_relevance", score: result.verdict?.relevance ?? null, metadata },
-        { name: "source_groundedness", score: result.verdict?.groundedness ?? null, metadata },
-      ];
+// Explicit single-case opt-in. The ordinary 11-case suite below stays unchanged.
+if (process.env.CHAT_SINGLE_MANIFEST) {
+  Eval("music-nerd", {
+    experimentName: experimentName("chat-single", MODEL_CHAT, process.env.GITHUB_SHA ?? "local"),
+    isPublic: false,
+    maxConcurrency: 1,
+    data: () => [{ input: process.env.CHAT_SINGLE_MANIFEST! }],
+    task: async (path, { span }) => {
+      const { runSingleGuardedChatTurn } = await import("@/lib/evals/runSingleGuardedChatTurn");
+      const result = await runSingleGuardedChatTurn(path);
+      if (!("answer" in result)) throw new Error("single_preflight_not_an_answer");
+      const usefulTransport = result.attribution
+        ? result.attribution.state === "complete-transport" &&
+          result.attribution.passages.length > 0
+        : !!result.answer.trim();
+      if (result.error || !usefulTransport) {
+        span.log({ output: result });
+        await span.flush();
+        throw new Error("single_chat_terminal_failed");
+      }
+      // No paid judge. Clean transport is not semantic acceptance.
+      return result;
     },
-  ],
-});
+    scores: [],
+  });
+} else {
+  // Carry attempt 1 forward under Pete's original $5 ceiling (run 40975550504).
+  const budget = createEvalBudgetFetch(globalThis.fetch, 104224);
+  globalThis.fetch = budget.fetch;
+
+  const SHA = process.env.GITHUB_SHA ?? "local";
+
+  Eval("music-nerd", {
+    experimentName: experimentName("chat", MODEL_CHAT, SHA),
+    metadata: {
+      suite: "chat",
+      model: MODEL_CHAT,
+      sha: SHA,
+      rubric: "all-read-attributed-v4",
+      budgetUsd: 5,
+      priorReservedUsd: 0.104224,
+      maxOutputTokens: 2048,
+    },
+    // One question at a time, so the timings are not measuring each other.
+    maxConcurrency: 1,
+    data: () =>
+      correctedChatCases(CHAT_CASES).map(c => ({
+        input: c,
+        expected: { answerable: c.answerable, reference: c.reference },
+        metadata: { key: c.key, artist: c.artistName, note: c.note },
+      })),
+    task: async (input: ChatCase) => {
+      // A latched guard must not consume further question-admission rows or SDK retries.
+      if (budget.snapshot().blocked)
+        return {
+          answer: "",
+          sources: [],
+          evidence: [],
+          firstTextMs: 0,
+          totalMs: 0,
+          error: `Not attempted: ${budget.snapshot().stopReason}`,
+        };
+      const turn = await chatStreamTurn(input);
+      console.log(
+        `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
+      );
+      return turn;
+    },
+    scores: [
+      ({ output }) =>
+        output.error || output.attribution
+          ? null
+          : scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
+      ({ output }) =>
+        output.error ? null : scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),
+      // An unanswerable question is right to cite nothing, so citations are not scored there.
+      ({ output, expected }) =>
+        expected.answerable && !output.attribution
+          ? scoreCitations(
+              output.answer,
+              output.sources.map(s => s.n),
+            )
+          : null,
+      async ({ input, output, expected }) => {
+        const result = await judgeCitedAnswer({
+          question: input.question,
+          reference: expected.reference,
+          answerable: expected.answerable,
+          turn: output,
+        });
+        const metadata = {
+          reason: result.verdict?.reason ?? result.unscoredReason,
+          diagnostic: result.diagnostic,
+          rubricDiagnostic: result.rubricDiagnostic,
+        };
+        return [
+          { name: "evidence_scorable", score: result.verdict ? 1 : 0, metadata },
+          { name: "answer_relevance", score: result.verdict?.relevance ?? null, metadata },
+          { name: "source_groundedness", score: result.verdict?.groundedness ?? null, metadata },
+        ];
+      },
+    ],
+  });
+}

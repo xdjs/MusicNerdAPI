@@ -14,4 +14,5 @@ export type CorrectionAbout = {
   revision: string;
   artistId: string;
   claimed: boolean;
+  storage?: "artist" | "directory";
 };

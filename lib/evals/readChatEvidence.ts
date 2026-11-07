@@ -1,3 +1,5 @@
+import { readPdfChatEvidence } from "./readPdfChatEvidence";
+import { captureAllowedBlocks } from "./captureAllowedBlocks";
 import { createHash } from "node:crypto";
 import type { ChatEvidence } from "@/lib/evals/ChatEvidence";
 
@@ -7,6 +9,8 @@ export function readChatEvidence(
   toolCallId: string,
   output: unknown,
 ): ChatEvidence[] {
+  if (tool === "readPdfSource" || tool === "readNamedPdf")
+    return readPdfChatEvidence(tool, toolCallId, output);
   if (!output || typeof output !== "object") return [];
   const record = output as Record<string, unknown>;
   if (tool !== "readSource" && tool !== "webSearch") return [];
@@ -26,6 +30,7 @@ export function readChatEvidence(
       !text.trim()
     )
       return [];
+    const blocks = Array.isArray(row.blocks) ? row.blocks : row.allowedBlocks;
     return [
       {
         n: row.n,
@@ -34,6 +39,27 @@ export function readChatEvidence(
         tool,
         toolCallId,
         sha256: createHash("sha256").update(text).digest("hex"),
+        ...(tool === "readSource"
+          ? {
+              ...(typeof row.sourceId === "string" ? { sourceId: row.sourceId } : {}),
+              ...(typeof row.revision === "string" ? { revision: row.revision } : {}),
+              ...(typeof row.readId === "string" ? { readId: row.readId } : {}),
+              ...(typeof row.start === "number" ? { start: row.start } : {}),
+              ...(typeof row.end === "number" ? { end: row.end } : {}),
+              ...(Array.isArray(blocks)
+                ? {
+                    allowedBlocks: captureAllowedBlocks(blocks),
+                  }
+                : {}),
+            }
+          : {}),
+        ...(tool === "readSource"
+          ? Object.fromEntries(
+              ["publishedAt", "activityDate", "retrievedAt"]
+                .filter(key => row[key] === null || typeof row[key] === "string")
+                .map(key => [key, row[key]]),
+            )
+          : {}),
       },
     ];
   });

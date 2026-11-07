@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { extractOriginalPdfPages } from "./extractOriginalPdfPages";
+import type { PdfPageManifest } from "./types";
 import { inspectChatPdf } from "@/lib/chatPdf/inspectChatPdf";
 import {
   CHAT_PDF_READ_MS,
@@ -8,7 +10,11 @@ import {
 } from "@/lib/chatPdf/types";
 
 /** Read one authorized public original with a byte/time/page bound; no credentials or extraction writes. */
-export async function readChatPdf(source: ChatPdf, signal?: AbortSignal) {
+export async function readChatPdf(
+  source: ChatPdf,
+  signal?: AbortSignal,
+  options?: { extractText: true },
+) {
   const timeout = AbortSignal.timeout(CHAT_PDF_READ_MS);
   const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout;
   const response = await fetch(source.url, {
@@ -38,9 +44,28 @@ export async function readChatPdf(source: ChatPdf, signal?: AbortSignal) {
     throw new Error("PDF changed or invalid");
   const pages = await inspectChatPdf(bytes, bounded);
   if (pages > MAX_CHAT_PDF_PAGES) throw new Error("PDF exceeds page limit");
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  let textManifest: PdfPageManifest | undefined;
+  if (options?.extractText) {
+    try {
+      textManifest = await extractOriginalPdfPages(bytes, hash, bounded);
+      if (textManifest.physicalPages !== pages) textManifest = undefined;
+    } catch {
+      // Unsupported text layers do not disable ordinary native PDF reading, but
+      // cancellation and the existing total read deadline still stop the turn.
+      bounded.throwIfAborted();
+    }
+  }
+  bounded.throwIfAborted();
   return {
     bytes,
     pages,
-    hash: createHash("sha256").update(bytes).digest("hex"),
+    hash,
+    ...(options?.extractText
+      ? {
+          textManifest,
+          textUnavailable: !textManifest || textManifest.extraction.emptyTextPages.length > 0,
+        }
+      : {}),
   };
 }

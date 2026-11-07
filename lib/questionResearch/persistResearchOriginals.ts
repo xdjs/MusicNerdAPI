@@ -28,8 +28,8 @@ export async function persistResearchOriginals(
   }>(
     sql`select id,url,curation,identity,reviewed_revision,current_revision,source_id from artist_research_candidates where artist_id=${artistId}::uuid limit 5001`,
   );
-  const vault = await tx.execute<{ id: string; url: string; status: string }>(
-    sql`select id,url,status from artist_vault_sources where artist_id=${artistId}::uuid limit 5001`,
+  const vault = await tx.execute<{ id: string; url: string; status: string; publication: string }>(
+    sql`select id,url,status,publication from artist_vault_sources where artist_id=${artistId}::uuid limit 5001`,
   );
   if (existing.length > 5000 || vault.length > 5000)
     throw new KnowledgeError(
@@ -52,7 +52,9 @@ export async function persistResearchOriginals(
     let candidate = existing.find(c => key(c.url) === url);
     if (
       vault.some(
-        v => key(v.url) === url && (v.id !== candidate?.source_id || v.status !== "approved"),
+        v =>
+          key(v.url) === url &&
+          (v.id !== candidate?.source_id || v.status !== "approved" || v.publication === "private"),
       )
     )
       continue;

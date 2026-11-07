@@ -1,3 +1,4 @@
+import { publicKnowledgeUrl as publicUrl } from "./publicKnowledgeUrl";
 import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
 import { knowledgeRevision } from "@/lib/knowledge/knowledgeRevision";
@@ -26,21 +27,7 @@ export function normalizeArtistKnowledge(raw: RawKnowledge): KnowledgeSnapshot {
     if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return null;
     return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toISOString();
   };
-  const publicUrl = (value: string): string | null => {
-    try {
-      const url = new URL(value);
-      if (
-        !["https:", "http:"].includes(url.protocol) ||
-        url.username ||
-        url.password ||
-        [...url.searchParams.keys()].some(key => /token|secret|signature|api[-_]?key/i.test(key))
-      )
-        return null;
-      return value;
-    } catch {
-      return null;
-    }
-  };
+
   const sources: Evidence[] = [];
   const add = (text: string, metadata: Omit<KnowledgeSource, "revision">) => {
     // Retrieval time is not an evidence revision; all citation metadata is.

@@ -1,12 +1,10 @@
-import { LORE_UPLOAD_BUCKET } from "@/lib/storage/const";
-import { removeObjects } from "@/lib/storage/removeObjects";
-
 /**
- * Deletes a staged upload, before or after it is published.
+ * Compatibility hook: staging cleanup is deferred until object generations can
+ * be fenced. A signed PUT may recreate this key after deletion; removing by path
+ * can delete a concurrent replacement. Use bucket retention/lifecycle review,
+ * not an unversioned request-time delete. No storage operation is performed.
  *
- * @param path - The staged object's key.
- * @returns Nothing; throws when storage refuses, so the caller can keep the completion retryable.
+ * @param _path - Staged key retained for the eventual lifecycle contract.
+ * @returns Nothing. This does not assert that physical cleanup occurred.
  */
-export async function removeStagedUpload(path: string): Promise<void> {
-  await removeObjects(LORE_UPLOAD_BUCKET, [path]);
-}
+export async function removeStagedUpload(_path: string): Promise<void> {}

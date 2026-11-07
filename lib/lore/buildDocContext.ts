@@ -28,7 +28,9 @@ import { withoutAt } from "@/lib/artists/withoutAt";
 export async function buildDocContext(
   artistId: string,
   presetSources?: DocSource[],
+  signal?: AbortSignal,
 ): Promise<{ artistName: string; context: string; sources: DocSource[] }> {
+  signal?.throwIfAborted();
   const material = await gatherDocMaterial(artistId);
   const { artist } = material;
   const sources = presetSources ?? toSourceList(material);
@@ -44,7 +46,10 @@ export async function buildDocContext(
   if (artist.soundcloud) parts.push(`SoundCloud: ${artist.soundcloud}`);
   if (artist.youtube) parts.push(`YouTube: https://youtube.com/@${withoutAt(artist.youtube)}`);
 
-  const catalog = artist.spotify ? await catalogBlock(artist.spotify) : null;
+  signal?.throwIfAborted();
+  const catalog = artist.spotify
+    ? await (signal ? catalogBlock(artist.spotify, signal) : catalogBlock(artist.spotify))
+    : null;
   if (catalog) parts.push(catalog);
 
   if (material.vaultSources.length > 0) {

@@ -12,12 +12,15 @@ import type { SpotifyHeaders, SpotifyRelease } from "@/lib/spotify/types";
 export async function getSpotifyCatalogDetail(
   id: string | null,
   headers: SpotifyHeaders,
+  signal?: AbortSignal,
 ): Promise<SpotifyRelease[]> {
   if (!id) return [];
   try {
     const data = (await readSpotifyJson(
       `https://api.spotify.com/v1/artists/${id}/albums?include_groups=album%2Csingle%2Cappears_on&limit=50&market=US`,
       headers,
+      fetch,
+      signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : undefined,
     )) as {
       items?: Array<{
         name?: string;

@@ -4,6 +4,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
 function tx(claim: unknown, user: unknown = undefined) {
   return {
+    execute: vi.fn().mockResolvedValue([]),
     query: {
       artistClaims: { findFirst: vi.fn(async () => claim) },
       users: { findFirst: vi.fn(async () => user) },
@@ -43,4 +44,18 @@ describe("authorizeLockedArtistWrite", () => {
       }),
     ).rejects.toThrow("ownership changed");
   });
+});
+
+it("locks admin authority before reading it and never treats whitelist as editing authority", async () => {
+  const t = tx(null, { isAdmin: false, isWhiteListed: true }) as unknown as {
+    execute: ReturnType<typeof vi.fn>;
+    query: { users: { findFirst: ReturnType<typeof vi.fn> } };
+  };
+  await expect(
+    authorizeLockedArtistWrite(t as never, "a1", { userId: "trusted", expectedClaimId: null }),
+  ).rejects.toThrow("ownership changed");
+  expect(t.execute).toHaveBeenCalledTimes(1);
+  expect(t.execute.mock.invocationCallOrder[0]).toBeLessThan(
+    t.query.users.findFirst.mock.invocationCallOrder[0],
+  );
 });

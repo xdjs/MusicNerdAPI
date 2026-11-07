@@ -23,7 +23,10 @@ beforeEach(() => {
 
 describe("handlePublishTurn", () => {
   it("publishes the clean About with the document and its sources, then completes", async () => {
-    const sources = [{ id: 1, kind: "vault", label: "A", url: "https://a" }, "junk"];
+    const sources = [
+      { id: 1, kind: "vault", label: "A", url: "https://a", revision: "a".repeat(64) },
+      "junk",
+    ];
     const ctx = turnContext("publish");
     const events = await collect(handlePublishTurn(ctx, turn({ sources })));
     expect(m.persist).toHaveBeenCalledWith("a1", "About.", {
