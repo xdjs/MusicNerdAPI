@@ -1,3 +1,4 @@
+import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SQL } from "drizzle-orm";
 import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
@@ -7,11 +8,15 @@ import { saveCorrectionAbout } from "@/lib/bioCorrections/saveCorrectionAbout";
 
 const mock = vi.hoisted(() => ({
   transaction: vi.fn(),
+  readProvenance: vi.fn(),
+  writeProvenance: vi.fn(),
   execute: vi.fn(),
   current: vi.fn(),
   versions: vi.fn(),
   activity: vi.fn(),
 }));
+vi.mock("@/lib/bio/readBioProvenance", () => ({ readBioProvenance: mock.readProvenance }));
+vi.mock("@/lib/bio/writeBioProvenance", () => ({ writeBioProvenance: mock.writeProvenance }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: mock.transaction } }));
 vi.mock("@/lib/bioCorrections/getCorrectionAbout", () => ({ getCorrectionAbout: mock.current }));
 vi.mock("@/lib/bio/saveBioVersions", () => ({ saveBioVersions: mock.versions }));
@@ -23,6 +28,7 @@ const current = { bio: "Old bio", revision: "rev", artistId: "a1", claimed: true
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.readProvenance.mockResolvedValue(null);
   mock.transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(tx));
   mock.execute.mockResolvedValue([]);
   mock.execute
@@ -45,7 +51,7 @@ describe("saveCorrectionAbout", () => {
       "select artist_id from artist_directory_preparations where artist_id=$1::uuid for update",
     );
     expect(mock.current).toHaveBeenCalledWith("r1", tx);
-    expect(mock.versions).toHaveBeenCalledWith(tx, "a1", ["Old bio", "New bio"]);
+    expect(mock.versions).toHaveBeenCalledWith(tx, "a1", ["Old bio", "New bio"], [null, null]);
     expect(sqlOf(4).text).toBe("update artists set bio=$1 where id=$2::uuid");
     expect(sqlOf(4).params).toEqual(["New bio", "a1"]);
     expect(mock.activity).toHaveBeenCalledWith(
@@ -63,6 +69,12 @@ describe("saveCorrectionAbout", () => {
   it("writes an unclaimed artist's public About in place, marked as admin-edited", async () => {
     mock.current.mockResolvedValueOnce({ ...current, claimed: false });
     await saveCorrectionAbout("r1", "admin", "New bio", "rev");
+    expect(mock.versions).toHaveBeenCalledWith(
+      tx,
+      "a1",
+      ["Old bio", "New bio"],
+      [expect.objectContaining({ kind: "unknown" }), expect.objectContaining({ kind: "unknown" })],
+    );
     expect(sqlOf(4).text).toContain("update artist_directory_preparations");
     expect(sqlOf(4).text).toContain("'editedByAdmin',true");
     expect(sqlOf(4).params).toEqual(["New bio", "a1"]);
@@ -114,4 +126,27 @@ describe("saveCorrectionAbout", () => {
       "This About is pinned.",
     );
   });
+});
+
+it("preserves generated lineage when an admin edits an unclaimed generated About", async () => {
+  const p = nextBioProvenance("Old bio", null, null, {
+    generated: true,
+    claimId: null,
+    sources: [],
+  });
+  mock.readProvenance.mockResolvedValue(p);
+  mock.execute.mockReset();
+  mock.execute
+    .mockResolvedValue([])
+    .mockResolvedValueOnce([{ id: "admin" }])
+    .mockResolvedValueOnce([{ id: "a1", bio: "Old bio" }]);
+  mock.current.mockResolvedValue({ ...current, claimed: false, storage: "artist" });
+  await saveCorrectionAbout("r1", "admin", "New bio", "rev");
+  expect(sqlOf(4).text).toContain("update artists set bio=");
+  expect(mock.versions).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    ["Old bio", "New bio"],
+    [p, expect.objectContaining({ kind: "generated", claimId: null, sources: [] })],
+  );
 });

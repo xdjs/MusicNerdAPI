@@ -1,3 +1,5 @@
+import { completeIndependentLoreUpload } from "./completeIndependentLoreUpload";
+import type { IndependentUploadTicket } from "./independentUploadTypes";
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/authenticateRequest";
 import { canEditArtist } from "@/lib/auth/canEditArtist";
@@ -7,9 +9,8 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { LORE_UPLOAD_BUCKET, VAULT_BUCKET } from "@/lib/storage/const";
 import { downloadObject } from "@/lib/storage/downloadObject";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
-import { removeObjects } from "@/lib/storage/removeObjects";
-import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
-import { getVaultUploadByPath } from "@/lib/vault/getVaultUploadByPath";
+import { publishImmutableUpload } from "@/lib/vaultUpload/publishImmutableUpload";
+import { getAuthorizedVaultUpload } from "@/lib/vaultUpload/getAuthorizedVaultUpload";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
 import { cleanupSavedUpload } from "@/lib/vaultUpload/cleanupSavedUpload";
 import { MAX_VAULT_FILE_BYTES } from "@/lib/vaultUpload/const";
@@ -24,12 +25,13 @@ import { verifyUploadTicket } from "@/lib/vaultUpload/verifyUploadTicket";
 /**
  * Handles POST /api/vault/upload/complete: checks the staged file against its
  * ticket, extracts its text, publishes it to the vault, saves the source as
- * approved and queues a Lore refresh. Completing the same ticket again
+ * approved. Independent scope returns an actor-bound receipt without claimant jobs.
+ * Claim-bound scope queues a Lore refresh. Completing the same ticket again
  * returns the saved source. A `retryCompletion: true` error asks for the same
  * ticket again, never a new upload.
  *
- * @param request - The request; a claimant or admin Privy token, JSON `{ ticket }`.
- * @returns 200 with `{ status, source, warning? }`; 400, 401, 403, 500 or 503.
+ * @param request - The request; an authenticated claimant/admin, or trusted contributor for unclaimed Lore, Privy token, JSON `{ ticket }`.
+ * @returns 200 with `{ status, source, receiptOnly?, warning? }`; 400, 401, 403, 500 or 503.
  */
 export async function postCompleteUploadHandler(request: Request): Promise<NextResponse> {
   const headers = getCorsHeaders();
@@ -60,7 +62,14 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       await removeStagedUpload(ticket.path);
       return error(400, "Upload expired. Please try again.");
     }
-    const expectedClaimId = await getLoreClaimGeneration(ticket.artistId);
+    if (ticket.scope === "contribution")
+      return completeIndependentLoreUpload(ticket as IndependentUploadTicket);
+    const expectedClaimId = ticket.expectedClaimId;
+    if (
+      expectedClaimId === null ||
+      (await getLoreClaimGeneration(ticket.artistId)) !== expectedClaimId
+    )
+      return error(403, "Artist ownership changed. Start a new upload.");
     if (!(await canEditArtist(userId, ticket.artistId))) {
       // The signed, user-bound ticket authorizes cleanup of this temporary
       // object only, even if artist editing permission has since changed.
@@ -69,7 +78,12 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
     }
     uploadClaimId = expectedClaimId;
     uploadArtistId = ticket.artistId;
-    const prior = await getVaultUploadByPath(ticket.artistId, ticket.path);
+    const prior = await getAuthorizedVaultUpload(
+      ticket.artistId,
+      ticket.path,
+      userId,
+      expectedClaimId,
+    );
     if (prior) {
       const warning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
       await cleanupSavedUpload(ticket.path);
@@ -90,11 +104,7 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
         : ticket.type.startsWith("text/") || ticket.type === "application/json"
           ? buffer.toString("utf8")
           : null;
-    await uploadStorageObject(VAULT_BUCKET, ticket.path, buffer, {
-      contentType: ticket.type,
-      upsert: true,
-      cacheControl: "3600",
-    });
+    await publishImmutableUpload(ticket.path, buffer, ticket.type);
     unpublishedPath = ticket.path;
     const url = getPublicUrl(VAULT_BUCKET, ticket.path);
     const inserted = await insertVaultSource(
@@ -111,10 +121,12 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
         filePath: ticket.path,
         contentType: ticket.type,
       },
-      { userId, trigger: "upload" },
+      { userId, trigger: "upload", recordSubmissionTrust: true },
       { userId, expectedClaimId },
     );
-    const source = inserted ?? (await getVaultUploadByPath(ticket.artistId, ticket.path));
+    const source =
+      inserted ??
+      (await getAuthorizedVaultUpload(ticket.artistId, ticket.path, userId, expectedClaimId));
     if (!source) throw new Error("Upload source was not saved");
     unpublishedPath = undefined;
     const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
@@ -134,7 +146,12 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       try {
         // A lost transaction response is not proof that INSERT rolled back.
         // Never delete a committed upload on an ambiguous network failure.
-        const saved = await getVaultUploadByPath(uploadArtistId, unpublishedPath);
+        const saved = await getAuthorizedVaultUpload(
+          uploadArtistId,
+          unpublishedPath,
+          userId,
+          uploadClaimId,
+        );
         if (saved && !(caught instanceof OwnershipChangedError)) {
           const warning = await refreshAfterUpload(uploadArtistId, uploadClaimId, userId);
           await cleanupSavedUpload(unpublishedPath);
@@ -143,8 +160,12 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
             { status: 200, headers },
           );
         }
-        if (!saved) await removeObjects(VAULT_BUCKET, [unpublishedPath]);
+        // Absence of a row is not an exclusive right to delete the object:
+        // another completion can be about to commit a reference to these bytes.
+        // Preserve the immutable object for a retry or lifecycle reconciliation.
       } catch (recoveryError) {
+        if (recoveryError instanceof OwnershipChangedError)
+          return error(403, recoveryError.message);
         console.error(
           "[vault/upload/complete] Publication reconciliation needs retry",
           recoveryError,

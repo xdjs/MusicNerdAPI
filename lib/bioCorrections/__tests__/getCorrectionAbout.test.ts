@@ -6,7 +6,8 @@ import { renderSql } from "@/lib/db/__tests__/renderSql";
 import { CorrectionAboutConflict } from "@/lib/bioCorrections/CorrectionAboutConflict";
 import { getCorrectionAbout } from "@/lib/bioCorrections/getCorrectionAbout";
 
-const mock = vi.hoisted(() => ({ execute: vi.fn(), publicAbout: vi.fn() }));
+const mock = vi.hoisted(() => ({ execute: vi.fn(), publicAbout: vi.fn(), savedBio: vi.fn() }));
+vi.mock("@/lib/bio/getPublicSavedBio", () => ({ getPublicSavedBio: mock.savedBio }));
 vi.mock("@/lib/db/db", () => ({ db: { execute: mock.execute } }));
 vi.mock("@/lib/bio/getPublicArtistAbout", () => ({
   getPublicArtistAbout: mock.publicAbout,
@@ -23,16 +24,21 @@ const row = {
 const revisionOf = (parts: unknown[]) =>
   createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mock.savedBio.mockResolvedValue("Stored bio");
+  mock.publicAbout.mockResolvedValue(null);
+});
 
 describe("getCorrectionAbout", () => {
   it("uses artists.bio for a claimed artist, with a revision over the row", async () => {
     mock.execute.mockResolvedValueOnce([row]);
     expect(await getCorrectionAbout("r1")).toEqual({
       bio: "Stored bio",
-      revision: revisionOf(["a1", "c1", "Stored bio", null, "Stored bio"]),
+      revision: revisionOf(["a1", "c1", "Stored bio", undefined, null, "Stored bio"]),
       artistId: "a1",
       claimed: true,
+      storage: "artist",
     });
     expect(mock.publicAbout).not.toHaveBeenCalled();
     const { text, params } = renderSql(mock.execute.mock.calls[0][0] as SQL);
@@ -41,6 +47,7 @@ describe("getCorrectionAbout", () => {
   });
 
   it("uses the public directory About for an unclaimed artist", async () => {
+    mock.savedBio.mockResolvedValue(null);
     const publicAbout = { version: 1, bio: "Public bio" };
     mock.execute.mockResolvedValueOnce([
       { ...row, claim_id: null, bio: "Private draft", public_about: publicAbout },
@@ -48,9 +55,10 @@ describe("getCorrectionAbout", () => {
     mock.publicAbout.mockResolvedValueOnce({ bio: "Public bio", kind: "researched", sources: [] });
     expect(await getCorrectionAbout("r1")).toEqual({
       bio: "Public bio",
-      revision: revisionOf(["a1", null, "Private draft", publicAbout, "Public bio"]),
+      revision: revisionOf(["a1", null, "Private draft", undefined, publicAbout, "Public bio"]),
       artistId: "a1",
       claimed: false,
+      storage: "directory",
     });
     expect(mock.publicAbout).toHaveBeenCalledWith("a1", expect.anything());
   });
@@ -73,13 +81,16 @@ describe("getCorrectionAbout", () => {
       "The published About is no longer available. Review the artist profile before resolving this report.",
     ],
   ])("throws a conflict for %s", async (_, rows, message) => {
+    if (rows.some(r => r.bio === ABOUT_EMPTY_STATE)) mock.savedBio.mockResolvedValue(null);
     mock.execute.mockResolvedValueOnce(rows);
     await expect(getCorrectionAbout("r1")).rejects.toThrow(CorrectionAboutConflict);
+    if (rows.some(r => r.bio === ABOUT_EMPTY_STATE)) mock.savedBio.mockResolvedValue(null);
     mock.execute.mockResolvedValueOnce(rows);
     await expect(getCorrectionAbout("r1")).rejects.toThrow(message);
   });
 
   it("throws a conflict for an unclaimed artist with no publishable About", async () => {
+    mock.savedBio.mockResolvedValue(null);
     mock.execute.mockResolvedValueOnce([{ ...row, claim_id: null }]);
     mock.publicAbout.mockResolvedValueOnce(null);
     await expect(getCorrectionAbout("r1")).rejects.toThrow(

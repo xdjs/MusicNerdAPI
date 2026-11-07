@@ -1,3 +1,4 @@
+import type { TransactionDb } from "@/lib/ownership/types";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { artistVaultSources } from "@/lib/db/schema";
@@ -14,8 +15,9 @@ import type { VaultSource } from "@/lib/vault/types";
 export async function getVaultUploadByPath(
   artistId: string,
   filePath: string,
+  reader: Pick<TransactionDb, "query"> = db,
 ): Promise<VaultSource | undefined> {
-  return db.query.artistVaultSources.findFirst({
+  return reader.query.artistVaultSources.findFirst({
     where: and(
       eq(artistVaultSources.artistId, artistId),
       eq(artistVaultSources.filePath, filePath),

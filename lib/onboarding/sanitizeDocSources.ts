@@ -13,12 +13,20 @@ export function sanitizeDocSources(input: unknown): DocSource[] {
   const out: DocSource[] = [];
   for (const item of input.slice(0, MAX_DOC_SOURCES)) {
     if (!item || typeof item !== "object") continue;
-    const { id, kind, label, url } = item as Record<string, unknown>;
+    const { id, kind, label, url, revision } = item as Record<string, unknown>;
     if (typeof id !== "number" || !Number.isFinite(id)) continue;
     if (kind !== "vault" && kind !== "interview" && kind !== "social") continue;
     if (typeof label !== "string") continue;
     if (url !== null && typeof url !== "string") continue;
-    out.push({ id, kind, label, url: url ?? null });
+    out.push({
+      id,
+      kind,
+      label,
+      url: url ?? null,
+      ...(kind === "vault" && typeof revision === "string" && /^[a-f0-9]{64}$/.test(revision)
+        ? { revision }
+        : {}),
+    });
   }
   return out;
 }

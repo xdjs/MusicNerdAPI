@@ -1,3 +1,4 @@
+import { getPublicSavedBio } from "@/lib/bio/getPublicSavedBio";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
@@ -23,14 +24,16 @@ export async function getCorrectionAbout(
   const [row] = await reader.execute<{
     artist_id: string;
     bio: string | null;
+    bio_provenance: unknown;
     claim_id: string | null;
     public_about: unknown;
     pinned: boolean;
     status: string;
-  }>(sql`select r.artist_id, a.bio, r.status, p.public_about,
+  }>(sql`select r.artist_id, a.bio, bp.provenance as bio_provenance, r.status, p.public_about,
     (select c.id from artist_claims c where c.artist_id=a.id and c.status='approved' limit 1) claim_id,
     exists(select 1 from artist_bio_versions v where v.artist_id=a.id and v.is_pinned) pinned
     from artist_bio_corrections r join artists a on a.id=r.artist_id
+    left join mn_private.artist_bio_provenance bp on bp.artist_id=a.id
     left join artist_directory_preparations p on p.artist_id=a.id where r.id=${reportId}::uuid`);
   if (!row || row.status !== "pending")
     throw new CorrectionAboutConflict("This report has already been reviewed or no longer exists.");
@@ -38,14 +41,30 @@ export async function getCorrectionAbout(
     throw new CorrectionAboutConflict(
       "This About is pinned. Unpin it on the artist profile before editing.",
     );
-  const about = row.claim_id ? null : await getPublicArtistAbout(row.artist_id, reader);
-  const bio = row.claim_id ? row.bio : about?.bio;
+  const savedBio = await getPublicSavedBio(row.artist_id, reader);
+  const about = savedBio ? null : await getPublicArtistAbout(row.artist_id, reader);
+  const bio = savedBio ?? about?.bio;
   if (!bio || !isRealBio(bio))
     throw new CorrectionAboutConflict(
       "The published About is no longer available. Review the artist profile before resolving this report.",
     );
   const revision = createHash("sha256")
-    .update(JSON.stringify([row.artist_id, row.claim_id, row.bio, row.public_about, bio]))
+    .update(
+      JSON.stringify([
+        row.artist_id,
+        row.claim_id,
+        row.bio,
+        row.bio_provenance,
+        row.public_about,
+        bio,
+      ]),
+    )
     .digest("hex");
-  return { bio, revision, artistId: row.artist_id, claimed: !!row.claim_id };
+  return {
+    bio,
+    revision,
+    artistId: row.artist_id,
+    claimed: !!row.claim_id,
+    storage: savedBio ? "artist" : "directory",
+  };
 }

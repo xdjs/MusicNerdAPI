@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const assertSources = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/lore/assertLoreSourcesCurrent", () => ({ assertLoreSourcesCurrent: assertSources }));
+const authorize = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
+  authorizeLockedArtistWrite: authorize,
+}));
+
 const { tx, values, upsert } = vi.hoisted(() => {
   const upsert = vi.fn();
   const values = vi.fn(() => ({ onConflictDoUpdate: upsert }));
@@ -15,6 +22,8 @@ const { persistRefreshedLore } = await import("@/lib/lore/persistRefreshedLore")
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authorize.mockReset();
+  assertSources.mockReset();
   tx.execute.mockResolvedValue([]);
   tx.query.artistClaims.findFirst.mockResolvedValue({ id: "current-claim" });
   tx.query.artistResearchJobs.findFirst.mockResolvedValue({ id: "j1" });
@@ -75,4 +84,70 @@ describe("persistRefreshedLore", () => {
       expect(upsert.mock.calls[0][0].set.loreSummary).toEqual(summary);
     },
   );
+});
+
+it("reauthorizes the editor under the write lock before publishing Lore", async () => {
+  const auth = { userId: "editor", expectedClaimId: "current-claim" };
+  await persistRefreshedLore("a1", "Doc", [], "current-claim", "j1", undefined, auth);
+  expect(authorize).toHaveBeenCalledWith(tx, "a1", auth);
+  expect(authorize.mock.invocationCallOrder[0]).toBeLessThan(values.mock.invocationCallOrder[0]);
+});
+it("does not write Lore when the editor lost authorization", async () => {
+  authorize.mockRejectedValue(new Error("revoked"));
+  await expect(
+    persistRefreshedLore("a1", "Doc", [], "current-claim", "j1", undefined, {
+      userId: "editor",
+      expectedClaimId: "current-claim",
+    }),
+  ).rejects.toThrow("revoked");
+  expect(values).not.toHaveBeenCalled();
+});
+it("does not publish a stale source snapshot", async () => {
+  assertSources.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(
+    persistRefreshedLore("a1", "Doc", [], "current-claim", "j1", undefined, {
+      userId: "editor",
+      expectedClaimId: "current-claim",
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+});
+it("does not publish with an expired or replacement lease", async () => {
+  await expect(
+    persistRefreshedLore(
+      "a1",
+      "Doc",
+      [],
+      "current-claim",
+      "j1",
+      undefined,
+      { userId: "editor", expectedClaimId: "current-claim" },
+      { jobId: "j1", claimedAt: "2026-11-03T00:00:00.123456Z", requestedAt: "" },
+    ),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+});
+it("does not publish after cancellation", async () => {
+  await expect(
+    persistRefreshedLore(
+      "a1",
+      "Doc",
+      [],
+      "current-claim",
+      "j1",
+      undefined,
+      undefined,
+      undefined,
+      AbortSignal.abort(new Error("deadline")),
+    ),
+  ).rejects.toThrow("deadline");
+  expect(tx.insert).not.toHaveBeenCalled();
+});
+
+it("revalidates sources for background refreshes as well as explicit About", async () => {
+  assertSources.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(persistRefreshedLore("a1", "Doc", [], "current-claim", "j1")).rejects.toThrow(
+    "Lore sources changed",
+  );
+  expect(tx.insert).not.toHaveBeenCalled();
 });

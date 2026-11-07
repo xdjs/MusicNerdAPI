@@ -50,6 +50,8 @@ describe("refreshArtistDoc", () => {
       "claim-1",
       "j1",
       summary,
+      undefined,
+      undefined,
     );
   });
 
@@ -92,4 +94,15 @@ describe("refreshArtistDoc", () => {
     });
     expect(await refreshArtistDoc("a1", { createIfMissing: true })).toBe("failed");
   });
+});
+
+it("passes the requesting editor to the document write", async () => {
+  const auth = { userId: "editor", expectedClaimId: "claim-1" };
+  await refreshArtistDoc("a1", {
+    createIfMissing: true,
+    jobId: "j1",
+    expectedClaimId: "claim-1",
+    auth,
+  });
+  expect(m.persistRefreshedLore.mock.calls[0][6]).toEqual(auth);
 });

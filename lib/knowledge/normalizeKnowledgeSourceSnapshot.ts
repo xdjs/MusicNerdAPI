@@ -1,3 +1,4 @@
+import { knowledgeRevision } from "@/lib/knowledge/knowledgeRevision";
 import { z } from "zod";
 import { normalizeArtistKnowledge } from "@/lib/knowledge/normalizeArtistKnowledge";
 
@@ -7,6 +8,7 @@ const schema = z.discriminatedUnion("kind", [
   z.object({
     ...base,
     kind: z.literal("vault"),
+    publication: z.enum(["inherit", "public", "private"]).optional(),
     status: z.enum(["approved", "pending", "rejected"]),
     origin: z.string(),
     type: nullableString,
@@ -43,5 +45,15 @@ export function normalizeKnowledgeSourceSnapshot(snapshot: unknown, artistId: st
     answers: [],
     corrections: [],
     jobs: [],
-  }).sources;
+  }).sources.map(source =>
+    row.kind === "vault" && row.publication
+      ? {
+          ...source,
+          metadata: {
+            ...source.metadata,
+            revision: knowledgeRevision([source.metadata.revision, row.publication, row.updatedAt]),
+          },
+        }
+      : source,
+  );
 }

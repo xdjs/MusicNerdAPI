@@ -12,14 +12,14 @@ import { isCitableSource } from "@/lib/sources/isCitableSource";
 import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
 import { searchAndPopulateVault } from "@/lib/vault/searchAndPopulateVault";
 import { updateVaultSourceStatus } from "@/lib/vault/updateVaultSourceStatus";
+import type { VaultSource } from "@/lib/vault/types";
 import { pluralize } from "@/lib/text/pluralize";
 
 /**
  * Auto-build stage 2: search the web for sources with a 45 s discovery deadline, streaming
  * each as it's saved. Then report the links the search adopted, ask about a
- * guessed account it replaced, and approve everything pending. Approval is safe:
- * only machine-verified text makes a source citable, so a namesake stays an
- * uncitable lead the artist can remove.
+ * guessed account it replaced, and approve only unchanged readable research
+ * inserted by this run. Existing contributions retain their moderation state.
  *
  * @param artistId - The artist.
  * @param provisionalSiteNames - Columns stage 1 filled with a guess.
@@ -41,7 +41,7 @@ export async function* autoBuildSources(
     Record<string, unknown> | undefined;
   // Await settlement: a budget race would hide a late provider failure and confirm
   // the stage while discovery is still running. The search checks its own deadline.
-  yield* yieldWhileRunning<TurnEvent, unknown>(emit =>
+  const saved = yield* yieldWhileRunning<TurnEvent, VaultSource[]>(emit =>
     searchAndPopulateVault(artistId, {
       deadline: Date.now() + VAULT_DISCOVERY_BUDGET_MS,
       requireComplete: true,
@@ -63,23 +63,22 @@ export async function* autoBuildSources(
     }
   }
 
-  const pending = await getVaultSourcesByStatus(artistId, "pending");
-  for (const source of pending) {
+  for (const source of saved) {
     try {
-      await updateVaultSourceStatus(source.id, "approved");
+      await updateVaultSourceStatus(source.id, "approved", source);
     } catch (e) {
       console.error("[onboarding] auto-approve failed:", source.id, e);
     }
   }
-  const citable = pending.filter(isCitableSource).length;
   // Everything on the page now, including what claim approval's own search saved.
   const onPage = await getVaultSourcesByStatus(artistId, "approved");
+  const citable = onPage.filter(isCitableSource).length;
   yield { kind: "sources", sources: onPage.map(toSourceView) };
   yield {
     kind: "progress",
     label:
-      pending.length > 0
-        ? `Read ${pending.length} ${pluralize(pending.length, "source", "sources")}`
+      saved.length > 0
+        ? `Read ${saved.length} ${pluralize(saved.length, "source", "sources")}`
         : "Looked for sources about you",
     done: true,
     group: VAULT_SEARCH_GROUP,

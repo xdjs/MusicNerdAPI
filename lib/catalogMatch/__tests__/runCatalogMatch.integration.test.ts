@@ -38,7 +38,7 @@ const id = "11111111-1111-4111-8111-111111111111",
   deezer = "42";
 beforeAll(async () => {
   await client.exec(
-    "CREATE ROLE mnweb; CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA musicnerd_private; GRANT USAGE ON SCHEMA musicnerd_private TO mnweb; CREATE TYPE confidence_level AS ENUM('high','medium','low','manual'); CREATE TYPE exclusion_reason AS ENUM('too_ambiguous','name_mismatch','conflict'); CREATE TYPE source_status AS ENUM('pending','approved','rejected'); CREATE TABLE musicnerd_private.catalog_link_disconnects(artist_id uuid,platform text)",
+    "CREATE ROLE mnweb; CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA mn_private; CREATE TABLE mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null); GRANT USAGE ON SCHEMA mn_private TO mnweb; GRANT SELECT,INSERT,UPDATE,DELETE ON mn_private.artist_bio_provenance TO mnweb; CREATE SCHEMA musicnerd_private; GRANT USAGE ON SCHEMA musicnerd_private TO mnweb; CREATE TYPE confidence_level AS ENUM('high','medium','low','manual'); CREATE TYPE exclusion_reason AS ENUM('too_ambiguous','name_mismatch','conflict'); CREATE TYPE source_status AS ENUM('pending','approved','rejected'); CREATE TABLE musicnerd_private.catalog_link_disconnects(artist_id uuid,platform text)",
   );
   for (const table of [
     schema.artists,

@@ -13,8 +13,14 @@ export async function readSpotifyJson(
   url: string,
   headers: SpotifyHeaders,
   transport: (url: string, init: RequestInit) => Promise<Response> = fetch,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  const res = await fetchSpotifyResponse(url, { headers: headers.headers }, transport);
+  signal?.throwIfAborted();
+  const res = await fetchSpotifyResponse(
+    url,
+    { headers: headers.headers, ...(signal ? { signal } : {}) },
+    transport,
+  );
   if (!res.ok) throw new Error(`Spotify returned ${res.status}`);
   return res.json();
 }
