@@ -29,6 +29,7 @@ describe("exact provider ownership SQL", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "exact", deezer: "1975", match_type: 0 });
     expect(rows[0]).not.toHaveProperty("bio");
+    expect(rows[0]).not.toHaveProperty("hasConflictingMapping");
     expect(execute).toHaveBeenCalledTimes(1);
     expect((await pg.query("SELECT count(*)::int AS n FROM artists")).rows).toEqual([{ n: 2 }]);
   });
@@ -56,8 +57,21 @@ describe("exact provider ownership SQL", () => {
       "conflicting saved profiles",
     );
   });
+  it.each(["deezer", "spotify"] as const)(
+    "rejects both sides of a conflicting %s identity",
+    async platform => {
+      await pg.query(`INSERT INTO artists(id, ${platform}) VALUES('direct', $1)`, ["1975"]);
+      await pg.query("INSERT INTO artist_id_mappings VALUES('direct', $1, $2)", [platform, "2020"]);
+      for (const platformId of ["1975", "2020"])
+        await expect(searchForArtistByProviderId(platform, platformId)).rejects.toThrow(
+          "conflicting saved profiles",
+        );
+    },
+  );
   it("keeps provider boundaries and values parameterized", async () => {
-    await pg.exec("INSERT INTO artists(id,spotify,deezer) VALUES('spotify','1975',null);");
+    await pg.exec(
+      "INSERT INTO artists(id,spotify,deezer) VALUES('spotify','1975',null); INSERT INTO artist_id_mappings VALUES('spotify','deezer','2020');",
+    );
     expect(await searchForArtistByProviderId("deezer", "1975")).toEqual([]);
     expect(await searchForArtistByProviderId("spotify", "1975")).toMatchObject([{ id: "spotify" }]);
     expect(await searchForArtistByProviderId("deezer", "1975' OR true--")).toEqual([]);

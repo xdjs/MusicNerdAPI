@@ -14,7 +14,13 @@ export async function searchForArtistByProviderId(
   const rows = rowsOf(
     await db.execute(sql`
     SELECT id, name, spotify, deezer, bandcamp, youtube, youtubechannel,
-      instagram, x, facebook, tiktok, custom_image AS "customImage", 0 AS match_type
+      instagram, x, facebook, tiktok, custom_image AS "customImage", 0 AS match_type,
+      EXISTS (
+        SELECT 1 FROM artist_id_mappings conflicting_mapping
+        WHERE conflicting_mapping.artist_id = artists.id
+          AND conflicting_mapping.platform = ${platform}
+          AND conflicting_mapping.platform_id <> ${platformId}
+      ) AS "hasConflictingMapping"
     FROM artists
     WHERE ${column} = ${platformId}
       OR EXISTS (
@@ -25,8 +31,13 @@ export async function searchForArtistByProviderId(
       )
     ORDER BY id
   `),
-  ) as ArtistSearchRow[];
-  if (rows.length > 1 || rows.some(row => row[platform]?.trim() && row[platform] !== platformId))
+  ) as (ArtistSearchRow & { hasConflictingMapping: boolean })[];
+  if (
+    rows.length > 1 ||
+    rows.some(
+      row => row.hasConflictingMapping || (row[platform]?.trim() && row[platform] !== platformId),
+    )
+  )
     throw new ProviderIdentityConflictError();
-  return rows;
+  return rows.map(({ hasConflictingMapping: _hasConflictingMapping, ...artist }) => artist);
 }
