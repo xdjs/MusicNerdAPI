@@ -52,18 +52,22 @@ describe("saveCorrectionAbout", () => {
     );
     expect(mock.current).toHaveBeenCalledWith("r1", tx);
     expect(mock.versions).toHaveBeenCalledWith(tx, "a1", ["Old bio", "New bio"], [null, null]);
-    expect(sqlOf(4).text).toBe("update artists set bio=$1 where id=$2::uuid");
-    expect(sqlOf(4).params).toEqual(["New bio", "a1"]);
+    expect(sqlOf(4)).toEqual({
+      text: "select set_config('musicnerd.about_writer_version','1655-v1',true)",
+      params: [],
+    });
+    expect(sqlOf(5).text).toBe("update artists set bio=$1 where id=$2::uuid");
+    expect(sqlOf(5).params).toEqual(["New bio", "a1"]);
     expect(mock.activity).toHaveBeenCalledWith(
       "a1",
       "about_edited",
       { userId: "admin", trigger: "about_correction" },
       tx,
     );
-    expect(sqlOf(5).text).toBe(
+    expect(sqlOf(6).text).toBe(
       "update artist_bio_corrections set status='resolved',reviewed_at=now(),reviewed_by=$1::uuid where id=$2::uuid",
     );
-    expect(sqlOf(5).params).toEqual(["admin", "r1"]);
+    expect(sqlOf(6).params).toEqual(["admin", "r1"]);
   });
 
   it("writes an unclaimed artist's public About in place, marked as admin-edited", async () => {
@@ -74,6 +78,9 @@ describe("saveCorrectionAbout", () => {
       "a1",
       ["Old bio", "New bio"],
       [expect.objectContaining({ kind: "unknown" }), expect.objectContaining({ kind: "unknown" })],
+    );
+    expect(mock.execute.mock.calls.map(c => renderSql(c[0] as SQL).text)).not.toContainEqual(
+      expect.stringContaining("set_config"),
     );
     expect(sqlOf(4).text).toContain("update artist_directory_preparations");
     expect(sqlOf(4).text).toContain("'editedByAdmin',true");
@@ -142,7 +149,12 @@ it("preserves generated lineage when an admin edits an unclaimed generated About
     .mockResolvedValueOnce([{ id: "a1", bio: "Old bio" }]);
   mock.current.mockResolvedValue({ ...current, claimed: false, storage: "artist" });
   await saveCorrectionAbout("r1", "admin", "New bio", "rev");
-  expect(sqlOf(4).text).toContain("update artists set bio=");
+  expect(sqlOf(4)).toEqual({
+    text: "select set_config('musicnerd.about_writer_version','1655-v1',true)",
+    params: [],
+  });
+  expect(sqlOf(5).text).toBe("update artists set bio=$1 where id=$2::uuid");
+  expect(sqlOf(5).params).toEqual(["New bio", "a1"]);
   expect(mock.versions).toHaveBeenCalledWith(
     tx,
     "a1",
