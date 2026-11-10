@@ -18,6 +18,17 @@ vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
 vi.mock("@/lib/ownership/findApprovedClaim", () => ({
   findApprovedClaim: vi.fn(async () => undefined),
 }));
+vi.mock("@/lib/auth/validateArtistEditRequest", () => ({
+  validateArtistEditRequest: vi.fn(() => {
+    throw new Error("Unexpected auth in public read");
+  }),
+}));
+vi.mock("@/lib/bio/generateArtistBio", () => ({
+  generateArtistBio: vi.fn(() => {
+    throw new Error("Unexpected generation in public read");
+  }),
+}));
+const { getArtistBioHandler } = await import("../getArtistBioHandler");
 const { persistArtistBio } = await import("../persistArtistBio");
 const artist = "00000000-0000-4000-8000-000000000001",
   sourceId = "00000000-0000-4000-8000-000000000002";
@@ -47,6 +58,7 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       artist_onboarding_steps: schema.artistOnboardingSteps,
       artist_vault_sources: schema.artistVaultSources,
       artist_activity_events: schema.artistActivityEvents,
+      artist_research_jobs: schema.artistResearchJobs,
     })) {
       const columns = Object.values(getTableColumns(table))
         .map(
@@ -60,7 +72,7 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       `create schema mn_private;create table mn_private.public_url_receipts(url_hash bytea,url text,policy_version integer,primary key(url_hash,policy_version)); create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb not null); create table mn_private.artist_bio_version_provenance(version_id uuid primary key,provenance jsonb not null);`,
     );
     await pg.exec(
-      "alter table artist_docs add unique(artist_id);create table artist_claims(artist_id uuid,status text)",
+      "alter table artist_docs add unique(artist_id);create table artist_claims(id uuid,artist_id uuid,status text);create table mn_private.legacy_bio_publications(artist_id uuid primary key,claim_id uuid not null,bio_hash text not null)",
     );
     await pg.exec("create role mnweb;create role anon;create role authenticated;");
     await pg.exec(
@@ -72,6 +84,18 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
         "utf8",
       ),
     );
+    await pg.exec(
+      "create table artist_source_assessments(source_id uuid,artist_id uuid,activity_id uuid,snapshot jsonb);create table artist_directory_preparations(artist_id uuid,activity_id uuid,job_id uuid,status text,starting_bio text,manifest jsonb,public_about jsonb)",
+    );
+    const functions = readFileSync(
+      new URL("../../../docs/prototypes/hosted-about/bootstrap-functions.sql", import.meta.url),
+      "utf8",
+    );
+    const snapshotFunction = functions.match(
+      /CREATE FUNCTION public\.knowledge_vault_source_snapshot[\s\S]*?\$\$;/,
+    )?.[0];
+    if (!snapshotFunction) throw new Error("Missing pinned source snapshot function");
+    await pg.exec(snapshotFunction);
     await pg.query("insert into artists(id,bio) values($1,'Original manual')", [artist]);
     await pg.query(
       "insert into artist_vault_sources(id,artist_id,origin,publication,status,url,extracted_text) values($1,$2,'upload','public','approved',$3,$4)",
@@ -107,6 +131,36 @@ it("atomically keeps current/history evidence, same-text revisions and manual li
       { bio_text: "Original manual", bio_provenance: null },
       { bio_text: "Generated", bio_provenance: first },
     ]);
+    // Regression from the narrow slice: exercise the real public handler and projector
+    // after actual protected persistence has written current/history lineage and receipts.
+    const saved = async () => ({
+      artists: (await pg.query("select bio from artists")).rows,
+      current: (await pg.query("select * from mn_private.artist_bio_provenance order by artist_id"))
+        .rows,
+      history: (await pg.query("select * from artist_bio_versions order by id")).rows,
+      lineage: (
+        await pg.query("select * from mn_private.artist_bio_version_provenance order by version_id")
+      ).rows,
+      receipts: (await pg.query("select * from mn_private.public_url_receipts order by url")).rows,
+    });
+    await pg.query("insert into artist_claims(id,artist_id,status) values($1,$2,'approved')", [
+      sourceId,
+      artist,
+    ]);
+    const readPublic = () =>
+      getArtistBioHandler(new Request(`https://api.test/api/artistBio/${artist}`), artist);
+    const visible = await readPublic();
+    expect(visible.status).toBe(200);
+    expect((await visible.json()).bio).toBe("Generated");
+    const preserved = await saved();
+    await pg.exec("update artist_vault_sources set publication='private'");
+    const withdrawn = await readPublic();
+    expect(withdrawn.status).toBe(200);
+    expect((await withdrawn.json()).bio).not.toBe("Generated");
+    expect(withdrawn.headers.get("cache-control")).toBe("private, no-store");
+    expect(await saved()).toEqual(preserved);
+    await pg.exec("update artist_vault_sources set publication='public';delete from artist_claims");
+
     source.extractedText = "Changed evidence. ".repeat(30);
     await pg.query("update artist_vault_sources set extracted_text=$1", [source.extractedText]);
     await persistArtistBio(artist, "Generated", options());
