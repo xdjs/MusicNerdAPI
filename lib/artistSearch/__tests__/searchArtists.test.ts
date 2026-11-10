@@ -8,6 +8,9 @@ const { local, external, images } = vi.hoisted(() => ({
 vi.mock("@/lib/artistSearch/searchForArtistByName", () => ({ searchForArtistByName: local }));
 vi.mock("@/lib/musicPlatform/searchDeezerArtists", () => ({ searchDeezerArtists: external }));
 vi.mock("@/lib/musicPlatform/getArtistImages", () => ({ getArtistImages: images }));
+vi.mock("@/lib/artistSearch/searchForArtistByProviderId", () => ({
+  searchForArtistByProviderId: vi.fn(),
+}));
 const { searchArtists } = await import("@/lib/artistSearch/searchArtists");
 
 const row = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
