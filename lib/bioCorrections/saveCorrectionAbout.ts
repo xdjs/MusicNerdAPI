@@ -1,3 +1,4 @@
+import { markAboutWriter } from "@/lib/bio/markAboutWriter";
 import { readBioProvenance } from "@/lib/bio/readBioProvenance";
 import { writeBioProvenance } from "@/lib/bio/writeBioProvenance";
 import { nextBioProvenance } from "@/lib/bio/nextBioProvenance";
@@ -65,6 +66,7 @@ export async function saveCorrectionAbout(
     const bioProvenance = nextBioProvenance(bio, artist.bio ?? current.bio, previousProvenance);
     await saveBioVersions(tx, artist.id, [current.bio, bio], [previousProvenance, bioProvenance]);
     if (stored) {
+      await markAboutWriter(tx);
       await tx.execute(sql`update artists set bio=${bio} where id=${artist.id}::uuid`);
       await writeBioProvenance(tx, artist.id, bioProvenance);
     } else {

@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { getTableColumns } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { rowsOf } from "@/lib/db/rowsOf";
@@ -45,6 +46,16 @@ beforeEach(async () => {
   database = drizzle(pg);
   await pg.exec(
     "create schema mn_private;create table mn_private.public_url_receipts(url_hash bytea,url text,policy_version integer,primary key(url_hash,policy_version));create table artists(id uuid,bio text);create table users(id uuid,is_admin boolean);create table artist_bio_corrections(id uuid,artist_id uuid,status text,reviewed_at timestamptz,reviewed_by uuid);create table artist_directory_preparations(artist_id uuid);create table artist_bio_versions(id uuid default gen_random_uuid(),artist_id uuid,bio_text text,is_pinned boolean);create table mn_private.artist_bio_version_provenance(version_id uuid,provenance jsonb);create table mn_private.artist_bio_provenance(artist_id uuid primary key,provenance jsonb)",
+  );
+  // Exercise the actual reviewed fence, not a mocked writer-marker assertion.
+  await pg.exec(
+    readFileSync(
+      new URL(
+        "../../../docs/prototypes/pg17-ci/fixtures/0065_about_writer_fence.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
   );
   const columns = Object.values(getTableColumns(schema.artistActivityEvents))
     .map(
@@ -99,4 +110,12 @@ it("rolls back correction and report resolution when receipt storage fails", asy
     { status: "pending" },
   ]);
   expect((await pg.query("select * from artist_bio_versions")).rows).toEqual([]);
+});
+
+it("does not leak the compatible writer marker beyond the correction transaction", async () => {
+  await saveCorrectionAbout(report, user, "Corrected", "synthetic");
+  await expect(
+    pg.query("update artists set bio='Unmarked overwrite' where id=$1", [artist]),
+  ).rejects.toMatchObject({ code: "55000" });
+  expect((await pg.query("select bio from artists")).rows).toEqual([{ bio: "Corrected" }]);
 });
