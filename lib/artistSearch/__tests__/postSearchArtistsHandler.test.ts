@@ -55,3 +55,23 @@ describe("postSearchArtistsHandler", () => {
     error.mockRestore();
   });
 });
+
+it.each(["1975", "7DRT8Nq9pZ9HuwZTSS7L8v"])(
+  "does not cache ambiguous bare input %s",
+  async query => {
+    search.mockResolvedValueOnce([{ id: "name" }]).mockResolvedValueOnce([{ id: "recovered" }]);
+    await post(JSON.stringify({ query }));
+    const again = await post(JSON.stringify({ query }));
+    expect(await again.json()).toEqual({ results: [{ id: "recovered" }] });
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(searchArtistsCache.size).toBe(0);
+  },
+);
+
+it("keeps successful explicit identities cached", async () => {
+  search.mockResolvedValue([{ id: "saved" }]);
+  const body = JSON.stringify({ query: "spotify:artist:7DRT8Nq9pZ9HuwZTSS7L8v" });
+  await post(body);
+  await post(body);
+  expect(search).toHaveBeenCalledTimes(1);
+});

@@ -1,78 +1,66 @@
-import { EXTERNAL_SEARCH_LIMIT } from "@/lib/artistSearch/const";
+import { fetchProviderSearchArtist } from "@/lib/artistSearch/fetchProviderSearchArtist";
 import { getLinkCount } from "@/lib/artistSearch/getLinkCount";
-import { getMatchScore } from "@/lib/artistSearch/getMatchScore";
-import { searchForArtistByName } from "@/lib/artistSearch/searchForArtistByName";
+import { parseArtistSearchQuery } from "@/lib/artistSearch/parseArtistSearchQuery";
+import { searchArtistsByName } from "@/lib/artistSearch/searchArtistsByName";
+import { searchForArtistByProviderId } from "@/lib/artistSearch/searchForArtistByProviderId";
 import type { SearchArtistResult } from "@/lib/artistSearch/types";
 import { customImageUrl } from "@/lib/artists/customImageUrl";
-import { getArtistImages } from "@/lib/musicPlatform/getArtistImages";
-import { searchDeezerArtists } from "@/lib/musicPlatform/searchDeezerArtists";
 
-/**
- * MusicNerdWeb's combined artist search: Music Nerd's artists and Deezer's,
- * searched at once, merged and ranked. Names are not identities: Deezer
- * artists already linked here are dropped, the rest stay `isExternalOnly` so
- * the add/duplicate-review flow can verify them. Platform images are fetched
- * only for artists whose own upload won't win.
- *
- * @param query - The name searched for.
- * @param bookmarkedIds - The caller's bookmarked artists; they rank first within a tier.
- * @returns The ranked results.
- */
+/** Search names or exact provider identities; reading never creates or attaches an artist. */
 export async function searchArtists(
   query: string,
   bookmarkedIds: string[],
 ): Promise<SearchArtistResult[]> {
-  const [dbResults, externalResults] = await Promise.all([
-    searchForArtistByName(query),
-    searchDeezerArtists(query, EXTERNAL_SEARCH_LIMIT).catch(err => {
-      console.error("External platform search failed:", err);
-      return [];
-    }),
-  ]);
-
-  const existingPlatformIds = new Set<string>();
-  for (const artist of dbResults ?? []) {
-    if (artist.deezer) existingPlatformIds.add(`deezer:${artist.deezer}`);
-    if (artist.spotify) existingPlatformIds.add(`spotify:${artist.spotify}`);
-  }
-
-  const newExternalResults: SearchArtistResult[] = externalResults
-    .filter(ext => !existingPlatformIds.has(`${ext.platform}:${ext.platformId}`))
-    .map(ext => ({
-      id: null,
-      name: ext.name,
-      platformId: ext.platformId,
-      platform: ext.platform,
-      imageUrl: ext.imageUrl,
-      profileUrl: ext.profileUrl,
-      isExternalOnly: true,
-      matchScore: getMatchScore(ext.name, query),
-      linkCount: 0,
+  const identity = parseArtistSearchQuery(query);
+  if (!identity) return searchArtistsByName(query, bookmarkedIds);
+  const { platform, platformId, includeNameResults } = identity;
+  const saved = await searchForArtistByProviderId(platform, platformId);
+  if (saved.length) {
+    const savedResults: SearchArtistResult[] = saved.map(artist => ({
+      ...artist,
+      bio: null,
+      isExternalOnly: false,
+      imageUrl: customImageUrl(artist.customImage),
+      matchScore: 0,
+      linkCount: getLinkCount(artist),
     }));
-
-  const withoutUpload = (dbResults ?? []).filter(artist => !customImageUrl(artist.customImage));
-  let imageMap = new Map<string, string>();
-  try {
-    imageMap = await getArtistImages(withoutUpload);
-  } catch (error) {
-    console.error("Failed to fetch platform images:", error);
+    // Explicit identities need no provider access. Bare IDs retain ranked name search.
+    if (!includeNameResults) return savedResults;
+    const names = await searchArtistsByName(query, bookmarkedIds).catch(() => []);
+    const savedIds = new Set(saved.map(artist => artist.id));
+    return [
+      ...savedResults,
+      ...names.filter(artist =>
+        artist.isExternalOnly
+          ? artist.platform !== platform || artist.platformId !== platformId
+          : !savedIds.has(artist.id),
+      ),
+    ];
   }
-
-  const dbArtistsWithImages: SearchArtistResult[] = (dbResults ?? []).map(artist => ({
-    ...artist,
-    bio: null, // Search results carry identity; About uses its claim-checked endpoint.
-    isExternalOnly: false,
-    imageUrl: customImageUrl(artist.customImage) ?? imageMap.get(artist.id) ?? null,
-    matchScore: getMatchScore(artist.name || "", query),
-    linkCount: getLinkCount(artist),
-  }));
-
-  return [...dbArtistsWithImages, ...newExternalResults].sort((a, b) => {
-    if (a.matchScore !== b.matchScore) return a.matchScore - b.matchScore;
-    const aIsBookmarked = bookmarkedIds.includes(a.id || "");
-    const bIsBookmarked = bookmarkedIds.includes(b.id || "");
-    if (aIsBookmarked !== bIsBookmarked) return bIsBookmarked ? 1 : -1;
-    if ((a.linkCount ?? 0) !== (b.linkCount ?? 0)) return (b.linkCount ?? 0) - (a.linkCount ?? 0);
-    return (a.name || "").localeCompare(b.name || "");
-  });
+  const [directResult, nameResult] = await Promise.allSettled([
+    fetchProviderSearchArtist(platform, platformId),
+    includeNameResults ? searchArtistsByName(query, bookmarkedIds) : Promise.resolve([]),
+  ]);
+  // A failed ID lookup must not erase usable matches for an ambiguous bare name.
+  if (directResult.status === "rejected") {
+    if (nameResult.status === "fulfilled" && nameResult.value.length) return nameResult.value;
+    throw directResult.reason;
+  }
+  const direct = directResult.value;
+  if (nameResult.status === "rejected") {
+    if (direct) return [direct];
+    throw nameResult.reason;
+  }
+  const names = nameResult.value;
+  if (!direct) return names;
+  // Prefer a local row if an identity was attached while the provider read was in flight.
+  const linked = names.find(artist => !artist.isExternalOnly && artist[platform] === platformId);
+  if (linked) return [linked, ...names.filter(artist => artist !== linked)];
+  return [
+    direct,
+    ...names.filter(
+      artist =>
+        !artist.isExternalOnly || artist.platform !== platform || artist.platformId !== platformId,
+    ),
+  ];
 }
