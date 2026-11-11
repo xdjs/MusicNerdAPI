@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 /** Combined artist search across Music Nerd and Deezer, in MusicNerdWeb's shape.
  *
  * @param request - POST with `{ "query": string, "bookmarkedArtistIds"?: string[] }`.
- * @returns `{ results }`, or `{ error }` with 400, 408 or 500.
+ * @returns `{ results }`, or `{ error }` with 400, 408, 409, 500 or 503.
  */
 export async function POST(request: Request) {
   return postSearchArtistsHandler(request);
