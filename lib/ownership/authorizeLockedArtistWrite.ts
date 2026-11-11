@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { users } from "@/lib/db/schema";
 import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 import type { ArtistWriteAuth, TransactionDb } from "@/lib/ownership/types";
@@ -22,6 +22,8 @@ export async function authorizeLockedArtistWrite(
   const claim = await findApprovedClaim(tx, artistId);
   if ((claim?.id ?? null) !== auth.expectedClaimId) throw new OwnershipChangedError();
   if (claim?.userId !== auth.userId) {
+    // Hold administrator authority stable through the short publication transaction.
+    await tx.execute(sql`select id from users where id=${auth.userId}::uuid for share`);
     const user = await tx.query.users.findFirst({ where: eq(users.id, auth.userId) });
     if (!user?.isAdmin) throw new OwnershipChangedError();
   }

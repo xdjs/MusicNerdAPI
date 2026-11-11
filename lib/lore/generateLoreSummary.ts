@@ -3,7 +3,7 @@ import { withTimeout } from "@/lib/async/withTimeout";
 import { GEMINI_ABOUT_TIMEOUT_MS, LORE_SUMMARY_MAX_CHARS } from "@/lib/lore/const";
 import { loreSourceKey } from "@/lib/lore/loreSourceKey";
 import type { LoreSummary } from "@/lib/lore/types";
-import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
+import { getLoreVaultSources } from "@/lib/lore/getLoreVaultSources";
 
 /**
  * A two-or-three-sentence overview of the artist's Lore sources, from titles
@@ -14,12 +14,22 @@ import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
  */
 export async function generateLoreSummary(
   artistId: string,
+  abortSignal?: AbortSignal,
 ): Promise<LoreSummary | null | undefined> {
   try {
-    const sources = await getVaultSourcesByStatus(artistId, "approved");
+    const sources = await getLoreVaultSources(artistId);
     if (!sources.length) return null;
+    abortSignal?.throwIfAborted();
+    const callSignal = abortSignal
+      ? AbortSignal.any([abortSignal, AbortSignal.timeout(GEMINI_ABOUT_TIMEOUT_MS)])
+      : undefined;
     const response = await withTimeout(
       generateText({
+        ...(abortSignal
+          ? {
+              abortSignal: callSignal,
+            }
+          : {}),
         prompt: JSON.stringify(
           sources.map(source => ({ title: source.title, type: source.type ?? "article" })),
         ),
@@ -31,6 +41,7 @@ export async function generateLoreSummary(
       GEMINI_ABOUT_TIMEOUT_MS,
       "Gemini timeout",
     );
+    if (callSignal?.aborted) throw new Error("Gemini timeout");
     const text = response.text?.trim();
     return text && text.length <= LORE_SUMMARY_MAX_CHARS
       ? { text, sourceKey: loreSourceKey(sources) }

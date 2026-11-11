@@ -1,0 +1,63 @@
+{
+  "webCommit": "d219118f1e3b9a0fa5c3807a8bf3ea4414fad99f",
+  "candidateSha256": "e123ad7bdd125c8aed597400c9e6101e6c46b1997d72248538bbf0513a8c5b5b",
+  "inputs": [
+    {
+      "file": "0035_account_merge_attribution.sql",
+      "sha256": "ce893158ed3b9dc0fcfbe27151789fdf48b5a5628c1ded6edd9f4a97282e17e8"
+    },
+    {
+      "file": "0039_source_versions.sql",
+      "sha256": "da4951de87e9262f1c40cd890916263fba31da61fc2016c33695b6ced57703cf"
+    },
+    {
+      "file": "0056_catalog_disconnect.sql",
+      "sha256": "72a33d1eec6333585dc0ac2312569a14dbbec7d8475beddc9573a60d3cfc02b2"
+    },
+    {
+      "file": "0058_catalog_automatic_reconnect_guard.sql",
+      "sha256": "3fb63c4db1653612ee144fba84275a8a25b84227f1bcb9d51817914fe5c55adb"
+    },
+    {
+      "file": "0059_catalog_counterpart_jobs.sql",
+      "sha256": "3489c2af1f763197ebb28df012c9d310c938a00d0b5d54c45bd9768b831cc99e"
+    },
+    {
+      "file": "0063_legacy_bio_publications.sql",
+      "sha256": "a062f93231b7416ba8c8eb06d4d7f4a243cd1f48c5831ce86270e065d4b1fe15"
+    },
+    {
+      "file": "0064_lore_activity_lock.sql",
+      "sha256": "3b2ec181364f3f414ee9f73a920716546fec3c68b23a62c3cc22386ee652b0e0"
+    }
+  ],
+  "functions": [
+    "public.transfer_account_activity",
+    "public.knowledge_vault_source_snapshot",
+    "public.knowledge_social_post_snapshot",
+    "public.knowledge_source_fingerprint",
+    "public.retain_vault_source_version",
+    "public.retain_social_post_version",
+    "musicnerd_private.disconnect_catalog_link",
+    "musicnerd_private.catalog_link_was_disconnected",
+    "musicnerd_private.queue_catalog_counterpart",
+    "musicnerd_private.queue_catalog_counterpart_after_write",
+    "musicnerd_private.validate_catalog_identity_write",
+    "musicnerd_private.lock_catalog_exclusion_artist",
+    "mn_private.consume_legacy_bio_publication",
+    "mn_private.lock_lore_activity_events"
+  ],
+  "triggers": [
+    "retain_vault_source_version",
+    "retain_social_post_version",
+    "artists_catalog_counterpart",
+    "artists_validate_catalog_identity",
+    "catalog_exclusion_artist_fence",
+    "consume_legacy_bio_provenance",
+    "consume_legacy_bio_text",
+    "consume_legacy_bio_claim",
+    "consume_legacy_bio_source"
+  ],
+  "baselineSha256": "29ff7b5756097b883250ea4d51d685ef638c9de44bc026631815edb7a9948850",
+  "functionsSha256": "a65ffb28c92df1f31a66045f4900fe60ae0c4d94f707ba6916c50c9eed72b245"
+}

@@ -18,7 +18,11 @@ const SNIPPET_CHARS = 300;
  * @param artistName - The artist's name, for ranking.
  * @returns The tool.
  */
-export function createSearchSourcesTool(originals: ResearchOriginal[], artistName: string) {
+export function createSearchSourcesTool(
+  originals: ResearchOriginal[],
+  artistName: string,
+  assertCurrent?: (source: ResearchOriginal) => Promise<void>,
+) {
   return tool({
     description:
       "Search the artist's saved sources. Returns up to 8, each with the passage that best matches the query; read one with readSource before citing it. For newest/recent activity use retrieval=latest, and platform when the question names one. Use evidenceNeed=release_date for latest releases. Dates describe stored evidence, not complete live coverage.",
@@ -45,18 +49,23 @@ export function createSearchSourcesTool(originals: ResearchOriginal[], artistNam
         retrieval === "latest"
           ? ranked
           : [...ranked, ...getEligibleResearchOriginals(originals, request)];
-      const sources = candidates
+      const selected = candidates
         .filter(source => !seen.has(source.sourceId) && seen.add(source.sourceId))
-        .slice(0, MAX_SOURCES)
-        .map(source => ({
-          sourceId: source.sourceId,
-          title: getSourceTitle(source.url),
-          url: source.url,
-          snippet: getQuerySnippet(source.text, query, SNIPPET_CHARS),
-          publishedAt: source.publishedAt,
-          activityDate: source.activityDate ?? null,
-          retrievedAt: source.retrievedAt,
-        }));
+        .slice(0, MAX_SOURCES);
+      await Promise.all(
+        selected.map(source =>
+          assertCurrent?.(originals.find(item => item.sourceId === source.sourceId)!),
+        ),
+      );
+      const sources = selected.map(source => ({
+        sourceId: source.sourceId,
+        title: getSourceTitle(source.url),
+        url: source.url,
+        snippet: getQuerySnippet(source.text, query, SNIPPET_CHARS),
+        publishedAt: source.publishedAt,
+        activityDate: source.activityDate ?? null,
+        retrievedAt: source.retrievedAt,
+      }));
       return {
         sources,
         coverage:

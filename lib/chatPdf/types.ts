@@ -8,5 +8,5 @@ export type ChatPdf = {
   path: string;
   size: number;
   revision: string;
-  claimId: string;
+  claimId: string | null;
 };

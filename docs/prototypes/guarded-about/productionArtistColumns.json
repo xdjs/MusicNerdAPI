@@ -1,0 +1,264 @@
+{
+  "columns": [
+    {
+      "name": "id",
+      "type": "uuid"
+    },
+    {
+      "name": "legacy_id",
+      "type": "text"
+    },
+    {
+      "name": "bandcamp",
+      "type": "text"
+    },
+    {
+      "name": "facebook",
+      "type": "text"
+    },
+    {
+      "name": "x",
+      "type": "text"
+    },
+    {
+      "name": "soundcloud",
+      "type": "text"
+    },
+    {
+      "name": "notes",
+      "type": "text"
+    },
+    {
+      "name": "patreon",
+      "type": "text"
+    },
+    {
+      "name": "name",
+      "type": "text"
+    },
+    {
+      "name": "instagram",
+      "type": "text"
+    },
+    {
+      "name": "youtube",
+      "type": "text"
+    },
+    {
+      "name": "youtubechannel",
+      "type": "text"
+    },
+    {
+      "name": "lcname",
+      "type": "text"
+    },
+    {
+      "name": "soundcloudID",
+      "type": "integer"
+    },
+    {
+      "name": "spotify",
+      "type": "text"
+    },
+    {
+      "name": "twitch",
+      "type": "text"
+    },
+    {
+      "name": "imdb",
+      "type": "text"
+    },
+    {
+      "name": "musicbrainz",
+      "type": "text"
+    },
+    {
+      "name": "wikidata",
+      "type": "text"
+    },
+    {
+      "name": "mixcloud",
+      "type": "text"
+    },
+    {
+      "name": "facebookID",
+      "type": "text"
+    },
+    {
+      "name": "discogs",
+      "type": "text"
+    },
+    {
+      "name": "tiktok",
+      "type": "text"
+    },
+    {
+      "name": "tiktokID",
+      "type": "text"
+    },
+    {
+      "name": "jaxsta",
+      "type": "text"
+    },
+    {
+      "name": "famousbirthdays",
+      "type": "text"
+    },
+    {
+      "name": "songexploder",
+      "type": "text"
+    },
+    {
+      "name": "colorsxstudios",
+      "type": "text"
+    },
+    {
+      "name": "bandsintown",
+      "type": "text"
+    },
+    {
+      "name": "linktree",
+      "type": "text"
+    },
+    {
+      "name": "onlyfans",
+      "type": "text"
+    },
+    {
+      "name": "wikipedia",
+      "type": "text"
+    },
+    {
+      "name": "audius",
+      "type": "text"
+    },
+    {
+      "name": "zora",
+      "type": "text"
+    },
+    {
+      "name": "catalog",
+      "type": "text"
+    },
+    {
+      "name": "opensea",
+      "type": "text"
+    },
+    {
+      "name": "foundation",
+      "type": "text"
+    },
+    {
+      "name": "lastfm",
+      "type": "text"
+    },
+    {
+      "name": "linkedin",
+      "type": "text"
+    },
+    {
+      "name": "soundxyz",
+      "type": "text"
+    },
+    {
+      "name": "mirror",
+      "type": "text"
+    },
+    {
+      "name": "glassnode",
+      "type": "text"
+    },
+    {
+      "name": "collectsNFTs",
+      "type": "boolean"
+    },
+    {
+      "name": "spotifyusername",
+      "type": "text"
+    },
+    {
+      "name": "bandcampfan",
+      "type": "text"
+    },
+    {
+      "name": "tellie",
+      "type": "text"
+    },
+    {
+      "name": "wallets",
+      "type": "text[]"
+    },
+    {
+      "name": "ens",
+      "type": "text"
+    },
+    {
+      "name": "lens",
+      "type": "text"
+    },
+    {
+      "name": "added_by",
+      "type": "uuid"
+    },
+    {
+      "name": "cameo",
+      "type": "text"
+    },
+    {
+      "name": "farcaster",
+      "type": "text"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "supercollector",
+      "type": "text"
+    },
+    {
+      "name": "bio",
+      "type": "text"
+    },
+    {
+      "name": "webmapdata",
+      "type": "jsonb"
+    },
+    {
+      "name": "node_pfp",
+      "type": "jsonb"
+    },
+    {
+      "name": "custom_image",
+      "type": "text"
+    },
+    {
+      "name": "deezer",
+      "type": "text"
+    },
+    {
+      "name": "subvert",
+      "type": "text"
+    },
+    {
+      "name": "bluesky",
+      "type": "text"
+    },
+    {
+      "name": "inprocess",
+      "type": "text"
+    },
+    {
+      "name": "link_order",
+      "type": "jsonb"
+    },
+    {
+      "name": "header_image_position",
+      "type": "jsonb"
+    }
+  ]
+}

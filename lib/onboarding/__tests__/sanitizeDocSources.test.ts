@@ -32,3 +32,10 @@ describe("sanitizeDocSources", () => {
     expect(sanitizeDocSources(many)).toHaveLength(200);
   });
 });
+
+it("preserves valid evidence revisions across client echo and refuses malformed hashes", () => {
+  const source = { id: 1, kind: "vault", label: "A", url: "https://a", revision: "a".repeat(64) };
+  expect(sanitizeDocSources([source])).toEqual([source]);
+  for (const revision of ["not-a-hash", "a".repeat(63), 4])
+    expect(sanitizeDocSources([{ ...source, revision }])[0]).not.toHaveProperty("revision");
+});

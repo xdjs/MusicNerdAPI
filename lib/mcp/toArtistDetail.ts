@@ -1,10 +1,8 @@
 import { getArtistLinks } from "@/lib/artists/getArtistLinks";
 import type { ArtistRow } from "@/lib/artists/types";
 import { getPublicArtistAbout } from "@/lib/bio/getPublicArtistAbout";
-import { isRealBio } from "@/lib/bio/isRealBio";
-import { db } from "@/lib/db/db";
+import { getPublicSavedBio } from "@/lib/bio/getPublicSavedBio";
 import type { ArtistDetail, SocialLink } from "@/lib/mcp/types";
-import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
  * What `get_artist` returns: the artist's links keyed by platform, and a bio
@@ -15,13 +13,12 @@ import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
  * @returns The detail.
  */
 export async function toArtistDetail(artist: ArtistRow): Promise<ArtistDetail> {
-  const [artistLinks, claim] = await Promise.all([
+  const [artistLinks, publicBio] = await Promise.all([
     getArtistLinks(artist),
-    findApprovedClaim(db, artist.id),
+    getPublicSavedBio(artist.id),
   ]);
-  const claimed = claim?.id ?? null;
 
-  const directoryAbout = claimed ? null : await getPublicArtistAbout(artist.id);
+  const directoryAbout = publicBio ? null : await getPublicArtistAbout(artist.id);
   const socialLinks: Record<string, SocialLink> = {};
 
   for (const link of artistLinks) {
@@ -43,7 +40,7 @@ export async function toArtistDetail(artist: ArtistRow): Promise<ArtistDetail> {
   return {
     id: artist.id,
     name: artist.name ?? "",
-    bio: claimed && isRealBio(artist.bio) ? artist.bio : (directoryAbout?.bio ?? null),
+    bio: publicBio ?? directoryAbout?.bio ?? null,
     spotifyId: artist.spotify ?? null,
     deezerId: artist.deezer ?? null,
     socialLinks,

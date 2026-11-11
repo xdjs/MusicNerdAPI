@@ -11,6 +11,14 @@ const mock = vi.hoisted(() => ({
   order: [] as string[],
 }));
 vi.mock("@/lib/db/db", () => ({ db: {} }));
+vi.mock("@/lib/bio/getPublicSavedBio", () => ({
+  getPublicSavedBio: async () =>
+    (await mock.findApprovedClaim())
+      ? (await mock.getArtistById())?.bio === ABOUT_EMPTY_STATE
+        ? null
+        : (await mock.getArtistById())?.bio
+      : null,
+}));
 vi.mock("@/lib/auth/validateArtistEditRequest", () => ({
   validateArtistEditRequest: mock.validate,
 }));
@@ -55,6 +63,7 @@ describe("getArtistBioHandler", () => {
 
   it("a claimed artist with only the claim prompt saved reads the claim prompt", async () => {
     mock.getArtistById.mockResolvedValue({ id, bio: ABOUT_EMPTY_STATE });
+    mock.getPublicArtistAbout.mockResolvedValue(null);
     expect(await (await read()).json()).toMatchObject({ bio: ABOUT_EMPTY_STATE });
   });
 
@@ -99,7 +108,11 @@ describe("getArtistBioHandler", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok", bio: "Fresh." });
     expect(mock.order).toEqual(["claim", "auth"]);
-    expect(mock.generate).toHaveBeenCalledWith(id, { userId: "u1", expectedClaimId: "c1" });
+    expect(mock.generate).toHaveBeenCalledWith(
+      id,
+      { userId: "u1", expectedClaimId: "c1" },
+      { deadline: expect.any(Number), signal: expect.any(AbortSignal) },
+    );
   });
 
   it("regenerate passes on the auth failure and the generation error", async () => {
@@ -113,4 +126,15 @@ describe("getArtistBioHandler", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ status: "error", code: "LORE_REQUIRED", error: "No Lore" });
   });
+});
+
+it("passes the legacy regenerate GET its request cancellation and handler-entry deadline", async () => {
+  mock.generate.mockResolvedValue({ httpStatus: 200, bio: "New About" });
+  const request = new Request(`https://api.test/api/artistBio/${id}?regenerate=true`);
+  const before = Date.now();
+  await getArtistBioHandler(request, id);
+  const budget = mock.generate.mock.calls[0][2];
+  expect(budget?.signal).toBe(request.signal);
+  expect(budget?.deadline).toBeGreaterThanOrEqual(before + 45_000);
+  expect(budget?.deadline).toBeLessThanOrEqual(Date.now() + 45_000);
 });

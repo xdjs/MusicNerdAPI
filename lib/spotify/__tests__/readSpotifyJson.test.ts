@@ -35,3 +35,16 @@ describe("readSpotifyJson", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+it("passes cancellation to the catalog transport and refuses work after cancellation", async () => {
+  const controller = new AbortController();
+  const transport = vi.fn(async (_url: string, init: RequestInit) => {
+    expect(init.signal).toBe(controller.signal);
+    return new Response("{}");
+  });
+  await readSpotifyJson("https://api.spotify.com/v1/x", headers, transport, controller.signal);
+  controller.abort(new Error("deadline"));
+  await expect(
+    readSpotifyJson("https://api.spotify.com/v1/x", headers, transport, controller.signal),
+  ).rejects.toThrow("deadline");
+  expect(transport).toHaveBeenCalledTimes(1);
+});

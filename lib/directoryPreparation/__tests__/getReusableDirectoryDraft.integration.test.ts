@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { beforeAll, afterAll, beforeEach, it, expect, vi } from "vitest";
+import { vaultSourceRevision } from "@/lib/lore/vaultSourceRevision";
 const client = new PGlite();
 const driver = drizzle(client);
 vi.mock("@/lib/db/db", () => ({
@@ -16,7 +17,7 @@ const a = "00000000-0000-4000-8000-000000000001",
   s = "00000000-0000-4000-8000-000000000004";
 beforeAll(async () => {
   await client.exec(
-    `create table artists(id uuid,bio text);create table artist_claims(id uuid,artist_id uuid,user_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,body text,file_name text,file_size integer,content_type text);create table artist_directory_preparations(artist_id uuid,status text,document text,about text,starting_bio text,manifest jsonb);create table artist_interview_answers(artist_id uuid);create table artist_doc_corrections(artist_id uuid);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.body)$$;`,
+    `create table artists(id uuid,bio text);create table artist_claims(id uuid,artist_id uuid,user_id uuid,status text);create table artist_vault_sources(id uuid,artist_id uuid,status text,body text,file_name text,file_size integer,content_type text,publication text default 'inherit',activity_id uuid);create table artist_directory_preparations(artist_id uuid,status text,document text,about text,starting_bio text,manifest jsonb);create table artist_interview_answers(artist_id uuid);create table artist_doc_corrections(artist_id uuid);create function knowledge_vault_source_snapshot(v artist_vault_sources) returns jsonb language sql as $$select jsonb_build_object('id',v.id,'artistId',v.artist_id,'status',v.status,'url','https://example.com/interview','title','Interview','publishedAt',null,'extractedText',v.body)$$;`,
   );
 });
 afterAll(() => client.close());
@@ -60,5 +61,36 @@ it("fails closed when ownership changes", async () => {
   await client.exec(
     "update artist_vault_sources set status='approved';update artist_claims set status='rejected'",
   );
+  expect(await read()).toBeNull();
+});
+
+it.each(["private", null])(
+  "does not reuse a cached draft when source publication becomes %s",
+  async publication => {
+    await client.exec("update artist_vault_sources set status='approved'");
+    expect(await read()).not.toBeNull();
+    await client.query("update artist_vault_sources set publication=$1", [publication]);
+    expect(await read()).toBeNull();
+  },
+);
+
+it("binds reused prose to the exact current vault revision after approval", async () => {
+  await client.exec("update artist_vault_sources set status='approved'");
+  const draft = await read();
+  expect(draft?.sources[0]?.revision).toBe(
+    vaultSourceRevision({
+      id: s,
+      url: "https://example.com/interview",
+      title: "Interview",
+      extractedText: "Original",
+      publication: "inherit",
+      activityId: null,
+    }),
+  );
+});
+it("refuses duplicate manifest IDs even when the total row count matches", async () => {
+  await client.exec(`update artist_vault_sources set status='approved';
+    update artist_directory_preparations set manifest=manifest || manifest;
+    insert into artist_vault_sources(id,artist_id,status,body) values('00000000-0000-4000-8000-000000000099','${a}','approved','New source');`);
   expect(await read()).toBeNull();
 });

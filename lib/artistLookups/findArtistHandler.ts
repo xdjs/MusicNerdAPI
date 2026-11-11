@@ -1,3 +1,5 @@
+import { getPublicSavedBio } from "@/lib/bio/getPublicSavedBio";
+import { getPublicArtistAbout } from "@/lib/bio/getPublicArtistAbout";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { LOOKUP_NOT_FOUND, LOOKUP_SERVER_ERROR } from "@/lib/artistLookups/const";
 import { findArtistByColumn } from "@/lib/artistLookups/findArtistByColumn";
@@ -26,7 +28,12 @@ export async function findArtistHandler(
   try {
     const artist = await findArtistByColumn(column, value);
     if (!artist) return lookupText(LOOKUP_NOT_FOUND, 404);
-    return Response.json({ result: artist }, { headers: getCorsHeaders() });
+    const bio =
+      (await getPublicSavedBio(artist.id)) ?? (await getPublicArtistAbout(artist.id))?.bio ?? null;
+    return Response.json(
+      { result: { ...artist, bio } },
+      { headers: { ...getCorsHeaders(), "Cache-Control": "private, no-store" } },
+    );
   } catch (e) {
     console.error(`[artist lookup] ${field}`, e);
     return lookupText(LOOKUP_SERVER_ERROR, 500);

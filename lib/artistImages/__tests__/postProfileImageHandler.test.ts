@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
 const m = vi.hoisted(() => ({
+  adminWrite: vi.fn(),
+  claim: vi.fn(),
+  fenced: vi.fn(),
   authenticateRequest: vi.fn(),
   canEditArtist: vi.fn(),
   isSupabaseStorageConfigured: vi.fn(),
@@ -22,6 +25,11 @@ vi.mock("@/lib/storage/uploadStorageObject", () => ({
 vi.mock("@/lib/artistImages/purgeStaleProfileImages", () => ({
   purgeStaleProfileImages: m.purgeStaleProfileImages,
 }));
+vi.mock("@/lib/ownership/getLoreClaimGeneration", () => ({ getLoreClaimGeneration: m.claim }));
+vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite: m.fenced }));
+vi.mock("@/lib/artistImages/withAdminProfileWrite", () => ({
+  withAdminProfileWrite: m.adminWrite,
+}));
 const { postProfileImageHandler } = await import("@/lib/artistImages/postProfileImageHandler");
 
 const ARTIST = "aab92f80-f9e1-4299-aa33-7dd85c8de5d3";
@@ -38,6 +46,15 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(1761000000000);
   vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+  m.adminWrite
+    .mockReset()
+    .mockImplementation(async (_a, _u, write) => write({ update: () => ({ set: m.set }) }));
+  m.claim.mockReset().mockResolvedValue("claim-1");
+  m.fenced
+    .mockReset()
+    .mockImplementation(async (_artist, _user, _claim, write) =>
+      write({ update: () => ({ set: m.set }) }),
+    );
   m.authenticateRequest.mockReset().mockResolvedValue({ userId: "u1" });
   m.canEditArtist.mockReset().mockResolvedValue(true);
   m.isSupabaseStorageConfigured.mockReset().mockReturnValue(true);
@@ -55,7 +72,7 @@ afterEach(() => {
 });
 
 describe("postProfileImageHandler", () => {
-  it("stores the image, points the artist at its public URL, purges older uploads", async () => {
+  it("stores the image and fences publication without purging concurrent uploads", async () => {
     const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
     expect(response.status).toBe(200);
     const url = `https://test.supabase.co/storage/v1/object/public/vault-files/profile-images/${ARTIST}_1761000000000.png`;
@@ -67,10 +84,8 @@ describe("postProfileImageHandler", () => {
     expect(Buffer.from(body)).toEqual(Buffer.from(PNG));
     expect(options).toEqual({ contentType: "image/png", upsert: false, cacheControl: "3600" });
     expect(m.set).toHaveBeenCalledWith({ customImage: url });
-    expect(m.purgeStaleProfileImages).toHaveBeenCalledWith(ARTIST, `${ARTIST}_1761000000000.png`);
-    expect(m.set.mock.invocationCallOrder[0]).toBeLessThan(
-      m.purgeStaleProfileImages.mock.invocationCallOrder[0],
-    );
+    expect(m.purgeStaleProfileImages).not.toHaveBeenCalled();
+    expect(m.fenced).toHaveBeenCalledWith(ARTIST, "u1", "claim-1", expect.any(Function));
   });
 
   it("forwards the auth error when not signed in", async () => {
@@ -168,4 +183,32 @@ describe("postProfileImageHandler", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ status: "error", error: "Failed to upload image" });
   });
+});
+
+it("rejects a profile upload revoked while storage was running without publishing or deleting bytes", async () => {
+  const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
+  m.fenced.mockRejectedValueOnce(new OwnershipChangedError());
+  const response = await postProfileImageHandler(request({ file: png(), artistId: ARTIST }));
+  expect(response.status).toBe(403);
+  expect(m.fenced).toHaveBeenCalledWith(ARTIST, "u1", "claim-1", expect.any(Function));
+  expect(m.set).not.toHaveBeenCalled();
+  expect(m.purgeStaleProfileImages).not.toHaveBeenCalled();
+});
+
+it("does not grant profile authority to an unclaimed non-admin contributor", async () => {
+  m.claim.mockResolvedValue(null);
+  m.canEditArtist.mockResolvedValue(false);
+  expect((await postProfileImageHandler(request({ file: png(), artistId: ARTIST }))).status).toBe(
+    403,
+  );
+  expect(m.uploadStorageObject).not.toHaveBeenCalled();
+});
+
+it("retains original unclaimed admin profile authority with a final role fence", async () => {
+  m.claim.mockResolvedValue(null);
+  expect((await postProfileImageHandler(request({ file: png(), artistId: ARTIST }))).status).toBe(
+    200,
+  );
+  expect(m.adminWrite).toHaveBeenCalledWith(ARTIST, "u1", expect.any(Function));
+  expect(m.fenced).not.toHaveBeenCalled();
 });

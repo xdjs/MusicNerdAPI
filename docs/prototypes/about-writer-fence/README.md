@@ -1,0 +1,13 @@
+# About writer fence: paired local candidate
+
+The canonical SQL is Web migration 0065; API tests use its checksum-verified fixture. The candidate is not published or deployed. It is an alternative to relying on a complete durable-workflow drain for the specific risk of late old About text overwriting the saved biography.
+
+Migration 0065 rejects changed `artists.bio` updates unless that transaction sets `musicnerd.about_writer_version` to `1655-v1` using `set_config(...,true)`. The trigger runs before legacy allowance consumption. A rejected update rolls back the entire publishing transaction, including earlier history/doc writes. Same-text updates are allowed. Nulling a non-null bio is a change and is fenced. No role, table ACL, RLS policy, credential or existing row is changed by installation. The custom setting is a compatibility marker, not authorization: any authorized SQL writer could set it. Existing claimant/admin and source checks remain required.
+
+API `persistArtistBio` and `resetClaimBuild`, Web `bioPersistence` and `dashboardQueries` pin/clear transactions set this marker. It is never set on connection initialization, from a request parameter, or for a whole session. Migration 0065 is new; no historical migration is rewritten. Actual API route requests and actual Web transactions are rehearsed under restricted mnweb access.
+
+Limitations: this proof fences changed UPDATEs only. It does not cover artist INSERTs, standalone history changes, Lore/source mutations, old raw public readers, or already-running model calls. Old workflows can fail/retry and consume provider budget; this does not cancel them. A transaction already writing before trigger installation completes first because DDL waits for conflicting locks. Use the existing bounded preflight to detect such drift before enabling the fence.
+
+The benefit is specific: a queued old claim-build that reaches changed About publication after installation fails instead of destroying the exact legacy allowance or replacing evidenced About text. A complete workflow drain is no longer necessary for that particular overwrite risk. It remains necessary to resolve old-reader exposure and decide how to handle obsolete workflow retries.
+
+Rollback: dropping this prototype trigger/function restores the prior writer behavior, but also restores the late-write risk. Do not remove evidence tables, restore consumed allowances, or roll back to an unprotected reader. After rollout, retain the fence until all old writers are retired. Production use requires explicit approval of the paired release and migration, plus the remaining source/history and old-reader controls.

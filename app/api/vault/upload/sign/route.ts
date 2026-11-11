@@ -18,7 +18,7 @@ export async function OPTIONS() {
  * size, and returns a signed storage URL to `PUT` the file to and a
  * 15-minute ticket for the complete route.
  *
- * @param request - The request; a claimant or admin Privy token, JSON `{ artistId, name, type, size }`.
+ * @param request - The request; an authenticated claimant/admin, or trusted contributor for unclaimed Lore, Privy token, JSON `{ artistId, name, type, size }`.
  * @returns 200 with `{ status, signedUrl, contentType, ticket }`, or an error.
  */
 export async function POST(request: Request) {
