@@ -27,6 +27,13 @@ describe("probeCandidate", () => {
       reasoning:
         'Handle probe: og:title matched "Pete Rango" for @peterango (derived from artist name)',
       preview: hit.preview,
+      discoveryEvidence: {
+        version: 1,
+        method: "name_handle_probe",
+        artistName: "Pete Rango",
+        sourceUrl: hit.url,
+        observedTitle: "Pete Rango",
+      },
     });
     expect(
       probeCandidate(

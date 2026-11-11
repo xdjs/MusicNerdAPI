@@ -57,7 +57,7 @@ export async function* tierThreeHandleProbeStream(
     if (!hit || resolved.has(probe.platform)) continue;
     const candidate = probeCandidate(probe, hit, artistName, probe.source);
     resolved.set(probe.platform, candidate);
-    newlyConfirmed.add(probe.handle);
+    if (!candidate.provisional) newlyConfirmed.add(probe.handle);
     yield [probe.platform, candidate];
   }
 

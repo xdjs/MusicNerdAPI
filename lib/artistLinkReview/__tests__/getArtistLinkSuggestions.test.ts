@@ -72,6 +72,7 @@ describe("getArtistLinkSuggestions", () => {
         hidden: false,
         status: "approved",
         origin: "submission",
+        evidence: null,
         submittedAt: "2026-10-01T00:00:00.000Z",
         suggestedBy: { id: "u2", name: "Fan" },
         reviewedAt: "2026-10-02T00:00:00.000Z",
@@ -147,4 +148,39 @@ describe("getArtistLinkSuggestions", () => {
     );
     expect(m.lock).not.toHaveBeenCalled();
   });
+});
+
+it("returns candidate-specific research evidence but not raw reasoning, other origins or sources", async () => {
+  const evidence = {
+    version: 1,
+    method: "name_web_search",
+    artistName: "Nova",
+    sourceUrl: "https://www.instagram.com/p3t3rango/",
+    observedTitle: null,
+  };
+  m.tx = fakeTransaction([
+    [
+      ugc({ origin: "research", discovery_evidence: evidence }),
+      ugc({ origin: "research", reasoning: "looks official" }),
+      ugc({ discovery_evidence: evidence }),
+      ugc({
+        kind: "source",
+        url: "https://music.apple.com/us/artist/nova/123",
+        type: "profile",
+        origin: "research",
+        discovery_evidence: evidence,
+      }),
+      ugc({
+        origin: "research",
+        discovery_evidence: { ...evidence, sourceUrl: "https://instagram.com/other" },
+      }),
+    ],
+  ]);
+  const { items } = await getArtistLinkSuggestions("a1", "u1");
+  expect(items[0].evidence).toMatchObject({
+    method: "name_web_search",
+    artistName: "Nova",
+    observedTitle: null,
+  });
+  expect(items.slice(1).map(item => item.evidence)).toEqual([null, null, null, null]);
 });

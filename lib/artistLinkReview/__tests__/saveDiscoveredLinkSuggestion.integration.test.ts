@@ -2,9 +2,13 @@ import { afterAll, beforeEach, expect, it, vi } from "vitest";
 const m = await vi.hoisted(async () => {
   const { PGlite } = await import("@electric-sql/pglite");
   const { renderSql } = await import("@/lib/db/__tests__/renderSql");
+  const { readFileSync } = await import("node:fs");
   const client = new PGlite();
   await client.exec(
     `create table ugcresearch(id uuid default gen_random_uuid(),artist_id uuid,ugc_url text,site_name text,site_username text,origin text,accepted boolean default false,date_processed timestamp);`,
+  );
+  await client.exec(
+    readFileSync(new URL("./fixtures/0060_discovery_evidence.sql", import.meta.url), "utf8"),
   );
   const tx = {
     execute: async (q: Parameters<typeof renderSql>[0]) => {
@@ -109,4 +113,42 @@ it("does not let source adoption override a prior rejection or change its in-mem
   expect(m.write).not.toHaveBeenCalled();
   expect(record.instagram).toBeUndefined();
   expect(provisional.has("instagram")).toBe(true);
+});
+
+it("persists structured evidence once and retains the original basis across repeated discoveries and review", async () => {
+  const discoveryEvidence = {
+    version: 1 as const,
+    method: "name_web_search" as const,
+    artistName: "Nova",
+    sourceUrl: p.profileUrl,
+    observedTitle: "Nova",
+  };
+  await saveDiscoveredLinkSuggestion(artist, { ...p, discoveryEvidence });
+  await saveDiscoveredLinkSuggestion(artist, {
+    ...p,
+    discoveryEvidence: { ...discoveryEvidence, observedTitle: "Changed title" },
+  });
+  await m.client.exec("update ugcresearch set date_processed=now()");
+  expect(await saveDiscoveredLinkSuggestion(artist, { ...p, discoveryEvidence })).toBe(false);
+  const { rows } = await m.client.query("select discovery_evidence from ugcresearch");
+  expect(rows).toEqual([{ discovery_evidence: discoveryEvidence }]);
+});
+it("does not fabricate evidence for an older candidate discovered again", async () => {
+  await m.client.query(
+    "insert into ugcresearch(artist_id,ugc_url,site_name,site_username,origin) values($1,$2,'instagram','nova','research')",
+    [artist, p.profileUrl],
+  );
+  await saveDiscoveredLinkSuggestion(artist, {
+    ...p,
+    discoveryEvidence: {
+      version: 1,
+      method: "name_web_search",
+      artistName: "Nova",
+      sourceUrl: p.profileUrl,
+      observedTitle: "Nova",
+    },
+  });
+  expect((await m.client.query("select discovery_evidence from ugcresearch")).rows).toEqual([
+    { discovery_evidence: null },
+  ]);
 });

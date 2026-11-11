@@ -28,6 +28,13 @@ describe("searchPlatformCandidates", () => {
         platform: "instagram",
         url: "https://instagram.com/b",
         reasoning: 'Web search hit on instagram.com: "B"',
+        discoveryEvidence: {
+          version: 1,
+          method: "name_web_search",
+          artistName: "Pete Rango",
+          sourceUrl: "https://instagram.com/b",
+          observedTitle: "B",
+        },
       },
       {
         tier: 4,
@@ -35,6 +42,13 @@ describe("searchPlatformCandidates", () => {
         platform: "instagram",
         url: "https://instagram.com/c",
         reasoning: 'Web search hit on instagram.com: "C snippet"',
+        discoveryEvidence: {
+          version: 1,
+          method: "name_web_search",
+          artistName: "Pete Rango",
+          sourceUrl: "https://instagram.com/c",
+          observedTitle: null,
+        },
       },
     ]);
     expect(webSearch).toHaveBeenCalledWith("q", {
@@ -65,4 +79,23 @@ it("marks a matching-name web result as provisional, not ownership evidence", as
   resultPassesNameCheck.mockResolvedValue(true);
   const candidates = await searchPlatformCandidates("youtube", "q", "Nova");
   expect(candidates[0].provisional).toBe(true);
+});
+
+it("records a bounded search title, never the snippet, without URL tracking parameters", async () => {
+  webSearch.mockResolvedValueOnce([
+    {
+      url: "https://x.com/nova?tracking=1#bio",
+      title: "t".repeat(3000),
+      snippet: "private reasoning",
+    },
+  ]);
+  resultPassesNameCheck.mockResolvedValue(true);
+  const [candidate] = await searchPlatformCandidates("x", "q", "Nova");
+  expect(candidate.discoveryEvidence).toEqual({
+    version: 1,
+    method: "name_web_search",
+    artistName: "Nova",
+    sourceUrl: "https://x.com/nova",
+    observedTitle: "t".repeat(2000),
+  });
 });

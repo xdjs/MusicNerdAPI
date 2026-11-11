@@ -1,4 +1,5 @@
 import { HANDLE_BASED_PLATFORM_DOMAINS, WEB_SEARCH_MAX_RESULTS } from "@/lib/discovery/const";
+import { stripUrlQuery } from "@/lib/discovery/stripUrlQuery";
 import { resultPassesNameCheck } from "@/lib/discovery/resultPassesNameCheck";
 import type { TierCandidate } from "@/lib/discovery/types";
 import type { ProfileDisplayColumn } from "@/lib/links/types";
@@ -37,6 +38,13 @@ export async function searchPlatformCandidates(
         provisional: true,
         platform,
         url: result.url,
+        discoveryEvidence: {
+          version: 1,
+          method: "name_web_search",
+          artistName,
+          sourceUrl: stripUrlQuery(result.url),
+          observedTitle: result.title?.slice(0, 2000) || null,
+        },
         reasoning: `Web search hit on ${domain}: "${result.title || result.snippet}"`,
       });
     }

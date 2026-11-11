@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
+import { discoveryEvidenceSchema } from "@/lib/discovery/evidence";
+import { stripUrlQuery } from "@/lib/discovery/stripUrlQuery";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import { getArtistOperationOwnership } from "@/lib/ownership/getArtistOperationOwnership";
 import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
@@ -14,7 +16,7 @@ import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
  */
 export async function saveDiscoveredLinkSuggestion(
   artistId: string,
-  profile: Pick<DiscoveredProfile, "siteName" | "value" | "profileUrl">,
+  profile: Pick<DiscoveredProfile, "siteName" | "value" | "profileUrl" | "discoveryEvidence">,
   provisional = true,
 ): Promise<boolean> {
   if (!getArtistOperationOwnership(artistId)) throw new Error("Artist operation required");
@@ -32,8 +34,13 @@ export async function saveDiscoveredLinkSuggestion(
       limit 1`);
     if (existing) return provisional && !existing.accepted && existing.date_processed === null;
     if (!provisional) return true;
-    await tx.execute(sql`insert into ugcresearch(artist_id,ugc_url,site_name,site_username,origin,accepted)
-      values(${artistId}::uuid,${profile.profileUrl},${profile.siteName},${profile.value},'research',false)`);
+    const parsed = discoveryEvidenceSchema.safeParse(profile.discoveryEvidence);
+    const evidence =
+      parsed.success && parsed.data.sourceUrl === stripUrlQuery(profile.profileUrl)
+        ? JSON.stringify(parsed.data)
+        : null;
+    await tx.execute(sql`insert into ugcresearch(artist_id,ugc_url,site_name,site_username,origin,accepted,discovery_evidence)
+      values(${artistId}::uuid,${profile.profileUrl},${profile.siteName},${profile.value},'research',false,${evidence}::jsonb)`);
     return true;
   });
 }

@@ -1,3 +1,4 @@
+import type { DiscoveryEvidence } from "@/lib/discovery/evidence";
 import type { ProfileDisplayColumn, UrlmapPresentationRow } from "@/lib/links/types";
 import type { LinkPreview } from "@/lib/pages/types";
 
@@ -11,6 +12,8 @@ export interface DiscoveredProfile {
   colorHex: string | null;
   previewImage: string | null;
   reasoning: string | null;
+  /** Structured observations, separate from diagnostic reasoning. */
+  discoveryEvidence?: DiscoveryEvidence;
   /**
    * The candidate has no independent ownership evidence (a name-derived probe
    * or matching-name web result). Show it for review, never automatically attach
@@ -34,6 +37,8 @@ export interface TierCandidate {
   platform: ProfileDisplayColumn;
   url: string;
   reasoning: string | null;
+  /** Structured observations, separate from diagnostic reasoning. */
+  discoveryEvidence?: DiscoveryEvidence;
   /** Tier 3's own probe fetch, reused rather than fetched twice. */
   preview?: LinkPreview;
   /** See `DiscoveredProfile.provisional`. Name-derived probes and uncorroborated web matches set it. */

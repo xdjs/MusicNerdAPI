@@ -1,3 +1,5 @@
+import type { DiscoveryEvidence } from "@/lib/discovery/evidence";
+
 /** One link suggestion as the owner's review list shows it. No email or wallet leaves the server. */
 export type LinkSuggestion = {
   id: string;
@@ -8,6 +10,8 @@ export type LinkSuggestion = {
   hidden?: boolean;
   status: "pending" | "approved" | "rejected";
   origin: string;
+  /** Missing on older APIs; null when discovery observations were not recorded. */
+  evidence?: (Omit<DiscoveryEvidence, "version"> & { summary: string }) | null;
   submittedAt: string | null;
   suggestedBy: { id: string | null; name: string };
   reviewedAt: string | null;

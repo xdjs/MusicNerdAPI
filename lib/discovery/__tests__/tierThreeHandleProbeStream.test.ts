@@ -24,7 +24,7 @@ describe("tierThreeHandleProbeStream", () => {
     expect(runHandleProbe.mock.calls.every(([p]) => p.platform === "x")).toBe(true);
   });
 
-  it("propagates a confirmed handle to the platforms still missing", async () => {
+  it("does not promote a name-derived hit to a confirmed seed on another platform", async () => {
     runHandleProbe.mockImplementation(async (p: { platform: string; handle: string }) =>
       p.platform === "youtube" && p.handle === "peterango"
         ? {
@@ -48,5 +48,8 @@ describe("tierThreeHandleProbeStream", () => {
     expect(out.find(([p]) => p === "youtube")?.[1]).toMatchObject({ provisional: true });
     const seedInstagram = runHandleProbe.mock.calls.filter(([p]) => p.platform === "instagram");
     expect(seedInstagram.length).toBeGreaterThan(0);
+    expect(seedInstagram.every(([probe]) => !probe.confirmed)).toBe(true);
+    expect(runHandleProbe.mock.calls.some(([probe]) => probe.source === "propagated")).toBe(false);
+    expect(out.find(([platform]) => platform === "instagram")?.[1]).toBeNull();
   });
 });

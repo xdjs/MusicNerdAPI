@@ -39,7 +39,7 @@ it("stores a new candidate as unapproved automated research without claiming a u
   const insert = tx.statements()[1];
   expect(insert.text).toContain("insert into ugcresearch");
   expect(insert.text).toContain("'research',false");
-  expect(insert.params).toEqual(["a1", candidate.profileUrl, "instagram", "nova"]);
+  expect(insert.params).toEqual(["a1", candidate.profileUrl, "instagram", "nova", null]);
 });
 it("stops before persistence if ownership changed", async () => {
   const tx = fakeTransaction([]);
@@ -47,4 +47,25 @@ it("stops before persistence if ownership changed", async () => {
   m.lock.mockRejectedValue(new Error("ownership changed"));
   await expect(saveDiscoveredLinkSuggestion("a1", candidate)).rejects.toThrow("ownership changed");
   expect(tx.statements()).toHaveLength(0);
+});
+
+it("stores validated structured observations, not diagnostic reasoning", async () => {
+  const tx = fakeTransaction([[], []]);
+  m.transaction.mockImplementation(fn => fn(tx));
+  const discoveryEvidence = {
+    version: 1 as const,
+    method: "name_web_search" as const,
+    artistName: "Nova",
+    sourceUrl: candidate.profileUrl,
+    observedTitle: "Nova",
+  };
+  await saveDiscoveredLinkSuggestion("a1", { ...candidate, discoveryEvidence });
+  expect(tx.statements()[1].text).toContain("discovery_evidence");
+  expect(JSON.parse(String(tx.statements()[1].params.at(-1)))).toEqual(discoveryEvidence);
+});
+it("never invents evidence or overwrites earlier candidates' observations", async () => {
+  const tx = fakeTransaction([[{ id: "old", accepted: false, date_processed: null }]]);
+  m.transaction.mockImplementation(fn => fn(tx));
+  expect(await saveDiscoveredLinkSuggestion("a1", candidate)).toBe(true);
+  expect(tx.statements()).toHaveLength(1);
 });
