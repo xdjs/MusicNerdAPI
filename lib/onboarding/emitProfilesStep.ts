@@ -43,8 +43,11 @@ export async function* emitProfilesStep(
           };
         } else if (event.kind === "found") {
           if (
-            event.profile.provisional &&
-            !(await saveDiscoveredLinkSuggestion(artistId, event.profile))
+            !(await saveDiscoveredLinkSuggestion(
+              artistId,
+              event.profile,
+              event.profile.provisional,
+            ))
           )
             continue;
           candidates.push(event.profile);

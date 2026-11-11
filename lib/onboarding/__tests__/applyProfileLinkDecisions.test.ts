@@ -12,6 +12,9 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/artistLinkReview/approveDiscoveredLinkSuggestion", () => ({
   approveDiscoveredLinkSuggestion: m.approve,
 }));
+vi.mock("@/lib/artistLinkReview/setDiscoveredArtistLink", () => ({
+  setDiscoveredArtistLink: m.set,
+}));
 vi.mock("@/lib/artistLinks/clearArtistLink", () => ({ clearArtistLink: m.clear }));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink: m.set }));
 vi.mock("@/lib/artists/extractArtistId", () => ({ extractArtistId: m.extract }));

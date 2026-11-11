@@ -7,6 +7,10 @@ const m = vi.hoisted(() => ({
   belongs: vi.fn(),
 }));
 vi.mock("@/lib/artists/getArtistById", () => ({ getArtistById: m.artist }));
+vi.mock("@/lib/artistLinkReview/setDiscoveredArtistLink", () => ({
+  setDiscoveredArtistLink: (artistId: string, site: string, value: string, evidence: unknown) =>
+    m.set(artistId, site, value, undefined, undefined, evidence),
+}));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink: m.set }));
 vi.mock("@/lib/artistLinks/clearArtistLink", () => ({ clearArtistLink: vi.fn() }));
 vi.mock("@/lib/artists/extractArtistId", () => ({

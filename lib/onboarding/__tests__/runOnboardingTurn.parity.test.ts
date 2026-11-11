@@ -119,6 +119,9 @@ vi.mock("@/lib/research/queueSocialIngest", () => ({
 }));
 vi.mock("@/lib/instagram/waitForSocialPosts", () => ({ waitForSocialPosts: m.waitForSocialPosts }));
 vi.mock("@/lib/sources/inferTypeFromUrl", () => ({ inferTypeFromUrl: m.inferTypeFromUrl }));
+vi.mock("@/lib/artistLinkReview/setDiscoveredArtistLink", () => ({
+  setDiscoveredArtistLink: m.setArtistLink,
+}));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink: m.setArtistLink }));
 vi.mock("@/lib/artistLinks/clearArtistLink", () => ({ clearArtistLink: m.clearArtistLink }));
 vi.mock("@/lib/artists/extractArtistId", () => ({ extractArtistId: m.extractArtistId }));

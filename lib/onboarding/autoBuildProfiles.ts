@@ -35,8 +35,7 @@ export async function* autoBuildProfiles(
     for await (const event of discoverArtistProfilesStream(artistId, { requireComplete: true })) {
       if (event.kind === "found") {
         if (
-          event.profile.provisional &&
-          !(await saveDiscoveredLinkSuggestion(artistId, event.profile))
+          !(await saveDiscoveredLinkSuggestion(artistId, event.profile, event.profile.provisional))
         )
           continue;
         discovered.push(event.profile);

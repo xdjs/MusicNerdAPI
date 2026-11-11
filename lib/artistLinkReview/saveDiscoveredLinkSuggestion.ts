@@ -8,11 +8,14 @@ import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
  * Retains an unresolved automated discovery in the existing link-review queue.
  * Rechecks the operation under the artist lock and preserves all prior decisions.
  * No account is attached and no contributor is represented as endorsing the match.
- * Returns true for unresolved candidates; false for a previously reviewed identity.
+ * Returns whether discovery may offer the candidate. A stronger later match
+ * cannot override an existing pending/reviewed decision; a new corroborated
+ * match is permitted without inserting a pending row.
  */
 export async function saveDiscoveredLinkSuggestion(
   artistId: string,
   profile: Pick<DiscoveredProfile, "siteName" | "value" | "profileUrl">,
+  provisional = true,
 ): Promise<boolean> {
   if (!getArtistOperationOwnership(artistId)) throw new Error("Artist operation required");
   return db.transaction(async tx => {
@@ -27,7 +30,8 @@ export async function saveDiscoveredLinkSuggestion(
       (${["instagram", "x"].includes(profile.siteName)} and lower(site_username)=lower(${profile.value})))))
       order by (accepted is true or date_processed is not null) desc
       limit 1`);
-    if (existing) return !existing.accepted && existing.date_processed === null;
+    if (existing) return provisional && !existing.accepted && existing.date_processed === null;
+    if (!provisional) return true;
     await tx.execute(sql`insert into ugcresearch(artist_id,ugc_url,site_name,site_username,origin,accepted)
       values(${artistId}::uuid,${profile.profileUrl},${profile.siteName},${profile.value},'research',false)`);
     return true;

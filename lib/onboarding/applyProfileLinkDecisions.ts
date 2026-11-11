@@ -1,3 +1,4 @@
+import { setDiscoveredArtistLink } from "@/lib/artistLinkReview/setDiscoveredArtistLink";
 import { approveDiscoveredLinkSuggestion } from "@/lib/artistLinkReview/approveDiscoveredLinkSuggestion";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
@@ -95,14 +96,9 @@ export async function applyProfileLinkDecisions(
           outcome.identityBlocked.push(url);
           continue;
         }
-        await setArtistLink(
-          artistId,
-          extracted.siteName,
-          extracted.id,
-          undefined,
-          undefined,
-          evidence,
-        );
+        await setDiscoveredArtistLink(artistId, extracted.siteName, extracted.id, evidence);
+      } else if (opts?.verifyIdentity) {
+        await setDiscoveredArtistLink(artistId, extracted.siteName, extracted.id);
       } else {
         await setArtistLink(artistId, extracted.siteName, extracted.id);
       }
