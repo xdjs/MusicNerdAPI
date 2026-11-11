@@ -5,11 +5,13 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import { convertToModelMessages, gateway } from "ai";
 import { z } from "zod";
+import { runGuardedChatConversation } from "@/lib/evals/runGuardedChatConversation";
 import { MODEL_CHAT } from "@/lib/ai/const";
 import { createBoundedChatCapture } from "@/lib/evals/createBoundedChatCapture";
 import { getChatCorpusFingerprint } from "@/lib/chat/getChatCorpusFingerprint";
@@ -19,19 +21,34 @@ import { createGuardedChatExecution } from "@/lib/evals/createGuardedChatExecuti
 /** One opt-in task in the existing Evals suite. No judge, source overrides or allowance bypass. */
 export async function runSingleGuardedChatTurn(
   manifestPath: string,
-  options: { preflightOnly?: boolean } = {},
+  options: {
+    preflightOnly?: boolean;
+    conversation?: { reviewFirst: Parameters<typeof runGuardedChatConversation>[0]["reviewFirst"] };
+  } = {},
 ) {
   const preflightStarted = performance.now();
   const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
   const raw = readFileSync(manifestPath);
-  if (
-    !process.env.CHAT_SINGLE_MANIFEST_SHA256 ||
-    hash(raw) !== process.env.CHAT_SINGLE_MANIFEST_SHA256
-  )
-    throw new Error("single_manifest_mismatch");
+  const paired = options.conversation !== undefined;
+  const manifestPin = paired
+    ? process.env.CHAT_PAIR_MANIFEST_SHA256
+    : process.env.CHAT_SINGLE_MANIFEST_SHA256;
+  if (!manifestPin || hash(raw) !== manifestPin) throw new Error("single_manifest_mismatch");
   const manifest = z
     .object({
       version: z.literal(2),
+      conversation: z
+        .object({
+          apiSha: z.string().regex(/^[a-f0-9]{40}$/),
+          webSha: z.string().regex(/^[a-f0-9]{40}$/),
+          model: z.literal(MODEL_CHAT),
+          followUp: z.string().trim().min(1).max(500),
+          maxTurns: z.literal(2),
+          maxDurationMs: z.literal(300000),
+          firstQualityGate: z.literal("human"),
+        })
+        .strict()
+        .optional(),
       provider: z.enum(["anthropic", "vertex"]),
       enabled: z.boolean(),
       utcDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -72,6 +89,47 @@ export async function runSingleGuardedChatTurn(
     })
     .strict()
     .parse(JSON.parse(raw.toString()));
+  if (paired !== !!manifest.conversation) throw new Error("pair_mode_mismatch");
+  if (paired) {
+    if (typeof options.conversation?.reviewFirst !== "function")
+      throw new Error("pair_human_review_required");
+    if (
+      manifest.conversation!.apiSha !== process.env.GITHUB_SHA ||
+      manifest.conversation!.webSha !== process.env.CHAT_PAIR_EXPECTED_WEB_SHA
+    )
+      throw new Error("pair_candidate_mismatch");
+    if (!manifest.pdf || manifest.provider !== "anthropic") throw new Error("pair_scope_mismatch");
+    // Require the complete runtime source tree, not a caller-selected subset of pins.
+    const runtimePaths = ["lib", "app"].flatMap(root =>
+      readdirSync(root, { recursive: true, withFileTypes: true })
+        .filter(
+          entry =>
+            entry.isFile() &&
+            /\.tsx?$/.test(entry.name) &&
+            !entry.name.includes(".test.") &&
+            !entry.parentPath.split("/").includes("__tests__"),
+        )
+        .map(entry => `${entry.parentPath}/${entry.name}`),
+    );
+    for (const path of [
+      ...runtimePaths,
+      "evals/chat-pair.ts",
+      "evals/buildChatPair.mjs",
+      "package.json",
+      "pnpm-lock.yaml",
+      "tsconfig.json",
+      "lib/evals/runSingleGuardedChatTurn.ts",
+      "lib/evals/runPairedGuardedChatTurn.ts",
+      "lib/ai/const.ts",
+      "lib/evals/runGuardedChatConversation.ts",
+      "lib/evals/createGuardedChatExecution.ts",
+      "lib/evals/createBoundedChatCapture.ts",
+      "lib/evals/chatStreamTurn.ts",
+      "lib/chat/validateArtistChatBody.ts",
+      "lib/attributedChat/normalizeChatHistoryParts.ts",
+    ])
+      if (!manifest.files[path]) throw new Error("pair_required_code_pin_missing");
+  }
   if (manifest.utcDate !== new Date().toISOString().slice(0, 10))
     throw new Error("single_date_pin_mismatch");
   if (!options.preflightOnly && !manifest.enabled) throw new Error("single_manifest_disabled");
@@ -94,7 +152,8 @@ export async function runSingleGuardedChatTurn(
     process.env.GITHUB_RUN_ATTEMPT !== "1" ||
     !process.env.GITHUB_RUN_ID ||
     !process.env.GITHUB_SHA ||
-    process.env.GITHUB_SHA !== process.env.CHAT_SINGLE_EXPECTED_SHA
+    process.env.GITHUB_SHA !==
+      (paired ? process.env.CHAT_PAIR_EXPECTED_SHA : process.env.CHAT_SINGLE_EXPECTED_SHA)
   )
     throw new Error("single_execution_identity_mismatch");
   for (const name of [
@@ -103,7 +162,7 @@ export async function runSingleGuardedChatTurn(
     "SUPABASE_DB_CONNECTION",
     "SUPABASE_URL",
     "MUSICNERD_RESEARCH_API_KEY",
-    "BRAINTRUST_API_KEY",
+    ...(paired ? [] : ["BRAINTRUST_API_KEY"]),
   ])
     if (!process.env[name]) throw new Error("single_runtime_configuration_missing");
   let origin: URL;
@@ -207,7 +266,7 @@ export async function runSingleGuardedChatTurn(
     : undefined;
   const directory = resolve(
     process.env.RUNNER_TEMP ?? ".",
-    `chat-single-${process.env.GITHUB_RUN_ID}`,
+    `chat-${paired ? "pair" : "single"}-${process.env.GITHUB_RUN_ID}`,
   );
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const operator = resolve(directory, "OPERATOR_CLAIM");
@@ -220,14 +279,16 @@ export async function runSingleGuardedChatTurn(
   const tracePath = resolve(directory, "trace.jsonl");
   const traceFd = openSync(tracePath, "wx", 0o600);
   closeSync(traceFd);
+  const ledgerHash = createHash("sha256");
   const capture = createBoundedChatCapture({
     maxBytes: manifest.pdf?.execution.maxCaptureBytes ?? 1000000,
     write: line => {
       appendFileSync(tracePath, line);
+      ledgerHash.update(line);
     },
   });
   let actualCorpusValidated = false;
-  const record = (kind: string, value: unknown) => {
+  const observe = (kind: string, value: unknown) => {
     if (
       kind === "server-tool-event" &&
       (value as { type?: string })?.type === "data-chat-corpus-pin"
@@ -236,6 +297,9 @@ export async function runSingleGuardedChatTurn(
         throw new Error("single_handler_corpus_mismatch");
       actualCorpusValidated = true;
     }
+  };
+  const record = (kind: string, value: unknown) => {
+    observe(kind, value);
     capture.record(kind, value);
   };
   record(
@@ -258,7 +322,7 @@ export async function runSingleGuardedChatTurn(
   const guardRaw = JSON.stringify({
     version: 1,
     ...(pdfAdmission ? { pdf: pdfAdmission } : {}),
-    runId: `single-${process.env.GITHUB_RUN_ID}`,
+    runId: `${paired ? "pair" : "single"}-${process.env.GITHUB_RUN_ID}`,
     modelId: MODEL_CHAT,
     promptSha256: manifest.promptSha256,
     provider: manifest.provider,
@@ -280,49 +344,103 @@ export async function runSingleGuardedChatTurn(
     maxCaptureBytes: manifest.pdf?.execution.maxCaptureBytes ?? 1000000,
   });
   writeFileSync(guardPath, guardRaw, { flag: "wx", mode: 0o600 });
-  const execution = createGuardedChatExecution({
-    manifestPath: guardPath,
-    manifestSha256: hash(guardRaw),
-    model: gateway(MODEL_CHAT),
-    ...(manifest.pdf
-      ? {
-          validatePdfCatalog: async () => {
-            if (
-              getChatCorpusFingerprint(await loadChatPdfs(manifest.artistId)) !==
-              getChatCorpusFingerprint(pdfs)
-            )
-              throw new Error("single_pdf_catalog_changed");
-          },
-          validatePdfSource: async (pin: (typeof manifest.pdf.admission.documents)[number]) => {
-            const baseline = pdfSnapshot.get(pin.sourceId);
-            const current = await loadChatPdfs(manifest.artistId, pin.sourceId);
-            if (
-              !baseline ||
-              current.length !== 1 ||
-              current[0].id !== pin.sourceId ||
-              current[0].revision !== pin.revision ||
-              current[0].title !== pin.filename ||
-              current[0].size !== pin.bytes ||
-              current[0].path !== baseline.path ||
-              current[0].url !== baseline.url ||
-              current[0].claimId !== baseline.claimId
-            )
-              throw new Error("single_pdf_source_changed");
-          },
-        }
-      : {}),
-    record: (kind, value) => {
-      if (kind === "model-input" && !actualCorpusValidated)
-        throw new Error("single_handler_corpus_observation_missing");
-      if (
-        kind === "model-input" &&
-        hash(JSON.stringify((value as { prepared: { tools: unknown } }).prepared.tools)) !==
-          manifest.toolSchemasSha256
-      )
-        throw new Error("single_tool_schema_mismatch");
-      record(kind, value);
-    },
-  });
+  const createExecution = (
+    controls?: Parameters<Parameters<typeof runGuardedChatConversation>[0]["createExecution"]>[0],
+  ) =>
+    createGuardedChatExecution({
+      ...(controls ? { continuation: controls.continuation } : {}),
+      manifestPath: guardPath,
+      manifestSha256: hash(guardRaw),
+      model: gateway(MODEL_CHAT),
+      ...(manifest.pdf
+        ? {
+            validatePdfCatalog: async () => {
+              if (
+                getChatCorpusFingerprint(await loadChatPdfs(manifest.artistId)) !==
+                getChatCorpusFingerprint(pdfs)
+              )
+                throw new Error("single_pdf_catalog_changed");
+            },
+            validatePdfSource: async (pin: (typeof manifest.pdf.admission.documents)[number]) => {
+              const baseline = pdfSnapshot.get(pin.sourceId);
+              const current = await loadChatPdfs(manifest.artistId, pin.sourceId);
+              if (
+                !baseline ||
+                current.length !== 1 ||
+                current[0].id !== pin.sourceId ||
+                current[0].revision !== pin.revision ||
+                current[0].title !== pin.filename ||
+                current[0].size !== pin.bytes ||
+                current[0].path !== baseline.path ||
+                current[0].url !== baseline.url ||
+                current[0].claimId !== baseline.claimId
+              )
+                throw new Error("single_pdf_source_changed");
+            },
+          }
+        : {}),
+      record: (kind, value) => {
+        if (kind === "model-input" && !actualCorpusValidated)
+          throw new Error("single_handler_corpus_observation_missing");
+        if (
+          kind === "model-input" &&
+          hash(JSON.stringify((value as { prepared: { tools: unknown } }).prepared.tools)) !==
+            manifest.toolSchemasSha256
+        )
+          throw new Error("single_tool_schema_mismatch");
+        (controls?.record ?? record)(kind, value);
+      },
+    });
+  if (paired && manifest.conversation && options.conversation) {
+    const verifyTrace = () => {
+      try {
+        const bytes = readFileSync(tracePath);
+        if (
+          bytes.length !== capture.snapshot().writtenBytes ||
+          hash(bytes) !== ledgerHash.copy().digest("hex")
+        )
+          throw new Error("mismatch");
+        for (const line of bytes.toString("utf8").trim().split("\n")) JSON.parse(line);
+      } catch {
+        throw new Error("pair_trace_incomplete");
+      }
+    };
+    const reviewFirst = options.conversation.reviewFirst;
+    const result = await runGuardedChatConversation({
+      artistId: manifest.artistId,
+      question: manifest.question,
+      followUp: manifest.conversation.followUp,
+      requestId: `pair-${process.env.GITHUB_RUN_ID}`,
+      maxCaptureBytes: manifest.pdf!.execution.maxCaptureBytes,
+      createExecution,
+      capture,
+      observe,
+      beforeTurn: () => {
+        actualCorpusValidated = false;
+      },
+      write: line => {
+        appendFileSync(tracePath, line);
+      },
+      reviewFirst: async (...args) => {
+        verifyTrace();
+        const verdict = await reviewFirst(...args);
+        verifyTrace();
+        return verdict;
+      },
+    });
+    verifyTrace();
+    return {
+      ...result,
+      diagnostic: {
+        preflight,
+        tracePath,
+        capture: capture.snapshot(),
+        invoiceGuarantee: false,
+        reservationUsd: manifest.pdf!.reservationUsd,
+      },
+    };
+  }
+  const execution = createExecution();
   let admitted = false;
   const { chatStreamTurn } = await import("@/lib/evals/chatStreamTurn");
   const turn = await chatStreamTurn(

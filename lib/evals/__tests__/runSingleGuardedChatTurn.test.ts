@@ -2,7 +2,7 @@ import { runSingleGuardedChatTurn } from "@/lib/evals/runSingleGuardedChatTurn";
 import { getChatCorpusFingerprint } from "@/lib/chat/getChatCorpusFingerprint";
 import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -529,4 +529,205 @@ it("rejects a manifest containing database-origin URLs instead of static URL has
   await expect(runSingleGuardedChatTurn(path)).rejects.toThrow();
   expect(m.artist).not.toHaveBeenCalled();
   expect(m.gateway).not.toHaveBeenCalled();
+});
+
+it("rejects a paired manifest through the single-turn entrypoint before reading sources", async () => {
+  const path = setup({
+    conversation: {
+      apiSha: "a".repeat(40),
+      webSha: "b".repeat(40),
+      model: "anthropic/claude-sonnet-5.5",
+      followUp: "What evidence supports those aliases?",
+      maxTurns: 2,
+      maxDurationMs: 300000,
+      firstQualityGate: "human",
+    },
+  });
+  await expect(runSingleGuardedChatTurn(path)).rejects.toThrow("pair_mode_mismatch");
+  expect(m.sources).not.toHaveBeenCalled();
+  expect(m.gateway).not.toHaveBeenCalled();
+});
+
+function setupPair(overrides: Record<string, unknown> = {}) {
+  const paths = [
+    ...["lib", "app"].flatMap(root =>
+      readdirSync(root, { recursive: true, withFileTypes: true })
+        .filter(
+          entry =>
+            entry.isFile() &&
+            /\.tsx?$/.test(entry.name) &&
+            !entry.name.includes(".test.") &&
+            !entry.parentPath.split("/").includes("__tests__"),
+        )
+        .map(entry => `${entry.parentPath}/${entry.name}`),
+    ),
+    "evals/chat-pair.ts",
+    "evals/buildChatPair.mjs",
+    "package.json",
+    "pnpm-lock.yaml",
+    "tsconfig.json",
+    "lib/evals/runSingleGuardedChatTurn.ts",
+    "lib/evals/runPairedGuardedChatTurn.ts",
+    "lib/ai/const.ts",
+    "lib/evals/runGuardedChatConversation.ts",
+    "lib/evals/createGuardedChatExecution.ts",
+    "lib/evals/createBoundedChatCapture.ts",
+    "lib/evals/chatStreamTurn.ts",
+    "lib/chat/validateArtistChatBody.ts",
+    "lib/attributedChat/normalizeChatHistoryParts.ts",
+  ];
+  const path = setup({
+    pdf: pdfPlan,
+    toolSchemasSha256: hash(JSON.stringify([])),
+    files: Object.fromEntries(paths.map(path => [path, hash(readFileSync(path, "utf8"))])),
+    conversation: {
+      apiSha: "a".repeat(40),
+      webSha: "b".repeat(40),
+      model: "anthropic/claude-sonnet-5.5",
+      followUp: "What evidence supports those aliases?",
+      maxTurns: 2,
+      maxDurationMs: 300000,
+      firstQualityGate: "human",
+    },
+    ...overrides,
+  });
+  vi.stubEnv("CHAT_PAIR_MANIFEST_SHA256", hash(readFileSync(path, "utf8")));
+  vi.stubEnv("CHAT_PAIR_EXPECTED_SHA", "a".repeat(40));
+  vi.stubEnv("CHAT_PAIR_EXPECTED_WEB_SHA", "b".repeat(40));
+  m.pdf.mockResolvedValue([pdfRow]);
+  m.turn.mockImplementation(async (_input, _clock, capture) => {
+    capture.claim();
+    capture.record("server-tool-event", {
+      type: "data-chat-corpus-pin",
+      data: { sha256: getChatCorpusFingerprint([]) },
+    });
+    m.guard.mock.calls[0][0].record("model-input", { prepared: { tools: [] } });
+    for (const chunk of [
+      { type: "start", messageId: "actual" },
+      { type: "text-start", id: "text" },
+      { type: "text-delta", id: "text", delta: "Actual answer" },
+      { type: "text-end", id: "text" },
+      { type: "finish", finishReason: "stop" },
+    ])
+      capture.record("ui-chunk", chunk);
+    return {
+      answer: "Actual answer",
+      sources: [],
+      evidenceCaptureComplete: true,
+      firstTextMs: 1,
+      totalMs: 2,
+    };
+  });
+  return path;
+}
+it("pins a pair independently, creates one shared guard/ledger and rejects replay", async () => {
+  const path = setupPair();
+  const reviewFirst = vi.fn(async () => "pass" as const);
+  const result = await runSingleGuardedChatTurn(path, { conversation: { reviewFirst } });
+  expect(result).toMatchObject({ stopped: "awaiting_followup_quality_review" });
+  expect(m.turn).toHaveBeenCalledTimes(2);
+  expect(m.guard).toHaveBeenCalledOnce();
+  expect(reviewFirst).toHaveBeenCalledOnce();
+  expect(m.turn.mock.calls[1][0].messages[1].parts).toContainEqual({
+    type: "text",
+    text: "Actual answer",
+    state: "done",
+  });
+  const ledger = readFileSync(
+    join(process.env.RUNNER_TEMP!, "chat-pair-123", "trace.jsonl"),
+    "utf8",
+  )
+    .trim()
+    .split("\n")
+    .map(line => JSON.parse(line));
+  expect(ledger.filter(r => r.kind === "first-quality-review")).toEqual([
+    expect.objectContaining({
+      value: expect.objectContaining({
+        verdict: "pass",
+        outputSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    }),
+  ]);
+  expect(ledger[0].kind).toBe("source-preflight");
+  expect((result as any).capture.writtenBytes).toBe(
+    Buffer.byteLength(ledger.map(r => JSON.stringify(r) + "\n").join("")),
+  );
+  await expect(runSingleGuardedChatTurn(path, { conversation: { reviewFirst } })).rejects.toThrow();
+  expect(m.turn).toHaveBeenCalledTimes(2);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it.each(["fail", "unscored"] as const)("stops at first human verdict %s", async verdict => {
+  const path = setupPair();
+  const result = await runSingleGuardedChatTurn(path, {
+    conversation: { reviewFirst: async () => verdict },
+  });
+  expect(result).toMatchObject({ stopped: `first_quality_${verdict}` });
+  expect(m.turn).toHaveBeenCalledOnce();
+});
+it("requires a new handler corpus observation on the second turn", async () => {
+  const path = setupPair();
+  const first = m.turn.getMockImplementation()!;
+  m.turn.mockImplementationOnce(first).mockImplementationOnce(async (_i, _c, capture) => {
+    capture.claim();
+    m.guard.mock.calls[0][0].record("model-input", { prepared: { tools: [] } });
+  });
+  await expect(
+    runSingleGuardedChatTurn(path, { conversation: { reviewFirst: async () => "pass" } }),
+  ).rejects.toThrow("single_handler_corpus_observation_missing");
+});
+it.each(["disabled", "single", "code", "candidate"])(
+  "rejects paired admission %s before source reads",
+  async reason => {
+    const path = setupPair(
+      reason === "disabled"
+        ? { enabled: false }
+        : reason === "single"
+          ? { conversation: undefined }
+          : reason === "code"
+            ? { files: {} }
+            : {},
+    );
+    if (reason === "candidate") vi.stubEnv("CHAT_PAIR_EXPECTED_WEB_SHA", "c".repeat(40));
+    await expect(
+      runSingleGuardedChatTurn(path, { conversation: { reviewFirst: async () => "pass" } }),
+    ).rejects.toThrow();
+    expect(m.sources).not.toHaveBeenCalled();
+    expect(m.gateway).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["truncate", "same-length-corruption"])(
+  "refuses a %s private trace before follow-up dispatch",
+  async failure => {
+    const path = setupPair();
+    await expect(
+      runSingleGuardedChatTurn(path, {
+        conversation: {
+          reviewFirst: async () => {
+            const trace = join(process.env.RUNNER_TEMP!, "chat-pair-123", "trace.jsonl");
+            const old = readFileSync(trace, "utf8");
+            writeFileSync(
+              trace,
+              failure === "truncate" ? "" : old.replace("Actual answer", "Forged answer"),
+            );
+            return "pass";
+          },
+        },
+      }),
+    ).rejects.toThrow("pair_trace_incomplete");
+    expect(m.turn).toHaveBeenCalledOnce();
+  },
+);
+it("does not return follow-up quality readiness with a truncated final artifact", async () => {
+  const path = setupPair();
+  const original = m.turn.getMockImplementation()!;
+  m.turn.mockImplementation(async (...args) => {
+    const result = await original(...args);
+    if (m.turn.mock.calls.length === 2)
+      writeFileSync(join(process.env.RUNNER_TEMP!, "chat-pair-123", "trace.jsonl"), "");
+    return result;
+  });
+  await expect(
+    runSingleGuardedChatTurn(path, { conversation: { reviewFirst: async () => "pass" } }),
+  ).rejects.toThrow("pair_trace_incomplete");
 });

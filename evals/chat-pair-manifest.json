@@ -1,0 +1,74 @@
+{
+  "version": 2,
+  "enabled": false,
+  "provider": "anthropic",
+  "utcDate": "2026-11-07",
+  "attributedTextCharacters": 12000,
+  "corpusSha256": "93c397c2798cc43040b2a42b7465c3f9153f25a6f43d60a3a6c963ff5bc9f656",
+  "artistId": "6cb3d81a-3d02-4c57-a711-bb7902a9af1b",
+  "artistName": "Dutchyyy",
+  "question": "Which years did Dutchyyy use each artist alias, and which were used at the same time?",
+  "stagingOriginSha256": "f8350d3631d8e76f00b601c021cd2ee682d40ab01d27c78da1d2bb644ab16c13",
+  "instructionsSha256": "960c06660d0c00bedb51b1408cd2124b9e45a446682e2b504fd75a89994309ed",
+  "promptSha256": "3fb8f062ddb757bc9422e829a6bf937bb16c508db73cea1d199700ff24e7b937",
+  "toolSchemasSha256": "a36a0658f5aa350411e846bbefb377a3108fb04303fada53764669e9000f1682",
+  "files": {},
+  "pdf": {
+    "execution": {
+      "maxCalls": 6,
+      "maxToolExecutions": 8,
+      "maxWebSearches": 1,
+      "maxInputBytes": 262144,
+      "maxTotalInputBytes": 1048576,
+      "maxCaptureBytes": 4194304
+    },
+    "admission": {
+      "documents": [
+        {
+          "sourceId": "2c623f78-412c-48f1-8a9b-2a3890e11e4d",
+          "revision": "2026-11-03 15:58:00.901801+00:5b72c5c6d00e110a12abf7431f241355:public",
+          "filename": "Dutchyyy VS The Algorithms (short)_compressed.pdf",
+          "sha256": "33c29a5285407551d923c69e5b63831d582688bc0016b02d90301faed82d8d8d",
+          "bytes": 950904,
+          "pages": 19
+        },
+        {
+          "sourceId": "9c4911b5-090f-443b-93f7-a4f4e861909e",
+          "revision": "2026-11-03 15:57:38.467753+00:76115c19c276b2f3972d750049437af0:public",
+          "filename": "Dutchyyy -vs- The Algorithms_compressed.pdf",
+          "sha256": "e8de51055fead5dc8c8757718eb06feeac8b6ada6561b2b3c5db9ba9a98b105c",
+          "bytes": 1943074,
+          "pages": 41
+        },
+        {
+          "sourceId": "84b02b2a-a406-4ca0-9adf-757a5f494d02",
+          "revision": "2026-11-03 15:58:15.79944+00:8c60d128ade59fc56f0e321746b5ee38:public",
+          "filename": "dutch_discography_timeline.pdf",
+          "sha256": "9f3503adb85313afc65dfe1443a652a67942aaeb6ab309aa80d50d60f62db09c",
+          "bytes": 289352,
+          "pages": 13
+        }
+      ],
+      "maxUniqueDocuments": 2,
+      "maxBytesPerCall": 2893978,
+      "maxTotalBytes": 14469890,
+      "maxPagesPerCall": 60,
+      "maxTotalPages": 300
+    },
+    "urlSha256": {
+      "2c623f78-412c-48f1-8a9b-2a3890e11e4d": "2a9ae02be2d1d46f4e20e7b5a1bb1de0acce7645ea10737971e0b8b99bc80056",
+      "9c4911b5-090f-443b-93f7-a4f4e861909e": "ccbaa215a86ec139d4a54cf9a97b7c4809e28cdd64a734e47defefda594cf188",
+      "84b02b2a-a406-4ca0-9adf-757a5f494d02": "95667e9567b9dea1476b24d81a7f365549e95d97417f938673f202b4ccff29df"
+    },
+    "reservationUsd": 16.59
+  },
+  "conversation": {
+    "apiSha": "0000000000000000000000000000000000000000",
+    "webSha": "0000000000000000000000000000000000000000",
+    "model": "anthropic/claude-sonnet-5.5",
+    "followUp": "What evidence supports those aliases being used at the same time, and what remains uncertain? Show the exact source pages.",
+    "maxTurns": 2,
+    "maxDurationMs": 300000,
+    "firstQualityGate": "human"
+  }
+}

@@ -775,3 +775,191 @@ it("charges full repeated inputs cumulatively and reports a rejected continuatio
   });
   expect(external).not.toHaveBeenCalled();
 });
+
+function setupPair(
+  overrides = {},
+  validatePrompt: (prompt: unknown) => boolean = prompt => prompt === "follow-up",
+) {
+  const model = new MockLanguageModelV4({ modelId: MODEL_CHAT, doStream: async () => result() });
+  const fixture = setup(model, overrides);
+  const validate = vi.fn(validatePrompt);
+  const execute = createGuardedChatExecution({
+    ...fixture.config,
+    continuation: { validatePrompt: validate },
+  });
+  return { ...fixture, model, validate, execute };
+}
+
+it("admits exactly one sequential continuation with durable markers and shared call evidence", async () => {
+  const { execute, model, validate, path } = setupPair();
+  await expect(execute({ model: MODEL_CHAT, prompt: "q" })).resolves.toEqual({ text: "Answer." });
+  expect(validate).not.toHaveBeenCalled();
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).resolves.toEqual({
+    text: "Answer.",
+  });
+  expect(validate).toHaveBeenCalledExactlyOnceWith("follow-up");
+  expect(existsSync(path + ".DISPATCHED")).toBe(true);
+  expect(existsSync(path + ".CONTINUED")).toBe(true);
+  expect(
+    events.filter(e => e.kind === "model-input").map(e => (e.value as { call: number }).call),
+  ).toEqual([1, 2]);
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow(
+    "eval_already_dispatched",
+  );
+  expect(model.doStreamCalls).toHaveLength(2);
+  expect(external).not.toHaveBeenCalled();
+});
+
+it.each(["different", "not-admitted", "throws"])(
+  "rejects continuation %s before dispatch and never retries admission",
+  async mode => {
+    const { execute, model, validate, path } = setupPair({}, prompt => {
+      if (mode === "throws") throw new Error("admission failed");
+      return mode !== "not-admitted" && prompt === "follow-up";
+    });
+    await execute({ model: MODEL_CHAT, prompt: "q" });
+    const prompt = mode === "different" ? "follow-up " : "follow-up";
+    await expect(execute({ model: MODEL_CHAT, prompt })).rejects.toThrow(
+      "eval_continuation_prompt_mismatch",
+    );
+    await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow();
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(existsSync(path + ".CONTINUED")).toBe(false);
+  },
+);
+
+it("keeps instructions pinned on the continuation", async () => {
+  const { execute, model, path } = setupPair();
+  await execute({ model: MODEL_CHAT, prompt: "q" });
+  await expect(
+    execute({ model: MODEL_CHAT, prompt: "follow-up", instructions: "changed" }),
+  ).rejects.toThrow("eval_instructions_mismatch");
+  expect(model.doStreamCalls).toHaveLength(1);
+  expect(existsSync(path + ".CONTINUED")).toBe(false);
+});
+
+it.each(["calls", "output", "input", "capture"])(
+  "shares the %s budget across both turns",
+  async boundary => {
+    const probe = setupPair();
+    await probe.execute({ model: MODEL_CHAT, prompt: "q" });
+    const inputBytes = (events.find(e => e.kind === "model-input")!.value as { inputBytes: number })
+      .inputBytes;
+    const captureBytes = events.reduce(
+      (sum, event) => sum + Buffer.byteLength(JSON.stringify(event)),
+      0,
+    );
+    rmSync(dir, { recursive: true, force: true });
+    dir = mkdtempSync(join(tmpdir(), "mn1424-pair-budget-"));
+    events.length = 0;
+    const overrides =
+      boundary === "calls"
+        ? { maxCalls: 1 }
+        : boundary === "output"
+          ? { maxOutputCharacters: 7 }
+          : boundary === "input"
+            ? { maxTotalInputBytes: inputBytes }
+            : { maxCaptureBytes: captureBytes };
+    const { execute, model } = setupPair(overrides);
+    await execute({ model: MODEL_CHAT, prompt: "q" });
+    await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow(
+      `eval_${boundary === "calls" ? "call" : boundary === "input" ? "total_input" : boundary}_limit`,
+    );
+    expect(model.doStreamCalls.length).toBeLessThanOrEqual(boundary === "output" ? 2 : 1);
+  },
+);
+
+it("rejects concurrent continuation before calling its validator", async () => {
+  const { execute, validate, model, path } = setupPair();
+  const first = execute({ model: MODEL_CHAT, prompt: "q" });
+  const firstRejected = expect(first).rejects.toThrow();
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow(
+    "eval_already_dispatched",
+  );
+  await firstRejected;
+  expect(validate).not.toHaveBeenCalled();
+  expect(model.doStreamCalls.length).toBeLessThanOrEqual(1);
+  expect(existsSync(path + ".CONTINUED")).toBe(false);
+});
+
+it("cannot resume from either durable marker in a new guard", async () => {
+  const { execute, config, model, path } = setupPair();
+  await execute({ model: MODEL_CHAT, prompt: "q" });
+  writeFileSync(path + ".CONTINUED", "prior attempt");
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow("EEXIST");
+  const restarted = createGuardedChatExecution({
+    ...config,
+    continuation: { validatePrompt: () => true },
+  });
+  await expect(restarted({ model: MODEL_CHAT, prompt: "q" })).rejects.toThrow("EEXIST");
+  expect(model.doStreamCalls).toHaveLength(1);
+});
+
+it("does not admit continuation after failed first turn", async () => {
+  const { execute, validate, model } = setupPair({ maxOutputCharacters: 1 });
+  await expect(execute({ model: MODEL_CHAT, prompt: "q" })).rejects.toThrow("eval_output_limit");
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow();
+  expect(validate).not.toHaveBeenCalled();
+  expect(model.doStreamCalls).toHaveLength(1);
+});
+
+it.each(["per-tool", "total"])(
+  "shares %s executions across turns without refund",
+  async boundary => {
+    const model = new MockLanguageModelV4({
+      modelId: MODEL_CHAT,
+      doStream: async () => result(true),
+    });
+    const fixture = setup(
+      model,
+      boundary === "per-tool" ? { toolLimits: { searchSources: 1 } } : { maxToolExecutions: 1 },
+    );
+    const execute = createGuardedChatExecution({
+      ...fixture.config,
+      continuation: { validatePrompt: prompt => prompt === "follow-up" },
+    });
+    const adapter = vi.fn(async () => ({ sources: [] }));
+    const tools = {
+      searchSources: tool({ inputSchema: z.object({ query: z.string() }), execute: adapter }),
+    };
+    await execute({ model: MODEL_CHAT, prompt: "q", tools });
+    await expect(execute({ model: MODEL_CHAT, prompt: "follow-up", tools })).rejects.toThrow(
+      "eval_tool_limit",
+    );
+    expect(adapter).toHaveBeenCalledTimes(1);
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(events.find(e => e.kind === "guard-failure")?.value).toMatchObject({
+      toolExecutions: 1,
+    });
+  },
+);
+
+it("requires strict synchronous admission rather than a truthy promise", async () => {
+  const { execute, model } = setupPair({}, (() => Promise.resolve(false)) as unknown as (
+    prompt: unknown,
+  ) => boolean);
+  await execute({ model: MODEL_CHAT, prompt: "q" });
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow(
+    "eval_continuation_prompt_mismatch",
+  );
+  expect(model.doStreamCalls).toHaveLength(1);
+});
+
+it("does not recover from a provider failure to start a second turn", async () => {
+  const model = new MockLanguageModelV4({
+    modelId: MODEL_CHAT,
+    doStream: async () => {
+      throw new Error("fixture provider failure");
+    },
+  });
+  const { config } = setup(model);
+  const validatePrompt = vi.fn(() => true);
+  const execute = createGuardedChatExecution({ ...config, continuation: { validatePrompt } });
+  await expect(execute({ model: MODEL_CHAT, prompt: "q" })).rejects.toThrow(
+    "fixture provider failure",
+  );
+  await expect(execute({ model: MODEL_CHAT, prompt: "follow-up" })).rejects.toThrow();
+  expect(validatePrompt).not.toHaveBeenCalled();
+  expect(model.doStreamCalls).toHaveLength(1);
+});

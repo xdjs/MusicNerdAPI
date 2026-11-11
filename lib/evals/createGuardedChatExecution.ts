@@ -48,7 +48,7 @@ const manifestSchema = z
     "Text-only admission ceilings remain unchanged",
   );
 
-/** Evaluator-only, one-turn forwarding guard. Never imported by an HTTP route. */
+/** Evaluator-only forwarding guard; one-shot unless a trusted continuation is admitted. */
 export function createGuardedChatExecution({
   manifestPath,
   manifestSha256,
@@ -56,6 +56,7 @@ export function createGuardedChatExecution({
   record,
   validatePdfSource,
   validatePdfCatalog,
+  continuation,
 }: {
   manifestPath: string;
   manifestSha256: string;
@@ -66,6 +67,13 @@ export function createGuardedChatExecution({
   validatePdfSource?: (document: PdfEvalDocument) => Promise<void>;
   /** Optional trusted evaluator check of the full eligible PDF catalog; never filters results. */
   validatePdfCatalog?: () => Promise<void>;
+  /** Trusted harness-only admission of one exact follow-up after a successful first turn.
+   * Return strictly true only for the expected prompt after the harness quality gate.
+   * No budgets are replenished; failed, concurrent or third attempts remain forbidden.
+   */
+  continuation?: {
+    validatePrompt: (prompt: Parameters<typeof streamText>[0]["prompt"]) => boolean;
+  };
 }): typeof streamText {
   const raw = readFileSync(manifestPath);
   if (createHash("sha256").update(raw).digest("hex") !== manifestSha256)
@@ -85,7 +93,8 @@ export function createGuardedChatExecution({
   let pdfReadAttempts = 0;
   let consumedPdfBytes = 0;
   let consumedPdfPages = 0;
-  let used = false;
+  let turns = 0;
+  let completed = false;
   let failed = false;
   let failureReason: string | undefined;
   let calls = 0;
@@ -326,11 +335,24 @@ export function createGuardedChatExecution({
     },
   });
   return async options => {
-    if (used) fail("eval_already_dispatched");
-    used = true;
+    if (turns && (!continuation || turns !== 1 || !completed)) fail("eval_already_dispatched");
+    check();
+    const isContinuation = turns === 1;
+    // Reserve before invoking trusted callbacks: reentry or concurrent attempts fail closed.
+    turns++;
+    completed = false;
     // Observe the unchanged ordinary handler configuration before any eval-only override.
     if (options.model !== MODEL_CHAT) fail("eval_model_mismatch");
-    if (
+    if (isContinuation) {
+      let admitted = false;
+      try {
+        admitted = continuation!.validatePrompt(options.prompt) === true;
+      } catch {
+        fail("eval_continuation_prompt_mismatch");
+      }
+      if (!admitted) fail("eval_continuation_prompt_mismatch");
+      check();
+    } else if (
       createHash("sha256").update(JSON.stringify(options.prompt)).digest("hex") !==
       manifest.promptSha256
     )
@@ -350,14 +372,21 @@ export function createGuardedChatExecution({
       )
     )
       fail("eval_tool_scope_mismatch");
-    // Exclusive-create is the durable one-shot boundary. Never remove on failure.
-    const fd = openSync(`${manifestPath}.DISPATCHED`, "wx", 0o600);
+    // Exclusive-create is the durable boundary for each turn. Never remove on failure.
+    const fd = openSync(
+      `${manifestPath}.${isContinuation ? "CONTINUED" : "DISPATCHED"}`,
+      "wx",
+      0o600,
+    );
     try {
       writeFileSync(fd, JSON.stringify({ runId: manifest.runId, manifestSha256 }));
     } finally {
       closeSync(fd);
     }
-    capture("dispatch", { runId: manifest.runId, manifestSha256 });
+    capture(isContinuation ? "continuation-dispatch" : "dispatch", {
+      runId: manifest.runId,
+      manifestSha256,
+    });
     const tools = Object.fromEntries(
       Object.entries(options.tools ?? {}).map(([name, tool]) => [
         name,
@@ -444,6 +473,7 @@ export function createGuardedChatExecution({
       });
       check();
       if (options.abortSignal?.aborted) fail("eval_aborted");
+      completed = true;
       return result;
     } catch (error) {
       failed = true;

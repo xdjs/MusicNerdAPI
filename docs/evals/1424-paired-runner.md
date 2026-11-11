@@ -1,0 +1,23 @@
+# Private paired acceptance runner
+
+This is offline preparation, not permission to execute. `evals/chat-pair-manifest.json` is disabled, expired and deliberately has zero candidate SHAs and no file pins. It carries historical source fingerprints and PDF limits only as an unverified template. The single-case manifest and existing Evals workflow are unchanged. No automatic pair registration, Braintrust upload, judge, retry or deployment is added.
+
+## Admission and operator gate
+
+The entrypoint is `evals/chat-pair.ts`, bundled locally with `node evals/buildChatPair.mjs`. Building does not run a model. The executable requires `CHAT_PAIR_BUNDLE_SHA256`, an independently reviewed hash of the exact emitted CJS bytes. It verifies its own bytes before dynamically importing any provider/DB runner boundary; source pins alone cannot authorize a stale bundle. Rebuild/re-review the artifact after any implementation change. Running `.next/chat-pair.cjs` requires a private interactive stdin/stdout terminal; ordinary CI log execution is rejected before source reads. The human sees JSON-escaped actual captured first-turn output and its reconstructed client message, then must type the exact `PASS FIRST ANSWER <sha256>` challenge. Generic, stale, unscored and failed responses stop. The ledger records the same output digest with the verdict. This is quality acceptance, not spending authorization. Follow-up quality remains unscored.
+
+Pair mode requires `CHAT_PAIR_MANIFEST`, its exact `CHAT_PAIR_MANIFEST_SHA256`, `CHAT_PAIR_EXPECTED_SHA`, and `CHAT_PAIR_EXPECTED_WEB_SHA`. The manifest separately binds API/Web candidate SHAs, current UTC date, model, Anthropic route, exact first question and follow-up, corpus, staging target, instructions, tools and original PDF metadata. Existing first-attempt execution identity/configuration checks remain. Pair admission requires pins for the full API `lib`/`app` runtime source tree, runner/bundler, lockfile, package and TypeScript configuration. An enabled single manifest cannot enter pair mode; the single entrypoint rejects a paired manifest. Neither existing approval nor setting a manifest flag authorizes a new paid run.
+
+Before execution, refresh candidate/code/date/provider/source-policy pins and verify the exact live eligible corpus in an authorized preflight. Do not set placeholder candidate SHAs to an arbitrary value or treat old source pins as current. The Web SHA is a declared paired-candidate identity; this runner does not launch or test the Web application. Commit/release/browser verification remains separate.
+
+## Limits and evidence
+
+One exclusively created operator claim and private trace are used per execution identity. A single guarded executor handles both turns, with separate durable dispatch markers and no third dispatch. Both turns share six model calls, eight tools, one web search, two unique whole PDFs/two PDF-read attempts, original PDF exposure/input ceilings, output and 4 MiB ledger limits. The human-review wait is included in the 300-second conversation deadline; each turn has at most 150 seconds. Budgets are not replenished after review.
+
+The first answer is reconstructed from actual SDK client chunks. Its literal history is normalized through the real handler path; expected sources or reference answers are not injected. Each turn must emit a matching current corpus observation before a model call. PDF catalog/source-policy validation stays active for subsequent reads. The same capture counts preflight, both turns and quality review. The private ledger is re-read and checked for exact byte length, SHA-256 and parseability before/after review and after the pair; missing/truncated/corrupt evidence cannot report follow-up quality readiness. Failed writes halt execution, and claims are never removed to retry.
+
+## Remaining authorization and acceptance
+
+After final candidate pins and current pricing are established, obtain fresh approval naming both prompts, exact API/Web target, recipients, shared limits, one attempt and normal staging quota/audit writes. The historical $16.59 reservation is planning metadata, not a dollar guarantee. This interactive path keeps evidence in its private local ledger; it does not send evidence to Braintrust. Vercel/Anthropic, Tavily and existing eligible source hosts remain relevant to any future live run.
+
+Do not upload artifacts, enable a live run, deploy, change database/schema/security settings or publish this work as part of offline verification. Passing local tests does not establish natural answer quality, live source eligibility, five-second/20-second latency acceptance, browser behavior, Willie conflict coverage or owner/release acceptance.
