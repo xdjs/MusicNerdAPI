@@ -1,7 +1,7 @@
 import { automaticDeezerIdentityIsBlocked } from "@/lib/providerIdentity/automaticDeezerIdentityIsBlocked";
 import { automaticSpotifyIdentityIsBlocked } from "@/lib/providerIdentity/automaticSpotifyIdentityIsBlocked";
 import type { LinkDecisionRun } from "@/lib/onboarding/types";
-import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
+import { setDiscoveredArtistLink } from "@/lib/artistLinkReview/setDiscoveredArtistLink";
 
 /**
  * Writes a link, then stops calling the column provisional and updates the
@@ -14,7 +14,7 @@ import { setArtistLink } from "@/lib/artistLinks/setArtistLink";
  * @param value - The handle or id.
  * @param provisional - Columns still holding a guess; the written one is removed.
  * @param record - The snapshot the gates read; the written value is set on it.
- * @returns Once written; throws what setArtistLink throws.
+ * @returns Once written; throws when the guarded write refuses the candidate.
  */
 export async function writeArtistLink(
   artistId: string,
@@ -31,9 +31,9 @@ export async function writeArtistLink(
         : await automaticDeezerIdentityIsBlocked(run, value);
     const evidence = siteName === "spotify" ? run.spotifyWriteEvidence : run.deezerWriteEvidence;
     if (blocked || !evidence) throw new Error("Automatic catalog identity not corroborated");
-    await setArtistLink(artistId, siteName, value, undefined, undefined, evidence);
+    await setDiscoveredArtistLink(artistId, siteName, value, evidence);
   } else {
-    await setArtistLink(artistId, siteName, value);
+    await setDiscoveredArtistLink(artistId, siteName, value);
   }
   provisional?.delete(siteName);
   if (record) record[siteName] = value;

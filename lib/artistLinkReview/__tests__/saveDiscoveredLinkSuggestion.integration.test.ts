@@ -94,3 +94,19 @@ it("passes the same checked transaction to an allowed automatic attachment", asy
   await setDiscoveredArtistLink(artist, "instagram", "nova");
   expect(m.write).toHaveBeenCalledWith(artist, "instagram", "nova", undefined, m.tx, undefined);
 });
+
+it("does not let source adoption override a prior rejection or change its in-memory account", async () => {
+  const { writeArtistLink } = await import("@/lib/vault/writeArtistLink");
+  await m.client.query(
+    "insert into ugcresearch(artist_id,site_name,site_username,date_processed) values($1,'instagram','Nova',now())",
+    [artist],
+  );
+  const provisional = new Set(["instagram"]);
+  const record: Record<string, unknown> = {};
+  await expect(writeArtistLink(artist, "instagram", "nova", provisional, record)).rejects.toThrow(
+    "explicit confirmation",
+  );
+  expect(m.write).not.toHaveBeenCalled();
+  expect(record.instagram).toBeUndefined();
+  expect(provisional.has("instagram")).toBe(true);
+});

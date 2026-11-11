@@ -6,7 +6,9 @@ const { setArtistLink } = vi.hoisted(() => ({
     artistName: null,
   })),
 }));
-vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink }));
+vi.mock("@/lib/artistLinkReview/setDiscoveredArtistLink", () => ({
+  setDiscoveredArtistLink: setArtistLink,
+}));
 const { writeArtistLink } = await import("@/lib/vault/writeArtistLink");
 
 describe("writeArtistLink", () => {
