@@ -34,6 +34,7 @@ export async function searchPlatformCandidates(
       if (!(await resultPassesNameCheck(result, platform, artistName))) continue;
       out.push({
         tier: 4,
+        provisional: true,
         platform,
         url: result.url,
         reasoning: `Web search hit on ${domain}: "${result.title || result.snippet}"`,

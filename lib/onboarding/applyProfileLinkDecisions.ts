@@ -1,3 +1,4 @@
+import { approveDiscoveredLinkSuggestion } from "@/lib/artistLinkReview/approveDiscoveredLinkSuggestion";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { sanitizeColumnName } from "@/lib/artistLinks/sanitizeColumnName";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
@@ -77,6 +78,13 @@ export async function applyProfileLinkDecisions(
       continue;
     }
     try {
+      if (
+        !opts?.verifyIdentity &&
+        (await approveDiscoveredLinkSuggestion(artistId, extracted.siteName, String(extracted.id)))
+      ) {
+        outcome.written.push(extracted.siteName);
+        continue;
+      }
       if (
         opts?.verifyIdentity &&
         (extracted.siteName === "deezer" || extracted.siteName === "spotify")

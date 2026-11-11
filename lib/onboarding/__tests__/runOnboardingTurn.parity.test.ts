@@ -11,6 +11,9 @@
  * web's `requestArtistResearch(artistId)` is `queueSocialIngest(artistId, {})`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("@/lib/artistLinkReview/saveDiscoveredLinkSuggestion", () => ({
+  saveDiscoveredLinkSuggestion: vi.fn(async () => true),
+}));
 vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
   hasReusableDirectoryDiscovery: vi.fn().mockResolvedValue(false),
 }));
@@ -481,16 +484,8 @@ describe("runOnboardingTurn", () => {
     expect(setArtistLink).not.toHaveBeenCalledWith("a1", "instagram", "blackdave");
   });
 
-  it("tells the vault search which columns hold a discovery GUESS, and names only the ones actually written", async () => {
-    // The ordering defect: discovery builds a handle out of the artist's
-    // name, writes it, and the vault search then skips that column under
-    // "already have it" — so its corroborated answer never lands. Black
-    // Dave MK2 got instagram=blackdavemk2 that way while blackdave.xyz,
-    // which the search alone had found on 8/27, was locked out.
-    //
-    // `written`, not `discovered`: the identity guards refuse some
-    // proposals, and offering the vault a column nothing was written to
-    // would be the same lie in the other direction.
+  it("leaves guessed columns empty for independently corroborated source research", async () => {
+    // Name-only guesses stay unlinked, so source search can fill the empty column.
     const oq = OQ;
     oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
     const { discoverArtistProfilesStream } = PD;
@@ -528,7 +523,7 @@ describe("runOnboardingTurn", () => {
     expect(searchAndPopulateVault).toHaveBeenCalledWith(
       "a1",
       expect.objectContaining({
-        provisionalSiteNames: ["instagram"],
+        provisionalSiteNames: [],
       }),
     );
   });
@@ -728,18 +723,8 @@ describe("runOnboardingTurn", () => {
     expect(events.filter(e => e.kind === "choices")).toHaveLength(1);
   });
 
-  it("asks about the second account when the VAULT SEARCH replaces what discovery guessed", async () => {
-    // The case that actually happens, and the one the discovery-side
-    // grouping cannot see. Discovery structurally yields at most one
-    // candidate per platform — tier 3 keeps the first confirmed hit, and
-    // `missing.delete` stops later tiers revisiting a resolved platform —
-    // so Black Dave MK2's two Instagrams never meet inside discovery. One
-    // is discovery's name-derived guess (blackdavemk2), the other is the
-    // vault search's corroborated find (blackdave.xyz). They meet in his
-    // row and nowhere else.
-    //
-    // Without this the picker was unreachable in production while its unit
-    // test passed, because that test mocks the stream to yield two.
+  it("keeps a name-only discovery unlinked rather than replacing a saved account", async () => {
+    // The candidate remains visible but is never attached as an official account.
     const oq = OQ;
     oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
     const { discoverArtistProfilesStream } = PD;
@@ -770,7 +755,7 @@ describe("runOnboardingTurn", () => {
         appStringFormat: "https://instagram.com/%@",
       },
     ]);
-    // The row as re-read AFTER the vault search has overwritten the guess.
+    // A corroborated account is retained without installing the name-only guess.
     artistQ.getArtistById.mockResolvedValue({
       id: "a1",
       name: "Black Dave MK2",
@@ -780,17 +765,9 @@ describe("runOnboardingTurn", () => {
     const { runOnboardingTurn } = TH;
     const events = await collect(runOnboardingTurn("a1", { type: "open" }));
 
-    const choice = events.find(e => e.kind === "choices");
-    expect(choice).toBeTruthy();
-    expect(choice.platform).toBe("instagram");
-    expect(choice.chosen).toBe("blackdave.xyz"); // what the search corroborated
-    expect(choice.options.map((o: any) => o.value).sort()).toEqual([
-      "blackdave.xyz",
-      "blackdavemk2",
-    ]);
-    expect(choice.options.map((o: any) => o.profileUrl)).toContain(
-      "https://instagram.com/blackdavemk2",
-    );
+    expect(events.some(e => e.kind === "choices")).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({ kind: "candidate" }));
+    expect(ALS.setArtistLink).not.toHaveBeenCalled();
   });
 
   it("does not ask when the vault search left the discovered handle alone", async () => {

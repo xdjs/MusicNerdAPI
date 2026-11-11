@@ -5,6 +5,7 @@ import { fakeTransaction } from "./fakeTransaction";
 const m = vi.hoisted(() => ({
   tx: undefined as unknown,
   lock: vi.fn(),
+  scopedLock: vi.fn(),
   platformLocks: vi.fn(),
   activity: vi.fn(async () => "act-1"),
   approveUgc: vi.fn(),
@@ -14,6 +15,7 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/db/db", () => ({
   db: { transaction: async (fn: (t: unknown) => unknown) => fn(m.tx) },
 }));
+vi.mock("@/lib/ownership/lockScopedArtistWrite", () => ({ lockScopedArtistWrite: m.scopedLock }));
 vi.mock("@/lib/artistLinkReview/lockLinkReview", () => ({ lockLinkReview: m.lock }));
 vi.mock("@/lib/artistLinks/acquireArtistPlatformWriteLocks", () => ({
   acquireArtistPlatformWriteLocks: m.platformLocks,
@@ -243,4 +245,14 @@ describe("reviewArtistLinkSuggestion: sources", () => {
       }).done,
     ).rejects.toThrow("This is not an artist profile link. Review it in Lore.");
   });
+});
+
+it("fences a stale onboarding operation before reviewing or writing a suggestion", async () => {
+  m.scopedLock.mockRejectedValueOnce(new Error("ownership changed"));
+  await expect(run([], { kind: "source", decision: "approve" }).done).rejects.toThrow(
+    "ownership changed",
+  );
+  expect(m.lock).not.toHaveBeenCalled();
+  expect(m.approveUgc).not.toHaveBeenCalled();
+  expect(m.activity).not.toHaveBeenCalled();
 });

@@ -12,10 +12,9 @@ export interface DiscoveredProfile {
   previewImage: string | null;
   reasoning: string | null;
   /**
-   * The URL was built from the artist's own name and a real page answered:
-   * the weakest finding, with nothing independent behind it. The auto-build
-   * passes these columns to the source search as still open, so a guess
-   * never outranks a better-evidenced answer by arriving first.
+   * The candidate has no independent ownership evidence (a name-derived probe
+   * or matching-name web result). Show it for review, never automatically attach
+   * it or use it as a confirmed seed for more platform discoveries.
    */
   provisional: boolean;
 }
@@ -37,7 +36,7 @@ export interface TierCandidate {
   reasoning: string | null;
   /** Tier 3's own probe fetch, reused rather than fetched twice. */
   preview?: LinkPreview;
-  /** See `DiscoveredProfile.provisional`. Only name-derived probes set it. */
+  /** See `DiscoveredProfile.provisional`. Name-derived probes and uncorroborated web matches set it. */
   provisional?: boolean;
 }
 

@@ -2,11 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
   clear: vi.fn(),
+  approve: vi.fn(),
   set: vi.fn(),
   extract: vi.fn(),
   unsafe: vi.fn(),
   route: vi.fn(),
   blocked: vi.fn(),
+}));
+vi.mock("@/lib/artistLinkReview/approveDiscoveredLinkSuggestion", () => ({
+  approveDiscoveredLinkSuggestion: m.approve,
 }));
 vi.mock("@/lib/artistLinks/clearArtistLink", () => ({ clearArtistLink: m.clear }));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink: m.set }));
@@ -17,6 +21,7 @@ vi.mock("@/lib/onboarding/linkIsIdentityBlocked", () => ({ linkIsIdentityBlocked
 const { applyProfileLinkDecisions } = await import("@/lib/onboarding/applyProfileLinkDecisions");
 
 beforeEach(() => {
+  m.approve.mockReset().mockResolvedValue(false);
   m.clear.mockReset().mockResolvedValue({ oldValue: "x" });
   m.set.mockReset().mockResolvedValue({ oldValue: null, artistName: "Nova" });
   m.extract
@@ -116,3 +121,11 @@ it.each(["spotify", "deezer", "dee-zer"])(
     expect(m.extract).not.toHaveBeenCalled();
   },
 );
+
+it("uses atomic suggestion review for an explicit confirmation rather than leaving it pending", async () => {
+  m.approve.mockResolvedValue(true);
+  const result = await applyProfileLinkDecisions("a1", [{ url: "https://instagram.com/nova" }], []);
+  expect(m.approve).toHaveBeenCalledWith("a1", "instagram", "nova");
+  expect(m.set).not.toHaveBeenCalled();
+  expect(result.written).toEqual(["instagram"]);
+});

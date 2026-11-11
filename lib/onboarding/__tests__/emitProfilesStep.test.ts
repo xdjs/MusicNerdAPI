@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { collect } from "@/lib/onboarding/__tests__/collect";
 
-const m = vi.hoisted(() => ({ payload: vi.fn(), discover: vi.fn() }));
+const m = vi.hoisted(() => ({ payload: vi.fn(), discover: vi.fn(), suggest: vi.fn() }));
+vi.mock("@/lib/artistLinkReview/saveDiscoveredLinkSuggestion", () => ({
+  saveDiscoveredLinkSuggestion: m.suggest,
+}));
 vi.mock("@/lib/onboarding/buildProfilesPayload", () => ({ buildProfilesPayload: m.payload }));
 vi.mock("@/lib/discovery/discoverArtistProfilesStream", () => ({
   discoverArtistProfilesStream: m.discover,
@@ -21,6 +24,7 @@ const profile = (siteName: string) => ({
 });
 
 beforeEach(() => {
+  m.suggest.mockReset().mockResolvedValue(true);
   m.payload.mockReset().mockResolvedValue({
     artistName: "Nova",
     links: [{ siteName: "spotify", value: "s" }],
@@ -90,4 +94,14 @@ describe("emitProfilesStep", () => {
     expect(events.at(-1)).toMatchObject({ kind: "step", step: "profiles" });
     error.mockRestore();
   });
+});
+
+it("does not re-offer a reviewed provisional candidate on manual rediscovery", async () => {
+  m.suggest.mockResolvedValue(false);
+  m.discover.mockImplementationOnce(async function* () {
+    yield { kind: "found", profile: { ...profile("instagram"), provisional: true } };
+  });
+  const events = await collect(emitProfilesStep("a1", true));
+  expect(events.some(e => e.kind === "candidate")).toBe(false);
+  expect(m.suggest).toHaveBeenCalledTimes(1);
 });

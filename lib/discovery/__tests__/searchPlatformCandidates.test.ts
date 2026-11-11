@@ -24,12 +24,14 @@ describe("searchPlatformCandidates", () => {
     expect(await searchPlatformCandidates("instagram", "q", "Pete Rango")).toEqual([
       {
         tier: 4,
+        provisional: true,
         platform: "instagram",
         url: "https://instagram.com/b",
         reasoning: 'Web search hit on instagram.com: "B"',
       },
       {
         tier: 4,
+        provisional: true,
         platform: "instagram",
         url: "https://instagram.com/c",
         reasoning: 'Web search hit on instagram.com: "C snippet"',
@@ -54,4 +56,13 @@ it("requests strict provider errors for a required search", async () => {
   webSearch.mockRejectedValueOnce(failure);
   await expect(searchPlatformCandidates("x", "q", "P", true)).rejects.toBe(failure);
   expect(webSearch).toHaveBeenCalledWith("q", expect.objectContaining({ throwOnError: true }));
+});
+
+it("marks a matching-name web result as provisional, not ownership evidence", async () => {
+  webSearch.mockResolvedValueOnce([
+    { url: "https://youtube.com/@namesake", title: "Nova", snippet: "" },
+  ]);
+  resultPassesNameCheck.mockResolvedValue(true);
+  const candidates = await searchPlatformCandidates("youtube", "q", "Nova");
+  expect(candidates[0].provisional).toBe(true);
 });
