@@ -23,26 +23,30 @@ Eval:
 
 ## Local results
 
-Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only; "after" adds discovery on every question, the two-source rule, previews and the narration gate.
+Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only. "Final" is the committed branch (`cc3a257`), run across three allowance windows on 2026-11-12 because the staging visitor allowance is 30 questions per rolling hour.
 
-| Case | Before | After | Evidence after |
+| Case | Before | Final | Final evidence |
 | --- | --- | --- | --- |
-| bio-ritmo-origin | 1 / 0.95, 10.6 / 10.6 s | 1 / 0.85, 10.8 / 10.8 s | 2 saved reads |
-| bio-ritmo-singer | 1 / 1, 6.6 / 6.6 s | 1 / 1, 7.7 / 7.7 s | 1 saved read |
-| bio-ritmo-puerta-del-sur | 1 / 1, 7.4 / 7.4 s | 1 / 1, 7.9 / 7.9 s | 1 saved read |
-| bio-ritmo-colombia | 0.95 / 0.8, 9.7 / 9.7 s | see final run | 2 saved reads |
-| bio-ritmo-30th | 0.6 / 0.7, 5.3 / 8.5 s (leaked planning text) | 0.75 / 0.85, 11.5 / 11.6 s | 2 saved reads |
-| willie-colon-death | 1 / 0.6, 7.9 / 7.9 s | see final run | web search |
-| willie-colon-blades | 0.4 / 0.95, 7.3 / 7.3 s (one source) | 0.7 / 0.75, 10.7 / 10.8 s (two sources) | 2 saved reads |
-| willie-colon-instrument | 1 / 0.9, 6.9 / 6.9 s | see final run | 1 saved read |
-| dutchyyy-aliases | 0.8 / 0.6, 6.6 / 12.6 s (no PDF) | 0.95 / 0.6, 11.9 / 11.9 s (PDF read) | PDF + 1 saved read |
-| dutchyyy-alias-years | 0.8 / 0.8, 31.5 / 31.5 s | 0.72 / 0.8, 10.7 / 10.7 s | PDF |
-| dutchyyy-onchain | 0.6 / 0.85, 6.5 / 6.5 s (no PDF) | 1 / 0.93, 11.4 / 11.4 s (PDF read) | PDF |
-| dutchyyy-unanswerable | 0.95 / 0.6, 9.1 / 9.2 s | see final run | web search |
+| bio-ritmo-origin | 1 / 0.95, 10.6 / 10.6 s | 0.95 / 0.8, 11.5 / 11.5 s | 2 saved reads |
+| bio-ritmo-singer | 1 / 1, 6.6 / 6.6 s | 1 / 0.95, 7.0 / 7.0 s | 1 saved read |
+| bio-ritmo-puerta-del-sur | 1 / 1, 7.4 / 7.4 s | 1 / 1, 7.3 / 7.3 s | 1 saved read |
+| bio-ritmo-colombia | 0.95 / 0.8, 9.7 / 9.7 s | 0.95 / 0.7, 8.7 / 8.8 s | 2 saved reads |
+| bio-ritmo-30th | 0.6 / 0.7, 5.3 / 8.5 s (leaked planning text) | 0.75 / 0.9, 11.4 / 11.5 s | 2 saved reads |
+| willie-colon-death | 1 / 0.6, 7.9 / 7.9 s (web) | 1 / 0.95, 8.3 / 8.3 s | 1 saved read |
+| willie-colon-blades | 0.4 / 0.95, 7.3 / 7.3 s (one source) | 0.6 / 0.75, 9.8 / 9.8 s | 2 saved reads |
+| willie-colon-instrument | 1 / 0.9, 6.9 / 6.9 s | 1 / 1, 8.5 / 8.5 s | 1 saved read |
+| dutchyyy-aliases | 0.8 / 0.6, 6.6 / 12.6 s (no PDF) | 0.95 / 0.85, 9.8 / 9.8 s | PDF |
+| dutchyyy-alias-years | 0.8 / 0.8, 31.5 / 31.5 s | 0.8 / 0.85, 10.1 / 10.1 s | PDF |
+| dutchyyy-onchain | 0.6 / 0.85, 6.5 / 6.5 s (no PDF) | 1 / 0.9, 10.3 / 10.3 s | PDF |
+| dutchyyy-unanswerable | 0.95 / 0.6, 9.1 / 9.2 s | 0.95 / 0.8, 8.6 / 8.6 s | web search |
 
-The final full run after all changes is recorded below once the staging question allowance window reopens.
+Final averages: relevance 0.91, groundedness 0.87; 12 of 12 complete within 20 seconds; 0 of 12 show first text within 5 seconds (range 7.0 to 11.5 s). The judge's reasons name the remaining gaps: the 30th-year answer hedges instead of committing to Salsa System; the first-album answer does not surface the Rolling Stone account; the acceptance answer omits The Chill Factor in this sample (it appears in about half of runs); the unanswerable answer's process claims are uncited.
 
-Cost: one 12-case run is about $0.60 at Sonnet 5.5 rates for chat plus judge; the PDF-backed questions are about $0.14 each.
+Cost: one 12-case run is about $0.60 at Sonnet 5.5 rates for chat plus judge; the PDF-backed questions are about $0.14 each. Raw per-case outputs, tool calls and judge reasons were kept locally for review and are not committed.
+
+## Hosted record
+
+The Evals workflow (`suite=chat`) on this branch records the same suite through the Vercel AI Gateway to Braintrust. Three attempts on 2026-11-12 each exposed a harness defect that this branch fixes (missing storage origin, PDF parts refused by the spend guard, the guard's five-dollar ledger exhausted at 39 requests); the fourth hit the evals' own staging allowance. The run after the allowance reopened is linked from the PR.
 
 ## What the numbers do not show
 
