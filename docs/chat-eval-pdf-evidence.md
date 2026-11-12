@@ -46,7 +46,7 @@ Cost: one 12-case run is about $0.60 at Sonnet 5.5 rates for chat plus judge; th
 
 ## Hosted record
 
-The Evals workflow (`suite=chat`) on this branch records the same suite through the Vercel AI Gateway to Braintrust. Three attempts on 2026-11-12 each exposed a harness defect that this branch fixes (missing storage origin, PDF parts refused by the spend guard, the guard's five-dollar ledger exhausted at 39 requests); the fourth hit the evals' own staging allowance. The run after the allowance reopened is linked from the PR.
+The Evals workflow (`suite=chat`) on this branch records the same suite through the Vercel AI Gateway to Braintrust. Three attempts on 2026-11-12 each exposed a harness defect that this branch fixes (missing storage origin, PDF parts refused by the spend guard, the guard's five-dollar ledger exhausted at 39 requests); the fourth hit the evals' own staging allowance. The run after the allowance reopened, [Actions run 43302586217](https://github.com/xdjs/MusicNerdAPI/actions/runs/43302586217) on `7847392`, answered 11 of 12 cases (the twelfth, the unanswerable control, hit the allowance by one slot): answer relevance 89.6%, source groundedness 87.5%, citations 100%, evidence scorable 91.7%, total time 100%, first text 0%; 44 paid requests, $6.88 reserved of the $10 ceiling, actual spend about a dollar. Per-case answers, captured evidence and judge reasons are in the private Braintrust experiment `chat · anthropic/claude-sonnet-5.5 · 7847392`.
 
 ## What the numbers do not show
 
