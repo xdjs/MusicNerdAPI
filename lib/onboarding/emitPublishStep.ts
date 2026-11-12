@@ -1,7 +1,6 @@
 import { getReusableDirectoryDraft } from "@/lib/directoryPreparation/getReusableDirectoryDraft";
 import { getArtistById } from "@/lib/artists/getArtistById";
 import { buildDocSources } from "@/lib/lore/buildDocSources";
-import { extractCitedIds } from "@/lib/lore/extractCitedIds";
 import { synthesizeArtistDoc } from "@/lib/lore/synthesizeArtistDoc";
 import { synthesizeFallbackAbout } from "@/lib/lore/synthesizeFallbackAbout";
 import { NARRATION, PUBLISH_RETRY_BUDGET_MS, TURN_MESSAGES } from "@/lib/onboarding/const";
@@ -20,13 +19,13 @@ export async function* emitPublishStep(artistId: string): AsyncGenerator<TurnEve
   const prepared = await getReusableDirectoryDraft(artistId);
   if (prepared) {
     yield { kind: "chat", text: NARRATION.docReady };
-    const cited = extractCitedIds(prepared.document);
     yield {
       kind: "draft",
       stage: "doc",
       doc: prepared.document,
       about: null,
-      sources: prepared.sources.filter(s => cited.has(s.id)),
+      // Preserve every input revision; uncited evidence also influenced generation.
+      sources: prepared.sources,
     };
     return;
   }
@@ -58,13 +57,12 @@ export async function* emitPublishStep(artistId: string): AsyncGenerator<TurnEve
     doc = `## Overview\n${fallback}`;
   }
   yield { kind: "progress", label: "Reading your sources and answers", done: true };
-  const cited = extractCitedIds(doc);
   yield { kind: "chat", text: NARRATION.docReady };
   yield {
     kind: "draft",
     stage: "doc",
     doc,
     about: null,
-    sources: sources.filter(s => cited.has(s.id)),
+    sources,
   };
 }

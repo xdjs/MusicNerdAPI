@@ -18,8 +18,8 @@ vi.mock("@/lib/directoryPreparation/getReusableDirectoryDraft", () => ({
 const { emitPublishStep } = await import("@/lib/onboarding/emitPublishStep");
 
 const S = [
-  { id: 1, kind: "vault", label: "A", url: "https://a" },
-  { id: 2, kind: "vault", label: "B", url: "https://b" },
+  { id: 1, kind: "vault", label: "A", url: "https://a", revision: "a".repeat(64) },
+  { id: 2, kind: "vault", label: "B", url: "https://b", revision: "b".repeat(64) },
 ];
 
 beforeEach(() => {
@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe("emitPublishStep", () => {
-  it("builds the document from one manifest and hands it over at stage doc, citing only what it uses", async () => {
+  it("builds the document from one manifest and hands it over at stage doc, preserving the full evidence manifest", async () => {
     const events = await collect(emitPublishStep("a1"));
     expect(m.synth).toHaveBeenCalledWith("a1", S);
     expect(events).toEqual([
@@ -39,7 +39,7 @@ describe("emitPublishStep", () => {
       { kind: "progress", label: "Reading your sources and answers", done: false },
       { kind: "progress", label: "Reading your sources and answers", done: true },
       { kind: "chat", text: expect.stringMatching(/^Here's your knowledge document\./) },
-      { kind: "draft", stage: "doc", doc: "## Overview\nCited[2].", about: null, sources: [S[1]] },
+      { kind: "draft", stage: "doc", doc: "## Overview\nCited[2].", about: null, sources: S },
     ]);
   });
 
@@ -81,6 +81,7 @@ it("offers the reviewed prepared document without regeneration or publication", 
     stage: "doc",
     doc: "Prepared[1].",
     about: null,
+    sources: S,
   });
   expect(m.synth).not.toHaveBeenCalled();
   expect(events.some(e => e.kind === "complete")).toBe(false);

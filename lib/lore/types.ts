@@ -13,10 +13,13 @@ export type DocSource = {
   url: string | null;
   /** When the source says it was published. Vault sources only. */
   publishedAt?: string | null;
+  /** Hash of the saved vault evidence used to build this document. */
+  revision?: string;
 };
 
 /** An empty source set is distinct from a model or storage failure. */
-export type DocRefresh = "rebuilt" | "no-document" | "no-material" | "failed" | "cancelled";
+export type DocRefresh =
+  "rebuilt" | "no-document" | "no-material" | "failed" | "cancelled" | "changed";
 
 /** The inventory overview stored beside the document, keyed to the sources it describes. */
 export type LoreSummary = { text: string; sourceKey: string };

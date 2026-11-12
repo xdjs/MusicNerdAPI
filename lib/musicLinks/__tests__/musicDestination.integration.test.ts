@@ -60,9 +60,11 @@ beforeAll(async () => {
               ? "DEFAULT false"
               : column.name === "status"
                 ? "DEFAULT 'pending'"
-                : column.name === "origin"
-                  ? "DEFAULT 'unknown'"
-                  : ""
+                : column.name === "publication"
+                  ? "DEFAULT 'inherit'"
+                  : column.name === "origin"
+                    ? "DEFAULT 'unknown'"
+                    : ""
         : "";
       return `"${column.name}" ${column.getSQLType()} ${column.primary ? "PRIMARY KEY" : ""} ${column.notNull ? "NOT NULL" : ""} ${defaultSql}`;
     });

@@ -16,13 +16,18 @@ const MAX_SOURCE_CHARACTERS = 12000;
  * @param cite - The turn's citation numbering.
  * @returns The tool.
  */
-export function createReadSourceTool(originals: ResearchOriginal[], cite: CiteSource) {
+export function createReadSourceTool(
+  originals: ResearchOriginal[],
+  cite: CiteSource,
+  assertCurrent?: (source: ResearchOriginal) => Promise<void>,
+) {
   return tool({
     description: "Read a saved source found by searchSources. Cite it in the answer as [n].",
     inputSchema: z.object({ sourceId: z.string().min(1).max(300) }),
     execute: async ({ sourceId }) => {
       const source = originals.find(original => original.sourceId === sourceId);
       if (!source) return { error: "Unknown sourceId. Use an id from searchSources." };
+      await assertCurrent?.(source);
       const title = getSourceTitle(source.url);
       return {
         n: cite({ url: source.url, title }),

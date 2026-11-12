@@ -8,9 +8,8 @@ import { sanitizeBioText } from "@/lib/bio/sanitizeBioText";
 import { BIO_CORRECTION_MAX_BODY, BIO_CORRECTION_REPORT_LIMIT } from "@/lib/bioCorrections/const";
 import { submitBioCorrection } from "@/lib/bioCorrections/submitBioCorrection";
 import { validateBioCorrectionBody } from "@/lib/bioCorrections/validateBioCorrectionBody";
-import { db } from "@/lib/db/db";
+import { getPublicSavedBio } from "@/lib/bio/getPublicSavedBio";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
-import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
 
 /**
  * Handles POST /api/artist/{id}/bio-corrections: any signed-in account files a
@@ -41,8 +40,8 @@ export async function postBioCorrectionHandler(request: Request, id: string) {
     if (input instanceof NextResponse) return input;
     const artist = await getArtistById(id);
     if (!artist) return fail("Artist not found", 404);
-    const claimed = (await findApprovedClaim(db, id))?.id ?? null;
-    const bio = sanitizeBioText(claimed ? artist.bio : (await getPublicArtistAbout(id))?.bio);
+    const savedBio = await getPublicSavedBio(id);
+    const bio = sanitizeBioText(savedBio ?? (await getPublicArtistAbout(id))?.bio);
     if (!bio || !isRealBio(bio) || bio !== input.expectedBio)
       return fail(
         "This About has changed. Reload the profile before sending your suggestion.",

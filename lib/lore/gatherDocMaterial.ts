@@ -6,7 +6,7 @@ import { socialSignalSources } from "@/lib/lore/socialSignalSources";
 import { videoContextSources } from "@/lib/lore/videoContextSources";
 import type { DocMaterial } from "@/lib/lore/types";
 import { isCitableSource } from "@/lib/sources/isCitableSource";
-import { getVaultSourcesByStatus } from "@/lib/vault/getVaultSourcesByStatus";
+import { getLoreVaultSources } from "@/lib/lore/getLoreVaultSources";
 
 /**
  * Everything the Lore is built from, read once.
@@ -24,7 +24,7 @@ export async function gatherDocMaterial(artistId: string): Promise<DocMaterial> 
   if (!artist) throw new Error(`Artist not found: ${artistId}`);
   const artistName = artist.name ?? "Unknown Artist";
 
-  const approvedSources = await getVaultSourcesByStatus(artistId, "approved");
+  const approvedSources = await getLoreVaultSources(artistId);
   const vaultSources = approvedSources.filter(isCitableSource);
   const uncitable = approvedSources.length - vaultSources.length;
   if (uncitable > 0) {

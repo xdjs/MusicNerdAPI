@@ -11,7 +11,7 @@ const m = await vi.hoisted(async () => {
     create table artist_activity_events(id uuid,artist_id uuid,source_id uuid,actor_user_id uuid,action text,created_at timestamptz);
   `);
   await client.exec(
-    readFileSync(new URL("./fixtures/0060_discovery_evidence.sql", import.meta.url), "utf8"),
+    readFileSync(new URL("./fixtures/0066_discovery_evidence.sql", import.meta.url), "utf8"),
   );
   const tx = {
     execute: async (q: Parameters<typeof renderSql>[0]) => {

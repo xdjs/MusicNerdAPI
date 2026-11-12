@@ -14,6 +14,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/artistLinkReview/saveDiscoveredLinkSuggestion", () => ({
   saveDiscoveredLinkSuggestion: vi.fn(async () => true),
 }));
+vi.mock("@/lib/bio/hasPinnedBio", () => ({ hasPinnedBio: vi.fn(async () => false) }));
+vi.mock("@/lib/lore/getArtistDocStrict", () => ({
+  getArtistDocStrict: vi.fn(async () => undefined),
+}));
+vi.mock("@/lib/onboarding/validateSetupLore", () => ({
+  validateSetupLore: vi.fn(async () => {
+    throw new Error("saved Lore not reusable");
+  }),
+}));
+vi.mock("@/lib/onboarding/persistSetupLore", () => ({
+  persistSetupLore: vi.fn(async () => {
+    throw new Error("setup preservation refused");
+  }),
+}));
 vi.mock("@/lib/directoryPreparation/hasReusableDirectoryDiscovery", () => ({
   hasReusableDirectoryDiscovery: vi.fn().mockResolvedValue(false),
 }));
@@ -59,7 +73,9 @@ const m = vi.hoisted(() => ({
   contradictsScrapedPosts: vi.fn<AnyFn>(async () => false),
   discoverArtistProfiles: vi.fn<AnyFn>(async () => []),
   discoverArtistProfilesStream: vi.fn<AnyFn>(async function* () {}),
-  buildDocSources: vi.fn<AnyFn>(async () => []),
+  buildDocSources: vi.fn<AnyFn>(async () => [
+    { id: 1, kind: "interview", label: "Artist statement", url: null },
+  ]),
   extractCitedIds: vi.fn<AnyFn>(() => new Set()),
   stripCitationMarkers: vi.fn<AnyFn>((text: string) => text),
   synthesizeArtistDoc: vi.fn<AnyFn>(async () => "## Overview\ndoc"),
@@ -315,7 +331,7 @@ describe("runOnboardingTurn", () => {
     const events = await collect(runOnboardingTurn("a1", { type: "open" }));
 
     const aboutStage = events.slice(
-      events.findIndex(e => e.kind === "progress" && e.label === "Writing your About"),
+      events.findIndex(e => e.kind === "progress" && e.label === "Preparing your Lore and About"),
       events.findIndex(e => e.kind === "progress" && e.label === "Wrote your About") + 1,
     );
     expect(aboutStage.filter(e => e.kind === "text-delta")).toEqual([
@@ -355,7 +371,7 @@ describe("runOnboardingTurn", () => {
     expect(docService.generateAboutFromDoc).not.toHaveBeenCalled();
   });
 
-  it("auto-build publishes when inherited history has reached the explicit-save cap", async () => {
+  it("auto-build fills an empty About when inherited history has reached the explicit-save cap", async () => {
     const oq = OQ;
     oq.getOnboardingState.mockResolvedValue({ complete: false, currentStep: "profiles" });
     const dq = DQ;
@@ -367,7 +383,7 @@ describe("runOnboardingTurn", () => {
       checkpoints.push(getActiveArtistOperation());
     });
     const artistQ = AQ;
-    artistQ.getArtistById.mockResolvedValue({ id: "a1", name: "Nova Reyes", bio: "Existing bio" });
+    artistQ.getArtistById.mockResolvedValue({ id: "a1", name: "Nova Reyes", bio: null });
     const { runOnboardingTurn } = TH;
     const events = await collect(runOnboardingTurn("a1", { type: "open" }, ownership));
     const { persistArtistBio } = BIO;
@@ -376,7 +392,7 @@ describe("runOnboardingTurn", () => {
       "An About.",
       expect.objectContaining({
         generated: true,
-        expectedBio: "Existing bio",
+        expectedBio: null,
         document: expect.objectContaining({ content: "## Overview\ndoc" }),
       }),
     );

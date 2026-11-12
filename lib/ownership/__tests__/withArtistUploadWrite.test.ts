@@ -17,6 +17,7 @@ const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedE
 beforeEach(() => {
   transaction.mockReset().mockImplementation(async (fn: (t: unknown) => unknown) => fn(tx));
   lockArtistRow.mockReset();
+  tx.execute.mockReset();
   authorize.mockReset();
 });
 
@@ -31,6 +32,13 @@ describe("withArtistUploadWrite", () => {
     });
     expect(await withArtistUploadWrite("a1", "u1", "c1", write)).toBe("written");
     expect(lockArtistRow).toHaveBeenCalledWith(tx, "a1");
+    expect(tx.execute).toHaveBeenCalled();
+    expect(lockArtistRow.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.execute.mock.invocationCallOrder[0],
+    );
+    expect(tx.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      authorize.mock.invocationCallOrder[0],
+    );
     expect(authorize).toHaveBeenCalledWith(tx, "a1", { userId: "u1", expectedClaimId: "c1" });
     expect(order).toEqual(["lock", "authorize", "write"]);
   });

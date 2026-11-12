@@ -12,7 +12,7 @@ it("adds optional JSON storage without changing old records or review decisions"
       await client.query<Record<string, unknown>>("select * from ugcresearch order by id")
     ).rows;
     await client.exec(
-      readFileSync(new URL("./fixtures/0060_discovery_evidence.sql", import.meta.url), "utf8"),
+      readFileSync(new URL("./fixtures/0066_discovery_evidence.sql", import.meta.url), "utf8"),
     );
     expect(
       (await client.query<Record<string, unknown>>("select * from ugcresearch order by id")).rows,

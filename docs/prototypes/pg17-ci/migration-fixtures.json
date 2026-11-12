@@ -1,0 +1,50 @@
+[
+  {
+    "file": "0060_source_publication.sql",
+    "fixture": "fixtures/0060_source_publication.sql",
+    "sha256": "091de2460bc9cccac143e85f203666733817ca0556e291dfd0b8747b98f36c0e",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "50a60897aa4f4d48292251859c3125c4c8420fcf",
+    "sourcePath": "drizzle/0060_source_publication.sql"
+  },
+  {
+    "file": "0061_about_evidence_provenance.sql",
+    "fixture": "fixtures/0061_about_evidence_provenance.sql",
+    "sha256": "fcae4026b73b37aa61c7613c38c71d57092a2b83a191a88c1e94e5a73d2bc582",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
+    "sourcePath": "drizzle/0061_about_evidence_provenance.sql"
+  },
+  {
+    "file": "0062_public_url_receipts.sql",
+    "fixture": "../guarded-about/fixtures/0062_public_url_receipts.sql",
+    "sha256": "d93d34e56aed271bf1fc83f1616195a0964ebecb0530a8ed566d7c6189a2752c",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
+    "sourcePath": "drizzle/0062_public_url_receipts.sql"
+  },
+  {
+    "file": "0063_legacy_bio_publications.sql",
+    "fixture": "../guarded-about/fixtures/0063_legacy_bio_publications.sql",
+    "sha256": "a062f93231b7416ba8c8eb06d4d7f4a243cd1f48c5831ce86270e065d4b1fe15",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "da3ba3dc19469d41d1579243b1916755fbec6aa2",
+    "sourcePath": "drizzle/0063_legacy_bio_publications.sql"
+  },
+  {
+    "file": "0064_lore_activity_lock.sql",
+    "fixture": "fixtures/0064_lore_activity_lock.sql",
+    "sha256": "3b2ec181364f3f414ee9f73a920716546fec3c68b23a62c3cc22386ee652b0e0",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "2957b9bec0a5c730d39bfff09a4f76ec18d4f96e",
+    "sourcePath": "drizzle/0064_lore_activity_lock.sql"
+  },
+  {
+    "file": "0065_about_writer_fence.sql",
+    "fixture": "fixtures/0065_about_writer_fence.sql",
+    "sha256": "3ffb9c95069b0680bc070e646ea41aca3dbc1c0fc9992515f6fc29b8a25d4a96",
+    "sourceRepository": "xdjs/MusicNerdWeb",
+    "sourceCommit": "774ad5af21b75d50d8d12c452083250fcf033753",
+    "sourcePath": "drizzle/0065_about_writer_fence.sql"
+  }
+]

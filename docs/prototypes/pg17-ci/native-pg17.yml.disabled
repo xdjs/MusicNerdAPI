@@ -1,0 +1,21 @@
+# PROPOSAL ONLY: outside .github/workflows and job explicitly disabled.
+# Checkout, runner/dependency provisioning, activation and dispatch need separate approval.
+name: Proposed synthetic About PG17 verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-pg17:
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # An approved provisioning stage must provide this exact checkout, its
+      # lockfile-matching node_modules, and a preinstalled Node24 executable.
+      # No installer/setup action or fallback download is included here.
+      - name: Verify preinstalled runtime and execute isolated native suite
+        env:
+          MN_APPROVED_SYNTHETIC_PG17: "yes"
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: bash docs/prototypes/pg17-ci/run-native-pg17.sh

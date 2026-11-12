@@ -8,7 +8,7 @@ const m = await vi.hoisted(async () => {
     `create table ugcresearch(id uuid default gen_random_uuid(),artist_id uuid,ugc_url text,site_name text,site_username text,origin text,accepted boolean default false,date_processed timestamp);`,
   );
   await client.exec(
-    readFileSync(new URL("./fixtures/0060_discovery_evidence.sql", import.meta.url), "utf8"),
+    readFileSync(new URL("./fixtures/0066_discovery_evidence.sql", import.meta.url), "utf8"),
   );
   const tx = {
     execute: async (q: Parameters<typeof renderSql>[0]) => {

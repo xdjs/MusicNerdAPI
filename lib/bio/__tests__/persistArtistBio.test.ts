@@ -3,12 +3,26 @@ import { ABOUT_EMPTY_STATE } from "@/lib/bio/const";
 
 const m = vi.hoisted(() => ({
   lockArtistRow: vi.fn(),
+  readProvenance: vi.fn(),
+  writeProvenance: vi.fn(),
+  assertLore: vi.fn(),
+  assertSources: vi.fn(),
+  assertLease: vi.fn(),
+  finish: vi.fn(),
   authorize: vi.fn(),
   findApprovedClaim: vi.fn(),
   record: vi.fn(),
   saveBioVersions: vi.fn(),
   transaction: vi.fn(),
 }));
+vi.mock("@/lib/lore/assertLoreSourcesCurrent", () => ({
+  assertLoreSourcesCurrent: m.assertSources,
+}));
+vi.mock("@/lib/bio/readBioProvenance", () => ({ readBioProvenance: m.readProvenance }));
+vi.mock("@/lib/bio/writeBioProvenance", () => ({ writeBioProvenance: m.writeProvenance }));
+vi.mock("@/lib/bio/assertAboutLoreCurrent", () => ({ assertAboutLoreCurrent: m.assertLore }));
+vi.mock("@/lib/lore/assertLoreRefreshLease", () => ({ assertLoreRefreshLease: m.assertLease }));
+vi.mock("@/lib/bio/finishAboutLoreRefresh", () => ({ finishAboutLoreRefresh: m.finish }));
 vi.mock("@/lib/db/db", () => ({ db: { transaction: m.transaction } }));
 vi.mock("@/lib/db/lockArtistRow", () => ({ lockArtistRow: m.lockArtistRow }));
 vi.mock("@/lib/ownership/authorizeLockedArtistWrite", () => ({
@@ -21,13 +35,19 @@ const { persistArtistBio } = await import("@/lib/bio/persistArtistBio");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
 const { BioConflictError } = await import("@/lib/bio/BioConflictError");
 
-function setup({ bio = "Artist edited bio" as string | null, pinned = false } = {}) {
+function setup({
+  bio = "Artist edited bio" as string | null,
+  pinned = false,
+  bioProvenance = null as unknown,
+} = {}) {
+  m.readProvenance.mockResolvedValue(bioProvenance);
   const set = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
   const values = vi.fn(() => ({
     onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
     onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
   }));
   const tx = {
+    execute: vi.fn().mockResolvedValue([]),
     query: {
       artists: { findFirst: vi.fn().mockResolvedValue({ id: "a1", bio }) },
       artistBioVersions: {
@@ -45,6 +65,7 @@ const owner = { expectedClaimId: null };
 beforeEach(() => {
   Object.values(m).forEach(f => f.mockReset());
   m.findApprovedClaim.mockResolvedValue(undefined);
+  m.finish.mockResolvedValue(true);
   m.record.mockResolvedValue("activity-1");
 });
 
@@ -130,10 +151,12 @@ describe("persistArtistBio", () => {
     expect(await persistArtistBio("a1", "New artist bio", { ownership: owner })).toBe(
       "New artist bio",
     );
-    expect(m.saveBioVersions).toHaveBeenCalledWith(tx, "a1", [
-      "Artist edited bio",
-      "New artist bio",
-    ]);
+    expect(m.saveBioVersions).toHaveBeenCalledWith(
+      tx,
+      "a1",
+      ["Artist edited bio", "New artist bio"],
+      [null, null],
+    );
     expect(set).toHaveBeenCalledWith({ bio: "New artist bio" });
     expect(m.saveBioVersions.mock.invocationCallOrder[0]).toBeLessThan(
       set.mock.invocationCallOrder[0],
@@ -185,11 +208,15 @@ describe("persistArtistBio", () => {
       generated: true,
       expectedBio: null,
     });
-    expect(m.saveBioVersions).toHaveBeenCalledWith(expect.anything(), "a1", [
-      null,
-      ABOUT_EMPTY_STATE,
-    ]);
-    expect(set).toHaveBeenCalledWith({ bio: ABOUT_EMPTY_STATE });
+    expect(m.saveBioVersions).toHaveBeenCalledWith(
+      expect.anything(),
+      "a1",
+      [null, ABOUT_EMPTY_STATE],
+      [null, expect.objectContaining({ kind: "unknown" })],
+    );
+    expect(set).toHaveBeenCalledWith({
+      bio: ABOUT_EMPTY_STATE,
+    });
   });
 
   it("publishes the document in the same transaction, before history and bio", async () => {
@@ -232,7 +259,7 @@ describe("persistArtistBio", () => {
   });
 
   it("confirms the steps in the same transaction, even when the bio already matches", async () => {
-    const { tx, set } = setup();
+    const { tx } = setup();
     const confirmation = vi.fn().mockResolvedValue(undefined);
     const confirmValues = vi.fn(() => ({ onConflictDoNothing: confirmation }));
     tx.insert.mockReturnValueOnce({ values: confirmValues } as never);
@@ -243,8 +270,12 @@ describe("persistArtistBio", () => {
       confirmSteps: ["publish"],
     });
     expect(confirmValues).toHaveBeenCalledWith({ artistId: "a1", step: "publish" });
-    expect(set).not.toHaveBeenCalled();
-    expect(m.record).not.toHaveBeenCalled();
+    expect(m.writeProvenance).toHaveBeenCalledWith(
+      tx,
+      "a1",
+      expect.objectContaining({ kind: "unknown" }),
+    );
+    expect(m.record).toHaveBeenCalled();
   });
 
   it("aborts publication if the confirmation can't be saved", async () => {
@@ -264,4 +295,111 @@ describe("persistArtistBio", () => {
     ).rejects.toThrow("confirmation failed");
     expect(set).not.toHaveBeenCalled();
   });
+});
+
+it("revalidates the exact Lore before any About/history writes and preserves them on source change", async () => {
+  const { tx, set } = setup();
+  const expectedLore = { content: "Lore", sources: [] };
+  m.assertLore.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(persistArtistBio("a1", "New", { ownership: owner, expectedLore })).rejects.toThrow(
+    "Lore sources changed",
+  );
+  expect(m.assertLore).toHaveBeenCalledWith(tx, "a1", expectedLore);
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+it("does not publish when the deadline elapses while waiting for the artist lock", async () => {
+  const { set } = setup();
+  const controller = new AbortController();
+  m.lockArtistRow.mockImplementation(async () => controller.abort(new Error("deadline")));
+  await expect(
+    persistArtistBio("a1", "New", { ownership: owner, signal: controller.signal }),
+  ).rejects.toThrow("deadline");
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+it("fences and settles the About lease using the same transaction as the About write", async () => {
+  const { tx, set } = setup();
+  const aboutLease = { jobId: "j", requestedAt: "r", claimedAt: "lease" };
+  await persistArtistBio("a1", "New", { ownership: owner, aboutLease });
+  expect(m.assertLease).toHaveBeenCalledWith(tx, "a1", aboutLease);
+  expect(m.finish).toHaveBeenCalledWith("a1", aboutLease, "rebuilt", tx);
+  expect(m.finish.mock.invocationCallOrder[0]).toBeLessThan(set.mock.invocationCallOrder[0]);
+});
+it("refuses the About write when settlement detects newer work or loses the lease", async () => {
+  const { set } = setup();
+  m.finish.mockResolvedValue(false);
+  await expect(
+    persistArtistBio("a1", "New", {
+      ownership: owner,
+      aboutLease: { jobId: "j", requestedAt: "r", claimedAt: "lease" },
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(set).not.toHaveBeenCalled();
+  expect(m.saveBioVersions).not.toHaveBeenCalled();
+});
+
+it("refuses onboarding publication after source privacy or moderation changes", async () => {
+  const { tx } = setup();
+  m.assertSources.mockRejectedValue(new Error("Lore sources changed"));
+  await expect(
+    persistArtistBio("a1", "New About", {
+      ownership: owner,
+      document: { content: "Lore", sources: [] },
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+  expect(tx.update).not.toHaveBeenCalled();
+});
+
+it("saves fresh evidence even when regeneration produces identical text", async () => {
+  const old = { version: 1, kind: "generated", bioHash: "old", claimId: null, sources: [] };
+  const { tx, set } = setup({ bio: "Same", bioProvenance: old });
+  const sources = [
+    {
+      id: 1,
+      kind: "vault" as const,
+      label: "Evidence",
+      url: "https://example.org",
+      revision: "a".repeat(64),
+    },
+  ];
+  await persistArtistBio("a1", "Same", {
+    ownership: owner,
+    generated: true,
+    expectedBio: "Same",
+    expectedLore: { content: "Lore", sources },
+  });
+  expect(set).toHaveBeenCalledWith({
+    bio: "Same",
+  });
+  expect(m.writeProvenance).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    expect.objectContaining({ kind: "generated", sources }),
+  );
+  expect(m.saveBioVersions).toHaveBeenCalledWith(
+    tx,
+    "a1",
+    ["Same", "Same"],
+    [old, expect.objectContaining({ sources })],
+  );
+});
+
+it("refuses a concurrent Lore edit while About remains empty before any writes", async () => {
+  const { tx } = setup({ bio: null });
+  tx.execute.mockResolvedValue([{ matches: false }]);
+  await expect(
+    persistArtistBio("a1", "Generated", {
+      ownership: owner,
+      generated: true,
+      expectedBio: null,
+      expectedDocument: { content: "Original", sources: [], updatedAt: null },
+      document: { content: "Generated Lore", sources: [] },
+      confirmSteps: ["interview", "publish"],
+    }),
+  ).rejects.toThrow("Lore sources changed");
+  expect(tx.insert).not.toHaveBeenCalled();
+  expect(tx.update).not.toHaveBeenCalled();
+  expect(m.writeProvenance).not.toHaveBeenCalled();
 });

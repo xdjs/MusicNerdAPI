@@ -40,6 +40,7 @@ export async function claimResearchJob(opts: {
     const rows = await db.execute(sql`
       update artist_research_jobs
          set status = 'running', claimed_at = now(), updated_at = now(),
+             state = case when kind='lore_refresh' then state - 'aboutOnly' else state end,
              attempts = attempts + case when status = 'running' then 1 else 0 end
        where id = (
          select candidate.id from artist_research_jobs candidate
