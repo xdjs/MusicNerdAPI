@@ -20,8 +20,9 @@ const DUTCHYYY = "6cb3d81a-3d02-4c57-a711-bb7902a9af1b";
 
 /**
  * The chat suite's dataset: staging fixture artists with approved sources whose stored text
- * (`artist_vault_sources.extracted_text`) answers each question, read and checked by hand on
- * 2026-10-27. Every id here is a STAGING id; production ids differ.
+ * (`artist_vault_sources.extracted_text`) or uploaded PDFs answer each question, read and checked
+ * by hand on 2026-10-27, with reference corrections from the 2026-11-06 retained-evidence audit
+ * and the 2026-11-12 acceptance question. Every id here is a STAGING id; production ids differ.
  */
 export const CHAT_CASES: ChatCase[] = [
   {
@@ -88,8 +89,9 @@ export const CHAT_CASES: ChatCase[] = [
     artistId: WILLIE_COLON,
     question: "What was the first album Willie Colón made with Rubén Blades?",
     answerable: true,
-    reference: "Metiendo Mano! (1977), before Siembra (Glide Magazine review of the reissue).",
-    note: "A collaboration question answered by one review.",
+    reference:
+      "The first album remains unresolved from the conflicting saved accounts. Glide calls Metiendo Mano! (1977) the first collaboration. Rolling Stone says Colón recorded The Good, The Bad, The Ugly with Lavoe, Rubén Blades and Yomo Toro. Attribute both accounts, including uncertainty in the opening; do not invent full-versus-partial collaboration, billing or participant distinctions. The Cua Cua Ra, Cua Cua / 1975 heading is a song-section date, not independently an album-release date.",
+    note: "Competing saved accounts: assesses useful coverage and supported distinctions, not recall of one review's answer (reference v2, 2026-11-06 audit).",
   },
   {
     key: "willie-colon-instrument",
@@ -108,8 +110,19 @@ export const CHAT_CASES: ChatCase[] = [
     question: "What other names has Dutchyyy released music under?",
     answerable: true,
     reference:
-      "Dutchmassive (MC alias, from 1998, with the group Equilibrium), Dutchy (producer alias, 2012–2019), Dutchyyy since 2019 (his uploaded discography timeline PDF).",
-    note: "An uploaded-file source rather than a web page.",
+      "Source-supported other names include Dutchmassive, Dutchy and The Chill Factor: the PDF explicitly identifies the latter as a credited alias in its 2001 We're Here Now entry (p.2), full use span unknown. Role or current-name context is optional: Dutchmassive is the MC alias, Dutchy the producer alias, Dutchyyy the primary alias. Equilibrium and Walkmen are groups; The Hobbyshop Hero is a parenthetical credit, not a required established alias on this evidence. If dates are given, preserve the PDF's roles: Dutchmassive 1998–present, Dutchy 2012–2019, Dutchyyy 2019–present as primary alias, not first-ever use. Dated examples or credits alone do not establish complete use/overlap bounds. Accept additional names only when supported by read evidence. Dates and extra context are not required when the question only asks for names.",
+    note: "An uploaded-file source rather than a web page (reference v2, 2026-11-06 audit).",
+  },
+  {
+    key: "dutchyyy-alias-years",
+    artistName: "Dutchyyy",
+    artistId: DUTCHYYY,
+    question:
+      "Which years did Dutchyyy use each artist alias, and which were used at the same time?",
+    answerable: true,
+    reference:
+      "From the uploaded discography timeline PDF (13 pages). Page 1 lists Dutchmassive 1998–present (MC/rapper alias), Dutchy 2012–2019 (producer alias) and Dutchyyy 2019–present (primary alias). The Chill Factor is a one-off alias documented in 2001 on We're Here Now (p.2). Used at the same time: Dutchmassive ran alongside Dutchy, with both names on one release, for example Blue Screen of Deaf (2012, p.7) and the 2013 Astral Basement compilation (p.8); Dutchmassive and Dutchyyy are both credited on The Reluctant Clap (2023, p.11); Dutchy and Dutchyyy overlap only around the 2018–2019 transition (RawSauce Remix, p.10). A documented year is not proof of a start, end or continuous use; the timeline calls itself incomplete, and Dutchyyy also appears as a 2007 production credit (p.5). Equilibrium and Walkmen are groups, not solo aliases; The Hobbyshop Hero is a parenthetical credit (p.4). An answer that gives the three overview aliases with years and at least one same-release overlap, cites the PDF with page numbers and states the timeline's own uncertainty is complete; omitting The Chill Factor is the main completeness gap.",
+    note: "Multi-part inventory plus overlap from one 13-page PDF: the #1424 acceptance question, pages verified against the original on 2026-11-12.",
   },
   {
     key: "dutchyyy-onchain",

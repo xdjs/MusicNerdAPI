@@ -35,3 +35,31 @@ it("states only what a read source says, without a sources list", () => {
   expect(text).toMatch(/never state facts from searchSources snippets/i);
   expect(text).toMatch(/don't add a list of sources/i);
 });
+
+it("treats approved PDFs as a corpus for ordinary questions, not only PDF questions", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/searchPdfSources searches approved Lore PDFs/i);
+  expect(text).toMatch(/even for ordinary artist questions that do not mention PDFs/i);
+  expect(text).toMatch(/before concluding saved evidence is absent/i);
+});
+
+it("asks for a whole-source scan when every item of a kind is requested", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/every item of a kind/i);
+  expect(text).toMatch(/not only its summary or overview list/i);
+  expect(text).toMatch(/say how the source labels them/i);
+});
+
+it("starts every question with saved-source and PDF discovery together", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(
+    /start every question by calling searchSources and searchPdfSources together/i,
+  );
+});
+
+it("reads a second source for firsts and dates and reports disagreement", () => {
+  const text = buildArtistChatInstructions("Dutchyyy");
+  expect(text).toMatch(/first, earliest or when something happened/i);
+  expect(text).toMatch(/read at least two sources/i);
+  expect(text).toMatch(/report the disagreement instead of picking one/i);
+});

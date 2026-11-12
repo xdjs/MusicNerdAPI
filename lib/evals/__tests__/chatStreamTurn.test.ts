@@ -95,3 +95,77 @@ describe("chatStreamTurn", () => {
     expect(turn.answer).toBe("");
   });
 });
+
+describe("chatStreamTurn PDF evidence", () => {
+  it("captures a cited PDF read through the adapter using the streamed source URL, after timing", async () => {
+    const readPdfChatEvidence = vi.fn(async () => [
+      {
+        n: 1,
+        url: "https://a.example/t.pdf",
+        text: "[page 1]\nAliases",
+        tool: "readPdfSource" as const,
+        toolCallId: "p",
+        sha256: "h",
+      },
+    ]);
+    vi.doMock("@/lib/evals/readPdfChatEvidence", () => ({ readPdfChatEvidence }));
+    vi.resetModules();
+    vi.doMock("@/lib/chat/postArtistChatHandler", () => ({
+      postArtistChatHandler: (...a: unknown[]) => postArtistChatHandler(...a),
+    }));
+    const { chatStreamTurn: turnWithPdf } = await import("@/lib/evals/chatStreamTurn");
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "p", toolName: "readPdfSource", input: {} },
+        { type: "source-url", sourceId: "1", url: "https://a.example/t.pdf", title: "t.pdf" },
+        {
+          type: "tool-output-available",
+          toolCallId: "p",
+          output: { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
+        },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "Aliases [1, p.1]." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await turnWithPdf({ artistId: "a1", question: "Aliases?" }, fakeClock());
+    expect(readPdfChatEvidence).toHaveBeenCalledWith(
+      "readPdfSource",
+      "p",
+      { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
+      "https://a.example/t.pdf",
+    );
+    expect(turn.evidence).toEqual([expect.objectContaining({ tool: "readPdfSource", n: 1 })]);
+    expect(turn.sources).toEqual([{ n: 1, title: "t.pdf", url: "https://a.example/t.pdf" }]);
+    vi.doUnmock("@/lib/evals/readPdfChatEvidence");
+  });
+});
+
+describe("chatStreamTurn tool record", () => {
+  it("records which tools ran and their inputs, for review", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        {
+          type: "tool-input-available",
+          toolCallId: "a",
+          toolName: "searchSources",
+          input: { query: "q" },
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "b",
+          toolName: "searchPdfSources",
+          input: { query: "q" },
+        },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "None." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.tools).toEqual([
+      { name: "searchSources", input: { query: "q" } },
+      { name: "searchPdfSources", input: { query: "q" } },
+    ]);
+  });
+});

@@ -422,3 +422,36 @@ it("revalidates search previews, including before the next model forward", async
   expect(chunks.some(c => c.type === "error")).toBe(true);
   expect(chunks.some(c => c.type === "text-delta")).toBe(false);
 });
+
+it("keeps planning narration written before a tool call off the stream", async () => {
+  m.model = new MockLanguageModelV4({
+    doStream: [
+      {
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "text-start" as const, id: "plan" },
+            { type: "text-delta" as const, id: "plan", delta: "Let me read the key sources." },
+            { type: "text-end" as const, id: "plan" },
+            {
+              type: "tool-call" as const,
+              toolCallId: "call-readSource",
+              toolName: "readSource",
+              input: JSON.stringify({ sourceId: "vault:1" }),
+            },
+            finish("tool-calls"),
+          ],
+        }),
+      },
+      textStep("Dutchyyy is on ", "Night Label [1]."),
+    ],
+  });
+  const chunks = await chunksOf(await post(ask("What label is Dutchyyy on?")));
+  const text = chunks
+    .filter(c => c.type === "text-delta")
+    .map(c => c.delta)
+    .join("");
+  expect(text).toBe("Dutchyyy is on Night Label [1].");
+  expect(chunks.filter(c => c.type === "tool-input-available").map(c => c.toolName)).toEqual([
+    "readSource",
+  ]);
+});

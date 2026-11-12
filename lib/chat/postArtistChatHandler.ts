@@ -11,6 +11,7 @@ import { z } from "zod";
 import { MODEL_CHAT } from "@/lib/ai/const";
 import { streamText } from "@/lib/ai/streamText";
 import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
+import { gateStepText } from "@/lib/chat/gateStepText";
 import { createChatCitations } from "@/lib/chat/createChatCitations";
 import { createReadSourceTool } from "@/lib/chat/createReadSourceTool";
 import { createSearchSourcesTool } from "@/lib/chat/createSearchSourcesTool";
@@ -94,7 +95,12 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
           },
           stopWhen: isStepCount(6),
           abortSignal: request.signal,
-          writer,
+          // Planning narration before a tool call never reaches the fan.
+          writer: {
+            write: part => writer.write(part),
+            merge: stream => writer.merge(stream.pipeThrough(gateStepText())),
+            onError: writer.onError,
+          },
         }).catch(error => {
           // The merged stream has already sent the client its error part.
           console.error("[chat] stream failed", error);

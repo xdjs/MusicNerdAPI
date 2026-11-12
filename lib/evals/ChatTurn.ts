@@ -9,6 +9,8 @@ export type ChatTurn = {
   firstTextMs: number;
   /** Exact public tool passages seen by the model; absent on historical turns. */
   evidence?: ChatEvidence[];
+  /** The tools the model called, in order, with their inputs; absent on historical turns. */
+  tools?: { name: string; input: unknown }[];
   /** From the question being sent to the finished answer. */
   totalMs: number;
   /** Set when the turn ended in an error response instead of an answer. */

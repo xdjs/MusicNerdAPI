@@ -82,3 +82,25 @@ describe("judgeCitedAnswer", () => {
     expect(generateObject).not.toHaveBeenCalled();
   });
 });
+
+describe("judgeCitedAnswer model", () => {
+  it("judges with the chat model at its default sampling and explains PDF page markers", async () => {
+    const { MODEL_CHAT } = await import("@/lib/ai/const");
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 1, reason: "Supported by [1]." },
+    });
+    const x = input();
+    x.turn.answer = "Label X [1, p.2].";
+    x.turn.evidence![0] = {
+      ...x.turn.evidence![0],
+      tool: "readPdfSource",
+      text: "[page 2]\nLabel X",
+    };
+    await judgeCitedAnswer(x);
+    const call = generateObject.mock.calls[0][0];
+    expect(call.model).toBe(MODEL_CHAT);
+    expect(call).not.toHaveProperty("temperature");
+    expect(call.instructions).toMatch(/\[page N\]/);
+    expect(JSON.parse(call.prompt).evidence[0].text).toBe("[page 2]\nLabel X");
+  });
+});

@@ -9,4 +9,6 @@ export type ChatPdf = {
   size: number;
   revision: string;
   claimId: string | null;
+  /** The first 240 characters of stored extracted text, whitespace collapsed; empty when none. */
+  preview?: string;
 };

@@ -112,17 +112,22 @@ export function createChatPdfTools(
 
     searchPdfSources: tool({
       description:
-        "Find approved public original PDFs for this artist by document name or topic. Metadata only; readPdfSource before answering. Only use for document/PDF questions.",
+        "Search approved public PDFs by filename or topics in stored extracted text, including ordinary artist questions. Returns navigation metadata with a short preview of each document's text, not evidence; readPdfSource before answering or citing. Missing extraction does not exclude an eligible PDF.",
       inputSchema: z.object({ query: z.string().min(1).max(300) }),
       execute: async ({ query }) => {
         const sources = await loadChatPdfs(artistId, undefined, query);
         return {
           sources: sources.slice(0, 8).map(s => {
             discovered.add(s.id);
-            return { sourceId: s.id, title: s.title, url: s.url };
+            return {
+              sourceId: s.id,
+              title: s.title,
+              url: s.url,
+              preview: (s.preview ?? "").slice(0, 240),
+            };
           }),
           coverage:
-            "Up to 8 matching public PDF titles; absence here is not proof a fact does not exist.",
+            "Up to 8 eligible public PDFs ranked by title and stored extracted-text matches. Extraction can be incomplete or stale; read the original PDF for claims and page citations. Absence is not proof a fact does not exist.",
         };
       },
     }),
