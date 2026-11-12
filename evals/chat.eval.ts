@@ -20,7 +20,8 @@ import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
  *   pnpm eval evals/chat.eval.ts
  */
 
-// Carry attempt 1 forward under Pete's original $5 ceiling (run 40975550504).
+// Carry attempt 1 forward; the ceiling is ten dollars of conservative reservations (see
+// createEvalBudgetFetch), which the 12-case suite with PDF reads needs. Actual spend is about a dollar.
 const budget = createEvalBudgetFetch(globalThis.fetch, 104224);
 globalThis.fetch = budget.fetch;
 
@@ -34,7 +35,7 @@ Eval("music-nerd", {
     sha: SHA,
     rubric: "cited-evidence-v2",
     judgeModel: MODEL_CHAT,
-    budgetUsd: 5,
+    budgetUsd: 10,
     priorReservedUsd: 0.104224,
     maxOutputTokens: 2048,
   },

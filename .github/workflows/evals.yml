@@ -50,6 +50,26 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # PDF discovery only matches rows whose URL is on the staging project's public storage
+      # origin, so the chat suite needs SUPABASE_URL; derive it from the database connection
+      # rather than adding a secret (same derivation the PDF suites use).
+      - name: Bind the staging storage origin for this job only
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          try {
+            const u = new URL(process.env.SUPABASE_DB_CONNECTION);
+            const direct = /^db\.([a-z0-9]{20})\.supabase\.co$/.exec(u.hostname);
+            const pooled = /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(u.hostname) ? /\.([a-z0-9]{20})$/.exec(decodeURIComponent(u.username)) : null;
+            const ref = direct?.[1] ?? pooled?.[1];
+            if (!['postgres:', 'postgresql:'].includes(u.protocol) || !ref) throw new Error('Unsupported staging connection format');
+            appendFileSync(process.env.GITHUB_ENV, `SUPABASE_URL=https://${ref}.supabase.co\n`);
+          } catch {
+            console.error('CHAT_ORIGIN_FAILED: no configuration values emitted');
+            process.exit(1);
+          }
+          JS
       - name: Run suite
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
 
