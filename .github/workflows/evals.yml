@@ -14,7 +14,16 @@ on:
           - pdf106-paired
           - pdf106-pete-smoke
           - pdf106-four-paired
+          - discovery1660
         default: chat
+      target_hash:
+        description: SHA256 of approved Dev project reference (discovery1660 only)
+        required: false
+        type: string
+      approval:
+        description: Must equal one-disposable-dev-fixture for discovery1660
+        required: false
+        type: string
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -178,4 +187,52 @@ jobs:
             pdf106-four-results
             pdf-chat-eval/acceptance-v2/harness-offline.json
           if-no-files-found: warn
+          retention-days: 7
+
+  discovery1660:
+    if: inputs.suite == 'discovery1660'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Refuse reruns
+        run: test "$RUN_ATTEMPT" = 1
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/discovery1660/build.mjs
+      - name: One approved Dev fixture, no provider or model credentials
+        run: node .next/discovery1660.mjs
+        env:
+          SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
+          DISCOVERY1660_TARGET_HASH: ${{ inputs.target_hash }}
+          DISCOVERY1660_APPROVED: ${{ inputs.approval }}
+      - uses: actions/upload-artifact@v4
+        id: evidence
+        if: always()
+        with:
+          name: discovery1660-${{ github.run_id }}
+          path: discovery1660-results
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean exact fixture only after evidence is durably uploaded
+        if: always() && steps.evidence.outcome == 'success'
+        run: node .next/discovery1660.mjs --cleanup
+        env:
+          SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
+          DISCOVERY1660_TARGET_HASH: ${{ inputs.target_hash }}
+          DISCOVERY1660_APPROVED: ${{ inputs.approval }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: discovery1660-cleanup-${{ github.run_id }}
+          path: discovery1660-results/cleanup.json
+          if-no-files-found: error
           retention-days: 7
