@@ -10,14 +10,19 @@ function collectFileParts(value: unknown, into: string[]): void {
     return;
   }
   const record = value as Record<string, unknown>;
-  if (record.type === "file" || record.type === "image") {
-    if (
-      record.type !== "file" ||
-      record.mediaType !== "application/pdf" ||
-      typeof record.data !== "string"
-    )
+  if (record.type === "file" || record.type === "file-data" || record.type === "image") {
+    // Prompt file parts carry a base64 string; tool-result file parts may wrap it as
+    // { type: "data", data } (the handler's shape). URLs and non-PDF media stay unpriced.
+    const data = record.data as unknown;
+    const base64 =
+      typeof data === "string"
+        ? data
+        : data && typeof data === "object" && typeof (data as { data?: unknown }).data === "string"
+          ? (data as { data: string }).data
+          : undefined;
+    if (record.type === "image" || record.mediaType !== "application/pdf" || base64 === undefined)
       throw new Error("unpriced native tool or media");
-    into.push(record.data);
+    into.push(base64);
     return;
   }
   for (const child of Object.values(record)) collectFileParts(child, into);

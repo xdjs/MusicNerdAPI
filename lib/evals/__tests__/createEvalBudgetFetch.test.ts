@@ -140,9 +140,7 @@ describe("createEvalBudgetFetch", () => {
   });
   it("prices a PDF tool result separately instead of rejecting it, and bounds its size", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
-    const guard = createEvalBudgetFetch(send);
-    const data = "A".repeat(400000);
-    const withPdf = (bytes: string) =>
+    const toolResult = (file: unknown) =>
       JSON.stringify({
         prompt: [
           { role: "user", content: [{ type: "text", text: "Which years?" }] },
@@ -155,60 +153,42 @@ describe("createEvalBudgetFetch", () => {
                 toolName: "readPdfSource",
                 output: {
                   type: "content",
-                  value: [
-                    { type: "text", text: "Original PDF follows." },
-                    {
-                      type: "file",
-                      mediaType: "application/pdf",
-                      data: { type: "data", data: bytes },
-                    },
-                  ],
+                  value: [{ type: "text", text: "Original PDF follows." }, file],
                 },
               },
             ],
           },
         ],
       });
-    await guard.fetch(gateway, { ...request(), body: withPdf(data) });
+    const pdf = (data: unknown) => ({ type: "file", mediaType: "application/pdf", data });
+    const guard = createEvalBudgetFetch(send);
+    await guard.fetch(gateway, {
+      ...request(),
+      body: toolResult(pdf({ type: "data", data: "A".repeat(400000) })),
+    });
     expect(send).toHaveBeenCalledTimes(1);
     // Half a micro-dollar per base64 character on top of the text reservation.
     expect(guard.snapshot().reservedUsd).toBeGreaterThan(0.2);
     expect(guard.snapshot().reservedUsd).toBeLessThan(0.3);
     await expect(
-      guard.fetch(gateway, { ...request(), body: withPdf("A".repeat(6000001)) }),
+      guard.fetch(gateway, {
+        ...request(),
+        body: toolResult(pdf({ type: "data", data: "A".repeat(6000001) })),
+      }),
     ).rejects.toThrow("PDF input outside priced envelope");
     const plain = createEvalBudgetFetch(send);
     await plain.fetch(gateway, {
       ...request(),
-      body: JSON.stringify({
-        prompt: [
-          {
-            role: "user",
-            content: [{ type: "file-data", mediaType: "application/pdf", data: "A".repeat(1000) }],
-          },
-        ],
-      }),
+      body: toolResult({ type: "file-data", mediaType: "application/pdf", data: "A".repeat(1000) }),
     });
     expect(plain.snapshot().paidRequests).toBe(1);
-    await expect(
-      createEvalBudgetFetch(send).fetch(gateway, {
-        ...request(),
-        body: JSON.stringify({
-          prompt: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "file",
-                  mediaType: "application/pdf",
-                  data: { type: "url", url: "https://x" },
-                },
-              ],
-            },
-          ],
-        }),
-      }),
-    ).rejects.toThrow("unpriced");
+    for (const file of [
+      pdf({ type: "url", url: "https://x" }),
+      { type: "file", mediaType: "image/png", data: { type: "data", data: "A" } },
+    ])
+      await expect(
+        createEvalBudgetFetch(send).fetch(gateway, { ...request(), body: toolResult(file) }),
+      ).rejects.toThrow("unpriced");
   });
   it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
     const send = vi.fn().mockResolvedValue(new Response("%PDF"));
