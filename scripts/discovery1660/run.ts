@@ -12,6 +12,7 @@ import { getArtistLinkSuggestions } from "@/lib/artistLinkReview/getArtistLinkSu
 
 // Keep dependency/driver failures from emitting SQL parameters in public CI logs.
 console.error = () => console.log("[1660] dependency failure details suppressed");
+let stage = "target-check";
 async function main() {
   // Manual, one-fixture acceptance only. No model/provider calls or grants.
   const hash = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
@@ -21,8 +22,11 @@ async function main() {
     decodeURIComponent(connection.username).split(".")[1] ?? connection.hostname.split(".")[1];
   assert.equal(hash(projectRef), process.env.DISCOVERY1660_TARGET_HASH, "Wrong test database");
   assert.equal(process.env.DISCOVERY1660_APPROVED, "one-disposable-dev-fixture");
+  stage = "app-role-connection";
   const [{ role }] = await db.execute<{ role: string }>(sql`select current_user as role`);
+  stage = "app-role-identity";
   assert.equal(role, "mnweb", "Must use real application role");
+  stage = "evidence-column-read";
   const [column] = await db.execute(
     sql`select 1 from information_schema.columns where table_schema='public' and table_name='ugcresearch' and column_name='discovery_evidence' and data_type='jsonb' and is_nullable='YES'`,
   );
@@ -58,16 +62,19 @@ async function main() {
     console.log("Exact fixture cleanup verified");
     process.exit(0);
   }
+  stage = "existing-admin-read";
   const admins = await db.execute<{ id: string }>(
     sql`select id from users where username='Pete Rango' and is_admin=true`,
   );
   assert.equal(admins.length, 1, "Need unambiguous existing authorized admin");
   const userId = admins[0].id;
+  stage = "public-identity-read";
   const originals = await db.execute<{ name: string; instagram: string; x: string }>(
     sql`select name,instagram,x from artists where lower(name)='pete rango'`,
   );
   assert.equal(originals.length, 1, "Need unambiguous original public identity");
   assert.ok(originals[0].instagram && originals[0].x, "Need existing public Instagram/X handles");
+  stage = "public-handle-validation";
   const artistId = randomUUID();
   const name = `Pete Rango — disposable #1660 acceptance ${artistId.slice(0, 8)}`;
   const out = "discovery1660-results";
@@ -234,7 +241,7 @@ async function main() {
 }
 main().catch(() => {
   console.log(
-    "[1660] stopped safely; inspect bounded artifact and verify fixture cleanup before retry",
+    `[1660] stopped safely at ${stage}; inspect bounded artifact and verify fixture cleanup before retry`,
   );
   process.exit(1);
 });
