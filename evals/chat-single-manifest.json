@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "enabled": false,
+  "enabled": true,
   "provider": "anthropic",
   "utcDate": "2026-11-12",
   "attributedTextCharacters": 12000,
