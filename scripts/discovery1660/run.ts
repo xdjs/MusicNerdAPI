@@ -21,9 +21,17 @@ async function main() {
   const projectRef =
     decodeURIComponent(connection.username).split(".")[1] ?? connection.hostname.split(".")[1];
   assert.equal(hash(projectRef), process.env.DISCOVERY1660_TARGET_HASH, "Wrong test database");
-  assert.equal(process.env.DISCOVERY1660_APPROVED, "one-disposable-dev-fixture");
+  const preflight = process.env.DISCOVERY1660_APPROVED === "read-only-preflight";
+  assert.ok(preflight || process.env.DISCOVERY1660_APPROVED === "one-disposable-dev-fixture");
   stage = "app-role-connection";
   const [{ role }] = await db.execute<{ role: string }>(sql`select current_user as role`);
+  if (preflight) {
+    const [facts] = await db.execute(
+      sql`select current_user as role,session_user as session_role,rolsuper,rolbypassrls,has_table_privilege(current_user,'public.ugcresearch','SELECT') as can_read_suggestions,has_table_privilege(current_user,'public.ugcresearch','INSERT') as can_insert_suggestions,has_table_privilege(current_user,'public.ugcresearch','UPDATE') as can_update_suggestions,has_table_privilege(current_user,'public.artists','UPDATE') as can_update_artists,has_table_privilege(current_user,'public.artist_activity_events','INSERT') as can_insert_audit from pg_roles where rolname=current_user`,
+    );
+    console.log(JSON.stringify({ mode: "read-only-preflight", facts }));
+    process.exit(0);
+  }
   stage = "app-role-identity";
   assert.equal(role, "mnweb", "Must use real application role");
   stage = "evidence-column-read";

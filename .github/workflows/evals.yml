@@ -216,21 +216,21 @@ jobs:
           DISCOVERY1660_APPROVED: ${{ inputs.approval }}
       - uses: actions/upload-artifact@v4
         id: evidence
-        if: always()
+        if: always() && inputs.approval != 'read-only-preflight'
         with:
           name: discovery1660-${{ github.run_id }}
           path: discovery1660-results
           if-no-files-found: error
           retention-days: 7
       - name: Clean exact fixture only after evidence is durably uploaded
-        if: always() && steps.evidence.outcome == 'success'
+        if: always() && inputs.approval != 'read-only-preflight' && steps.evidence.outcome == 'success'
         run: node .next/discovery1660.mjs --cleanup
         env:
           SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
           DISCOVERY1660_TARGET_HASH: ${{ inputs.target_hash }}
           DISCOVERY1660_APPROVED: ${{ inputs.approval }}
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && inputs.approval != 'read-only-preflight'
         with:
           name: discovery1660-cleanup-${{ github.run_id }}
           path: discovery1660-results/cleanup.json
