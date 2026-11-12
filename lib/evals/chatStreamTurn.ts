@@ -44,6 +44,10 @@ export async function chatStreamTurn(
     const ms = Math.round(clock.now() - started);
     const data = await response.json().catch(() => ({}));
     const message = typeof data.error === "string" ? data.error : "error";
+    const retryAfterSeconds =
+      Number.isInteger(data.retryAfterSeconds) && data.retryAfterSeconds > 0
+        ? (data.retryAfterSeconds as number)
+        : undefined;
     return {
       answer: "",
       sources: [],
@@ -51,6 +55,7 @@ export async function chatStreamTurn(
       firstTextMs: ms,
       totalMs: ms,
       error: `${response.status} ${message}`,
+      ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
     };
   }
 

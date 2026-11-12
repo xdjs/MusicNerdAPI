@@ -11,6 +11,8 @@ export type ChatCase = {
   reference: string;
   /** What the case tests. */
   note: string;
+  /** Times the question is asked per run, for a behaviour that varies between runs; default 1. */
+  trials?: number;
 };
 
 /** Staging (Music Nerd Dev) fixture ids; previews and the eval use the staging database. */
@@ -123,6 +125,9 @@ export const CHAT_CASES: ChatCase[] = [
     reference:
       "From the uploaded discography timeline PDF (13 pages). Page 1 lists Dutchmassive 1998–present (MC/rapper alias), Dutchy 2012–2019 (producer alias) and Dutchyyy 2019–present (primary alias). The Chill Factor is a one-off alias documented in 2001 on We're Here Now (p.2). Used at the same time: Dutchmassive ran alongside Dutchy, with both names on one release, for example Blue Screen of Deaf (2012, p.7) and the 2013 Astral Basement compilation (p.8); Dutchmassive and Dutchyyy are both credited on The Reluctant Clap (2023, p.11); Dutchy and Dutchyyy overlap only around the 2018–2019 transition (RawSauce Remix, p.10). A documented year is not proof of a start, end or continuous use; the timeline calls itself incomplete, and Dutchyyy also appears as a 2007 production credit (p.5). Equilibrium and Walkmen are groups, not solo aliases; The Hobbyshop Hero is a parenthetical credit (p.4). An answer that gives the three overview aliases with years and at least one same-release overlap, cites the PDF with page numbers and states the timeline's own uncertainty is complete; omitting The Chill Factor is the main completeness gap.",
     note: "Multi-part inventory plus overlap from one 13-page PDF: the #1424 acceptance question, pages verified against the original on 2026-11-12.",
+    // The Chill Factor credit on page 2 appears in about half of runs; three trials make the
+    // score a rate instead of a coin flip.
+    trials: 3,
   },
   {
     key: "dutchyyy-onchain",

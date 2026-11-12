@@ -84,6 +84,36 @@ describe("chatStreamTurn", () => {
     expect(turn).toMatchObject({ answer: "", sources: [], error: "404 Artist not found" });
   });
 
+  it("keeps the allowance reset from a quota response, and nothing from other errors", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      NextResponse.json(
+        {
+          status: "error",
+          code: "visitor_question_quota",
+          error: "You've reached your question limit for this hour. Try again in 12 minutes.",
+          retryAfterSeconds: 700,
+          resetAt: "2026-11-12T20:00:00.000Z",
+        },
+        { status: 429 },
+      ),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "q" }, fakeClock());
+    expect(turn).toMatchObject({
+      error: "429 You've reached your question limit for this hour. Try again in 12 minutes.",
+      retryAfterSeconds: 700,
+    });
+
+    postArtistChatHandler.mockResolvedValueOnce(
+      NextResponse.json(
+        { status: "error", error: "x", retryAfterSeconds: "soon" },
+        { status: 500 },
+      ),
+    );
+    expect(await chatStreamTurn({ artistId: "a1", question: "q" }, fakeClock())).not.toHaveProperty(
+      "retryAfterSeconds",
+    );
+  });
+
   it("records an error part in the stream", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
       streamOf([{ type: "error", errorText: "gateway down" }]),

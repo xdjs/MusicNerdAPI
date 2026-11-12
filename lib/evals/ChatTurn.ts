@@ -15,4 +15,6 @@ export type ChatTurn = {
   totalMs: number;
   /** Set when the turn ended in an error response instead of an answer. */
   error?: string;
+  /** With `error`, when the staging question allowance that refused the turn reopens. */
+  retryAfterSeconds?: number;
 };

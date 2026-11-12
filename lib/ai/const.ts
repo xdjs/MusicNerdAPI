@@ -6,3 +6,6 @@ export const MODEL_PUBLIC_RESEARCH = "google/gemini-3.8-flash";
 
 /** Writes artist chat answers (xdjs/MusicNerdWeb#1629). */
 export const MODEL_CHAT = "anthropic/claude-sonnet-5.5";
+
+/** Grades chat answers in the eval: a different family from MODEL_CHAT, so the answerer never marks its own work. */
+export const MODEL_JUDGE = "google/gemini-3.8-flash";

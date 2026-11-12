@@ -26,7 +26,9 @@ jobs:
   eval:
     if: inputs.suite == 'chat'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # A run takes about eight minutes; the suite waits up to an hour when the staging
+    # question allowance (30 per rolling hour) is still used by an earlier run.
+    timeout-minutes: 80
 
     env:
       BRAINTRUST_API_KEY: ${{ secrets.BRAINTRUST_API_KEY }}
