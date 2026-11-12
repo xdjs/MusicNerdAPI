@@ -81,7 +81,11 @@ async function main() {
     sql`select name,instagram,x from artists where lower(name)='pete rango'`,
   );
   assert.equal(originals.length, 1, "Need unambiguous original public identity");
-  assert.ok(originals[0].instagram && originals[0].x, "Need existing public Instagram/X handles");
+  const instagram = originals[0].instagram || process.env.DISCOVERY1660_PUBLIC_INSTAGRAM;
+  assert.ok(
+    instagram && /^[A-Za-z0-9._]+$/.test(instagram) && originals[0].x,
+    "Need verified public Instagram/X handles",
+  );
   stage = "public-handle-validation";
   const artistId = randomUUID();
   const name = `Pete Rango — disposable #1660 acceptance ${artistId.slice(0, 8)}`;
@@ -99,8 +103,8 @@ async function main() {
   const profiles = [
     {
       siteName: "instagram",
-      value: originals[0].instagram,
-      profileUrl: `https://www.instagram.com/${originals[0].instagram}/`,
+      value: instagram,
+      profileUrl: `https://www.instagram.com/${instagram}/`,
     },
     { siteName: "x", value: originals[0].x, profileUrl: `https://x.com/${originals[0].x}` },
   ];
@@ -230,7 +234,8 @@ async function main() {
           events,
           actor: "existing authorized Pete Rango admin; ID not exported",
           checks,
-          source: "controlled replay using saved public handles, not live provider search",
+          source:
+            "controlled replay using saved X and public Music Nerd footer Instagram, not live provider search",
           sha: process.env.GITHUB_SHA,
         },
         null,
