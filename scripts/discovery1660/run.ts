@@ -109,6 +109,7 @@ async function main() {
       `${out}/intent.json`,
       JSON.stringify({ artistId, name, sha: process.env.GITHUB_SHA }),
     );
+    console.log(JSON.stringify({ fixtureIntent: { artistId, name, sha: process.env.GITHUB_SHA } }));
     attempted = true;
     await db.execute(sql`insert into artists(id,name) values(${artistId}::uuid,${name})`);
 
