@@ -49,6 +49,7 @@ const tables = [
   schema.artistMappingExclusions,
   schema.artistVaultSources,
   schema.artistResearchJobs,
+  schema.ugcresearch,
 ];
 const run = (automatic = true) =>
   withArtistOperation(artistId, { userId, expectedClaimId: claimId }, () =>

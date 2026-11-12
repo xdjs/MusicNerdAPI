@@ -55,6 +55,9 @@ vi.mock("@/lib/musicbrainz/fetchMusicBrainzLinks", () => ({
   fetchMusicBrainzLinks: m.musicBrainz,
 }));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink: m.setLink }));
+vi.mock("@/lib/artistLinkReview/setDiscoveredArtistLink", () => ({
+  setDiscoveredArtistLink: m.setLink,
+}));
 vi.mock("@/lib/spotify/getSpotifyHeaders", () => ({
   getSpotifyHeaders: async () => ({ headers: { Authorization: "t" } }),
 }));

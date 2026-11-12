@@ -1,3 +1,4 @@
+import { stripUrlQuery } from "@/lib/discovery/stripUrlQuery";
 import type { HandleProbe, ProbeHit, TierCandidate } from "@/lib/discovery/types";
 
 /**
@@ -23,5 +24,16 @@ export function probeCandidate(
     url: hit.url,
     reasoning: `Handle probe: ${hit.preview.title ? `og:title matched "${artistName}"` : "og:image resolved"} for @${probe.handle} (${note})`,
     preview: hit.preview,
+    ...(!probe.confirmed && hit.preview.title
+      ? {
+          discoveryEvidence: {
+            version: 1 as const,
+            method: "name_handle_probe" as const,
+            artistName,
+            sourceUrl: stripUrlQuery(hit.url),
+            observedTitle: hit.preview.title.slice(0, 2000),
+          },
+        }
+      : {}),
   };
 }

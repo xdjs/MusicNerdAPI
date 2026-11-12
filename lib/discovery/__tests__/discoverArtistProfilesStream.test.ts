@@ -236,7 +236,7 @@ describe("discoverArtistProfilesStream", () => {
     expect(m.fetchLinkPreview.mock.calls.some(c => String(c[0]).includes("x.com"))).toBe(true);
   });
 
-  it("tier 4 feeds a search-confirmed handle back into probing, without a second search", async () => {
+  it("tier 4 keeps name-match results provisional without cross-platform propagation", async () => {
     m.fetchLinkPreview.mockImplementation(async (url: string) => {
       if (url === "https://instagram.com/p3t3rango")
         return { imageUrl: "https://cdn/ig.jpg", title: null };
@@ -263,7 +263,8 @@ describe("discoverArtistProfilesStream", () => {
         : [],
     );
     const found = await profiles();
-    expect(found.map(r => r.siteName).sort()).toEqual(["instagram", "youtube"]);
+    expect(found.map(r => r.siteName).sort()).toEqual(["instagram"]);
+    expect(found[0].provisional).toBe(true);
     expect(
       m.webSearch.mock.calls.filter(c => c[1]?.includeDomains?.[0] === "youtube.com"),
     ).toHaveLength(1);

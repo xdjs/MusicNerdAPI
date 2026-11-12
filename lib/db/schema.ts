@@ -210,6 +210,7 @@ export const ugcresearch = pgTable(
     ugcUrl: text("ugc_url"),
     siteName: text("site_name"),
     siteUsername: text("site_username"),
+    discoveryEvidence: jsonb("discovery_evidence"),
     artistId: uuid("artist_id"),
     dateProcessed: timestamp("date_processed", { mode: "string" }),
     name: text("name"),

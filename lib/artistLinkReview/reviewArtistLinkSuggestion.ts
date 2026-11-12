@@ -1,3 +1,4 @@
+import { lockScopedArtistWrite } from "@/lib/ownership/lockScopedArtistWrite";
 import { sql } from "drizzle-orm";
 import { recordArtistActivity } from "@/lib/activity/recordArtistActivity";
 import { approveSourceBackedUgc } from "@/lib/artistLinkReview/approveSourceBackedUgc";
@@ -44,6 +45,7 @@ export async function reviewArtistLinkSuggestion(
           String(hint.site_username),
         );
     }
+    await lockScopedArtistWrite(tx, artistId);
     await lockLinkReview(tx, artistId, userId);
     const table = input.kind === "ugc" ? "ugcresearch" : "artist_vault_sources";
     const [row] = await tx.execute<Record<string, unknown>>(

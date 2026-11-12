@@ -65,6 +65,14 @@ export async function validateCandidate(
     colorHex: meta.colorHex,
     previewImage,
     reasoning: candidate.reasoning,
+    ...(candidate.discoveryEvidence
+      ? {
+          discoveryEvidence: {
+            ...candidate.discoveryEvidence,
+            sourceUrl: stripUrlQuery(profileUrl),
+          },
+        }
+      : {}),
     provisional: candidate.provisional ?? false,
   };
 }

@@ -1,3 +1,4 @@
+import { saveDiscoveredLinkSuggestion } from "@/lib/artistLinkReview/saveDiscoveredLinkSuggestion";
 import { discoverArtistProfilesStream } from "@/lib/discovery/discoverArtistProfilesStream";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import { applyProfileLinkDecisions } from "@/lib/onboarding/applyProfileLinkDecisions";
@@ -33,6 +34,10 @@ export async function* autoBuildProfiles(
   try {
     for await (const event of discoverArtistProfilesStream(artistId, { requireComplete: true })) {
       if (event.kind === "found") {
+        if (
+          !(await saveDiscoveredLinkSuggestion(artistId, event.profile, event.profile.provisional))
+        )
+          continue;
         discovered.push(event.profile);
         yield { kind: "candidate", profile: event.profile };
       }
@@ -42,15 +47,16 @@ export async function* autoBuildProfiles(
     failures.push(e);
   }
 
-  let provisionalSiteNames: string[] = [];
+  // Preserve the source-stage contract, but no provisional accounts are written.
+  const provisionalSiteNames: string[] = [];
   const discoveredBySiteName = new Map<string, DiscoveredProfile>();
-  if (discovered.length > 0) {
+  if (discovered.some(p => !p.provisional)) {
     const primaries: DiscoveredProfile[] = [];
     const byPlatform = new Map<string, DiscoveredProfile[]>();
     for (const p of discovered) {
-      // A failed stage cannot return the metadata that lets source search revisit
-      // guesses. Defer those writes until discovery can finish successfully.
-      if (failures.length > 0 && p.provisional) continue;
+      // A successful search is not ownership evidence. Keep name-only guesses
+      // visible as candidates, but never attach them without human confirmation.
+      if (p.provisional) continue;
       const group = byPlatform.get(p.siteName);
       if (group) group.push(p);
       else {
@@ -66,11 +72,6 @@ export async function* autoBuildProfiles(
     );
     // What was WRITTEN, not proposed: the guards refuse some.
     const wrote = new Set(outcome.written);
-    provisionalSiteNames = [
-      ...new Set(
-        primaries.filter(p => p.provisional && wrote.has(p.siteName)).map(p => p.siteName),
-      ),
-    ];
     for (const p of primaries) if (wrote.has(p.siteName)) discoveredBySiteName.set(p.siteName, p);
     yield { kind: "linked", profiles: [...discoveredBySiteName.values()] };
     // Only where the write landed: don't offer a choice we already declined to make.

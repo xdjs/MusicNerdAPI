@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import { getLinkSuggestionEvidence } from "@/lib/artistLinkReview/getLinkSuggestionEvidence";
+import { stripUrlQuery } from "@/lib/discovery/stripUrlQuery";
 import { lockLinkReview } from "@/lib/artistLinkReview/lockLinkReview";
 import type { LinkSuggestion } from "@/lib/artistLinkReview/types";
 import { db } from "@/lib/db/db";
@@ -29,11 +31,11 @@ export async function getArtistLinkSuggestions(artistId: string, userId: string,
     const rows = await tx.execute<Record<string, unknown>>(sql`with suggestions as (
       select g.id,'ugc' as kind,g.ugc_url as url,g.site_name as title,g.site_name as platform,
         case when g.accepted then 'approved' when g.date_processed is not null then 'rejected' else 'pending' end as status,
-        g.origin,g.created_at at time zone 'UTC' as submitted_at,g.user_id,null::text as type,g.date_processed at time zone 'UTC' as processed_at
+        g.origin,g.created_at at time zone 'UTC' as submitted_at,g.user_id,null::text as type,g.date_processed at time zone 'UTC' as processed_at,g.discovery_evidence
       from ugcresearch g where g.artist_id=${artistId}::uuid and g.site_name is distinct from 'ugc_discord_ping'
         and not (g.accepted is true and exists(select 1 from artist_vault_sources linked where linked.artist_id=g.artist_id and linked.url=g.ugc_url))
       union all
-      select s.id,'source',s.url,s.title,null,s.status::text,s.origin,s.created_at,e.actor_user_id,s.type,null::timestamptz
+      select s.id,'source',s.url,s.title,null,s.status::text,s.origin,s.created_at,e.actor_user_id,s.type,null::timestamptz,null::jsonb
       from artist_vault_sources s left join artist_activity_events e on e.id=s.activity_id
       where s.artist_id=${artistId}::uuid and s.file_path is null and s.podcast_episode_key is null
     ) select s.*,u.username,u.wallet,u.is_hidden,r.action as review_action,coalesce(r.created_at,s.processed_at) as reviewed_at,r.actor_user_id as reviewer_id,ru.is_hidden as reviewer_hidden,ru.username as reviewer_name,ru.wallet as reviewer_wallet
@@ -54,6 +56,10 @@ export async function getArtistLinkSuggestions(artistId: string, userId: string,
         continue;
       const suggester = row.user_id && !row.is_hidden;
       const reviewer = row.reviewer_id && !row.reviewer_hidden;
+      const evidence =
+        row.kind === "ugc" && row.origin === "research"
+          ? getLinkSuggestionEvidence(row.discovery_evidence)
+          : null;
       items.push({
         id: String(row.id),
         kind: row.kind as LinkSuggestion["kind"],
@@ -63,6 +69,7 @@ export async function getArtistLinkSuggestions(artistId: string, userId: string,
         hidden: row.review_action === "link_hidden",
         status: row.status as LinkSuggestion["status"],
         origin: String(row.origin),
+        evidence: evidence?.sourceUrl === stripUrlQuery(url) ? evidence : null,
         submittedAt: toIso(row.submitted_at),
         suggestedBy: {
           id: suggester ? String(row.user_id) : null,

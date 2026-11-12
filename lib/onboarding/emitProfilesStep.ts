@@ -1,3 +1,4 @@
+import { saveDiscoveredLinkSuggestion } from "@/lib/artistLinkReview/saveDiscoveredLinkSuggestion";
 import { discoverArtistProfilesStream } from "@/lib/discovery/discoverArtistProfilesStream";
 import type { DiscoveredProfile } from "@/lib/discovery/types";
 import { buildProfilesPayload } from "@/lib/onboarding/buildProfilesPayload";
@@ -41,6 +42,14 @@ export async function* emitProfilesStep(
             group: PROFILE_SEARCH_GROUP,
           };
         } else if (event.kind === "found") {
+          if (
+            !(await saveDiscoveredLinkSuggestion(
+              artistId,
+              event.profile,
+              event.profile.provisional,
+            ))
+          )
+            continue;
           candidates.push(event.profile);
           yield { kind: "candidate", profile: event.profile };
         } else if (event.kind === "unreachable") {

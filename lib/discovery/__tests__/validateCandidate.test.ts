@@ -140,3 +140,31 @@ describe("validateCandidate", () => {
     error.mockRestore();
   });
 });
+
+it("carries candidate observations using the validated identity URL, not the diagnostic reasoning", async () => {
+  extractArtistId.mockResolvedValue({ siteName: "x", id: "nova" });
+  const profile = await validateCandidate(
+    {
+      tier: 4,
+      platform: "x",
+      url: "https://www.x.com/nova?tracking=1",
+      reasoning: "unverified model prose",
+      provisional: true,
+      discoveryEvidence: {
+        version: 1,
+        method: "name_web_search",
+        artistName: "Nova",
+        sourceUrl: "https://www.x.com/nova",
+        observedTitle: null,
+      },
+    },
+    ctx(),
+  );
+  expect(profile?.discoveryEvidence).toEqual({
+    version: 1,
+    method: "name_web_search",
+    artistName: "Nova",
+    sourceUrl: profile?.profileUrl,
+    observedTitle: null,
+  });
+});

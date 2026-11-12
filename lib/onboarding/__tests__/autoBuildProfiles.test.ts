@@ -3,9 +3,13 @@ import { profile } from "@/lib/onboarding/__tests__/profile";
 
 const m = vi.hoisted(() => ({
   discover: vi.fn(),
+  suggest: vi.fn(),
   apply: vi.fn(),
   queue: vi.fn(),
   confirm: vi.fn(),
+}));
+vi.mock("@/lib/artistLinkReview/saveDiscoveredLinkSuggestion", () => ({
+  saveDiscoveredLinkSuggestion: m.suggest,
 }));
 vi.mock("@/lib/discovery/discoverArtistProfilesStream", () => ({
   discoverArtistProfilesStream: m.discover,
@@ -32,6 +36,7 @@ const ig2 = profile("instagram", "nova2");
 const x = profile("x", "novax");
 
 beforeEach(() => {
+  m.suggest.mockReset().mockResolvedValue(true);
   m.discover.mockReset().mockImplementation(async function* () {
     yield { kind: "found", profile: ig };
     yield { kind: "found", profile: ig2 };
@@ -48,7 +53,7 @@ describe("autoBuildProfiles", () => {
     const { events, result } = await run();
     expect(m.apply).toHaveBeenCalledWith(
       "a1",
-      [{ url: ig.profileUrl }, { url: x.profileUrl }],
+      [{ url: ig2.profileUrl }, { url: x.profileUrl }],
       [],
       { verifyIdentity: true },
     );
@@ -57,14 +62,13 @@ describe("autoBuildProfiles", () => {
       { kind: "candidate", profile: ig },
       { kind: "candidate", profile: ig2 },
       { kind: "candidate", profile: x },
-      { kind: "linked", profiles: [ig, x] },
-      { kind: "choices", platform: "instagram", chosen: "nova", options: [ig, ig2] },
+      { kind: "linked", profiles: [ig2, x] },
       { kind: "unreachable", platforms: ["TikTok"] },
       { kind: "progress", label: "Found 3 profiles", done: true, group: "platform-search" },
     ]);
     expect(m.queue).toHaveBeenCalledWith("a1", {});
     expect(m.confirm).toHaveBeenCalledWith("a1", "profiles");
-    expect(result.provisionalSiteNames).toEqual(["instagram"]);
+    expect(result.provisionalSiteNames).toEqual([]);
     expect([...result.discoveredBySiteName.keys()]).toEqual(["instagram", "x"]);
   });
 
@@ -107,6 +111,41 @@ it("retains partial profiles but rejects discovery failure without confirming", 
   expect(m.confirm).not.toHaveBeenCalled();
   expect(m.queue).not.toHaveBeenCalled();
   const { result } = await run();
-  expect(result.provisionalSiteNames).toEqual(["instagram"]);
+  expect(result.provisionalSiteNames).toEqual([]);
   expect(m.confirm).toHaveBeenCalledTimes(1);
+});
+
+it("does not automatically persist a name-only candidate even when discovery succeeds", async () => {
+  m.discover.mockImplementationOnce(async function* () {
+    yield { kind: "found", profile: ig };
+  });
+  m.apply.mockResolvedValue({ written: [] });
+  const { events, result } = await run();
+  expect(m.apply).not.toHaveBeenCalled();
+  expect(m.suggest).toHaveBeenCalledWith("a1", ig, true);
+  expect(events).toContainEqual({ kind: "candidate", profile: ig });
+  expect(result.provisionalSiteNames).toEqual([]);
+  expect(result.discoveredBySiteName.size).toBe(0);
+});
+
+it("does not re-offer a previously rejected candidate", async () => {
+  m.suggest.mockResolvedValue(false);
+  m.discover.mockImplementationOnce(async function* () {
+    yield { kind: "found", profile: ig };
+  });
+  const { events } = await run();
+  expect(events.some(e => e.kind === "candidate")).toBe(false);
+  expect(m.apply).not.toHaveBeenCalled();
+});
+
+it("does not attach a previously rejected identity after discovery upgrades its evidence", async () => {
+  m.suggest.mockResolvedValue(false);
+  const stronger = { ...ig, provisional: false };
+  m.discover.mockImplementationOnce(async function* () {
+    yield { kind: "found", profile: stronger };
+  });
+  const { events } = await run();
+  expect(m.suggest).toHaveBeenCalledWith("a1", stronger, false);
+  expect(events.some(e => e.kind === "candidate")).toBe(false);
+  expect(m.apply).not.toHaveBeenCalled();
 });
