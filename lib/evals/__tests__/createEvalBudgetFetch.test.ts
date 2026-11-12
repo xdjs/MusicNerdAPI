@@ -157,7 +157,11 @@ describe("createEvalBudgetFetch", () => {
                   type: "content",
                   value: [
                     { type: "text", text: "Original PDF follows." },
-                    { type: "file", mediaType: "application/pdf", data: bytes },
+                    {
+                      type: "file",
+                      mediaType: "application/pdf",
+                      data: { type: "data", data: bytes },
+                    },
                   ],
                 },
               },
@@ -173,6 +177,38 @@ describe("createEvalBudgetFetch", () => {
     await expect(
       guard.fetch(gateway, { ...request(), body: withPdf("A".repeat(6000001)) }),
     ).rejects.toThrow("PDF input outside priced envelope");
+    const plain = createEvalBudgetFetch(send);
+    await plain.fetch(gateway, {
+      ...request(),
+      body: JSON.stringify({
+        prompt: [
+          {
+            role: "user",
+            content: [{ type: "file-data", mediaType: "application/pdf", data: "A".repeat(1000) }],
+          },
+        ],
+      }),
+    });
+    expect(plain.snapshot().paidRequests).toBe(1);
+    await expect(
+      createEvalBudgetFetch(send).fetch(gateway, {
+        ...request(),
+        body: JSON.stringify({
+          prompt: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "file",
+                  mediaType: "application/pdf",
+                  data: { type: "url", url: "https://x" },
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    ).rejects.toThrow("unpriced");
   });
   it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
     const send = vi.fn().mockResolvedValue(new Response("%PDF"));
