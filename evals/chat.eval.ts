@@ -76,6 +76,16 @@ Eval(
       console.log(
         `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
       );
+      // A citation with no returned source is the one defect the log cannot otherwise show
+      // (answers are not printed: the repository is public). Numbers only.
+      const citations = scoreCitations(
+        turn.answer,
+        turn.sources.map(s => s.n),
+      );
+      if (citations.score < 1)
+        console.log(
+          `[chat] ${input.key} dangling citations: cited=${JSON.stringify(citations.metadata.cited)} sources=${JSON.stringify(turn.sources.map(s => s.n))}`,
+        );
       return turn;
     },
     scores: [

@@ -63,7 +63,27 @@ Before this change the suite recorded six scores per case and nothing could fail
 
 A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same. First text is not gated because the chat reads sources before it writes; the five-second target waits on a product change, a status line streamed while reading, tracked separately.
 
-The judge is `MODEL_JUDGE`, a different model family from the chat model, so an answer is never graded by its own author. Scores from the earlier Sonnet judge (the tables above) and from `MODEL_JUDGE` are not directly comparable; the experiment metadata records `judgeModel`.
+The judge is `MODEL_JUDGE` (`openai/gpt-5.4`), a different model family from the chat model, so an answer is never graded by its own author. Scores from the earlier Sonnet judge (the tables above) and from `MODEL_JUDGE` are not directly comparable; the experiment metadata records `judgeModel`.
+
+### Choosing the judge (2026-11-13)
+
+The `chat-pdf-text` suite asked the acceptance question ten times (hosted runs 43353848854 and 43354317150) and graded every answer with three candidates. Six answers named all four aliases; four omitted The Chill Factor, which the reference calls the main completeness gap.
+
+| Judge | Relevance, complete / incomplete answers | Groundedness range | Failed calls | Latency |
+| --- | --- | --- | --- | --- |
+| google/gemini-3.8-flash | 1.0 / 0.90–0.95 | always 1.0 | 0 of 10 | 6–9 s |
+| google/gemini-4-hydrogen | 0.90–1.0 / 0.85–0.90 | 0.85–1.0 | 2 of 10 | 9–14 s |
+| openai/gpt-5.4 | 0.93–0.95 / 0.87–0.90 | 0.79–0.96 | 0 of 10 | 3–5 s |
+
+GPT-5.4 separated complete from incomplete answers every time, was the only judge whose groundedness ever moved (its reasons name the specific claim), never failed a call, and was the fastest. Gemini 3.8 Flash never found a groundedness fault in ten answers. Gemini 4 Hydrogen failed two calls through the gateway. The spend guard prices all three (`createEvalBudgetFetch`), so the comparison can be rerun.
+
+### Text beside the bytes (2026-11-13, not kept)
+
+One paired experiment tested handing the model the PDF's extracted text with page markers beside the original bytes, five trials each. All four aliases appeared in 3 of 5 bytes-only answers and 2 of 5 text-alongside answers; every answer cited correctly and finished under 20 seconds. No evidence of improvement for about 40% more input per PDF read, so the variant was removed; the alias rate stays about one in two, measured by three trials in the chat suite.
+
+### First hosted gated run (2026-11-13, run 43353465167)
+
+Fourteen rows (twelve questions, the acceptance question three times), judged by Gemini 3.8 Flash before the judge choice above: means relevance 0.95, groundedness 1.0, citations 0.97, total time 1.0. One row failed the gates and so did the run: the `dutchyyy-aliases` answer cited a number that no returned source carried, which also left the judge without evidence for it. The other thirteen rows passed every gate. The suite now logs the cited and returned numbers when that happens.
 
 ## Staging allowance
 
@@ -71,7 +91,7 @@ Staging admits 30 chat questions per rolling hour per visitor key and 200 per da
 
 ## Running locally
 
-`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
+`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
 
 ## What the numbers do not show
 
