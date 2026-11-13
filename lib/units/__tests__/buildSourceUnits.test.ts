@@ -228,33 +228,47 @@ describe("buildSourceUnits", () => {
     expect(result).toMatchObject({ failed: "vision", aborted: true, ocrPages: 4 });
   });
 
-  test("slices every page that needs vision from one parse of the document", async () => {
+  test("parses the document once and cuts each slice only when a worker takes its page", async () => {
     vi.resetModules();
-    const slicePdfPages = vi
+    const doc = { parsed: true };
+    const loadPdfDocument = vi.fn().mockResolvedValue(doc);
+    const sliceLoadedPdfPage = vi
       .fn()
-      .mockImplementation(async (_b: Uint8Array, indexes: number[]) =>
-        indexes.map(i => new Uint8Array([i])),
-      );
-    vi.doMock("@/lib/units/slicePdfPages", () => ({ slicePdfPages }));
+      .mockImplementation(async (_d: unknown, i: number) => new Uint8Array([i]));
+    vi.doMock("@/lib/units/loadPdfDocument", () => ({ loadPdfDocument }));
+    vi.doMock("@/lib/units/sliceLoadedPdfPage", () => ({ sliceLoadedPdfPage }));
     const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
-    const bytes = await twoPagePdf([PAGE_ONE, "", ""]);
-    const readPage = vi.fn(async (page: Uint8Array) => `Read page index ${page[0]}`);
-    const result = await build(input({ kind: "pdf", bytes }), { readPage });
-    expect(slicePdfPages).toHaveBeenCalledOnce();
-    expect(slicePdfPages).toHaveBeenCalledWith(bytes, [1, 2]);
-    expect(result.units.map(u => u.text)).toEqual([
-      expect.stringContaining("Alpha one"),
-      "Read page index 1",
-      "Read page index 2",
-    ]);
-    vi.doUnmock("@/lib/units/slicePdfPages");
+    const bytes = await twoPagePdf([PAGE_ONE, ...Array.from({ length: 9 }, () => "")]);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const readPage = vi.fn(async (page: Uint8Array) => {
+      await gate;
+      return `Read page index ${page[0]}`;
+    });
+    const signal = new AbortController().signal;
+    const built = build(input({ kind: "pdf", bytes }), { readPage, signal });
+    await vi.waitFor(() => expect(readPage).toHaveBeenCalledTimes(4));
+    // Four reads in flight: only their four slices exist yet.
+    expect(sliceLoadedPdfPage).toHaveBeenCalledTimes(4);
+    release();
+    const result = await built;
+    expect(loadPdfDocument).toHaveBeenCalledOnce();
+    expect(loadPdfDocument).toHaveBeenCalledWith(bytes, signal);
+    expect(sliceLoadedPdfPage.mock.calls.map(c => [c[0], c[1]])).toEqual(
+      Array.from({ length: 9 }, (_, i) => [doc, i + 1]),
+    );
+    expect(result.units.map(u => u.text).slice(1)).toEqual(
+      Array.from({ length: 9 }, (_, i) => `Read page index ${i + 1}`),
+    );
+    vi.doUnmock("@/lib/units/loadPdfDocument");
+    vi.doUnmock("@/lib/units/sliceLoadedPdfPage");
     vi.resetModules();
   });
 
-  test("a document the slicer cannot parse fails its vision pages and keeps its text pages", async () => {
+  test("a document pdf-lib cannot parse fails its vision pages and keeps its text pages", async () => {
     vi.resetModules();
-    const slicePdfPages = vi.fn().mockRejectedValue(new Error("unparseable"));
-    vi.doMock("@/lib/units/slicePdfPages", () => ({ slicePdfPages }));
+    const loadPdfDocument = vi.fn().mockRejectedValue(new Error("unparseable"));
+    vi.doMock("@/lib/units/loadPdfDocument", () => ({ loadPdfDocument }));
     const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
     const readPage = vi.fn();
     const result = await build(input({ kind: "pdf", bytes: await twoPagePdf([PAGE_ONE, ""]) }), {
@@ -263,7 +277,7 @@ describe("buildSourceUnits", () => {
     expect(readPage).not.toHaveBeenCalled();
     expect(result.units.map(u => u.locator)).toEqual(["p.1"]);
     expect(result).toMatchObject({ failed: "vision", aborted: false });
-    vi.doUnmock("@/lib/units/slicePdfPages");
+    vi.doUnmock("@/lib/units/loadPdfDocument");
     vi.resetModules();
   });
 

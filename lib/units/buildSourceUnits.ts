@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { extractPdfPages } from "@/lib/units/extractPdfPages";
 import { isBrokenExtraction } from "@/lib/units/isBrokenExtraction";
 import { readPageWithVision } from "@/lib/units/readPageWithVision";
-import { slicePdfPages } from "@/lib/units/slicePdfPages";
+import { loadPdfDocument } from "@/lib/units/loadPdfDocument";
+import { sliceLoadedPdfPage } from "@/lib/units/sliceLoadedPdfPage";
 import { splitTextUnits } from "@/lib/units/splitTextUnits";
 import {
   MAX_INGEST_PAGES,
@@ -27,8 +28,8 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  * Turn one source's body into unit drafts for the page-level text index.
  *
  * PDFs yield one unit per physical page (locator `p.N`); a page whose extracted text
- * is broken or empty is read with vision and marked `ocr`. The pages for vision are cut from one
- * parse of the document and read `OCR_CONCURRENCY` at a time; drafts keep page order. A page that
+ * is broken or empty is read with vision and marked `ocr`. The document is parsed once; each page
+ * for vision is cut from it when a worker takes it, `OCR_CONCURRENCY` at a time; drafts keep page order. A page that
  * cannot be read (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
  * An empty vision read is a blank page: no draft, no failure, and not counted in `ocrPages`.
  *
@@ -102,32 +103,43 @@ export async function buildSourceUnits(
   const read = new Map<number, string>();
   let aborted = false;
   if (visionPages.length > 0) {
-    let slices: Uint8Array[] = [];
+    // One parse for the whole document; each slice is cut only when a worker takes its page and
+    // dropped after its read, so at most `OCR_CONCURRENCY` slices exist at once.
+    let doc: Awaited<ReturnType<typeof loadPdfDocument>> | null = null;
     try {
-      slices = await slicePdfPages(body.bytes, visionPages);
+      doc = await loadPdfDocument(body.bytes, deps.signal);
     } catch {
       failed = "vision";
+      if (deps.signal?.aborted) aborted = true;
     }
     // A small pool: each worker takes the next page until none is left or the signal aborts.
     let next = 0;
-    const worker = async () => {
-      while (next < slices.length) {
+    const worker = async (source: NonNullable<typeof doc>) => {
+      while (next < visionPages.length) {
         if (deps.signal?.aborted) {
           aborted = true;
           return;
         }
-        const k = next++;
+        const pageIndex = visionPages[next++];
         try {
-          read.set(visionPages[k], (await readPage(slices[k])).trim());
+          const slice = await sliceLoadedPdfPage(source, pageIndex);
+          // Cutting the slice yields: check again so no paid read starts after an abort.
+          if (deps.signal?.aborted) {
+            aborted = true;
+            return;
+          }
+          read.set(pageIndex, (await readPage(slice)).trim());
         } catch {
           failed = "vision";
           if (deps.signal?.aborted) aborted = true;
         }
       }
     };
-    await Promise.all(
-      Array.from({ length: Math.min(OCR_CONCURRENCY, slices.length) }, () => worker()),
-    );
+    const loaded = doc;
+    if (loaded)
+      await Promise.all(
+        Array.from({ length: Math.min(OCR_CONCURRENCY, visionPages.length) }, () => worker(loaded)),
+      );
     if (aborted) failed = "vision";
   }
 
