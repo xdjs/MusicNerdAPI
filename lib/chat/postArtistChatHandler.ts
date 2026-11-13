@@ -98,6 +98,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               searchPassages: createSearchPassagesTool(artistId, documents, {
                 names: [name],
                 signal: request.signal,
+                budget,
               }),
               readUnits: createReadUnitsTool(artistId, documents, budget),
               listDocuments: createListDocumentsTool(artistId, documents),
