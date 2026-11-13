@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { MAX_CHAT_PDF_READS } from "@/lib/chatPdf/types";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 const MAX_MESSAGES = 12;
 /** Parts per message: an answer is a few tool steps, their sources and text; this bounds the work on a hostile body. */
 const MAX_PARTS = 64;
-/** PDF reads an answer can depend on: the read tool allows at most two per turn (createChatPdfTools). */
-const MAX_PDF_READS = 2;
 const question = z.string().trim().min(1).max(500);
 
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
@@ -32,7 +31,7 @@ const message = z
     // against the document's current publication (keepCurrentPdfTurns); one that cannot be
     // identified, or claims more reads than the tool allows, is not replayed at all, since
     // access can have changed since. The cap also bounds the lookups a hostile body can cause.
-    if (reads.length > MAX_PDF_READS || reads.some(read => !read.success))
+    if (reads.length > MAX_CHAT_PDF_READS || reads.some(read => !read.success))
       return { id, role, parts: [] };
     const text = parts.flatMap(part => {
       const parsed = textPart.safeParse(part);
