@@ -27,6 +27,8 @@ vi.mock("@/lib/storage/removeObjects", () => ({ removeObjects: mock.remove }));
 vi.mock("@/lib/vaultUpload/isTrustedLoreContributor", () => ({
   isTrustedLoreContributor: mock.trusted,
 }));
+const ingest = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/units/ingestUploadInline", () => ({ ingestUploadInline: ingest }));
 const { postUploadHandler } = await import("@/lib/vaultUpload/postUploadHandler");
 const { OwnershipChangedError } = await import("@/lib/research/OwnershipChangedError");
 
@@ -50,6 +52,7 @@ beforeEach(() => {
   mock.configured.mockReset().mockReturnValue(true);
   mock.upload.mockReset().mockResolvedValue(undefined);
   mock.remove.mockReset().mockResolvedValue(undefined);
+  ingest.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -246,4 +249,33 @@ it("requires stable sign/complete identity for independent contributions, withou
   ).toBe(409);
   expect(mock.upload).not.toHaveBeenCalled();
   expect(mock.insert).not.toHaveBeenCalled();
+});
+
+describe("postUploadHandler ingest at upload", () => {
+  it("indexes the saved row after it is written, with its id, artist, bytes and type", async () => {
+    const order: string[] = [];
+    mock.insert.mockImplementation(async () => (order.push("insert"), { id: "src-1" }));
+    ingest.mockImplementation(async () => void order.push("ingest"));
+    mock.queue.mockImplementation(async () => (order.push("queue"), true));
+    const res = await postUploadHandler(
+      req(new File([png], "press-photo.png", { type: "image/png" })),
+    );
+    expect(res.status).toBe(200);
+    expect(order).toEqual(["insert", "ingest", "queue"]);
+    expect(ingest).toHaveBeenCalledWith({
+      sourceId: "src-1",
+      artistId: "artist-x",
+      bytes: Buffer.from(png),
+      contentType: "image/png",
+    });
+  });
+
+  it("returns the same success response when ingestion finishes late", async () => {
+    ingest.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
+    const res = await postUploadHandler(
+      req(new File([png], "press-photo.png", { type: "image/png" })),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "ok", success: true, source: { id: "src-1" } });
+  });
 });

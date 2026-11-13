@@ -39,5 +39,8 @@ export async function runResearchJob(job: ResearchJob, deadline: number): Promis
       return runSourceSearchJob(job, deadline);
     case "latest_refresh":
       return runLatestRefresh(job, deadline);
+    case "unit_sync":
+      // Task 12 registers the runner and claims the kind; until then no worker claims it.
+      throw new Error("unit_sync has no runner yet");
   }
 }

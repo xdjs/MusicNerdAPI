@@ -9,6 +9,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { LORE_UPLOAD_BUCKET, VAULT_BUCKET } from "@/lib/storage/const";
 import { downloadObject } from "@/lib/storage/downloadObject";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
+import { ingestUploadInline } from "@/lib/units/ingestUploadInline";
 import { publishImmutableUpload } from "@/lib/vaultUpload/publishImmutableUpload";
 import { getAuthorizedVaultUpload } from "@/lib/vaultUpload/getAuthorizedVaultUpload";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -129,6 +130,13 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       (await getAuthorizedVaultUpload(ticket.artistId, ticket.path, userId, expectedClaimId));
     if (!source) throw new Error("Upload source was not saved");
     unpublishedPath = undefined;
+    // After the row is committed; never rejects.
+    await ingestUploadInline({
+      sourceId: source.id,
+      artistId: ticket.artistId,
+      bytes: buffer,
+      contentType: ticket.type,
+    });
     const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
     await cleanupSavedUpload(ticket.path);
     const warning =

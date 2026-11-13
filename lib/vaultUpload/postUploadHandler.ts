@@ -8,6 +8,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { queueLoreRefresh } from "@/lib/research/queueLoreRefresh";
 import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
+import { ingestUploadInline } from "@/lib/units/ingestUploadInline";
 import { isSupabaseStorageConfigured } from "@/lib/storage/isSupabaseStorageConfigured";
 import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -172,6 +173,15 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
       { userId, trigger: "upload", recordSubmissionTrust: true },
       { userId, expectedClaimId },
     );
+
+    // After the row is committed; never rejects.
+    if (source)
+      await ingestUploadInline({
+        sourceId: source.id,
+        artistId,
+        bytes: buffer,
+        contentType: resolvedType,
+      });
 
     let refreshWarning: string | undefined;
     try {

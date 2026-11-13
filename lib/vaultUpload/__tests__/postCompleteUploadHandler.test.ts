@@ -29,6 +29,8 @@ vi.mock("@/lib/ownership/withArtistUploadWrite", () => ({ withArtistUploadWrite:
 vi.mock("@/lib/vaultUpload/completeIndependentLoreUpload", () => ({
   completeIndependentLoreUpload: mock.independent,
 }));
+const ingest = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/units/ingestUploadInline", () => ({ ingestUploadInline: ingest }));
 const { postCompleteUploadHandler: complete } =
   await import("@/lib/vaultUpload/postCompleteUploadHandler");
 const { signUploadTicket } = await import("@/lib/vaultUpload/signUploadTicket");
@@ -63,6 +65,7 @@ beforeEach(() => {
   mock.download.mockReset().mockResolvedValue(bytes);
   mock.upload.mockReset().mockResolvedValue(undefined);
   mock.remove.mockReset().mockResolvedValue(undefined);
+  ingest.mockReset().mockResolvedValue(undefined);
   vi.spyOn(console, "error").mockImplementation(() => {});
   ticket = signUploadTicket({
     expectedClaimId: "claim-1",
@@ -434,4 +437,28 @@ it("dispatches signed independent tickets without granting claimant operations",
   expect(mock.claim).not.toHaveBeenCalled();
   expect(mock.canEdit).not.toHaveBeenCalled();
   expect(mock.queue).not.toHaveBeenCalled();
+});
+
+describe("postCompleteUploadHandler ingest at upload", () => {
+  it("indexes the saved row after it is written, before the Lore refresh", async () => {
+    const order: string[] = [];
+    mock.insert.mockImplementation(async () => (order.push("insert"), { id: "source" }));
+    ingest.mockImplementation(async () => void order.push("ingest"));
+    mock.queue.mockImplementation(async () => (order.push("queue"), true));
+    expect((await complete(req({ ticket }))).status).toBe(200);
+    expect(order).toEqual(["insert", "ingest", "queue"]);
+    expect(ingest).toHaveBeenCalledWith({
+      sourceId: "source",
+      artistId,
+      bytes,
+      contentType: "application/pdf",
+    });
+  });
+
+  it("returns the same success response when ingestion finishes late", async () => {
+    ingest.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
+    const response = await complete(req({ ticket }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "ok", source: { id: "source" } });
+  });
 });
