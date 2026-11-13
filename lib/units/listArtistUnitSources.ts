@@ -8,7 +8,7 @@ import type { UnitSourceKind, UnitSyncEntry } from "@/lib/units/types";
 /**
  * Every source of one artist the text index should hold, next to what the index holds for it.
  *
- * Sources: vault rows with extracted text or a PDF, the artist's own posts that are not reposts or
+ * Sources: vault rows with extracted text or a PDF that are not rejected (never public, so never worth paid OCR or embeddings), the artist's own posts that are not reposts or
  * retweets, and evidence at its candidate's current revision for a confirmed candidate still pending
  * or approved (the public corpus's scope, `loadPublicResearchOriginals`). Units whose row no longer
  * exists in its table come back as orphans with a null `sourceRevision`. Units of a row that exists
@@ -31,6 +31,7 @@ export async function listArtistUnitSources(artistId: string): Promise<UnitSyncE
       select 'vault'::text as source_kind, v.id as source_id, ${vaultSourceRevisionSql()} as source_revision
         from artist_vault_sources v
        where v.artist_id = ${artistId}::uuid
+         and v.status is distinct from 'rejected'
          and (v.extracted_text is not null or v.content_type = 'application/pdf')
       union all
       select 'social', s.id, ${socialPostRevisionSql()}

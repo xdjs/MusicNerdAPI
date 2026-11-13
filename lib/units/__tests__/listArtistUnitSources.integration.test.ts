@@ -44,7 +44,7 @@ const unit = (
 
 beforeAll(async () => {
   await client.exec(`
-    create table artist_vault_sources(id uuid,artist_id uuid,content_type text,extracted_text text,publication text not null default 'inherit',updated_at timestamptz,created_at timestamptz default '2026-01-02T00:00:00Z');
+    create table artist_vault_sources(id uuid,artist_id uuid,content_type text,extracted_text text,status text not null default 'approved',publication text not null default 'inherit',updated_at timestamptz,created_at timestamptz default '2026-01-02T00:00:00Z');
     create table artist_social_posts(id uuid,artist_id uuid,caption text,is_own_post boolean,raw jsonb);
     create table artist_research_candidates(id uuid,artist_id uuid,identity text,curation text,current_revision text);
     create table artist_research_evidence(id uuid,candidate_id uuid,artist_id uuid,revision text);
@@ -64,6 +64,10 @@ beforeAll(async () => {
   await vault(5, artist, null, "two revisions");
   await vault(6, other, null, "another artist");
   await vault(7, artist, null, "indexed by an older ingest");
+  await vault(8, artist, "application/pdf", "rejected by the artist");
+  await client.query("update artist_vault_sources set status = 'rejected' where id = $1", [id(8)]);
+  await vault(9, artist, null, "pending review");
+  await client.query("update artist_vault_sources set status = 'pending' where id = $1", [id(9)]);
   const post = (n: number, own: boolean, raw: string) =>
     client.query(
       "insert into artist_social_posts(id,artist_id,caption,is_own_post,raw) values($1,$2,$3,$4,$5)",
@@ -129,6 +133,7 @@ describe("listArtistUnitSources", () => {
       ["vault", id(4)],
       ["vault", id(5)],
       ["vault", id(7)],
+      ["vault", id(9)],
       ["vault", id(99)],
     ]);
   });
@@ -199,7 +204,8 @@ describe("listArtistUnitSources", () => {
 
   it("leaves out sources with nothing to index, other people's posts, and other artists", async () => {
     const ids = (await listArtistUnitSources(artist)).map(e => e.sourceId);
-    for (const n of [3, 6, 11, 12, 13, 21, 23]) expect(ids).not.toContain(id(n));
+    // A rejected upload is never public: no paid OCR or embeddings for it.
+    for (const n of [3, 6, 8, 11, 12, 13, 21, 23]) expect(ids).not.toContain(id(n));
     expect(await listArtistUnitSources(other)).toEqual([
       expect.objectContaining({ sourceKind: "vault", sourceId: id(6), indexedRevision: null }),
     ]);
