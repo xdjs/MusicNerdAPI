@@ -1,5 +1,19 @@
 /** Reservation ceiling in micro-dollars: the 12-case suite at its conservative rates fits under ten dollars; actual spend is about a dollar. */
 const CEILING_MICROS = 10000000;
+
+/**
+ * Micro-dollars reserved per input byte, per output token and per base64 PDF character, by
+ * gateway model id. Deliberately above the gateway's list prices (2026-11-12: Sonnet 5.5
+ * $3/$15 per million tokens, Gemini 2.5 Flash $0.30/$2.50, Gemini 3.8 Flash $0.75/$3.75,
+ * Gemini 4 Hydrogen $1.50/$7.50, GPT-5.4 $2.50/$15). A model not listed here is refused.
+ */
+const PRICED_MODELS: Record<string, { input: number; output: number; file: number }> = {
+  "anthropic/claude-sonnet-5.5": { input: 4, output: 20, file: 0.5 },
+  "google/gemini-2.5-flash": { input: 1, output: 6, file: 0.125 },
+  "google/gemini-3.8-flash": { input: 1, output: 6, file: 0.125 },
+  "google/gemini-4-hydrogen": { input: 2, output: 10, file: 0.25 },
+  "openai/gpt-5.4": { input: 4, output: 20, file: 0.5 },
+};
 const MAX_PAID_REQUESTS = 150;
 
 /** Collect native file parts anywhere in the body; only PDFs are priced, anything else is refused. */
@@ -84,8 +98,8 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
     let reservation: number;
     if (url.hostname === "ai-gateway.vercel.sh" && url.pathname.endsWith("/language-model")) {
       const model = new Headers(init.headers).get("ai-language-model-id");
-      if (model !== "anthropic/claude-sonnet-5.5" && model !== "google/gemini-2.5-flash")
-        return fail("unpriced model");
+      const price = model ? PRICED_MODELS[model] : undefined;
+      if (!price) return fail("unpriced model");
       if (!Array.isArray(body.prompt)) return fail("missing prompt");
       for (const message of body.prompt) {
         if (!message || typeof message !== "object") return fail("invalid message");
@@ -128,11 +142,9 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       // higher than ordinary text tokenization. Reserve cache-write/regional headroom.
       const bytes = Buffer.byteLength(JSON.stringify(body), "utf8") - fileCharacters;
       if (bytes > 200000) return fail("input outside priced text envelope");
-      const inputMicros = model.startsWith("anthropic/") ? 4 : 1;
-      const outputMicros = model.startsWith("anthropic/") ? 20 : 6;
-      const fileMicros = Math.ceil(fileCharacters * (model.startsWith("anthropic/") ? 0.5 : 0.125));
+      const fileMicros = Math.ceil(fileCharacters * price.file);
       reservation =
-        (bytes + 8192) * inputMicros + Number(body.maxOutputTokens) * outputMicros + fileMicros;
+        (bytes + 8192) * price.input + Number(body.maxOutputTokens) * price.output + fileMicros;
     } else if (url.hostname === "api.tavily.com" && url.pathname === "/search") {
       if (Object.keys(body).some(key => !["query", "include_domains", "max_results"].includes(key)))
         return fail("unpriced search options");

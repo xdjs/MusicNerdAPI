@@ -127,6 +127,22 @@ describe("createEvalBudgetFetch", () => {
     }
     expect(send).not.toHaveBeenCalled();
   });
+  it("prices the judge candidate models at their own rates and still refuses others", async () => {
+    const reservedFor = async (model: string) => {
+      const guard = createEvalBudgetFetch(vi.fn().mockResolvedValue(new Response("{}")));
+      await guard.fetch(gateway, request(model));
+      return guard.snapshot().reservedUsd;
+    };
+    const sonnet = await reservedFor("anthropic/claude-sonnet-5.5");
+    const flash = await reservedFor("google/gemini-2.5-flash");
+    expect(await reservedFor("google/gemini-3.8-flash")).toBe(flash);
+    expect(await reservedFor("openai/gpt-5.4")).toBe(sonnet);
+    const hydrogen = await reservedFor("google/gemini-4-hydrogen");
+    expect(hydrogen).toBeGreaterThan(flash);
+    expect(hydrogen).toBeLessThan(sonnet);
+    await expect(reservedFor("openai/gpt-5.5")).rejects.toThrow("unpriced model");
+    await expect(reservedFor("google/gemini-3.1-pro-preview")).rejects.toThrow("unpriced model");
+  });
   it("reserves search credits and passes through Braintrust logging", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);

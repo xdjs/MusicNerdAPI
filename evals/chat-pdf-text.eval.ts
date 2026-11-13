@@ -33,15 +33,13 @@ const JUDGES = (
   .split(",")
   .map(s => s.trim())
   .filter(Boolean);
-/** The aliases on the timeline's pages; "Chill Factor" is the one-off credit on page 2. */
-const ALIASES = [
-  "Chill Factor",
-  "Blue Screen",
-  "Astral Basement",
-  "Reluctant Clap",
-  "RawSauce",
-  "Hobbyshop",
-];
+/** The aliases the reference requires; "Chill Factor" is the one-off 2001 credit on page 2. */
+const ALIASES = ["Dutchmassive", "Dutchy", "Dutchyyy", "Chill Factor"];
+/** Whole-word, case-insensitive: "Dutchy" must not match inside "Dutchyyy". */
+const mentions = (answer: string, alias: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${alias.replace(/ /g, "\\s+")}(?![\\p{L}\\p{N}])`, "iu").test(
+    answer,
+  );
 
 Eval("music-nerd", {
   experimentName: experimentName(`chat-pdf-text ${VARIANT}`, MODEL_CHAT, SHA),
@@ -74,8 +72,7 @@ Eval("music-nerd", {
         missing: ALIASES,
       };
     const turn = await withAllowanceWait(() => chatStreamTurn(input));
-    const lower = turn.answer.toLowerCase();
-    const present = ALIASES.filter(a => lower.includes(a.toLowerCase()));
+    const present = ALIASES.filter(a => mentions(turn.answer, a));
     const missing = ALIASES.filter(a => !present.includes(a));
     console.log(
       `\n[${VARIANT}] first=${turn.firstTextMs}ms total=${turn.totalMs}ms tools=${(turn.tools ?? []).map(t => t.name).join(">")} missing=${JSON.stringify(missing)}${turn.error ? ` error=${turn.error}` : ""}\n${turn.answer}\n`,
