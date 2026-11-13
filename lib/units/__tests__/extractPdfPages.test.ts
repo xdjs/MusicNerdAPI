@@ -1,6 +1,17 @@
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { extractPdfPages } from "@/lib/units/extractPdfPages";
+
+const failingPage = vi.hoisted(() => ({ number: 0 }));
+vi.mock("@/lib/units/renderPdfPageText", async importActual => {
+  const actual = await importActual<typeof import("@/lib/units/renderPdfPageText")>();
+  return {
+    renderPdfPageText: async (pageData: Parameters<typeof actual.renderPdfPageText>[0]) => {
+      if (pageData.pageNumber === failingPage.number) throw new Error("unreadable page");
+      return actual.renderPdfPageText(pageData);
+    },
+  };
+});
 
 async function twoPagePdf(texts: string[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -34,5 +45,19 @@ describe("extractPdfPages", () => {
     await expect(extractPdfPages(await twoPagePdf(["A"]), { timeoutMs: 0 })).rejects.toThrow(
       /timed out/i,
     );
+  });
+
+  test("keeps later pages at their physical index when one page fails to render", async () => {
+    failingPage.number = 2;
+    try {
+      const bytes = await twoPagePdf(["Alpha", "Beta", "Gamma"]);
+      const result = await extractPdfPages(bytes);
+      expect(result.pages).toHaveLength(3);
+      expect(result.pages[0]).toContain("Alpha");
+      expect(result.pages[1]).toBe("");
+      expect(result.pages[2]).toContain("Gamma");
+    } finally {
+      failingPage.number = 0;
+    }
   });
 });

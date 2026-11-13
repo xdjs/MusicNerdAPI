@@ -28,7 +28,9 @@ export async function extractPdfPages(
         max: maxPages,
         pagerender: async (pageData: Parameters<typeof renderPdfPageText>[0]) => {
           const text = (await renderPdfPageText(pageData)).trim();
-          pages.push(text);
+          // By physical page number: pdf-parse swallows a page's render error, so
+          // pushing would shift every later page onto the wrong index.
+          pages[(pageData.pageNumber ?? pages.length + 1) - 1] = text;
           return text;
         },
       }),
@@ -38,7 +40,10 @@ export async function extractPdfPages(
     ]);
     // A small document can finish before the timer's macrotask runs; the budget still applies.
     if (Date.now() - startedAt >= timeoutMs) throw timedOut();
-    return { pages, truncated: result.numpages > maxPages };
+    const rendered = Math.min(result.numpages, maxPages);
+    // Holes (pages that failed to render) become empty strings, keeping pages[i] = page i + 1.
+    const filled = Array.from({ length: rendered }, (_, i) => pages[i] ?? "");
+    return { pages: filled, truncated: result.numpages > maxPages };
   } finally {
     clearTimeout(timer);
   }
