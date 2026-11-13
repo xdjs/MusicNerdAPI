@@ -157,6 +157,40 @@ it("keeps an earlier PDF answer with the reads it depends on, when every read is
   });
 });
 
+it("does not replay a PDF answer that claims more reads than the tool allows, and bounds parts per message", async () => {
+  const read = (n: number) => ({
+    type: "tool-readPdfSource",
+    state: "output-available",
+    output: { sourceId: `33333333-3333-4333-8333-33333333333${n}`, revision: `r${n}` },
+  });
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "pdf",
+          role: "assistant",
+          parts: [read(1), read(2), read(3), { type: "text", text: "Three documents [1][2][3]." }],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(result)).not.toContain("Three documents");
+  const tooMany = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: Array.from({ length: 65 }, () => ({ type: "text", text: "x" })),
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(tooMany).toBeInstanceOf(NextResponse);
+});
+
 it("does not replay a PDF answer whose read ended in an error or lacks a revision", async () => {
   for (const output of [
     { error: "PDF unavailable" },
