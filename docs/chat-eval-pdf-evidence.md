@@ -48,6 +48,31 @@ Cost: one 12-case run is about $0.60 at Sonnet 5.5 rates for chat plus judge; th
 
 The Evals workflow (`suite=chat`) on this branch records the same suite through the Vercel AI Gateway to Braintrust. Three attempts on 2026-11-12 each exposed a harness defect that this branch fixes (missing storage origin, PDF parts refused by the spend guard, the guard's five-dollar ledger exhausted at 39 requests); the fourth hit the evals' own staging allowance. The run after the allowance reopened, [Actions run 43302586217](https://github.com/xdjs/MusicNerdAPI/actions/runs/43302586217) on `7847392`, answered 11 of 12 cases (the twelfth, the unanswerable control, hit the allowance by one slot): answer relevance 89.6%, source groundedness 87.5%, citations 100%, evidence scorable 91.7%, total time 100%, first text 0%; 44 paid requests, $6.88 reserved of the $10 ceiling, actual spend about a dollar. Per-case answers, captured evidence and judge reasons are in the private Braintrust experiment `chat · anthropic/claude-sonnet-5.5 · 7847392`.
 
+## Pass and fail (added 2026-11-12, decided with Pete)
+
+Before this change the suite recorded six scores per case and nothing could fail a run. `lib/evals/chatGates.ts` now defines the gates and `lib/evals/chatReporter.ts` applies them, printing every row and making `braintrust eval` exit non-zero when a gate is missed:
+
+| Gate                         | Threshold                                                 |
+| ---------------------------- | --------------------------------------------------------- |
+| answer_relevance             | mean over questions at least 0.80; no question below 0.60 |
+| source_groundedness          | mean over questions at least 0.80; no question below 0.60 |
+| citations, evidence_scorable | 1 on every answerable row                                 |
+| total_time                   | 1 on every row                                            |
+| errors                       | no row may end in an error                                |
+| first_text                   | reported, not gated                                       |
+
+A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same. First text is not gated because the chat reads sources before it writes; the five-second target waits on a product change, a status line streamed while reading, tracked separately.
+
+The judge is `MODEL_JUDGE`, a different model family from the chat model, so an answer is never graded by its own author. Scores from the earlier Sonnet judge (the tables above) and from `MODEL_JUDGE` are not directly comparable; the experiment metadata records `judgeModel`.
+
+## Staging allowance
+
+Staging admits 30 chat questions per rolling hour per visitor key and 200 per day. The suite does not bypass this. When a question is refused, `withAllowanceWait` sleeps until the reset the response reports (plus two seconds) and asks once more; a refusal that is further away than an hour, the daily allowance, is returned as the error it is and fails the run. The hosted job's timeout is 80 minutes to allow one such wait. Two hosted runs in the same hour therefore take longer, not fewer answers.
+
+## Running locally
+
+`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
+
 ## What the numbers do not show
 
 - First text within five seconds is not met. Answers start at 6 to 12 seconds because the model reads sources before writing; the PDF-backed answer varies from 10 to 31 seconds with provider latency. Completion within 20 seconds is met on all but the slowest PDF sample.
