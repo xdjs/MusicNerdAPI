@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { CiteSource } from "@/lib/chat/createChatCitations";
 import { loadChatPdfs } from "@/lib/chatPdf/loadChatPdfs";
 import { readChatPdf } from "@/lib/chatPdf/readChatPdf";
-import type { ChatPdf } from "@/lib/chatPdf/types";
+import { MAX_CHAT_PDF_READS, type ChatPdf } from "@/lib/chatPdf/types";
 
 type PdfOutput = {
   sourceId?: string;
@@ -28,7 +28,7 @@ export function createChatPdfTools(
   const reads = new Map<string, { source: ChatPdf; bytes: Buffer }>();
   let attempts = 0;
   const read = async (sourceId: string, expected?: ChatPdf): Promise<PdfOutput> => {
-    if (!discovered.has(sourceId) || attempted.has(sourceId) || attempts++ >= 2)
+    if (!discovered.has(sourceId) || attempted.has(sourceId) || attempts++ >= MAX_CHAT_PDF_READS)
       return { error: "PDF unavailable or read limit reached" };
     attempted.add(sourceId);
     try {
