@@ -33,3 +33,24 @@ it("returns no results when the search finds nothing", async () => {
     results: [],
   });
 });
+
+it("webSearch refuses a third call", async () => {
+  webSearch.mockResolvedValue([]);
+  const search = createWebSearchTool(vi.fn());
+  await search.execute!({ query: "one" }, call);
+  await search.execute!({ query: "two" }, call);
+  expect(await search.execute!({ query: "three" }, call)).toEqual({
+    error: "Web search limit reached for this answer",
+  });
+  expect(webSearch).toHaveBeenCalledTimes(2);
+});
+
+it("takes its call limit from maxCalls", async () => {
+  webSearch.mockResolvedValue([]);
+  const search = createWebSearchTool(vi.fn(), { maxCalls: 1 });
+  await search.execute!({ query: "one" }, call);
+  expect(await search.execute!({ query: "two" }, call)).toEqual({
+    error: "Web search limit reached for this answer",
+  });
+  expect(webSearch).toHaveBeenCalledTimes(1);
+});

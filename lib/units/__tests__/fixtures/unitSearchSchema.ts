@@ -1,6 +1,6 @@
 /**
- * The tables the unit eligibility predicate reads, reduced to the columns it references, for
- * PGlite. PGlite has no pgvector, so `extensions.vector` is a text domain and `embedding` is text;
+ * The tables the unit eligibility predicate and the unit readers use, reduced to the columns they
+ * reference, for PGlite. PGlite has no pgvector, so `extensions.vector` is a text domain and `embedding` is text;
  * `search` is the real generated column of migration 0066. The two knowledge functions are stubs
  * that still change when the post changes, which is all the revision check needs.
  */
@@ -12,15 +12,15 @@ export const UNIT_SEARCH_SCHEMA = `
   create table artist_activity_events(id uuid, artist_id uuid, source_id uuid, actor_kind text, actor_user_id text, trigger text, action text);
   create table artist_vault_sources(
     id uuid primary key, artist_id uuid, activity_id uuid, origin text, status text,
-    publication text not null default 'inherit', url text, file_path text, content_type text,
+    publication text not null default 'inherit', url text, title text, file_name text, file_path text, content_type text,
     extracted_text text, updated_at timestamptz, created_at timestamptz default '2026-01-02T00:00:00Z'
   );
-  create table artist_social_posts(id uuid primary key, artist_id uuid, caption text, is_own_post boolean, raw jsonb);
+  create table artist_social_posts(id uuid primary key, artist_id uuid, caption text, url text, is_own_post boolean, raw jsonb);
   create table artist_research_candidates(
     id uuid primary key, artist_id uuid, current_revision text, identity text, curation text,
     reviewed_revision text, destination text, source_id uuid, platform text, platform_id text, url text
   );
-  create table artist_research_evidence(id uuid primary key, candidate_id uuid, artist_id uuid, revision text);
+  create table artist_research_evidence(id uuid primary key, candidate_id uuid, artist_id uuid, revision text, title text);
   create function knowledge_social_post_snapshot(s artist_social_posts) returns jsonb language sql as 'select to_jsonb(s)';
   create function knowledge_source_fingerprint(j jsonb) returns text language sql as 'select ''fp:'' || md5(j::text)';
   create table source_units(
