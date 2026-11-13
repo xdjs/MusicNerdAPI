@@ -70,6 +70,8 @@ export const OCR_CONCURRENCY = 4;
 export const MAX_PAGE_CHARS = 24000;
 // A unit_sync slice starts no source with less than this left before its deadline.
 export const MIN_SOURCE_START_MS = 20_000;
+// A unit_sync slice starts no source after this long, so a backfill does not hold every tick.
+export const UNIT_SYNC_SLICE_MS = 20_000;
 export const SEARCH_CANDIDATES = 20;
 export const SEARCH_LIMIT = 8;
 export const MAX_UNITS_PER_DOCUMENT = 3;

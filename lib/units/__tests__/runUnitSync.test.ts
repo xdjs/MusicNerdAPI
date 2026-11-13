@@ -146,6 +146,22 @@ describe("runUnitSync", () => {
     expect(mock.ingest.mock.calls[0][1].pdfTimeoutMs).toBe(22_000);
   });
 
+  it("starts no source after 20 s of its slice, so a backfill leaves the tick to other jobs", async () => {
+    mock.list.mockResolvedValue(
+      Array.from({ length: 6 }, (_, i) => entry(`s${i}`, { indexedRevision: null })),
+    );
+    mock.ingest.mockImplementation(async () => {
+      now += 8_000;
+      return { units: 1, ocrPages: 0, embedded: true };
+    });
+    // 0 s, 8 s and 16 s start; at 24 s the slice's 20 s are spent, with the deadline far off.
+    const outcome = await runUnitSync(job(), farDeadline());
+    expect(mock.ingest).toHaveBeenCalledTimes(3);
+    expect(outcome).toEqual({ progress: "units 3/6, failures 0", done: false });
+    // The source in flight still runs to the framework's deadline.
+    expect(mock.ingest.mock.calls[2][1].pdfTimeoutMs).toBe(45_000);
+  });
+
   it("does not start a source with less than 20 s left, keeping the cursor", async () => {
     mock.list.mockResolvedValue([
       entry("s1", { indexedRevision: null }),

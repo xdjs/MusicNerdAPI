@@ -19,6 +19,8 @@ vi.mock("@/lib/sourceExtraction/runSourceExtraction", () => ({
 }));
 const runUnitSync = vi.fn(async () => ({ progress: "units 1/1, failures 0", done: true }));
 vi.mock("@/lib/units/runUnitSync", () => ({ runUnitSync }));
+const queueUnitSyncAfterJob = vi.fn(async () => {});
+vi.mock("@/lib/units/queueUnitSyncAfterJob", () => ({ queueUnitSyncAfterJob }));
 const { runResearchJob } = await import("@/lib/research/runResearchJob");
 
 const job = (kind: string) =>
@@ -93,5 +95,13 @@ describe("runResearchJob", () => {
       done: true,
     });
     expect(runUnitSync).toHaveBeenCalledWith(expect.objectContaining({ kind: "unit_sync" }), 987);
+  });
+  it("hands every outcome to the unit_sync completion hook, after the runner", async () => {
+    queueUnitSyncAfterJob.mockClear();
+    const outcome = await runResearchJob(job("source_extract"), 123);
+    expect(queueUnitSyncAfterJob).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "source_extract", artistId: "a" }),
+      outcome,
+    );
   });
 });

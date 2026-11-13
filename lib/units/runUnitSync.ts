@@ -6,7 +6,7 @@ import { finishUnitSync } from "@/lib/units/finishUnitSync";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { listArtistUnitSources } from "@/lib/units/listArtistUnitSources";
 import { saveUnitSyncProgress } from "@/lib/units/saveUnitSyncProgress";
-import { MIN_SOURCE_START_MS } from "@/lib/units/types";
+import { MIN_SOURCE_START_MS, UNIT_SYNC_SLICE_MS } from "@/lib/units/types";
 import type { UnitSyncEntry } from "@/lib/units/types";
 
 /** The PDF parse budget inside the job (Ruling R2); the upload path keeps its own, shorter one. */
@@ -45,8 +45,12 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
   let failures = typeof saved.failures === "number" ? saved.failures : 0;
   let handled = 0;
   let restarted = false;
+  const sliceStart = Date.now();
   // A source started late would run past the deadline (Ruling R2, amended): wait for the next slice.
-  const canStart = () => deadline - Date.now() >= MIN_SOURCE_START_MS;
+  // Past `UNIT_SYNC_SLICE_MS` the slice stops too, so jobs queued after a backfill get their turn;
+  // the source in flight is still bounded by the deadline alone.
+  const canStart = () =>
+    Date.now() - sliceStart < UNIT_SYNC_SLICE_MS && deadline - Date.now() >= MIN_SOURCE_START_MS;
 
   for (;;) {
     const sources = await listArtistUnitSources(job.artistId);
