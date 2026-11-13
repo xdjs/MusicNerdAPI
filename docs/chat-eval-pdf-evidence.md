@@ -97,6 +97,29 @@ Staging admits 30 chat questions per rolling hour per visitor key and 200 per da
 
 Before this change the body validator dropped every earlier answer that had read a PDF, because the document's access can change between turns and the old answer would replay it. The guard stays, narrowed: `keepCurrentPdfTurns` keeps such an answer only while every document it read is still published for the artist at the revision it read (the read tool now returns `revision`); otherwise the answer is dropped as before. The chat suite's `dutchyyy-aliases` case gained a follow-up row, asked with the first answer in the conversation and scored like any other row.
 
+## Passages run
+
+With `CHAT_RETRIEVAL=units` the chat answers from `searchPassages` and `readUnits` instead of the whole-source and PDF tools, and the suite judges what those tools returned. The workflow input `retrieval` (`legacy` or `units`, default `legacy`) sets `CHAT_RETRIEVAL` for the run, and the experiment metadata records it as `retrieval`.
+
+- **Evidence is the tool output.** Each search result and each unit read becomes one evidence row with its text exactly as the model saw it; nothing is refetched (the PDF refetch applies only to the legacy PDF tools).
+- **Locator markers.** Each row's text starts with `[<locator>]` on its own line (for example `[p.3]`), so a `[n, p.N]` citation can be checked against the pages the model was shown, the way `[page N]` markers are checked today.
+- **Follow-ups.** The turn's replayed parts include the `tool-searchPassages` and `tool-readUnits` parts, so the follow-up row sends `documents` and the handler checks them as it does for a client.
+- **Output.** As before, only numbers are printed; no passage text reaches the log.
+
+Run: `gh workflow run evals.yml -f suite=chat -f retrieval=units`, then once with `-f retrieval=legacy` on the same commit.
+
+| Measure                  | legacy | units | Delta |
+| ------------------------ | ------ | ----- | ----- |
+| Gate result              |        |       |       |
+| Mean answer_relevance    |        |       |       |
+| Mean source_groundedness |        |       |       |
+| Mean first signal (ms)   |        |       |       |
+| Mean first text (ms)     |        |       |       |
+| Mean total time (ms)     |        |       |       |
+| Per-question deltas      |        |       |       |
+
+To be filled from the hosted runs.
+
 ## What the numbers do not show
 
 - First text within five seconds is not met. Answers start at 6 to 12 seconds because the model reads sources before writing; the PDF-backed answer varies from 10 to 31 seconds with provider latency. Completion within 20 seconds is met on all but the slowest PDF sample.

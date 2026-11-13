@@ -27,6 +27,13 @@ on:
         description: "retrieval only: print each hit's source id, page locator, title and public URL (never text) so the cases can be labelled"
         type: boolean
         default: false
+      retrieval:
+        description: "chat only: the chat's retrieval (CHAT_RETRIEVAL): legacy (whole sources and PDF tools) or units (page-level passages)"
+        type: choice
+        options:
+          - legacy
+          - units
+        default: legacy
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -59,6 +66,8 @@ jobs:
       CHAT_TRIALS: ${{ inputs.trials }}
       # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
+      # The chat's retrieval for the run (lib/chat/getChatRetrievalMode.ts).
+      CHAT_RETRIEVAL: ${{ inputs.retrieval }}
 
     steps:
       - uses: actions/checkout@v4

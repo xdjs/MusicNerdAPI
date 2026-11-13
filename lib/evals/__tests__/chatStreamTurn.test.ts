@@ -270,3 +270,52 @@ describe("chatStreamTurn follow-ups", () => {
     ]);
   });
 });
+
+describe("chatStreamTurn passage tools", () => {
+  it("keeps the passage tool parts, with their documents, in the parts for the next turn", async () => {
+    const documents = [
+      {
+        n: 1,
+        sourceKind: "vault",
+        sourceId: "00000000-0000-4000-8000-000000000001",
+        revision: "r1",
+        title: "Doc",
+        url: "https://a.example/d.pdf",
+      },
+    ];
+    const output = {
+      results: [{ n: 1, locator: "p.2", title: "Doc", passage: "Born in 1970." }],
+      weak: false,
+      documents,
+    };
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        {
+          type: "tool-input-available",
+          toolCallId: "s",
+          toolName: "searchPassages",
+          input: { query: "born" },
+        },
+        { type: "tool-output-available", toolCallId: "s", output },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "1970 [1, p.2]." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Born?" }, fakeClock());
+    expect(turn.evidence?.[0]).toMatchObject({
+      tool: "searchPassages",
+      text: "[p.2]\nBorn in 1970.",
+    });
+    expect(turn.assistantParts).toEqual([
+      {
+        type: "tool-searchPassages",
+        toolCallId: "s",
+        state: "output-available",
+        input: { query: "born" },
+        output,
+      },
+      { type: "text", text: "1970 [1, p.2]." },
+    ]);
+  });
+});

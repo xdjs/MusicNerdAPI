@@ -21,7 +21,7 @@ export type HistoryMessage = { id: string; role: "user" | "assistant"; parts: un
  * stream the way `useChat` does: the first `text-delta` is when a fan first sees text, and
  * the end of the stream is the finished answer. `source-url` parts are the citable sources.
  * The turn's `assistantParts` are what a client would send back as this answer in a
- * follow-up: its completed PDF reads and its text.
+ * follow-up: its completed PDF and passage reads and its text.
  *
  * @param input - The case.
  * @param input.artistId - The artist's id on the database the suite runs against.
@@ -83,6 +83,8 @@ export async function chatStreamTurn(
   const tools: NonNullable<ChatTurn["tools"]> = [];
   // PDF tool outputs carry only metadata; the original is refetched after timing ends.
   const pdfReads: { tool: string; toolCallId: string; output: unknown }[] = [];
+  // Passage tool outputs are the evidence itself; they are also replayed so a follow-up carries `documents`.
+  const passageReads: { tool: string; toolCallId: string; output: unknown }[] = [];
   const reader = parseJsonEventStream({
     stream: response.body,
     schema: uiMessageChunkSchema,
@@ -104,7 +106,11 @@ export async function chatStreamTurn(
       const tool = toolNames.get(chunk.toolCallId) ?? "";
       if (tool === "readPdfSource" || tool === "readNamedPdf")
         pdfReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
-      else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
+      else {
+        if (tool === "searchPassages" || tool === "readUnits")
+          passageReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
+        evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
+      }
     } else if (chunk.type === "text-delta") {
       firstText ??= clock.now();
       firstSignal ??= firstText;
@@ -125,7 +131,7 @@ export async function chatStreamTurn(
       );
   }
   const assistantParts: unknown[] = [
-    ...pdfReads.map(read => ({
+    ...[...pdfReads, ...passageReads].map(read => ({
       type: `tool-${read.tool}`,
       toolCallId: read.toolCallId,
       state: "output-available",

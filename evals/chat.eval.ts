@@ -2,6 +2,7 @@ import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_CHAT, MODEL_JUDGE } from "@/lib/ai/const";
 import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
+import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { chatReporter } from "@/lib/evals/chatReporter";
 import { experimentName } from "@/lib/evals/experimentName";
@@ -48,6 +49,7 @@ Eval(
       suite: "chat",
       model: MODEL_CHAT,
       sha: SHA,
+      retrieval: getChatRetrievalMode(),
       rubric: "cited-evidence-v2",
       judgeModel: MODEL_JUDGE,
       budgetUsd: 10,
