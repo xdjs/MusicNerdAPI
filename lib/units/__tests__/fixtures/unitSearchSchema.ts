@@ -15,12 +15,12 @@ export const UNIT_SEARCH_SCHEMA = `
     publication text not null default 'inherit', url text, title text, file_name text, file_path text, content_type text,
     extracted_text text, updated_at timestamptz, created_at timestamptz default '2026-01-02T00:00:00Z'
   );
-  create table artist_social_posts(id uuid primary key, artist_id uuid, caption text, url text, is_own_post boolean, raw jsonb);
+  create table artist_social_posts(id uuid primary key, artist_id uuid, platform text, caption text, url text, is_own_post boolean, raw jsonb);
   create table artist_research_candidates(
     id uuid primary key, artist_id uuid, current_revision text, identity text, curation text,
     reviewed_revision text, destination text, source_id uuid, platform text, platform_id text, url text
   );
-  create table artist_research_evidence(id uuid primary key, candidate_id uuid, artist_id uuid, revision text, title text);
+  create table artist_research_evidence(id uuid primary key, candidate_id uuid, artist_id uuid, revision text, title text, original_text text);
   create function knowledge_social_post_snapshot(s artist_social_posts) returns jsonb language sql as 'select to_jsonb(s)';
   create function knowledge_source_fingerprint(j jsonb) returns text language sql as 'select ''fp:'' || md5(j::text)';
   create table source_units(

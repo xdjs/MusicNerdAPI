@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { publicEvidenceSql } from "@/lib/sourcePublication/publicEvidenceSql";
+import { publicSocialPostSql } from "@/lib/sourcePublication/publicSocialPostSql";
 import { publicVaultSourceSql } from "@/lib/sourcePublication/publicVaultSourceSql";
 import { socialPostRevisionSql } from "@/lib/sourcePublication/socialPostRevisionSql";
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
@@ -24,8 +25,7 @@ export function eligibleUnitsSql(artistId: string, alias = "u") {
     where v.id = ${u}.source_id and v.artist_id = ${u}.artist_id and ${publicVaultSourceSql()}
       and ${vaultSourceRevisionSql("v")} = ${u}.source_revision))
   or (${u}.source_kind = 'social' and exists (select 1 from artist_social_posts s
-    where s.id = ${u}.source_id and s.artist_id = ${u}.artist_id and s.is_own_post = true
-      and s.raw->'isRepost' is distinct from 'true'::jsonb and s.raw->'isRetweet' is distinct from 'true'::jsonb
+    where s.id = ${u}.source_id and s.artist_id = ${u}.artist_id and ${publicSocialPostSql()}
       and ${socialPostRevisionSql("s")} = ${u}.source_revision))
   or (${u}.source_kind = 'evidence' and exists (select 1 from artist_research_evidence e
     join artist_research_candidates c on c.id = e.candidate_id and c.artist_id = e.artist_id

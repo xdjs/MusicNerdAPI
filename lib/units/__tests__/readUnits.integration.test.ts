@@ -58,12 +58,37 @@ describe("readUnits", () => {
         { locator: "p. 1", text: `page 1 of ${id(1)}`, tokens: 100 },
         { locator: "p. 3", text: `page 3 of ${id(1)}`, tokens: 102 },
       ],
+      missing: ["p. 9"],
     });
   });
 
-  test("returns null when no requested locator exists", async () => {
+  test("reads every unit in order when no locators are given", async () => {
+    await addUnits(id(1), 3);
+    await addUnits(id(2), 2);
+    const read = await readUnits(artist, vault(id(1)), []);
+    expect(read).toEqual({
+      revision: await revisionOf(id(1)),
+      units: [1, 2, 3].map(page => ({
+        locator: `p. ${page}`,
+        text: `page ${page} of ${id(1)}`,
+        tokens: 99 + page,
+      })),
+      missing: [],
+    });
+  });
+
+  test("reports locators the current document lacks instead of returning null", async () => {
     await addUnits(id(1), 2);
-    expect(await readUnits(artist, vault(id(1)), ["p. 7"])).toBeNull();
+    expect(await readUnits(artist, vault(id(1)), ["p. 7", "p. 8"])).toEqual({
+      revision: await revisionOf(id(1)),
+      units: [],
+      missing: ["p. 7", "p. 8"],
+    });
+  });
+
+  test("returns null for a source with no eligible units", async () => {
+    expect(await readUnits(artist, vault(id(1)), [])).toBeNull();
+    expect(await readUnits(artist, vault(id(1)), ["p. 1"])).toBeNull();
   });
 
   test("returns null once the source is no longer public", async () => {
@@ -93,13 +118,12 @@ describe("readUnits", () => {
     expect(await readUnits(artist, vault(id(3)), ["p. 1"])).toBeNull();
   });
 
-  test("returns null for no locators without querying", async () => {
-    expect(await readUnits(artist, vault(id(1)), [])).toBeNull();
-    expect(execute).not.toHaveBeenCalled();
-  });
-
   test("binds the artist, source and locators as parameters", async () => {
-    expect(await readUnits(artist, vault(id(1)), ["p. 1' or '1'='1"])).toBeNull();
+    await addUnits(id(1), 1);
+    expect(await readUnits(artist, vault(id(1)), ["p. 1' or '1'='1"])).toMatchObject({
+      units: [],
+      missing: ["p. 1' or '1'='1"],
+    });
     const q = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
     expect(q.params).toEqual(expect.arrayContaining([artist, id(1), "p. 1' or '1'='1"]));
     expect(q.sql).not.toContain("'1'='1");

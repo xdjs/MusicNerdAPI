@@ -48,13 +48,21 @@ describe("createListDocumentsTool", () => {
     const tool = createListDocumentsTool("artist-1", documents);
     expect(await tool.execute!({}, call)).toEqual({
       documents: [
-        { n: 4, title: "Liner notes", kind: "vault", units: 3, indexing: false },
-        { n: null, title: "press.pdf", kind: "vault", units: 0, indexing: true },
-        { n: null, title: "Untitled", kind: "social", units: 1, indexing: false },
+        {
+          n: 4,
+          title: "Liner notes",
+          kind: "vault",
+          url: "https://example.com/a",
+          units: 3,
+          indexing: false,
+        },
+        { n: null, title: "press.pdf", kind: "vault", url: null, units: 0, indexing: true },
+        { n: null, title: "Untitled", kind: "social", url: null, units: 1, indexing: false },
       ],
     });
     expect(listArtistDocuments).toHaveBeenCalledWith("artist-1");
     // Listing numbers nothing: only search hands out document numbers.
     expect(cite).toHaveBeenCalledTimes(1);
+    expect(tool.description).toContain("at most 60");
   });
 });
