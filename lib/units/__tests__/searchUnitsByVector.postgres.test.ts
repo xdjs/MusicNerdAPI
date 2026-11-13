@@ -2,8 +2,9 @@
  * Opt-in: the vector half of unit search against real Postgres with pgvector (PGlite has none).
  *   docker run --rm -d -p 54329:5432 -e POSTGRES_PASSWORD=test --name mn-pgvector pgvector/pgvector:pg17
  *   MUSICNERD_UNITS_TEST_URL=postgres://postgres:test@127.0.0.1:54329/postgres pnpm vitest run searchUnitsByVector.postgres
- * Runs in CI against a pgvector service. The `source_units` DDL is read from the Web repo's migration
- * 0066 (`MUSICNERD_0066_SQL`); everything runs in a scratch database that is dropped afterwards.
+ * Runs in CI against a pgvector service. The `source_units` DDL is the Web repo's migration 0066,
+ * vendored in `fixtures/source-units-0066.sql`; everything runs in a scratch database that is
+ * dropped afterwards.
  */
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import { EMBEDDING_DIMENSIONS, type UnitDraft, type UnitSourceKind } from "@/lib/units/types";
+import { assertLocalTestUrl } from "./fixtures/assertLocalTestUrl";
 
 const shared = vi.hoisted(() => ({ database: null as unknown }));
 vi.mock("@/lib/db/db", () => ({
@@ -31,13 +33,10 @@ const { searchUnitsByVector } = await import("@/lib/units/searchUnitsByVector");
 const { writeSourceUnits } = await import("@/lib/units/writeSourceUnits");
 
 const url = process.env.MUSICNERD_UNITS_TEST_URL;
-const migrationPath =
-  process.env.MUSICNERD_0066_SQL ??
-  "/Users/peterarango/cursor experiments/MusicNerdMono/.worktrees/MusicNerdWeb/0066-source-units/drizzle/0066_source_units.sql";
 
 /** The only `source_units` statements of 0066 the test needs: the table, its FK and its three indexes. */
 function sourceUnitsDdl(): string[] {
-  return readFileSync(migrationPath, "utf8")
+  return readFileSync(new URL("./fixtures/source-units-0066.sql", import.meta.url), "utf8")
     .split("--> statement-breakpoint")
     .map(s => s.trim())
     .filter(
@@ -94,12 +93,8 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
   const otherArtist = randomUUID();
 
   beforeAll(async () => {
+    await assertLocalTestUrl(url as string);
     const parsed = new URL(url as string);
-    if (!["localhost", "127.0.0.1"].includes(parsed.hostname)) {
-      throw new Error(
-        `MUSICNERD_UNITS_TEST_URL must point at localhost or 127.0.0.1, got ${parsed.hostname}; this test creates and drops a database.`,
-      );
-    }
     scratch = `units_vector_${process.pid}_${Date.now()}`;
     admin = postgres(url as string, { max: 1, onnotice: () => {} });
     await admin.unsafe(`create database ${scratch}`);
@@ -261,7 +256,8 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
       await client`reset enable_sort`;
       await client`create index source_units_artist on source_units using btree (artist_id, source_kind, source_id)`;
     }
-  });
+    // 300 sequential writes outrun the default 5 s on a loaded machine.
+  }, 60000);
 
   it("returns [{ revision }] from the OCR-fill update shape through the real driver", async () => {
     const id = randomUUID();
