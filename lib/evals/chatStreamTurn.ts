@@ -1,5 +1,6 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
 import { readChatEvidence } from "@/lib/evals/readChatEvidence";
+import { readPdfChatEvidence } from "@/lib/evals/readPdfChatEvidence";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { postArtistChatHandler } from "@/lib/chat/postArtistChatHandler";
 
@@ -43,6 +44,10 @@ export async function chatStreamTurn(
     const ms = Math.round(clock.now() - started);
     const data = await response.json().catch(() => ({}));
     const message = typeof data.error === "string" ? data.error : "error";
+    const retryAfterSeconds =
+      Number.isInteger(data.retryAfterSeconds) && data.retryAfterSeconds > 0
+        ? (data.retryAfterSeconds as number)
+        : undefined;
     return {
       answer: "",
       sources: [],
@@ -50,15 +55,20 @@ export async function chatStreamTurn(
       firstTextMs: ms,
       totalMs: ms,
       error: `${response.status} ${message}`,
+      ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
     };
   }
 
   let answer = "";
   let firstText: number | undefined;
+  let firstSignal: number | undefined;
   let error: string | undefined;
   const sources: ChatTurn["sources"] = [];
   const evidence: NonNullable<ChatTurn["evidence"]> = [];
   const toolNames = new Map<string, string>();
+  const tools: NonNullable<ChatTurn["tools"]> = [];
+  // PDF tool outputs carry only metadata; the original is refetched after timing ends.
+  const pdfReads: { tool: string; toolCallId: string; output: unknown }[] = [];
   const reader = parseJsonEventStream({
     stream: response.body,
     schema: uiMessageChunkSchema,
@@ -72,13 +82,18 @@ export async function chatStreamTurn(
     }
     const chunk = value.value;
     if (chunk.type === "tool-input-available" || chunk.type === "tool-input-start") {
+      firstSignal ??= clock.now();
       toolNames.set(chunk.toolCallId, chunk.toolName);
+      if (chunk.type === "tool-input-available")
+        tools.push({ name: chunk.toolName, input: chunk.input });
     } else if (chunk.type === "tool-output-available") {
-      evidence.push(
-        ...readChatEvidence(toolNames.get(chunk.toolCallId) ?? "", chunk.toolCallId, chunk.output),
-      );
+      const tool = toolNames.get(chunk.toolCallId) ?? "";
+      if (tool === "readPdfSource" || tool === "readNamedPdf")
+        pdfReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
+      else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
     } else if (chunk.type === "text-delta") {
       firstText ??= clock.now();
+      firstSignal ??= firstText;
       answer += chunk.delta;
     } else if (chunk.type === "source-url") {
       sources.push({ n: Number(chunk.sourceId), title: chunk.title ?? chunk.url, url: chunk.url });
@@ -87,11 +102,21 @@ export async function chatStreamTurn(
     }
   }
   const totalMs = Math.round(clock.now() - started);
+  for (const read of pdfReads) {
+    const n = (read.output as { n?: unknown } | null)?.n;
+    const source = sources.find(s => s.n === n);
+    if (source)
+      evidence.push(
+        ...(await readPdfChatEvidence(read.tool, read.toolCallId, read.output, source.url)),
+      );
+  }
   return {
     answer,
     sources,
     evidence,
+    tools,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
+    firstSignalMs: firstSignal === undefined ? totalMs : Math.round(firstSignal - started),
     totalMs,
     ...(error ? { error } : {}),
   };

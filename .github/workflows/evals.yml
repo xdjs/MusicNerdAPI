@@ -11,10 +11,15 @@ on:
         type: choice
         options:
           - chat
+          - chat-pdf-text
           - pdf106-paired
           - pdf106-pete-smoke
           - pdf106-four-paired
         default: chat
+      trials:
+        description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
+        type: string
+        default: "5"
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -24,9 +29,11 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # A run takes about eight minutes; the suite waits up to an hour when the staging
+    # question allowance (30 per rolling hour) is still used by an earlier run.
+    timeout-minutes: 80
 
     env:
       BRAINTRUST_API_KEY: ${{ secrets.BRAINTRUST_API_KEY }}
@@ -41,6 +48,8 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
+      # The chat-pdf-text suite's trial count (evals/chat-pdf-text.eval.ts).
+      CHAT_TRIALS: ${{ inputs.trials }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +59,26 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # PDF discovery only matches rows whose URL is on the staging project's public storage
+      # origin, so the chat suite needs SUPABASE_URL; derive it from the database connection
+      # rather than adding a secret (same derivation the PDF suites use).
+      - name: Bind the staging storage origin for this job only
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          try {
+            const u = new URL(process.env.SUPABASE_DB_CONNECTION);
+            const direct = /^db\.([a-z0-9]{20})\.supabase\.co$/.exec(u.hostname);
+            const pooled = /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(u.hostname) ? /\.([a-z0-9]{20})$/.exec(decodeURIComponent(u.username)) : null;
+            const ref = direct?.[1] ?? pooled?.[1];
+            if (!['postgres:', 'postgresql:'].includes(u.protocol) || !ref) throw new Error('Unsupported staging connection format');
+            appendFileSync(process.env.GITHUB_ENV, `SUPABASE_URL=https://${ref}.supabase.co\n`);
+          } catch {
+            console.error('CHAT_ORIGIN_FAILED: no configuration values emitted');
+            process.exit(1);
+          }
+          JS
       - name: Run suite
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
 

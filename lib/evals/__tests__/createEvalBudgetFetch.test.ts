@@ -28,10 +28,10 @@ describe("createEvalBudgetFetch", () => {
       body: JSON.stringify({ query: "artist" }),
     });
     expect(guard.snapshot().reservedUsd).toBe(0.120224);
-    await expect(createEvalBudgetFetch(send, 4999999).fetch(gateway, request())).rejects.toThrow(
+    await expect(createEvalBudgetFetch(send, 9999999).fetch(gateway, request())).rejects.toThrow(
       "exhausted",
     );
-    for (const invalid of [-1, NaN, 0.1, 5000001])
+    for (const invalid of [-1, NaN, 0.1, 10000001])
       expect(() => createEvalBudgetFetch(send, invalid)).toThrow();
   });
   it("allows the SDK's Anthropic message-start metadata on later tool steps", async () => {
@@ -98,15 +98,15 @@ describe("createEvalBudgetFetch", () => {
     expect(guard.snapshot().paidRequests).toBe(1);
     expect(guard.snapshot().reservedUsd).toBeGreaterThan(0);
   });
-  it("never sends a request whose reservation exceeds five dollars", async () => {
+  it("never sends a request whose reservation exceeds ten dollars", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);
-    for (let i = 0; i < 100; i++) await guard.fetch(gateway, request()).catch(() => {});
-    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(5);
+    for (let i = 0; i < 160; i++) await guard.fetch(gateway, request()).catch(() => {});
+    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(10);
     expect(guard.snapshot().blocked).toBe(true);
-    expect(send.mock.calls.length).toBeLessThan(100);
+    expect(send.mock.calls.length).toBeLessThanOrEqual(150);
   });
-  it("rejects unknown models, multimodal input and unknown network destinations", async () => {
+  it("rejects unknown models, image input and unknown network destinations", async () => {
     const send = vi.fn();
     for (const [url, init] of [
       [gateway, request("unknown")],
@@ -115,7 +115,9 @@ describe("createEvalBudgetFetch", () => {
         {
           ...request(),
           body: JSON.stringify({
-            prompt: [{ role: "user", content: [{ type: "file", data: "x" }] }],
+            prompt: [
+              { role: "user", content: [{ type: "file", mediaType: "image/png", data: "x" }] },
+            ],
           }),
         },
       ],
@@ -124,6 +126,22 @@ describe("createEvalBudgetFetch", () => {
       await expect(createEvalBudgetFetch(send).fetch(url, init)).rejects.toThrow();
     }
     expect(send).not.toHaveBeenCalled();
+  });
+  it("prices the judge candidate models at their own rates and still refuses others", async () => {
+    const reservedFor = async (model: string) => {
+      const guard = createEvalBudgetFetch(vi.fn().mockResolvedValue(new Response("{}")));
+      await guard.fetch(gateway, request(model));
+      return guard.snapshot().reservedUsd;
+    };
+    const sonnet = await reservedFor("anthropic/claude-sonnet-5.5");
+    const flash = await reservedFor("google/gemini-2.5-flash");
+    expect(await reservedFor("google/gemini-3.8-flash")).toBe(flash);
+    expect(await reservedFor("openai/gpt-5.4")).toBe(sonnet);
+    const hydrogen = await reservedFor("google/gemini-4-hydrogen");
+    expect(hydrogen).toBeGreaterThan(flash);
+    expect(hydrogen).toBeLessThan(sonnet);
+    await expect(reservedFor("openai/gpt-5.5")).rejects.toThrow("unpriced model");
+    await expect(reservedFor("google/gemini-3.1-pro-preview")).rejects.toThrow("unpriced model");
   });
   it("reserves search credits and passes through Braintrust logging", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
@@ -135,5 +153,71 @@ describe("createEvalBudgetFetch", () => {
     expect(guard.snapshot().reservedUsd).toBe(0.016);
     await guard.fetch("https://api.braintrust.dev/logs3", { method: "POST", body: "{}" });
     expect(guard.snapshot().paidRequests).toBe(1);
+  });
+  it("prices a PDF tool result separately instead of rejecting it, and bounds its size", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("ok"));
+    const toolResult = (file: unknown) =>
+      JSON.stringify({
+        prompt: [
+          { role: "user", content: [{ type: "text", text: "Which years?" }] },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "p",
+                toolName: "readPdfSource",
+                output: {
+                  type: "content",
+                  value: [{ type: "text", text: "Original PDF follows." }, file],
+                },
+              },
+            ],
+          },
+        ],
+      });
+    const pdf = (data: unknown) => ({ type: "file", mediaType: "application/pdf", data });
+    const guard = createEvalBudgetFetch(send);
+    await guard.fetch(gateway, {
+      ...request(),
+      body: toolResult(pdf({ type: "data", data: "A".repeat(400000) })),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    // Half a micro-dollar per base64 character on top of the text reservation.
+    expect(guard.snapshot().reservedUsd).toBeGreaterThan(0.2);
+    expect(guard.snapshot().reservedUsd).toBeLessThan(0.3);
+    await expect(
+      guard.fetch(gateway, {
+        ...request(),
+        body: toolResult(pdf({ type: "data", data: "A".repeat(6000001) })),
+      }),
+    ).rejects.toThrow("PDF input outside priced envelope");
+    const plain = createEvalBudgetFetch(send);
+    await plain.fetch(gateway, {
+      ...request(),
+      body: toolResult({ type: "file-data", mediaType: "application/pdf", data: "A".repeat(1000) }),
+    });
+    expect(plain.snapshot().paidRequests).toBe(1);
+    for (const file of [
+      pdf({ type: "url", url: "https://x" }),
+      { type: "file", mediaType: "image/png", data: { type: "data", data: "A" } },
+    ])
+      await expect(
+        createEvalBudgetFetch(send).fetch(gateway, { ...request(), body: toolResult(file) }),
+      ).rejects.toThrow("unpriced");
+  });
+  it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("%PDF"));
+    const guard = createEvalBudgetFetch(send, 9999999);
+    const pdf = "https://project.supabase.co/storage/v1/object/public/vault-files/a/timeline.pdf";
+    await guard.fetch(pdf, { redirect: "error", cache: "no-store" });
+    await expect(guard.fetch(gateway, request())).rejects.toThrow("exhausted");
+    await guard.fetch(pdf);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(guard.snapshot().paidRequests).toBe(0);
+    await expect(guard.fetch(pdf, { method: "POST", body: "{}" })).rejects.toThrow();
+    await expect(
+      guard.fetch("https://project.supabase.co/rest/v1/artists", { method: "GET" }),
+    ).rejects.toThrow();
   });
 });

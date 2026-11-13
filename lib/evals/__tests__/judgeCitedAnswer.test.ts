@@ -82,3 +82,34 @@ describe("judgeCitedAnswer", () => {
     expect(generateObject).not.toHaveBeenCalled();
   });
 });
+
+describe("judgeCitedAnswer model", () => {
+  it("judges with a model from another family than the chat model, at default sampling, and explains PDF page markers", async () => {
+    const { MODEL_CHAT, MODEL_JUDGE } = await import("@/lib/ai/const");
+    expect(MODEL_JUDGE.split("/")[0]).not.toBe(MODEL_CHAT.split("/")[0]);
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 1, reason: "Supported by [1]." },
+    });
+    const x = input();
+    x.turn.answer = "Label X [1, p.2].";
+    x.turn.evidence![0] = {
+      ...x.turn.evidence![0],
+      tool: "readPdfSource",
+      text: "[page 2]\nLabel X",
+    };
+    await judgeCitedAnswer(x);
+    const call = generateObject.mock.calls[0][0];
+    expect(call.model).toBe(MODEL_JUDGE);
+    expect(call).not.toHaveProperty("temperature");
+    expect(call.instructions).toMatch(/\[page N\]/);
+    expect(JSON.parse(call.prompt).evidence[0].text).toBe("[page 2]\nLabel X");
+  });
+
+  it("takes a judge model override, for comparing judges", async () => {
+    generateObject.mockResolvedValue({
+      output: { relevance: 1, groundedness: 1, reason: "Supported by [1]." },
+    });
+    await judgeCitedAnswer({ ...input(), model: "openai/gpt-5.4" });
+    expect(generateObject.mock.calls[0][0].model).toBe("openai/gpt-5.4");
+  });
+});

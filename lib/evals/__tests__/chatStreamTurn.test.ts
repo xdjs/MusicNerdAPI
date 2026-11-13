@@ -54,6 +54,10 @@ describe("chatStreamTurn", () => {
 
     const turn = await chatStreamTurn({ artistId: "a1", question: "Where?" }, fakeClock());
 
+    // The fake clock advances 100 ms per read: the first tool step is the first signal, the
+    // first text delta comes later.
+    expect(turn.firstSignalMs).toBe(100);
+    expect(turn.firstSignalMs).toBeLessThan(turn.firstTextMs);
     const [request, artistId] = postArtistChatHandler.mock.calls[0];
     expect(artistId).toBe("a1");
     expect((await request.json()).messages).toEqual([
@@ -84,6 +88,36 @@ describe("chatStreamTurn", () => {
     expect(turn).toMatchObject({ answer: "", sources: [], error: "404 Artist not found" });
   });
 
+  it("keeps the allowance reset from a quota response, and nothing from other errors", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      NextResponse.json(
+        {
+          status: "error",
+          code: "visitor_question_quota",
+          error: "You've reached your question limit for this hour. Try again in 12 minutes.",
+          retryAfterSeconds: 700,
+          resetAt: "2026-11-12T20:00:00.000Z",
+        },
+        { status: 429 },
+      ),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "q" }, fakeClock());
+    expect(turn).toMatchObject({
+      error: "429 You've reached your question limit for this hour. Try again in 12 minutes.",
+      retryAfterSeconds: 700,
+    });
+
+    postArtistChatHandler.mockResolvedValueOnce(
+      NextResponse.json(
+        { status: "error", error: "x", retryAfterSeconds: "soon" },
+        { status: 500 },
+      ),
+    );
+    expect(await chatStreamTurn({ artistId: "a1", question: "q" }, fakeClock())).not.toHaveProperty(
+      "retryAfterSeconds",
+    );
+  });
+
   it("records an error part in the stream", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
       streamOf([{ type: "error", errorText: "gateway down" }]),
@@ -93,5 +127,79 @@ describe("chatStreamTurn", () => {
 
     expect(turn.error).toBe("gateway down");
     expect(turn.answer).toBe("");
+  });
+});
+
+describe("chatStreamTurn PDF evidence", () => {
+  it("captures a cited PDF read through the adapter using the streamed source URL, after timing", async () => {
+    const readPdfChatEvidence = vi.fn(async () => [
+      {
+        n: 1,
+        url: "https://a.example/t.pdf",
+        text: "[page 1]\nAliases",
+        tool: "readPdfSource" as const,
+        toolCallId: "p",
+        sha256: "h",
+      },
+    ]);
+    vi.doMock("@/lib/evals/readPdfChatEvidence", () => ({ readPdfChatEvidence }));
+    vi.resetModules();
+    vi.doMock("@/lib/chat/postArtistChatHandler", () => ({
+      postArtistChatHandler: (...a: unknown[]) => postArtistChatHandler(...a),
+    }));
+    const { chatStreamTurn: turnWithPdf } = await import("@/lib/evals/chatStreamTurn");
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "p", toolName: "readPdfSource", input: {} },
+        { type: "source-url", sourceId: "1", url: "https://a.example/t.pdf", title: "t.pdf" },
+        {
+          type: "tool-output-available",
+          toolCallId: "p",
+          output: { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
+        },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "Aliases [1, p.1]." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await turnWithPdf({ artistId: "a1", question: "Aliases?" }, fakeClock());
+    expect(readPdfChatEvidence).toHaveBeenCalledWith(
+      "readPdfSource",
+      "p",
+      { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
+      "https://a.example/t.pdf",
+    );
+    expect(turn.evidence).toEqual([expect.objectContaining({ tool: "readPdfSource", n: 1 })]);
+    expect(turn.sources).toEqual([{ n: 1, title: "t.pdf", url: "https://a.example/t.pdf" }]);
+    vi.doUnmock("@/lib/evals/readPdfChatEvidence");
+  });
+});
+
+describe("chatStreamTurn tool record", () => {
+  it("records which tools ran and their inputs, for review", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        {
+          type: "tool-input-available",
+          toolCallId: "a",
+          toolName: "searchSources",
+          input: { query: "q" },
+        },
+        {
+          type: "tool-input-available",
+          toolCallId: "b",
+          toolName: "searchPdfSources",
+          input: { query: "q" },
+        },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "None." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.tools).toEqual([
+      { name: "searchSources", input: { query: "q" } },
+      { name: "searchPdfSources", input: { query: "q" } },
+    ]);
   });
 });
