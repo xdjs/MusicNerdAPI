@@ -61,6 +61,7 @@ export async function chatStreamTurn(
 
   let answer = "";
   let firstText: number | undefined;
+  let firstSignal: number | undefined;
   let error: string | undefined;
   const sources: ChatTurn["sources"] = [];
   const evidence: NonNullable<ChatTurn["evidence"]> = [];
@@ -81,6 +82,7 @@ export async function chatStreamTurn(
     }
     const chunk = value.value;
     if (chunk.type === "tool-input-available" || chunk.type === "tool-input-start") {
+      firstSignal ??= clock.now();
       toolNames.set(chunk.toolCallId, chunk.toolName);
       if (chunk.type === "tool-input-available")
         tools.push({ name: chunk.toolName, input: chunk.input });
@@ -91,6 +93,7 @@ export async function chatStreamTurn(
       else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
     } else if (chunk.type === "text-delta") {
       firstText ??= clock.now();
+      firstSignal ??= firstText;
       answer += chunk.delta;
     } else if (chunk.type === "source-url") {
       sources.push({ n: Number(chunk.sourceId), title: chunk.title ?? chunk.url, url: chunk.url });
@@ -113,6 +116,7 @@ export async function chatStreamTurn(
     evidence,
     tools,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
+    firstSignalMs: firstSignal === undefined ? totalMs : Math.round(firstSignal - started),
     totalMs,
     ...(error ? { error } : {}),
   };
