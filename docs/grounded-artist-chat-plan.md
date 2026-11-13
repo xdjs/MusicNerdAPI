@@ -15,12 +15,12 @@
 - Both repositories are public: no secrets, tokens or database references in code, PRs or docs; env var names only. Passages and unit text are never printed in CI or Actions logs, and never in eval output.
 - `extracted_text` is never rewritten, with one exception: a vault source whose `extracted_text` is null gets the vision pass text written once.
 - Eligibility is joined at query time from the source's publication state and revision; nothing about eligibility is stored in a unit.
-- The migration lands once, in the Web repo (`drizzle/0044_source_units.sql` + `drizzle/meta/_journal.json`, idx 44), and both schema files are updated. It is applied by hand per environment before dependent code deploys, per `docs/development.md#database-migrations` in the Web repo; `npx drizzle-kit check` must pass; `db:migrate` is not wired into deploys.
+- The migration lands once, in the Web repo (`drizzle/0066_source_units.sql` + `drizzle/meta/_journal.json`, idx 66; numbered from `origin/main` after a fetch, because the local `main` clone is stale at 0024), and both schema files are updated. It is applied by hand per environment before dependent code deploys, per `docs/development.md#database-migrations` in the Web repo; `npx drizzle-kit check` must pass; `db:migrate` is not wired into deploys.
 - The app role is `mnweb`: every new table ships with RLS enabled, four permissive `mnweb_*` policies, `REVOKE ALL ... FROM PUBLIC, anon, authenticated, mnweb` then explicit `GRANT`.
 - Every model call is a gateway string id. Models: chat `MODEL_CHAT` (`anthropic/claude-sonnet-5.5`), judge `MODEL_JUDGE` (`openai/gpt-5.4`), embeddings `openai/text-embedding-3-small` (1536 dimensions), vision pass `google/gemini-3.8-flash`.
 - Budgets per answer: 12,000 tokens of retrieved text, 6 steps, 1,500 output tokens, 2 web searches. Ingest: 300 pages per document, 10 MB upload limit unchanged, 40 pages inline at upload (more goes to the queue).
 - API repo rules (`AGENTS.md`): one exported function per file, named after the file, test beside it in `__tests__/`; TDD (see the test fail first); conventional commits; no env vars, dependencies or abstractions before the task that needs them; docs PR first for any public contract change.
-- Base branch for API work: `claude/1424-chat-followup-history` (API #118, stacked on #117), which carries the page-marked PDF renderer, the eval gates, `MODEL_JUDGE` and `keepCurrentPdfTurns`. #117 and #118 merge before part 1's chat PRs.
+- Base branch for API work: `claude/1424-chat-followup-history` (API #118, stacked on #117), which carries the page-marked PDF renderer, the eval gates, `MODEL_JUDGE` and `keepCurrentPdfTurns`. #117 and #118 merge before part 1's chat PRs. `origin/main` has moved past them (`6ebb8d5`), so A1 starts by merging `origin/main` into its branch and resolving conflicts there.
 - Staging allowance stays 30 questions per visitor-hour and 200 per day; evals wait for it, never raise it.
 
 ## Review Focus
@@ -37,7 +37,7 @@
 
 | PR | Repo | Branch (from) | Tasks |
 | --- | --- | --- | --- |
-| W1 | Web | `claude/0044-source-units` (main) | 1 |
+| W1 | Web | `claude/0066-source-units` (origin/main) | 1 |
 | A1 | API | `claude/units-ingest` (#118 head) | 2 to 12 |
 | A2 | API | `claude/units-retrieval` (A1) | 13, 14, 21 |
 | A3 | API | `claude/units-chat` (A2) | 15 to 19 |
@@ -47,16 +47,18 @@ Migration W1 is applied to staging before A1 is exercised there, and to producti
 
 ---
 
-### Task 1: Migration `0044_source_units` (Web)
+### Task 1: Migration `0066_source_units` (Web)
 
 **Files:**
-- Create: `drizzle/0044_source_units.sql`
-- Modify: `drizzle/meta/_journal.json` (append idx 44, tag `0044_source_units`, version `"7"`, `breakpoints: true`)
+- Create: `drizzle/0066_source_units.sql`
+- Modify: `drizzle/meta/_journal.json` (append idx 66, tag `0066_source_units`, version `"7"`, `breakpoints: true`)
 - Modify: `src/server/db/schema.ts` (add `sourceUnits`; widen nothing else)
 - Test: `npx drizzle-kit check`, `npm test`
 
 **Interfaces:**
 - Produces: table `public.source_units` with columns `id uuid pk default extensions.uuid_generate_v4()`, `source_kind text check in ('vault','social','evidence')`, `source_id uuid`, `artist_id uuid references artists(id) on delete cascade`, `source_revision text`, `unit_index integer`, `locator text`, `title text null`, `url text null`, `text text`, `text_hash text`, `tokens integer`, `ocr boolean default false`, `ingest_version integer`, `search tsvector generated always as (to_tsvector('english', coalesce(title,'') || ' ' || text)) stored`, `embedding extensions.vector(1536) null`, `created_at timestamptz default (now() at time zone 'utc')`; unique `(source_kind, source_id, unit_index)`; indexes `source_units_artist btree (artist_id, source_kind, source_id)`, `source_units_search gin (search)`, `source_units_embedding hnsw (embedding extensions.vector_cosine_ops)`. Job kind `unit_sync` allowed by `artist_research_jobs_kind_check`.
+
+- [ ] **Step 0: Fetch and branch from `origin/main`**; confirm `drizzle/0065_about_writer_fence.sql` is the highest file before numbering.
 
 - [ ] **Step 1: Write the migration**
 
@@ -79,8 +81,8 @@ Expected: PASS (the schema is mocked; this guards the TypeScript of the new tabl
 - [ ] **Step 5: Commit and open the PR as draft**
 
 ```bash
-git add drizzle/0044_source_units.sql drizzle/meta/_journal.json src/server/db/schema.ts
-git commit -m "feat(db): source_units table for page-level chat retrieval (0044)"
+git add drizzle/0066_source_units.sql drizzle/meta/_journal.json src/server/db/schema.ts
+git commit -m "feat(db): source_units table for page-level chat retrieval (0066)"
 ```
 
 PR body states: applied to nowhere yet; apply to staging by hand per the migration protocol before API PR A1 is exercised there.
@@ -246,6 +248,7 @@ test("readPageWithVision rejects an empty transcription", async () => {
 
 - [ ] **Step 2: Run, fail. Step 3: Implement (mock `@/lib/ai/generateText` in the test). Step 4: Run, pass.**
 - [ ] **Step 5: Commit** — `feat(units): one-page PDF slices read by the vision model`
+- [ ] **Step 6: Hosted proof of the vision pass.** Commit `lib/units/__tests__/fixtures/scanned-page.pdf`: an image-only, one-page PDF (under 50 KB) made once with `pdf-lib` from a rendered image of the sentence "Music Nerd vision fixture, November 2026" (no artist text). Add `evals/vision-page.eval.ts` (one case: `readPageWithVision(fixture)`; scorer `contains_phrase` = 1 when the transcription contains that sentence, case-insensitive) and the suite option `vision-page` in `.github/workflows/evals.yml`. `MODEL_OCR` is already priced in `createEvalBudgetFetch`. Run `gh workflow run evals.yml --ref claude/units-ingest -f suite=vision-page`; it must score 1 before Task 7 wires the vision path. Record the result in `docs/chat-eval-pdf-evidence.md`.
 
 ---
 
@@ -372,7 +375,7 @@ test("a missing source is reported as skipped", ...)
 - Modify: `lib/research/types.ts:1-11` (`JobKind` gains `"unit_sync"`), `lib/research/const.ts:9-20` (`PORTED_JOB_KINDS`), `lib/research/runResearchJob.ts:21-42` (case)
 - Create: `lib/units/runUnitSync.ts`, `lib/units/__tests__/runUnitSync.test.ts`
 - Create: `lib/units/listArtistUnitSources.ts`, `lib/units/__tests__/listArtistUnitSources.integration.test.ts`
-- Modify: `README.md` (one line: Web migration 0044 must be applied before this job runs; the backfill is one manual SQL insert, text given in the PR body, no secrets)
+- Modify: `README.md` (one line: Web migration 0066 must be applied before this job runs; the backfill is one manual SQL insert, text given in the PR body, no secrets)
 
 **Interfaces:**
 - Produces: `export async function listArtistUnitSources(artistId: string): Promise<{ sourceKind: UnitSourceKind; sourceId: string; sourceRevision: string; indexedRevision: string | null; needsEmbedding: boolean }[]>` — every vault source with text or PDF bytes, own non-repost social post and confirmed evidence row of the artist, left-joined to `source_units` (distinct source revision, and whether any unit has a null embedding); plus orphan units whose source row is gone (`sourceRevision` null for those).
@@ -428,7 +431,7 @@ test("searchUnits falls back to text when embedding fails", ...)
 - Modify: `lib/evals/createEvalBudgetFetch.ts:99-147` + test; `.github/workflows/evals.yml:9-17` (suite option `retrieval`); `docs/chat-eval-pdf-evidence.md` (new section "Retrieval eval")
 
 **Interfaces:**
-- `export type RetrievalCase = { key: string; artistId: string; artistName: string; question: string; expected: { sourceKind: UnitSourceKind; sourceId: string; locator: string }[]; note: string };` `export const RETRIEVAL_CASES: RetrievalCase[]` — the twelve chat questions plus the #118 follow-up, labelled against staging after the backfill (the Dutchyyy PDF page numbers come from `chatCases.ts`; the source ids are read from staging by the builder and are UUIDs, not secrets).
+- `export type RetrievalCase = { key: string; artistId: string; artistName: string; question: string; expected: { sourceKind: UnitSourceKind; sourceId: string; locator: string }[]; note: string };` `export const RETRIEVAL_CASES: RetrievalCase[]` — the twelve chat questions plus the #118 follow-up. Labelling procedure: with `RETRIEVAL_LABEL=1` (workflow input `label`), the suite runs the searches and prints, per question, the top 20 candidates as `sourceKind`, `sourceId`, title, public URL and locator, never text; the labeller opens each public document (the Dutchyyy PDF page numbers are already in `chatCases.ts`) and writes the expected pairs into `retrievalCases.ts`; Pete confirms the labels in the PR. Source ids are UUIDs, not secrets.
 - Scorers in `evals/retrieval.eval.ts`: `recall_at_8` (share of expected pairs present in `hits`, matched on `sourceId` and `locator`), `reciprocal_rank` (1 / rank of the first expected hit, 0 when absent). Task: `searchUnits(artistId, question, { names: [artistName] })` behind `createEvalBudgetFetch`. No unit text is logged or scored by a model.
 - `export const RETRIEVAL_GATES = { meanRecall: 0.8, maxRank: 8 }`; `checkRetrievalGates(rows): string[]` fails when the mean recall is below 0.8 or any case has `reciprocal_rank === 0`.
 - Spend guard: gateway requests whose pathname ends with `/embedding-model` are priced at $0.02 per million input tokens (`Math.ceil(JSON.stringify(values).length / 4)` tokens) under `MODEL_EMBEDDING`; any other `ai-gateway.vercel.sh` path that is not `/language-model` fails closed with "unpriced gateway path". The first hosted run confirms the embedding path name; if the gateway uses another suffix, fix it in the same PR.
@@ -536,7 +539,7 @@ test("webSearch refuses a third call", ...)
 - Delete: `lib/chatPdf/` (all files and tests), `lib/chat/keepCurrentPdfTurns.ts` + test, `lib/evals/readPdfChatEvidence.ts` + test, `evals/chat-pdf-text.eval.ts` and its workflow option, `lib/chat/createReadSourceTool.ts`'s 12,000-character cap stays (latest items only)
 - Modify: `docs/chat-eval-pdf-evidence.md` (what changed), `README.md`
 
-**Files (Web, PR W2):** `src/lib/artistChat/getChatProgress.ts:22-27` + test: `tool-searchPassages` → "Searching N documents…" is not available from the part, so "Searching saved documents…"; `tool-readUnits` → "Reading <title> <locator>…" from the output; `tool-listDocuments` → "Listing documents…"; the PDF tool lines are removed.
+**Files (Web, PR W2, branched from `claude/1424-citation-page-labels` until #1680 merges, then from main):** `src/lib/artistChat/getChatProgress.ts:22-27` + test: `tool-searchPassages` → "Searching N documents…" is not available from the part, so "Searching saved documents…"; `tool-readUnits` → "Reading <title> <locator>…" from the output; `tool-listDocuments` → "Listing documents…"; the PDF tool lines are removed.
 
 **Files (Docs, PR D1, opened first per the docs-first rule):** the chat endpoint's description and stream part names in the chat OpenAPI file (tool part types `tool-searchPassages`, `tool-readUnits`, `tool-listDocuments`; `source-url` parts may carry `musicnerd://` URLs for documents without a public URL; citation forms `[n, p.N]`, `[n, §Heading]`, `[n, ¶N]`).
 
@@ -550,7 +553,7 @@ test("webSearch refuses a third call", ...)
 ### Task 21: Real-Postgres tests for the vector path
 
 **Files:**
-- Create: `lib/units/__tests__/searchUnitsByVector.postgres.test.ts` (pattern of `lib/spotifyMatch/__tests__/spotifyMatch.integration.test.ts:36-37`: `describe.skipIf(!process.env.MUSICNERD_UNITS_TEST_URL)`; the URL must be localhost; the test creates the extension, the table from the 0044 SQL text and three rows, then asserts the nearest unit is first and a stale one is hidden)
+- Create: `lib/units/__tests__/searchUnitsByVector.postgres.test.ts` (pattern of `lib/spotifyMatch/__tests__/spotifyMatch.integration.test.ts:36-37`: `describe.skipIf(!process.env.MUSICNERD_UNITS_TEST_URL)`; the URL must be localhost; the test creates the extension, the table from the 0044 SQL text and three rows, then asserts the nearest unit is first and a stale one is hidden; the table SQL is the 0066 text)
 - Modify: `.github/workflows/ci.yml` (a `postgres` service from the `pgvector/pgvector:pg17` image, `MUSICNERD_UNITS_TEST_URL` pointing at it, so CI runs the test; the Vitest job otherwise unchanged)
 
 - [ ] **Step 1: Write the test, run it against a local pgvector Postgres, see it pass; confirm it is skipped without the variable.**
