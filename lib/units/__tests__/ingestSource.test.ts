@@ -175,14 +175,20 @@ describe("ingestSource", () => {
       truncated: false,
     });
     mocks.embedUnits.mockResolvedValue([[0.1], [0.2]]);
+    mocks.execute.mockResolvedValue([{ revision: "rev-2" }]);
 
     const outcome = await ingestSource(REF);
 
     expect(outcome).toEqual({ units: 2, ocrPages: 1, embedded: true });
     expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(mocks.writeSourceUnits.mock.calls[0][1].sourceRevision).toBe("rev-2");
+    expect(mocks.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.writeSourceUnits.mock.invocationCallOrder[0],
+    );
+    expect(statementText(mocks.execute.mock.calls[0])).toContain("returning");
     const text = statementText(mocks.execute.mock.calls[0]);
-    expect(text).toContain("update artist_vault_sources set extracted_text");
-    expect(text).toContain("extracted_text is null");
+    expect(text).toContain("update artist_vault_sources v set extracted_text");
+    expect(text).toContain("v.extracted_text is null");
     expect(text).toContain("typed page\\n\\nscanned page");
     expect(text).toContain("src-1");
   });
@@ -206,6 +212,38 @@ describe("ingestSource", () => {
     await ingestSource(REF);
 
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  test("a vault row that no longer matches the update keeps the loaded revision", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source(true));
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "scanned page", true)],
+      ocrPages: 1,
+      truncated: false,
+    });
+    mocks.embedUnits.mockResolvedValue([[0.1]]);
+    mocks.execute.mockResolvedValue([]);
+
+    await ingestSource(REF);
+
+    expect(mocks.writeSourceUnits.mock.calls[0][1].sourceRevision).toBe("rev-1");
+  });
+
+  test("a partial vision read writes units but leaves extracted_text null", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source(true));
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "scanned page", true)],
+      ocrPages: 1,
+      failed: "vision",
+      truncated: false,
+    });
+    mocks.embedUnits.mockResolvedValue([[0.1]]);
+
+    const outcome = await ingestSource(REF);
+
+    expect(outcome).toEqual({ units: 1, ocrPages: 1, embedded: true, failed: "vision" });
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.writeSourceUnits.mock.calls[0][1].sourceRevision).toBe("rev-1");
   });
 
   test("a missing source is reported as skipped", async () => {

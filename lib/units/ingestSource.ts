@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { buildSourceUnits } from "@/lib/units/buildSourceUnits";
 import { embedUnits } from "@/lib/units/embedUnits";
+import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import { loadUnitSource } from "@/lib/units/loadUnitSource";
 import { writeSourceUnits } from "@/lib/units/writeSourceUnits";
 import type { IngestOutcome, UnitSourceKind } from "@/lib/units/types";
@@ -64,18 +65,24 @@ export async function ingestSource(
     }
   }
 
+  // Fill only from a complete read, so a partial one leaves the blob null for a later complete read.
   const fillExtractedText =
-    input.sourceKind === "vault" && input.extractedTextIsNull && built.units.some(u => u.ocr);
+    input.sourceKind === "vault" &&
+    input.extractedTextIsNull &&
+    !built.failed &&
+    built.units.some(u => u.ocr);
   const written = await db.transaction(async tx => {
-    const count = await writeSourceUnits(tx, { ...base, units: built.units, embeddings });
+    let sourceRevision = base.sourceRevision;
     if (fillExtractedText) {
-      // The one allowed write to this column; the null guard keeps it idempotent.
+      // The one allowed write to this column; the null guard keeps it idempotent. The fill changes the
+      // vault revision, so the units are stamped with the revision it returns, or they would be stale on commit.
       const joined = built.units.map(u => u.text).join("\n\n");
-      await tx.execute(
-        sql`update artist_vault_sources set extracted_text = ${joined} where id = ${input.sourceId}::uuid and extracted_text is null`,
+      const rows = await tx.execute<{ revision: string }>(
+        sql`update artist_vault_sources v set extracted_text = ${joined} where v.id = ${input.sourceId}::uuid and v.extracted_text is null returning ${vaultSourceRevisionSql()} as revision`,
       );
+      if (rows[0]) sourceRevision = rows[0].revision;
     }
-    return count;
+    return writeSourceUnits(tx, { ...base, sourceRevision, units: built.units, embeddings });
   });
 
   return { units: written, ocrPages: built.ocrPages, embedded: embeddings !== null, ...failed };
