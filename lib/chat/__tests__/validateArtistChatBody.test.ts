@@ -215,3 +215,139 @@ it("does not replay a PDF answer whose read ended in an error or lacks a revisio
     expect(JSON.stringify(result)).not.toContain("Revoked fact");
   }
 });
+
+const doc = (n: number, overrides: Record<string, unknown> = {}) => ({
+  n,
+  sourceKind: "vault",
+  sourceId: `44444444-4444-4444-8444-${String(n).padStart(12, "0")}`,
+  revision: `r${n}`,
+  title: `Doc ${n}`,
+  url: n % 2 ? `https://a.example/${n}` : null,
+  ...overrides,
+});
+const search = (documents: unknown[], state = "output-available") => ({
+  type: "tool-searchPassages",
+  toolCallId: "s",
+  state,
+  input: { query: "names" },
+  output: {
+    results: [{ n: 1, locator: "p. 1", title: "Doc 1", passage: "unit text" }],
+    weak: false,
+    documents,
+  },
+});
+
+it("keeps the documents an answer's searches numbered, first of each document, without their passages", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("What names?", "1"),
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            search([doc(1), doc(2)]),
+            search([doc(2, { n: 9, revision: "later" }), doc(3, { sourceKind: "social" })]),
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: { n: 1, title: "Doc 1", units: [], truncated: false, missing: [] },
+            },
+            search([doc(4)], "output-error"),
+            { type: "text", text: "Dutchy [1, p. 1][3]." },
+          ],
+        },
+        user("And labels?", "3"),
+      ],
+    }),
+  );
+  expect(result).toEqual({
+    messages: [
+      user("What names?", "1"),
+      {
+        id: "2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Dutchy [1, p. 1][3]." }],
+        documents: [doc(1), doc(2), doc(3, { sourceKind: "social" })],
+      },
+      user("And labels?", "3"),
+    ],
+  });
+  expect(JSON.stringify(result)).not.toContain("unit text");
+});
+
+it("keeps documents a readUnits output carries", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: { n: 5, documents: [doc(5)] },
+            },
+            { type: "text", text: "Read [5]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual([
+    doc(5),
+  ]);
+});
+
+it.each([
+  ["17 documents", [Array.from({ length: 17 }, (_, i) => doc(i + 1))]],
+  [
+    "17 documents over two searches",
+    [
+      Array.from({ length: 9 }, (_, i) => doc(i + 1)),
+      Array.from({ length: 8 }, (_, i) => doc(i + 10)),
+    ],
+  ],
+  ["n out of range", [[doc(65)]]],
+  ["n zero", [[doc(0)]]],
+  ["an unknown kind", [[doc(1, { sourceKind: "web" })]]],
+  ["a non-uuid source", [[doc(1, { sourceId: "x" })]]],
+  ["an empty revision", [[doc(1, { revision: "" })]]],
+  ["a long title", [[doc(1, { title: "t".repeat(301) })]]],
+  ["a missing url", [[doc(1, { url: undefined })]]],
+  ["no documents", [undefined]],
+])("does not replay an answer whose searches list %s", async (_name, lists) => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...(lists as unknown[][]).map(list => search(list)),
+            { type: "text", text: "Unverifiable [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(result).not.toBeInstanceOf(NextResponse);
+  expect(JSON.stringify(result)).not.toContain("Unverifiable");
+});
+
+it("keeps 16 documents", async () => {
+  const docs = Array.from({ length: 16 }, (_, i) => doc(i + 1));
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        { id: "a", role: "assistant", parts: [search(docs), { type: "text", text: "Many [16]." }] },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual(docs);
+});
