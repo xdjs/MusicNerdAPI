@@ -109,7 +109,7 @@ export async function chatStreamTurn(
       else {
         if (tool === "searchPassages" || tool === "readUnits")
           passageReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
-        evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
+        else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
       }
     } else if (chunk.type === "text-delta") {
       firstText ??= clock.now();
@@ -122,6 +122,10 @@ export async function chatStreamTurn(
     }
   }
   const totalMs = Math.round(clock.now() - started);
+  // Resolved after the stream: a citation's url is the one its `source-url` part carries.
+  const sourceUrls = new Map(sources.map(s => [s.n, s.url] as const));
+  for (const read of passageReads)
+    evidence.push(...readChatEvidence(read.tool, read.toolCallId, read.output, sourceUrls));
   for (const read of pdfReads) {
     const n = (read.output as { n?: unknown } | null)?.n;
     const source = sources.find(s => s.n === n);

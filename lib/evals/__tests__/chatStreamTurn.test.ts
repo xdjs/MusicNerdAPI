@@ -297,12 +297,15 @@ describe("chatStreamTurn passage tools", () => {
           input: { query: "born" },
         },
         { type: "tool-output-available", toolCallId: "s", output },
+        { type: "source-url", sourceId: "1", url: "https://cited.example/d.pdf", title: "Doc" },
         { type: "text-start", id: "x" },
         { type: "text-delta", id: "x", delta: "1970 [1, p.2]." },
         { type: "text-end", id: "x" },
       ]),
     );
     const turn = await chatStreamTurn({ artistId: "a1", question: "Born?" }, fakeClock());
+    // The source-url part arrives after the output here; the evidence still takes its url.
+    expect(turn.evidence?.[0]).toMatchObject({ url: "https://cited.example/d.pdf" });
     expect(turn.evidence?.[0]).toMatchObject({
       tool: "searchPassages",
       text: "[p.2]\nBorn in 1970.",

@@ -92,5 +92,39 @@ describe("readChatEvidence", () => {
       expect(readChatEvidence("readUnits", "c3", { error: "nope" })).toEqual([]);
       expect(readChatEvidence("searchPassages", "c4", { error: "nope" })).toEqual([]);
     });
+
+    it("takes the url from the stream's source-url part for that n, over the documents entry", () => {
+      const dup = [
+        { n: 1, title: "A", url: "https://a.example/same" },
+        { n: 2, title: "B", url: "https://a.example/same", sourceKind: "vault", sourceId: "v-2" },
+      ];
+      const rows = readChatEvidence(
+        "searchPassages",
+        "c5",
+        {
+          results: [
+            { n: 1, locator: "p.1", title: "A", passage: "One." },
+            { n: 2, locator: "p.2", title: "B", passage: "Two." },
+          ],
+          weak: false,
+          documents: dup,
+        },
+        new Map([
+          [1, "https://a.example/same"],
+          [2, "musicnerd://vault/v-2"],
+        ]),
+      );
+      expect(rows.map(r => r.url)).toEqual(["https://a.example/same", "musicnerd://vault/v-2"]);
+    });
+
+    it("yields nothing for a result with no documents entry and no source-url part", () => {
+      expect(
+        readChatEvidence("searchPassages", "c6", {
+          results: [{ n: 3, locator: "p.1", title: "A", passage: "One." }],
+          weak: false,
+          documents: [],
+        }),
+      ).toEqual([]);
+    });
   });
 });

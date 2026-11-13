@@ -102,6 +102,8 @@ describe("judgeCitedAnswer model", () => {
     expect(call.model).toBe(MODEL_JUDGE);
     expect(call).not.toHaveProperty("temperature");
     expect(call.instructions).toMatch(/\[page N\]/);
+    expect(call.instructions).toContain("starts with its locator in brackets");
+    expect(call.instructions).toContain("[n, §Early years]");
     expect(JSON.parse(call.prompt).evidence[0].text).toBe("[page 2]\nLabel X");
   });
 

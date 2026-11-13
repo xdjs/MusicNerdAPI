@@ -50,7 +50,7 @@ Eval(
       model: MODEL_CHAT,
       sha: SHA,
       retrieval: getChatRetrievalMode(),
-      rubric: "cited-evidence-v2",
+      rubric: "cited-evidence-v3",
       judgeModel: MODEL_JUDGE,
       budgetUsd: 10,
       priorReservedUsd: 0.104224,

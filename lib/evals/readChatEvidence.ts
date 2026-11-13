@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import type { ChatEvidence } from "@/lib/evals/ChatEvidence";
 
 /** The document a passage tool numbered: its public URL, or `musicnerd://kind/id` when it has none. */
-function documentUrl(documents: unknown, n: number): string | undefined {
+function documentUrl(
+  documents: unknown,
+  n: number,
+  sourceUrls: ReadonlyMap<number, string>,
+): string | undefined {
+  // The citable url is the one the stream's `source-url` part gave this n; a duplicate-url document is cited by its synthetic url there.
+  const cited = sourceUrls.get(n);
+  if (cited) return cited;
   if (!Array.isArray(documents)) return undefined;
   const doc = documents.find(d => d && typeof d === "object" && (d as { n?: unknown }).n === n) as
     Record<string, unknown> | undefined;
@@ -18,6 +25,7 @@ function readPassageEvidence(
   tool: "searchPassages" | "readUnits",
   toolCallId: string,
   record: Record<string, unknown>,
+  sourceUrls: ReadonlyMap<number, string>,
 ): ChatEvidence[] {
   const items: { n: unknown; locator: unknown; text: unknown }[] =
     tool === "searchPassages"
@@ -34,7 +42,7 @@ function readPassageEvidence(
   return items.flatMap(({ n, locator, text }) => {
     if (typeof n !== "number" || !Number.isInteger(n) || n < 1) return [];
     if (typeof locator !== "string" || typeof text !== "string" || !text.trim()) return [];
-    const url = documentUrl(record.documents, n);
+    const url = documentUrl(record.documents, n, sourceUrls);
     if (!url) return [];
     const marked = `[${locator}]\n${text}`;
     return [
@@ -50,16 +58,21 @@ function readPassageEvidence(
   });
 }
 
-/** Extract only supported public tool outputs, preserving the exact text the model saw. */
+/**
+ * Extract only supported public tool outputs, preserving the exact text the model saw.
+ * For the passage tools, `sourceUrls` (n to url, from the turn's `source-url` parts) names the
+ * url each citation resolves to; the output's `documents` entry is the fallback.
+ */
 export function readChatEvidence(
   tool: string,
   toolCallId: string,
   output: unknown,
+  sourceUrls: ReadonlyMap<number, string> = new Map(),
 ): ChatEvidence[] {
   if (!output || typeof output !== "object") return [];
   const record = output as Record<string, unknown>;
   if (tool === "searchPassages" || tool === "readUnits")
-    return readPassageEvidence(tool, toolCallId, record);
+    return readPassageEvidence(tool, toolCallId, record, sourceUrls);
   if (tool !== "readSource" && tool !== "webSearch") return [];
   const candidates =
     tool === "readSource" ? [record] : Array.isArray(record.results) ? record.results : [];

@@ -17,7 +17,7 @@ Chat:
 Eval:
 
 - `readPdfChatEvidence` refetches the cited public PDF, verifies its bytes hash to what the tool reported, and extracts text with `[page N]` markers so `[n, p.N]` citations can be checked.
-- The judge is the chat model at default sampling (the current Sonnet rejects a non-default temperature). Rubric `cited-evidence-v2`; the judge model is recorded in experiment metadata.
+- The judge is the chat model at default sampling (the current Sonnet rejects a non-default temperature). Rubric `cited-evidence-v3`; the judge model is recorded in experiment metadata.
 - `chatCases.ts` carries the 2026-11-06 audited references for Willie Colón / Blades and the Dutchyyy aliases, plus a twelfth case, the #1424 acceptance question, with page numbers checked against the original PDF on 2026-11-12.
 - `ChatTurn.tools` records tool calls and inputs for review.
 
