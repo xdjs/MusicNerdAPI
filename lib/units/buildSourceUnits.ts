@@ -24,6 +24,7 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  * PDFs yield one unit per physical page (locator `p.N`); a page whose extracted text
  * is broken or empty is read with vision and marked `ocr`. A page that cannot be read
  * (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
+ * An empty vision read is a blank page: no draft, no failure, and not counted in `ocrPages`.
  *
  * @param input - The source and its body.
  * @param deps - `ocr: false` skips vision and reports `needsOcr`; `readPage` overrides the vision read; `signal` is passed to it; `pdfTimeoutMs` bounds the PDF parse.

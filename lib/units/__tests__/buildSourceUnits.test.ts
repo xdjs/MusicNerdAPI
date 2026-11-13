@@ -178,6 +178,38 @@ describe("buildSourceUnits", () => {
     expect(unit.tokens).toBe(Math.ceil(unit.text.length / 4));
   });
 
+  test("by default a page is read with readPageWithVision and the signal", async () => {
+    vi.resetModules();
+    const readPageWithVision = vi.fn().mockResolvedValue("");
+    vi.doMock("@/lib/units/readPageWithVision", () => ({ readPageWithVision }));
+    const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const signal = new AbortController().signal;
+    const result = await build(input({ kind: "pdf", bytes }), { signal });
+    expect(readPageWithVision).toHaveBeenCalledWith(expect.any(Uint8Array), { signal });
+    // An empty read is a blank page: no draft, no failure, not an OCR page.
+    expect(result.units.map(u => u.locator)).toEqual(["p.1"]);
+    expect(result.failed).toBeUndefined();
+    expect(result.ocrPages).toBe(0);
+    vi.doUnmock("@/lib/units/readPageWithVision");
+    vi.resetModules();
+  });
+
+  test("a page the model marks blank is neither a unit nor a failure", async () => {
+    vi.resetModules();
+    const generateText = vi.fn().mockResolvedValue({ text: "[blank page]" });
+    vi.doMock("@/lib/ai/generateText", () => ({ generateText }));
+    const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const result = await build(input({ kind: "pdf", bytes }));
+    expect(generateText).toHaveBeenCalledOnce();
+    expect(result.units.map(u => u.locator)).toEqual(["p.1"]);
+    expect(result.failed).toBeUndefined();
+    expect(result.ocrPages).toBe(0);
+    vi.doUnmock("@/lib/ai/generateText");
+    vi.resetModules();
+  });
+
   test("pdfTimeoutMs and the signal reach the PDF extractor", async () => {
     vi.resetModules();
     const extractPdfPages = vi.fn().mockResolvedValue({ pages: [PAGE_ONE], truncated: false });
