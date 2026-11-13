@@ -13,7 +13,7 @@ describe("fuseRanks", () => {
     expect(fused[0].score).toBeCloseTo(1 / 63 + 1 / 62);
     expect(fused[1].score).toBeCloseTo(1 / 61);
     // The first-seen hit's fields survive; only the score is replaced.
-    expect(fused[0]).toMatchObject({ text: "text c 0", locator: "p. 1" });
+    expect(fused[0]).toMatchObject({ text: "text c 0", locator: "p.1" });
   });
 
   test("keys by kind, source and unit", () => {

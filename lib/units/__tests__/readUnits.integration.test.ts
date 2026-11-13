@@ -30,7 +30,7 @@ async function addUnits(sourceId: string, count: number, revision?: string) {
   for (let i = 0; i < count; i++)
     await client.query(
       "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text, tokens) values ('vault', $1, $2, $3, $4, $5, $6, $7)",
-      [sourceId, artist, r, i, `p. ${i + 1}`, `page ${i + 1} of ${sourceId}`, 100 + i],
+      [sourceId, artist, r, i, `p.${i + 1}`, `page ${i + 1} of ${sourceId}`, 100 + i],
     );
 }
 
@@ -51,14 +51,14 @@ describe("readUnits", () => {
   test("returns the requested units of one eligible source in unit order", async () => {
     await addUnits(id(1), 4);
     await addUnits(id(2), 2);
-    const read = await readUnits(artist, vault(id(1)), ["p. 3", "p. 1", "p. 1", "p. 9"]);
+    const read = await readUnits(artist, vault(id(1)), ["p.3", "p.1", "p.1", "p.9"]);
     expect(read).toEqual({
       revision: await revisionOf(id(1)),
       units: [
-        { locator: "p. 1", text: `page 1 of ${id(1)}`, tokens: 100 },
-        { locator: "p. 3", text: `page 3 of ${id(1)}`, tokens: 102 },
+        { locator: "p.1", text: `page 1 of ${id(1)}`, tokens: 100 },
+        { locator: "p.3", text: `page 3 of ${id(1)}`, tokens: 102 },
       ],
-      missing: ["p. 9"],
+      missing: ["p.9"],
     });
   });
 
@@ -69,7 +69,7 @@ describe("readUnits", () => {
     expect(read).toEqual({
       revision: await revisionOf(id(1)),
       units: [1, 2, 3].map(page => ({
-        locator: `p. ${page}`,
+        locator: `p.${page}`,
         text: `page ${page} of ${id(1)}`,
         tokens: 99 + page,
       })),
@@ -77,18 +77,35 @@ describe("readUnits", () => {
     });
   });
 
+  test("resolves a locator written with a space after its marker, or padded, as the stored form", async () => {
+    await addUnits(id(1), 4);
+    await client.query(
+      "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text, tokens) values ('vault', $1, $2, $3, 4, '§Early years', 'section', 5), ('vault', $1, $2, $3, 5, '¶7', 'paragraph', 6)",
+      [id(1), artist, await revisionOf(id(1))],
+    );
+    const read = await readUnits(artist, vault(id(1)), [
+      "p. 4",
+      "p.4",
+      " p.2 ",
+      "§ Early years",
+      "¶ 7",
+    ]);
+    expect(read?.units.map(unit => unit.locator)).toEqual(["p.2", "p.4", "§Early years", "¶7"]);
+    expect(read?.missing).toEqual([]);
+  });
+
   test("reports locators the current document lacks instead of returning null", async () => {
     await addUnits(id(1), 2);
-    expect(await readUnits(artist, vault(id(1)), ["p. 7", "p. 8"])).toEqual({
+    expect(await readUnits(artist, vault(id(1)), ["p.7", "p.8"])).toEqual({
       revision: await revisionOf(id(1)),
       units: [],
-      missing: ["p. 7", "p. 8"],
+      missing: ["p.7", "p.8"],
     });
   });
 
   test("returns null for a source with no eligible units", async () => {
     expect(await readUnits(artist, vault(id(1)), [])).toBeNull();
-    expect(await readUnits(artist, vault(id(1)), ["p. 1"])).toBeNull();
+    expect(await readUnits(artist, vault(id(1)), ["p.1"])).toBeNull();
   });
 
   test("returns null once the source is no longer public", async () => {
@@ -99,7 +116,7 @@ describe("readUnits", () => {
     // Even units re-stamped to the private revision stay hidden.
     await client.exec("delete from source_units");
     await addUnits(id(1), 2);
-    expect(await readUnits(artist, vault(id(1)), ["p. 1"])).toBeNull();
+    expect(await readUnits(artist, vault(id(1)), ["p.1"])).toBeNull();
   });
 
   test("hides stale units once the source revision moved on", async () => {
@@ -107,25 +124,25 @@ describe("readUnits", () => {
     await client.query("update artist_vault_sources set extracted_text = 'edited' where id = $1", [
       id(1),
     ]);
-    expect(await readUnits(artist, vault(id(1)), ["p. 1", "p. 2"])).toBeNull();
+    expect(await readUnits(artist, vault(id(1)), ["p.1", "p.2"])).toBeNull();
   });
 
   test("never reads another artist's source", async () => {
     await client.query(
-      "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ('vault', $1, $2, $3, 0, 'p. 1', 'theirs')",
+      "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ('vault', $1, $2, $3, 0, 'p.1', 'theirs')",
       [id(3), otherArtist, await revisionOf(id(3))],
     );
-    expect(await readUnits(artist, vault(id(3)), ["p. 1"])).toBeNull();
+    expect(await readUnits(artist, vault(id(3)), ["p.1"])).toBeNull();
   });
 
   test("binds the artist, source and locators as parameters", async () => {
     await addUnits(id(1), 1);
-    expect(await readUnits(artist, vault(id(1)), ["p. 1' or '1'='1"])).toMatchObject({
+    expect(await readUnits(artist, vault(id(1)), ["p.1' or '1'='1"])).toMatchObject({
       units: [],
-      missing: ["p. 1' or '1'='1"],
+      missing: ["p.1' or '1'='1"],
     });
     const q = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
-    expect(q.params).toEqual(expect.arrayContaining([artist, id(1), "p. 1' or '1'='1"]));
+    expect(q.params).toEqual(expect.arrayContaining([artist, id(1), "p.1' or '1'='1"]));
     expect(q.sql).not.toContain("'1'='1");
   });
 });

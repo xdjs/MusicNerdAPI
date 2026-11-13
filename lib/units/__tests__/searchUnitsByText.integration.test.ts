@@ -25,7 +25,7 @@ async function addUnits(sourceId: string, texts: string[], title = "Liner notes"
   for (const [i, text] of texts.entries())
     await client.query(
       "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, title, url, text) values ('vault', $1, $2, $3, $4, $5, $6, 'https://example.com/doc', $7)",
-      [sourceId, artist, r, i, `p. ${i + 1}`, title, text],
+      [sourceId, artist, r, i, `p.${i + 1}`, title, text],
     );
 }
 
@@ -58,7 +58,7 @@ describe("searchUnitsByText", () => {
     expect(hits[0].score).toBeGreaterThan(hits[1].score);
     expect(hits[0]).toMatchObject({
       sourceKind: "vault",
-      locator: "p. 2",
+      locator: "p.2",
       title: "Liner notes",
       url: "https://example.com/doc",
       text: "They recorded Blue Moon in a barn outside the city.",

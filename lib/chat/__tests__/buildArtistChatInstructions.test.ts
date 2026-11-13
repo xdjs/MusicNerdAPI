@@ -118,4 +118,8 @@ describe("units mode", () => {
   it("keeps searchSources with retrieval latest for current releases only", () => {
     expect(text).toMatch(/searchSources with retrieval: "latest".*current releases only/i);
   });
+
+  it("states the exact locator forms readUnits matches", () => {
+    expect(text).toMatch(/locators exactly as searchPassages gave them.*p\.4.*§Heading.*¶3/i);
+  });
 });

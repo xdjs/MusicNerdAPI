@@ -11,7 +11,7 @@ export const unitHit = (
   sourceId: doc,
   sourceRevision: "rev",
   unitIndex: unit,
-  locator: `p. ${unit + 1}`,
+  locator: `p.${unit + 1}`,
   title: `Doc ${doc}`,
   url: `https://example.com/${doc}`,
   text: `text ${doc} ${unit}`,

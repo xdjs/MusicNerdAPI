@@ -24,7 +24,7 @@ export function createReadUnitsTool(
 ) {
   return tool({
     description:
-      "Read whole pages of document n when a claim needs more than the search passage: the surrounding page, or pages next to a hit. Pass n from searchPassages and up to 6 locators (e.g. `p. 4`); omit locators to read the whole document; long documents are cut at the budget. Cite what you use as [n, locator]. Reading is capped per answer; `truncated` means some pages were not returned, `missing` lists locators the document does not have.",
+      "Read whole pages of document n when a claim needs more than the search passage: the surrounding page, or pages next to a hit. Pass n from searchPassages and up to 6 locators (e.g. `p.4`); omit locators to read the whole document; long documents are cut at the budget. Cite what you use as [n, locator]. Reading is capped per answer; `truncated` means some pages were not returned, `missing` lists locators the document does not have.",
     inputSchema: z.object({
       n: z.number().int().min(1),
       locators: z.array(z.string().min(1).max(100)).max(6).optional(),

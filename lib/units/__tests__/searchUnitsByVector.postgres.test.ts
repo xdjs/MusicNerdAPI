@@ -79,7 +79,7 @@ function vec(axis: number, tilt = 0, amount = 0): number[] {
 }
 const draft = (n: number): UnitDraft => ({
   unitIndex: 0,
-  locator: `p. ${n}`,
+  locator: `p.${n}`,
   text: `unit ${n}`,
   textHash: `h${n}`,
   tokens: 3,

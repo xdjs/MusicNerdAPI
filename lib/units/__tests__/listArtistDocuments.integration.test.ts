@@ -34,7 +34,7 @@ async function addUnits(kind: UnitSourceKind, sourceId: string, count: number, r
   for (let i = 0; i < count; i++)
     await client.query(
       "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ($1, $2, $3, $4, $5, $6, 'text')",
-      [kind, sourceId, artist, r, i, `p. ${i + 1}`],
+      [kind, sourceId, artist, r, i, `p.${i + 1}`],
     );
 }
 

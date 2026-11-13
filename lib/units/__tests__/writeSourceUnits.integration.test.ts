@@ -18,7 +18,7 @@ const artistId = "00000000-0000-4000-8000-000000000001";
 const sourceId = "00000000-0000-4000-8000-000000000002";
 const draft = (i: number, text = `unit ${i} text`): UnitDraft => ({
   unitIndex: i,
-  locator: `p. ${i + 1}`,
+  locator: `p.${i + 1}`,
   text,
   textHash: `hash${i}`,
   tokens: 4,

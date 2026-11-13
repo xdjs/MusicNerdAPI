@@ -602,7 +602,7 @@ describe("with CHAT_RETRIEVAL=units", () => {
     const fresh = doc(3, "https://c.example/doc");
     u.findCurrent.mockResolvedValue(new Set([key(earlierNoUrl), key(earlier)]));
     u.search.mockResolvedValue({
-      hits: [hit(earlier, "p. 2", "Dutchy was the alias."), hit(fresh, "p. 1", "Night Label.")],
+      hits: [hit(earlier, "p.2", "Dutchy was the alias."), hit(fresh, "p.1", "Night Label.")],
       weak: false,
     });
     const model = new MockLanguageModelV4({
@@ -667,7 +667,7 @@ describe("with CHAT_RETRIEVAL=units", () => {
   });
 
   it("stops before the next model forward when a numbered document is revoked", async () => {
-    u.search.mockResolvedValue({ hits: [hit(doc(1, null), "p. 1", "Text")], weak: false });
+    u.search.mockResolvedValue({ hits: [hit(doc(1, null), "p.1", "Text")], weak: false });
     u.assertDocs
       .mockResolvedValueOnce(undefined)
       .mockRejectedValue(new Error("Source changed or is no longer public"));
@@ -683,17 +683,17 @@ describe("with CHAT_RETRIEVAL=units", () => {
 
   it("shares one 12,000-token read budget across the answer's reads", async () => {
     const d = doc(1, "https://a.example/doc");
-    u.search.mockResolvedValue({ hits: [hit(d, "p. 1", "Text")], weak: false });
+    u.search.mockResolvedValue({ hits: [hit(d, "p.1", "Text")], weak: false });
     u.read.mockResolvedValue({
       revision: d.revision,
-      units: [{ locator: "p. 1", text: "Page one.", tokens: 7000 }],
+      units: [{ locator: "p.1", text: "Page one.", tokens: 7000 }],
       missing: [],
     });
     m.model = new MockLanguageModelV4({
       doStream: [
         toolStep("searchPassages", { query: "label" }),
         toolStep("readUnits", { n: 1 }),
-        toolStep("readUnits", { n: 1, locators: ["p. 1"] }),
+        toolStep("readUnits", { n: 1, locators: ["p.1"] }),
         textStep("Night Label [1, p.1]."),
       ],
     });

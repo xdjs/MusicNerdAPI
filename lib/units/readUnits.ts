@@ -3,6 +3,9 @@ import { db } from "@/lib/db/db";
 import { eligibleUnitsSql } from "@/lib/units/eligibleUnitsSql";
 import type { UnitSourceKind } from "@/lib/units/types";
 
+/** The stored form of a locator the model wrote: trimmed, no space after the marker. */
+const normaliseLocator = (locator: string) => locator.trim().replace(/^(p\.|§|¶)\s+/u, "$1");
+
 /**
  * Units of one source a public read may return: eligible and current only (`eligibleUnitsSql`),
  * so a source that went private, changed or was deleted reads as nothing.
@@ -12,7 +15,8 @@ import type { UnitSourceKind } from "@/lib/units/types";
  *
  * @param artistId - The artist.
  * @param ref - The source.
- * @param locators - The units wanted (`p. 3`, …); empty for every unit.
+ * @param locators - The units wanted (`p.3`, `§Heading`, `¶2`); empty for every unit. Each is trimmed and
+ *   loses any space after its `p.`, `§` or `¶` marker (`p. 3` reads `p.3`), the form ingest stores.
  * @returns The units in unit order, the revision they were cut from, and the requested locators
  *   the document lacks; null when the source has no eligible units at all.
  */
@@ -25,7 +29,7 @@ export async function readUnits(
   units: { locator: string; text: string; tokens: number }[];
   missing: string[];
 } | null> {
-  const wanted = [...new Set(locators)];
+  const wanted = [...new Set(locators.map(normaliseLocator))];
   const isWanted =
     wanted.length === 0
       ? sql`true`

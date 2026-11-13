@@ -43,9 +43,9 @@ describe("createSearchPassagesTool", () => {
     expect(cite).toHaveBeenCalledTimes(2);
     expect(out).toEqual({
       results: [
-        { n: 1, locator: "p. 1", title: "Doc a", passage: "text a 0" },
-        { n: 2, locator: "p. 1", title: "Untitled", passage: "text b 0" },
-        { n: 1, locator: "p. 3", title: "Doc a", passage: "text a 2" },
+        { n: 1, locator: "p.1", title: "Doc a", passage: "text a 0" },
+        { n: 2, locator: "p.1", title: "Untitled", passage: "text b 0" },
+        { n: 1, locator: "p.3", title: "Doc a", passage: "text a 2" },
       ],
       weak: false,
       documents: [
@@ -115,5 +115,12 @@ describe("createSearchPassagesTool", () => {
     const [miss, short] = (await run("label")).results;
     expect(miss.passage).toBe(long.slice(0, PASSAGE_CHARS));
     expect(short.passage).toBe("short page");
+  });
+  test("teaches locators in the stored form, with no space after the marker", () => {
+    const { description } = createSearchPassagesTool("artist-1", createChatDocuments(vi.fn()), {
+      names: [],
+    });
+    expect(description).toContain("`p.3`");
+    expect(description).not.toMatch(/p\. \d/);
   });
 });

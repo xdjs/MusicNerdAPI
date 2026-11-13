@@ -231,7 +231,7 @@ const search = (documents: unknown[], state = "output-available") => ({
   state,
   input: { query: "names" },
   output: {
-    results: [{ n: 1, locator: "p. 1", title: "Doc 1", passage: "unit text" }],
+    results: [{ n: 1, locator: "p.1", title: "Doc 1", passage: "unit text" }],
     weak: false,
     documents,
   },
@@ -262,7 +262,7 @@ it("keeps the documents an answer's searches numbered, first of each document, w
               },
             },
             search([doc(4)], "output-error"),
-            { type: "text", text: "Dutchy [1, p. 1][3]." },
+            { type: "text", text: "Dutchy [1, p.1][3]." },
           ],
         },
         user("And labels?", "3"),
@@ -275,7 +275,7 @@ it("keeps the documents an answer's searches numbered, first of each document, w
       {
         id: "2",
         role: "assistant",
-        parts: [{ type: "text", text: "Dutchy [1, p. 1][3]." }],
+        parts: [{ type: "text", text: "Dutchy [1, p.1][3]." }],
         documents: [doc(1), doc(2), doc(3, { sourceKind: "social" })],
       },
       user("And labels?", "3"),
@@ -373,7 +373,7 @@ it("does not replay a read-only answer whose read names no documents", async () 
               output: {
                 n: 1,
                 title: "Doc 1",
-                units: [{ locator: "p. 1", text: "t" }],
+                units: [{ locator: "p.1", text: "t" }],
                 truncated: false,
                 missing: [],
               },

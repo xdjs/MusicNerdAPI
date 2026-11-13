@@ -27,7 +27,7 @@ async function currentRevision(kind: UnitSourceKind, sourceId: string) {
 }
 async function addUnit(kind: UnitSourceKind, sourceId: string, revision?: string, a = artist) {
   await client.query(
-    "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ($1, $2, $3, $4, 0, 'p. 1', 'text')",
+    "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ($1, $2, $3, $4, 0, 'p.1', 'text')",
     [kind, sourceId, a, revision ?? (await currentRevision(kind, sourceId))],
   );
 }
@@ -167,7 +167,7 @@ describe("eligibleUnitsSql", () => {
   test("hides other artists' units, unknown kinds, and units of deleted rows", async () => {
     await addUnit("vault", id(1), undefined, otherArtist);
     await client.query(
-      "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ('other', $1, $2, 'x', 0, 'p. 1', 't')",
+      "insert into source_units(source_kind, source_id, artist_id, source_revision, unit_index, locator, text) values ('other', $1, $2, 'x', 0, 'p.1', 't')",
       [id(1), artist],
     );
     await addUnit("vault", id(2));
