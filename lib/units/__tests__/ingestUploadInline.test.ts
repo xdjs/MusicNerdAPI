@@ -10,7 +10,7 @@ const bytes = Buffer.from("bytes");
 const input = (contentType: string) => ({ sourceId: "s1", artistId: "a1", bytes, contentType });
 
 beforeEach(() => {
-  mock.ingest.mockReset().mockResolvedValue({ units: 2 });
+  mock.ingest.mockReset().mockResolvedValue({ units: 2, ocrPages: 0, embedded: true });
   mock.queue.mockReset().mockResolvedValue(true);
   mock.inspect.mockReset().mockResolvedValue(2);
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -80,6 +80,18 @@ describe("ingestUploadInline", () => {
     const warned = vi.mocked(console.warn).mock.calls.flat().join(" ");
     expect(warned).toContain("s1");
     expect(warned).not.toContain("secret text");
+  });
+
+  it("queues when units were written without embeddings, so the job fills them", async () => {
+    mock.ingest.mockResolvedValue({ units: 1700, ocrPages: 0, embedded: false });
+    await ingestUploadInline(input("text/plain"));
+    expect(mock.queue).toHaveBeenCalledWith("a1");
+  });
+
+  it("does not queue when nothing was written and nothing failed", async () => {
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, skipped: "no-text" });
+    await ingestUploadInline(input("text/plain"));
+    expect(mock.queue).not.toHaveBeenCalled();
   });
 
   it("does not queue after a clean inline ingest", async () => {
