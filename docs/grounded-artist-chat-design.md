@@ -204,9 +204,25 @@ Not part of the design, but found while mapping the flow and cheap to fix in pas
 
 Table and column names; the exact unit size for HTML, social and evidence text; the embedding model and dimension; the OCR model and how a "near-empty" text layer is detected; the rewrite and grounding models; the RRF constant and score floor; how the backfill job is scheduled and how failures are retried; the page cap at ingest; the shape of the running summary; the retrieval eval's labelled set (built from the twelve chat cases plus their follow-ups); migration numbering (both repositories share the database and each keeps a schema file; the migration lands once, in the Web repo's `drizzle/`, and both schema files are updated).
 
+## Where the Web stands (decided with Pete, 2026-11-13)
+
+Pete's rule: the Web may keep reading the shared database for its own pages, but anything that produces text, indexes it or answers from it lives in the API, and the Web reaches it through the API. Unused code goes, but only once every use is accounted for.
+
+Today the Web does not go through the API for everything: it has its own drizzle schema, its own Lore synthesizer, research web search and HTML extractor, and a copy of the publication SQL. The design treats these as follows:
+
+| Web code | Used by (Web) | Fate | When |
+| --- | --- | --- | --- |
+| Lore synthesizer (`artistDocService.ts`, `artistDoc/synthesizeArtistDoc.ts`) | artist page Lore, claimant dashboard | Replaced by the API's Lore rebuild reading units; Web calls the API route | after the chat switch, before retiring the Web copy |
+| Research web search (`queries/vaultWebSearch.ts`) | `dashboardActions.ts`, `evals/runResearchCase.ts` | Replaced by the API's `searchAndPopulateVault` route | same phase; the Web eval moves with it |
+| HTML extractor (`fetchPageContent.ts`) | `addVaultSource.ts` (podcast metadata only) | Keep only the metadata fetch; body text already comes from the API | same phase |
+| Publication SQL (`bio/publicVaultSourceSql.ts`) | public bio and Lore reads | Keep as a read-side copy until those reads move; a drift test compares it to the API's | ongoing |
+| `validateMagicBytes.ts` | its own test only | Delete | any time |
+| `extractPdfText.ts` | no production caller found | Delete after a grep in the Web main branch confirms it | any time |
+
+Rule for every row: nothing is deleted until the API route serving the same flow exists, the Web flow is switched to it, and the Web's tests for that flow pass against the API. The chat switch does not wait for this table; the table is the phase after it.
+
+Partner access in the first version: the existing research key with one allowance. A key registry (keys table, issuance, revocation, admin surface) is built when there is a second partner.
+
 ## Open questions for Pete
 
-Two remain after the builder check; the rest of its questions are settled above and marked "my call".
-
-1. **Are the Web-side retirements in scope for this work?** The Web keeps its own Lore synthesizer, research web search, HTML extractor and publication SQL. Retiring them touches claimant flows and is weeks of Web work; leaving them means two Lore writers keep running beside the new table. Recommendation: out of scope for the chat switch, scheduled as the next piece once the chat runs on units, with the Web's writers frozen (no new features) in the meantime.
-2. **Partner keys: one service key or a key registry?** Today one shared research key serves every server-to-server caller and doubles as the visitor-allowance secret. Per-partner allowances need a keys table, issuance and revocation, and an admin surface. Recommendation: the first version ships the partner endpoints behind the existing single key with one allowance, and the registry comes when there is a second partner.
+None outstanding. Decisions recorded above: OCR in v1; native read removed; hybrid retrieval; Web scope and partner keys as in the previous section.
