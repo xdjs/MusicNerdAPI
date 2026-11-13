@@ -630,13 +630,9 @@ export const sourceUnits = pgTable(
     foreignKey({
       columns: [table.artistId],
       foreignColumns: [artists.id],
-      name: "source_units_artist_id_fkey",
+      name: "source_units_artist_id_artists_id_fk",
     }).onDelete("cascade"),
-    uniqueIndex("source_units_source_unit_uniq").on(
-      table.sourceKind,
-      table.sourceId,
-      table.unitIndex,
-    ),
+    uniqueIndex("source_units_source_unit").on(table.sourceKind, table.sourceId, table.unitIndex),
     index("source_units_artist").on(table.artistId, table.sourceKind, table.sourceId),
   ],
 );
