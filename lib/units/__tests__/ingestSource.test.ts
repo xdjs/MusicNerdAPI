@@ -247,6 +247,58 @@ describe("ingestSource", () => {
     expect(mocks.writeSourceUnits.mock.calls[0][1].sourceRevision).toBe("rev-1");
   });
 
+  test("an aborted read writes nothing, so the next attempt redoes the whole document", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source(true));
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "scanned page", true)],
+      ocrPages: 1,
+      failed: "vision",
+      truncated: false,
+      aborted: true,
+    });
+
+    const outcome = await ingestSource(REF);
+
+    expect(outcome).toEqual({ units: 0, ocrPages: 0, embedded: false, skipped: "aborted" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.embedUnits).not.toHaveBeenCalled();
+  });
+
+  test("an aborted parse writes nothing either, rather than clearing the source's units", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source());
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [],
+      ocrPages: 0,
+      failed: "extract",
+      truncated: false,
+      aborted: true,
+    });
+
+    const outcome = await ingestSource(REF, { ocr: false });
+
+    expect(outcome).toEqual({ units: 0, ocrPages: 0, embedded: false, skipped: "aborted" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  test("with stampPartial, an aborted read writes the pages it read and reports the failure", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source(true));
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "scanned page", true)],
+      ocrPages: 1,
+      failed: "vision",
+      truncated: false,
+      aborted: true,
+    });
+    mocks.embedUnits.mockResolvedValue([[0.1]]);
+
+    const outcome = await ingestSource(REF, { stampPartial: true });
+
+    expect(outcome).toEqual({ units: 1, ocrPages: 1, embedded: true, failed: "vision" });
+    expect(mocks.writeSourceUnits.mock.calls[0][1].sourceRevision).toBe("rev-1");
+    // A partial read never fills extracted_text.
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
   test("a missing source is reported as skipped", async () => {
     mocks.loadUnitSource.mockResolvedValue(null);
 

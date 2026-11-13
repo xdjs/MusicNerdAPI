@@ -39,8 +39,18 @@ describe("readPageWithVision", () => {
     });
   });
 
-  test("rejects an empty transcription", async () => {
-    generateTextMock.mockResolvedValue({ text: "  " });
-    await expect(readPageWithVision(new Uint8Array([1]))).rejects.toThrow(/empty/i);
+  test("asks the model to mark a page with no text", async () => {
+    generateTextMock.mockResolvedValue({ text: "Body" });
+    await readPageWithVision(new Uint8Array([1]));
+    const instruction = generateTextMock.mock.calls[0][0].prompt[0].content[0].text;
+    expect(instruction).toMatch(/If the page has no text, reply exactly: \[blank page\]$/);
   });
+
+  test.each(["[blank page]", "  [Blank Page]\n", "  "])(
+    "returns an empty string for a blank page (%j), never an error",
+    async reply => {
+      generateTextMock.mockResolvedValue({ text: reply });
+      await expect(readPageWithVision(new Uint8Array([1]))).resolves.toBe("");
+    },
+  );
 });

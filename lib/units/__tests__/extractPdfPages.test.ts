@@ -41,6 +41,24 @@ describe("extractPdfPages", () => {
     expect(result.truncated).toBe(true);
   });
 
+  test("rejects at once when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      extractPdfPages(await twoPagePdf(["A"]), { signal: controller.signal }),
+    ).rejects.toThrow(/aborted/i);
+  });
+
+  test("rejects when the signal aborts during the parse", async () => {
+    const controller = new AbortController();
+    const parse = extractPdfPages(await twoPagePdf(["A", "B", "C"]), {
+      signal: controller.signal,
+      timeoutMs: 60_000,
+    });
+    controller.abort();
+    await expect(parse).rejects.toThrow(/aborted/i);
+  });
+
   test("rejects when the parse exceeds the timeout", async () => {
     await expect(extractPdfPages(await twoPagePdf(["A"]), { timeoutMs: 0 })).rejects.toThrow(
       /timed out/i,

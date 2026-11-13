@@ -7,8 +7,7 @@ const mock = vi.hoisted(() => ({
   execute: vi.fn(),
   txExecute: vi.fn(),
   saveProgress: vi.fn(),
-  saveState: vi.fn(),
-  complete: vi.fn(),
+  finish: vi.fn(),
 }));
 vi.mock("@/lib/units/listArtistUnitSources", () => ({ listArtistUnitSources: mock.list }));
 vi.mock("@/lib/units/ingestSource", () => ({ ingestSource: mock.ingest }));
@@ -19,9 +18,8 @@ vi.mock("@/lib/db/db", () => ({
     transaction: (fn: (tx: unknown) => Promise<unknown>) => fn({ execute: mock.txExecute }),
   },
 }));
-vi.mock("@/lib/research/saveJobProgress", () => ({ saveJobProgress: mock.saveProgress }));
-vi.mock("@/lib/research/saveJobState", () => ({ saveJobState: mock.saveState }));
-vi.mock("@/lib/research/completeResearchJob", () => ({ completeResearchJob: mock.complete }));
+vi.mock("@/lib/units/saveUnitSyncProgress", () => ({ saveUnitSyncProgress: mock.saveProgress }));
+vi.mock("@/lib/units/finishUnitSync", () => ({ finishUnitSync: mock.finish }));
 const { runUnitSync } = await import("@/lib/units/runUnitSync");
 
 type Entry = {
@@ -72,6 +70,7 @@ beforeEach(() => {
   mock.ingest.mockResolvedValue({ units: 2, ocrPages: 0, embedded: true });
   mock.execute.mockResolvedValue([]);
   mock.txExecute.mockResolvedValue([]);
+  mock.finish.mockResolvedValue(true);
 });
 
 describe("runUnitSync", () => {
@@ -141,26 +140,68 @@ describe("runUnitSync", () => {
     expect(outcome.done).toBe(true);
   });
 
+  it("bounds the PDF parse by the slice deadline, keeping 8 s to persist", async () => {
+    mock.list.mockResolvedValue([entry("s1", { indexedRevision: null })]);
+    await runUnitSync(job(), now + 30_000);
+    expect(mock.ingest.mock.calls[0][1].pdfTimeoutMs).toBe(22_000);
+  });
+
+  it("starts no source after 20 s of its slice, so a backfill leaves the tick to other jobs", async () => {
+    mock.list.mockResolvedValue(
+      Array.from({ length: 6 }, (_, i) => entry(`s${i}`, { indexedRevision: null })),
+    );
+    mock.ingest.mockImplementation(async () => {
+      now += 8_000;
+      return { units: 1, ocrPages: 0, embedded: true };
+    });
+    // 0 s, 8 s and 16 s start; at 24 s the slice's 20 s are spent, with the deadline far off.
+    const outcome = await runUnitSync(job(), farDeadline());
+    expect(mock.ingest).toHaveBeenCalledTimes(3);
+    expect(outcome).toEqual({ progress: "units 3/6, failures 0", done: false });
+    // The source in flight still runs to the framework's deadline.
+    expect(mock.ingest.mock.calls[2][1].pdfTimeoutMs).toBe(45_000);
+  });
+
+  it("does not start a source with less than 20 s left, keeping the cursor", async () => {
+    mock.list.mockResolvedValue([
+      entry("s1", { indexedRevision: null }),
+      entry("s2", { indexedRevision: null }),
+    ]);
+    mock.ingest.mockImplementation(async () => {
+      now += 11_000;
+      return { units: 1, ocrPages: 0, embedded: true };
+    });
+    // 0 s starts (30 s left); at 11 s only 19 s remain.
+    const outcome = await runUnitSync(job(), now + 30_000);
+    expect(mock.ingest).toHaveBeenCalledOnce();
+    expect(outcome).toEqual({ progress: "units 1/2, failures 0", done: false });
+    expect(mock.saveProgress.mock.calls[0][3].after).toEqual({
+      sourceKind: "vault",
+      sourceId: "s1",
+    });
+  });
+
   it("stops before the deadline with done false and saves the next cursor and total", async () => {
     mock.list.mockResolvedValue([
       entry("s1", { indexedRevision: null }),
       entry("s2", { indexedRevision: null }),
       entry("s3", { indexedRevision: null }),
     ]);
-    const deadline = now + 30_000;
+    const deadline = now + 40_000;
     mock.ingest.mockImplementation(async () => {
       now += 12_000;
       return { units: 1, ocrPages: 0, embedded: true };
     });
     const outcome = await runUnitSync(job(), deadline);
-    // 0 s and 12 s start; at 24 s only 6 s remain, inside the 8 s reserve.
+    // 0 s and 12 s start; at 24 s only 16 s remain, under the 20 s needed to start a source.
     expect(mock.ingest).toHaveBeenCalledTimes(2);
     expect(outcome).toEqual({ progress: "units 2/3, failures 0", done: false });
-    expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 2, {
-      total: 3,
-      state: { backfill: true, failures: 0, after: { sourceKind: "vault", sourceId: "s2" } },
+    expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 2, 3, {
+      backfill: true,
+      failures: 0,
+      after: { sourceKind: "vault", sourceId: "s2" },
     });
-    expect(mock.complete).not.toHaveBeenCalled();
+    expect(mock.finish).not.toHaveBeenCalled();
   });
 
   it("resumes after the saved key and finishes with done true", async () => {
@@ -177,11 +218,10 @@ describe("runUnitSync", () => {
     expect(mock.ingest).toHaveBeenCalledOnce();
     expect(mock.ingest.mock.calls[0][0]).toEqual({ sourceKind: "vault", sourceId: "s3" });
     expect(outcome).toEqual({ progress: "units 3/3, failures 1", done: true });
-    expect(mock.saveState).toHaveBeenCalledWith("job-1", {
+    expect(mock.finish).toHaveBeenCalledWith("job-1", {
       failures: 1,
       after: { sourceKind: "vault", sourceId: "s3" },
     });
-    expect(mock.complete).toHaveBeenCalledWith("job-1");
     expect(mock.saveProgress).not.toHaveBeenCalled();
   });
 
@@ -214,7 +254,7 @@ describe("runUnitSync", () => {
       progress: "units 0/0, failures 0",
       done: true,
     });
-    expect(mock.complete).toHaveBeenCalledWith("job-1");
+    expect(mock.finish).toHaveBeenCalledWith("job-1", { backfill: true, failures: 0 });
   });
 
   it("counts a thrown ingest and a failed outcome as failures and keeps going", async () => {
@@ -235,10 +275,15 @@ describe("runUnitSync", () => {
     const outcome = await runUnitSync(job(), farDeadline());
     expect(mock.ingest).toHaveBeenCalledTimes(3);
     expect(outcome).toEqual({ progress: "units 3/3, failures 2", done: true });
-    expect(mock.saveState).toHaveBeenCalledWith("job-1", {
+    expect(mock.finish).toHaveBeenCalledWith("job-1", {
       backfill: true,
       failures: 2,
       after: { sourceKind: "vault", sourceId: "s3" },
+      // Which sources failed and why: an error name or an outcome field, never text.
+      recentFailures: [
+        { kind: "vault", id: "s1", reason: "DrizzleQueryError" },
+        { kind: "vault", id: "s2", reason: "vision" },
+      ],
     });
     const logged = vi
       .mocked(console.warn)
@@ -247,6 +292,25 @@ describe("runUnitSync", () => {
     expect(logged).toContain("vault source s1 failed: DrizzleQueryError 57P01");
     expect(logged).not.toContain("secret unit text");
     expect(logged).not.toContain("Failed query");
+  });
+
+  it("keeps only the last 20 failed sources, across slices, beside the full count", async () => {
+    const earlier = Array.from({ length: 19 }, (_, i) => ({
+      kind: "social",
+      id: `old${i}`,
+      reason: "extract",
+    }));
+    mock.list.mockResolvedValue([
+      entry("s1", { indexedRevision: null }),
+      entry("s2", { indexedRevision: null }),
+    ]);
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, failed: "extract" });
+    await runUnitSync(job({ state: { failures: 19, recentFailures: earlier } }), farDeadline());
+    const state = mock.finish.mock.calls[0][1];
+    expect(state.failures).toBe(21);
+    expect(state.recentFailures).toHaveLength(20);
+    expect(state.recentFailures[0]).toEqual({ kind: "social", id: "old1", reason: "extract" });
+    expect(state.recentFailures.at(-1)).toEqual({ kind: "vault", id: "s2", reason: "extract" });
   });
 
   it("counts a failed re-embed and keeps going", async () => {
@@ -270,12 +334,114 @@ describe("runUnitSync", () => {
 
   it("waits for a longer slice when the budget cannot fit one source", async () => {
     mock.list.mockResolvedValue([entry("s1", { indexedRevision: null })]);
-    const outcome = await runUnitSync(job(), now + 7_000);
+    const outcome = await runUnitSync(job(), now + 19_999);
     expect(mock.ingest).not.toHaveBeenCalled();
     expect(outcome).toEqual({ progress: "units 0/1, failures 0", done: false, waiting: true });
-    expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 0, {
-      total: 1,
-      state: { backfill: true, failures: 0 },
+    expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 0, 1, { backfill: true, failures: 0 });
+  });
+
+  describe("a source whose read was cut short (aborted)", () => {
+    it("is not stamped, not counted, and is retried first in the next slice", async () => {
+      mock.list.mockResolvedValue([
+        entry("s1", { indexedRevision: null }),
+        entry("s2", { indexedRevision: null }),
+        entry("s3", { indexedRevision: null }),
+      ]);
+      mock.ingest
+        .mockResolvedValueOnce({ units: 1, ocrPages: 0, embedded: true })
+        .mockResolvedValueOnce({ units: 0, ocrPages: 0, embedded: false, skipped: "aborted" });
+      const outcome = await runUnitSync(job({ state: {} }), farDeadline());
+      expect(mock.ingest).toHaveBeenCalledTimes(2);
+      expect(mock.ingest.mock.calls[1][1]).toMatchObject({ stampPartial: false });
+      expect(outcome).toEqual({ progress: "units 1/3, failures 0", done: false });
+      expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 1, 3, {
+        failures: 0,
+        after: { sourceKind: "vault", sourceId: "s1" },
+        retry: { sourceKind: "vault", sourceId: "s2" },
+      });
+    });
+
+    it("is retried once with stampPartial, which keeps today's partial write and counts a failure", async () => {
+      mock.list.mockResolvedValue([
+        entry("s1"),
+        entry("s2", { indexedRevision: null }),
+        entry("s3", { indexedRevision: null }),
+      ]);
+      mock.ingest
+        .mockResolvedValueOnce({ units: 3, ocrPages: 3, embedded: true, failed: "vision" })
+        .mockResolvedValueOnce({ units: 1, ocrPages: 0, embedded: true });
+      const retry = { sourceKind: "vault", sourceId: "s2" };
+      const after = { sourceKind: "vault", sourceId: "s1" };
+      const outcome = await runUnitSync(job({ state: { after, retry } }), farDeadline());
+      expect(mock.ingest.mock.calls.map(c => [c[0].sourceId, c[1].stampPartial])).toEqual([
+        ["s2", true],
+        ["s3", false],
+      ]);
+      expect(outcome.done).toBe(true);
+      // The retry is spent, whatever its outcome.
+      expect(mock.finish.mock.calls[0][1]).not.toHaveProperty("retry");
+      expect(mock.finish.mock.calls[0][1].failures).toBe(1);
+    });
+  });
+
+  describe("rescan (a source queued while the job was live)", () => {
+    it("starts over from the top once when a rescan is pending at the end, then completes", async () => {
+      // s0 was added while the job was live; it sorts before the saved key.
+      mock.list
+        .mockResolvedValueOnce([entry("s1"), entry("s2", { indexedRevision: null })])
+        .mockResolvedValueOnce([entry("s0", { indexedRevision: null }), entry("s1"), entry("s2")]);
+      mock.finish.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      const after = { sourceKind: "vault", sourceId: "s1" };
+      const outcome = await runUnitSync(job({ state: { after, rescan: true } }), farDeadline());
+      expect(mock.ingest.mock.calls.map(c => c[0].sourceId)).toEqual(["s2", "s0"]);
+      expect(mock.list).toHaveBeenCalledTimes(2);
+      expect(mock.finish).toHaveBeenCalledTimes(2);
+      // The flag is the database's to clear: the slice never writes it back.
+      expect(mock.finish.mock.calls[0][1]).not.toHaveProperty("rescan");
+      expect(mock.finish.mock.calls[1][1]).toEqual({
+        failures: 0,
+        after: { sourceKind: "vault", sourceId: "s2" },
+      });
+      expect(outcome).toEqual({ progress: "units 3/3, failures 0", done: true });
+    });
+
+    it("never writes the claim-time cursor back after a restart", async () => {
+      // s0 (the new upload) sorts before the claim-time key s1; its read is cut short on the second pass.
+      mock.list
+        .mockResolvedValueOnce([entry("s1"), entry("s2")])
+        .mockResolvedValueOnce([entry("s0", { indexedRevision: null }), entry("s1"), entry("s2")]);
+      mock.finish.mockResolvedValueOnce(false);
+      mock.ingest.mockResolvedValueOnce({
+        units: 0,
+        ocrPages: 0,
+        embedded: false,
+        skipped: "aborted",
+      });
+      const after = { sourceKind: "vault", sourceId: "s1" };
+      await runUnitSync(job({ state: { after, rescan: true } }), farDeadline());
+      const saved = mock.saveProgress.mock.calls[0][3];
+      expect(saved.retry).toEqual({ sourceKind: "vault", sourceId: "s0" });
+      expect(saved).not.toHaveProperty("after");
+    });
+
+    it("restarts at most once per slice and leaves a second rescan to the next slice", async () => {
+      mock.list.mockResolvedValue([entry("s1")]);
+      mock.finish.mockResolvedValue(false);
+      const outcome = await runUnitSync(job({ state: {} }), farDeadline());
+      expect(mock.finish).toHaveBeenCalledTimes(2);
+      expect(outcome.done).toBe(false);
+      // The next slice starts from the top: no resume key is saved.
+      expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 0, 1, { failures: 0 });
+    });
+
+    it("saves progress without the flag, which the database keeps", async () => {
+      mock.list.mockResolvedValue([entry("s1", { indexedRevision: null }), entry("s2")]);
+      mock.ingest.mockImplementation(async () => {
+        now += 600_000;
+        return { units: 1, ocrPages: 0, embedded: true };
+      });
+      await runUnitSync(job({ state: { rescan: true } }), farDeadline());
+      expect(mock.saveProgress.mock.calls[0][3]).not.toHaveProperty("rescan");
     });
   });
 });
