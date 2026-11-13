@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { Eval } from "braintrust";
 import { MODEL_OCR } from "@/lib/ai/const";
 import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
@@ -19,7 +20,8 @@ globalThis.fetch = budget.fetch;
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 const PHRASE = "Music Nerd vision fixture, November 2026";
-const FIXTURE = new URL("../lib/units/__tests__/fixtures/scanned-page.pdf", import.meta.url);
+/** Resolved from the repo root: the eval CLI bundles to CommonJS, where import.meta.url is empty. */
+const FIXTURE = path.join(process.cwd(), "lib/units/__tests__/fixtures/scanned-page.pdf");
 
 Eval("music-nerd", {
   experimentName: experimentName("vision-page", MODEL_OCR, SHA),
