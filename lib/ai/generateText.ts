@@ -1,4 +1,9 @@
-import { generateText as sdkGenerateText, type Output, type OutputInterface } from "ai";
+import {
+  generateText as sdkGenerateText,
+  type ModelMessage,
+  type Output,
+  type OutputInterface,
+} from "ai";
 import { MODEL_FLASH } from "@/lib/ai/const";
 import { buildProviderOptions } from "@/lib/ai/buildProviderOptions";
 
@@ -9,7 +14,8 @@ export type GenerateTextOptions<OUTPUT extends OutputInterface = TextOutput> = {
   model?: string;
   /** The system instruction. */
   instructions?: string;
-  prompt: string;
+  /** A text prompt, or a conversation as model messages (e.g. one carrying a file part). */
+  prompt: string | ModelMessage[];
   temperature?: number;
   abortSignal?: AbortSignal;
   maxOutputTokens?: number;
