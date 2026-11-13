@@ -40,23 +40,14 @@ beforeEach(() => {
 });
 
 describe("getMeHandler", () => {
-  it("returns the caller's row and needsLegacyLink with CORS headers", async () => {
+  it("returns the caller's row with CORS headers", async () => {
     const res = await getMeHandler(request("Bearer tok"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok", ...user, needsLegacyLink: true });
+    expect(await res.json()).toEqual({ status: "ok", ...user });
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(verify).toHaveBeenCalledWith("tok");
     expect(findOrCreate).toHaveBeenCalledWith("did:privy:x");
     expect(assign).toHaveBeenCalledWith(user);
-  });
-
-  it.each([
-    ["a wallet", { wallet: "0xabc" }],
-    ["a dismissed prompt", { legacyLinkDismissed: true }],
-  ])("has needsLegacyLink false for an account with %s", async (_label, change) => {
-    findOrCreate.mockResolvedValue({ ...user, ...change });
-    const res = await getMeHandler(request("Bearer tok"));
-    expect((await res.json()).needsLegacyLink).toBe(false);
   });
 
   it("returns the generated name", async () => {

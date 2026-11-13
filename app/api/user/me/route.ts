@@ -17,7 +17,7 @@ export async function OPTIONS() {
  * The signed-in caller's own user row and role flags, created on first sign-in.
  *
  * @param request - The request; any signed-in user's Privy token.
- * @returns 200 with the row and `needsLegacyLink`, or an error.
+ * @returns 200 with the row, or an error.
  */
 export async function GET(request: Request) {
   return getMeHandler(request);

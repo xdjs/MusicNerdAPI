@@ -12,7 +12,7 @@ import { findOrCreateUserByPrivyId } from "@/lib/users/findOrCreateUserByPrivyId
  * sign-in did.
  *
  * @param request - The request, with a Privy bearer token.
- * @returns 200 with the row, `needsLegacyLink` and `status: "ok"`, or 401 or 500.
+ * @returns 200 with the row and `status: "ok"`, or 401 or 500.
  */
 export async function getMeHandler(request: Request) {
   const headers = getCorsHeaders();
@@ -25,10 +25,7 @@ export async function getMeHandler(request: Request) {
         { status: 401, headers },
       );
     const user = await assignUserName(await findOrCreateUserByPrivyId(privyUserId));
-    return NextResponse.json(
-      { status: "ok", ...user, needsLegacyLink: !user.wallet && !user.legacyLinkDismissed },
-      { headers },
-    );
+    return NextResponse.json({ status: "ok", ...user }, { headers });
   } catch (error) {
     console.error("[API] get me error", error);
     return NextResponse.json(
