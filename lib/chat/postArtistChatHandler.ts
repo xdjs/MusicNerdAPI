@@ -12,6 +12,7 @@ import { MODEL_CHAT } from "@/lib/ai/const";
 import { streamText } from "@/lib/ai/streamText";
 import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
 import { gateStepText } from "@/lib/chat/gateStepText";
+import { keepCurrentPdfTurns } from "@/lib/chat/keepCurrentPdfTurns";
 import { createChatCitations } from "@/lib/chat/createChatCitations";
 import { createReadSourceTool } from "@/lib/chat/createReadSourceTool";
 import { createSearchSourcesTool } from "@/lib/chat/createSearchSourcesTool";
@@ -56,7 +57,8 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     await reserveQuestionPlanning(artistId, await getQuestionVisitorKey(request));
     const originals = await loadPublicResearchOriginals(artistId);
     const name = artist.name ?? "This artist";
-    const prompt = await convertToModelMessages(body.messages);
+    // An earlier answer that read a PDF is replayed only while that document is unchanged.
+    const prompt = await convertToModelMessages(await keepCurrentPdfTurns(body.messages, artistId));
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const cite = createChatCitations(writer);

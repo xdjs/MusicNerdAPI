@@ -93,10 +93,13 @@ Staging admits 30 chat questions per rolling hour per visitor key and 200 per da
 
 `pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
 
+## Follow-up turns (2026-11-13)
+
+Before this change the body validator dropped every earlier answer that had read a PDF, because the document's access can change between turns and the old answer would replay it. The guard stays, narrowed: `keepCurrentPdfTurns` keeps such an answer only while every document it read is still published for the artist at the revision it read (the read tool now returns `revision`); otherwise the answer is dropped as before. The chat suite's `dutchyyy-aliases` case gained a follow-up row, asked with the first answer in the conversation and scored like any other row.
+
 ## What the numbers do not show
 
 - First text within five seconds is not met. Answers start at 6 to 12 seconds because the model reads sources before writing; the PDF-backed answer varies from 10 to 31 seconds with provider latency. Completion within 20 seconds is met on all but the slowest PDF sample.
 - The Dutchyyy acceptance answer includes The Chill Factor in roughly half of runs. The page-1 overview lists three aliases; the fourth is a one-off credit on page 2. The reference marks this as the main completeness gap and the judge scores it accordingly.
 - The Willie Colón / Blades case surfaces the Rolling Stone account only when search ranks it; the two-source rule reads what search returns.
 - The judge is the same model family as the answerer. Manual review of answers against captured evidence remains the acceptance gate; the judge's reasons are good at naming unsupported clauses and misplaced citations and should be read, not averaged.
-- Follow-ups after a PDF read drop the previous assistant turn from history (unchanged); the model re-answers from sources, which worked in a two-turn local check but repeats itself.
