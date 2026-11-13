@@ -19,7 +19,8 @@ const PARSE_RESERVE_MS = 8_000;
  *
  * Walks `listArtistUnitSources` from where the last slice stopped: an orphan's units are deleted, a source whose
  * indexed revision differs from its current one is ingested with OCR, and a current source with
- * units lacking embeddings is re-embedded. A source that fails is counted in `state.failures` and
+ * units lacking embeddings is re-embedded. A source that fails is counted in `state.failures`, listed
+ * in `state.recentFailures` (the last 20, with an error name or outcome field as the reason) and
  * skipped, never stopping the slice. The list is rebuilt every slice, so the slice resumes after the
  * last source handled (`state.after`, a kind and id), not at a position.
  *
@@ -38,11 +39,18 @@ const PARSE_RESERVE_MS = 8_000;
  */
 export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   // The flag belongs to the row: the slice never writes it back, so only the database clears it.
-  const { rescan: _rescan, retry: savedRetry, ...saved } = job.state;
+  const { rescan: _rescan, retry: savedRetry, recentFailures: savedRecent, ...saved } = job.state;
   let after = savedKey(saved.after);
   // A source whose read was cut short last slice: read it again, once, before moving on.
   let retry = savedKey(savedRetry);
   let failures = typeof saved.failures === "number" ? saved.failures : 0;
+  // Which sources failed lately and why (an error name or outcome field, never text), for support.
+  const recentFailures: FailedSource[] = Array.isArray(savedRecent) ? [...savedRecent] : [];
+  const fail = (entry: UnitSyncEntry, reason: string) => {
+    failures++;
+    recentFailures.push({ kind: entry.sourceKind, id: entry.sourceId, reason });
+    recentFailures.splice(0, recentFailures.length - RECENT_FAILURES);
+  };
   let handled = 0;
   let restarted = false;
   const sliceStart = Date.now();
@@ -75,9 +83,9 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
           cutShort = true;
           break;
         }
-        if (result === "failed") failures++;
+        if (typeof result === "object") fail(entry, result.failed);
       } catch (error) {
-        failures++;
+        fail(entry, error instanceof Error ? error.name : "unknown");
         // Never the message: a failed query's message carries its bound parameters, which can be unit text.
         const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
         console.warn(
@@ -90,7 +98,13 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
     }
 
     // `cursor` and `total` are display counters for this slice's list; `state.after` is the resume point.
-    const state = { ...saved, failures, ...(after ? { after } : {}), ...(retry ? { retry } : {}) };
+    const state = {
+      ...saved,
+      failures,
+      ...(after ? { after } : {}),
+      ...(retry ? { retry } : {}),
+      ...(recentFailures.length > 0 ? { recentFailures } : {}),
+    };
     const progress = `units ${cursor}/${total}, failures ${failures}`;
     if (cursor < total || cutShort) {
       await saveUnitSyncProgress(job.id, cursor, total, state);
@@ -110,6 +124,9 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
 }
 
 type SourceKey = { sourceKind: string; sourceId: string };
+type FailedSource = { kind: string; id: string; reason: string };
+/** How many failed sources `state.recentFailures` keeps, newest last. */
+const RECENT_FAILURES = 20;
 
 /** The resume key saved in job state, or null when there is none (a fresh job). */
 function savedKey(value: unknown): SourceKey | null {
@@ -126,12 +143,12 @@ function compareKeys(a: SourceKey, b: SourceKey): number {
   return 0;
 }
 
-/** Sync one source; "failed" when it failed without throwing. Database errors propagate. */
+/** Sync one source; `failed` names why it failed without throwing. Database errors propagate. */
 async function syncSource(
   entry: UnitSyncEntry,
   deadline: number,
   stampPartial: boolean,
-): Promise<"ok" | "failed" | "aborted"> {
+): Promise<"ok" | "aborted" | { failed: string }> {
   const { sourceKind, sourceId } = entry;
   const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
   if (entry.sourceRevision === null) {
@@ -150,7 +167,7 @@ async function syncSource(
     if (outcome.failed)
       console.warn(`[unit_sync] ${sourceKind} source ${sourceId} failed: ${outcome.failed}`);
     if (outcome.skipped === "aborted") return "aborted";
-    return outcome.failed ? "failed" : "ok";
+    return outcome.failed ? { failed: outcome.failed } : "ok";
   }
   if (!entry.needsEmbedding) return "ok";
 

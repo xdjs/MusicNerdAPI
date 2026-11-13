@@ -275,14 +275,16 @@ describe("runUnitSync", () => {
     const outcome = await runUnitSync(job(), farDeadline());
     expect(mock.ingest).toHaveBeenCalledTimes(3);
     expect(outcome).toEqual({ progress: "units 3/3, failures 2", done: true });
-    expect(mock.finish).toHaveBeenCalledWith(
-      "job-1",
-      expect.objectContaining({
-        backfill: true,
-        failures: 2,
-        after: { sourceKind: "vault", sourceId: "s3" },
-      }),
-    );
+    expect(mock.finish).toHaveBeenCalledWith("job-1", {
+      backfill: true,
+      failures: 2,
+      after: { sourceKind: "vault", sourceId: "s3" },
+      // Which sources failed and why: an error name or an outcome field, never text.
+      recentFailures: [
+        { kind: "vault", id: "s1", reason: "DrizzleQueryError" },
+        { kind: "vault", id: "s2", reason: "vision" },
+      ],
+    });
     const logged = vi
       .mocked(console.warn)
       .mock.calls.map(c => c.join(" "))
@@ -290,6 +292,25 @@ describe("runUnitSync", () => {
     expect(logged).toContain("vault source s1 failed: DrizzleQueryError 57P01");
     expect(logged).not.toContain("secret unit text");
     expect(logged).not.toContain("Failed query");
+  });
+
+  it("keeps only the last 20 failed sources, across slices, beside the full count", async () => {
+    const earlier = Array.from({ length: 19 }, (_, i) => ({
+      kind: "social",
+      id: `old${i}`,
+      reason: "extract",
+    }));
+    mock.list.mockResolvedValue([
+      entry("s1", { indexedRevision: null }),
+      entry("s2", { indexedRevision: null }),
+    ]);
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, failed: "extract" });
+    await runUnitSync(job({ state: { failures: 19, recentFailures: earlier } }), farDeadline());
+    const state = mock.finish.mock.calls[0][1];
+    expect(state.failures).toBe(21);
+    expect(state.recentFailures).toHaveLength(20);
+    expect(state.recentFailures[0]).toEqual({ kind: "social", id: "old1", reason: "extract" });
+    expect(state.recentFailures.at(-1)).toEqual({ kind: "vault", id: "s2", reason: "extract" });
   });
 
   it("counts a failed re-embed and keeps going", async () => {
