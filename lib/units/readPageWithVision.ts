@@ -9,7 +9,7 @@ const BLANK_PAGE = "[blank page]";
  * Has the vision model transcribe one PDF page, for pages whose text layer is
  * missing or unreadable.
  *
- * @param pageBytes - A one-page PDF (see `slicePdfPage`).
+ * @param pageBytes - A one-page PDF (see `sliceLoadedPdfPage`).
  * @param opts - An abort signal, and a model id to use instead of `MODEL_OCR`.
  * @returns The page as trimmed markdown; an empty string for a page with no text (the model's
  * `[blank page]` marker, or an empty reply), which is not an error.

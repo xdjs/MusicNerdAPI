@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 
 /**
  * Cuts one page out of an already parsed PDF (`loadPdfDocument`) into a new one-page PDF for the
- * vision model, without parsing the document again (`slicePdfPage` parses it per call).
+ * vision model, without parsing the document again.
  *
  * @param source - The parsed document.
  * @param pageIndex - The page to keep, 0-based.

@@ -39,8 +39,15 @@ const PARSE_RESERVE_MS = 8_000;
  */
 export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   // The flag belongs to the row: the slice never writes it back, so only the database clears it.
-  const { rescan: _rescan, retry: savedRetry, recentFailures: savedRecent, ...saved } = job.state;
-  let after = savedKey(saved.after);
+  const {
+    rescan: _rescan,
+    retry: savedRetry,
+    recentFailures: savedRecent,
+    after: savedAfter,
+    ...saved
+  } = job.state;
+  // Out of `saved`, so a restart from the top (after = null) can never write the claim-time key back.
+  let after = savedKey(savedAfter);
   // A source whose read was cut short last slice: read it again, once, before moving on.
   let retry = savedKey(savedRetry);
   let failures = typeof saved.failures === "number" ? saved.failures : 0;

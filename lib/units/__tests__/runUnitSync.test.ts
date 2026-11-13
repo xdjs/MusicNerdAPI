@@ -405,6 +405,25 @@ describe("runUnitSync", () => {
       expect(outcome).toEqual({ progress: "units 3/3, failures 0", done: true });
     });
 
+    it("never writes the claim-time cursor back after a restart", async () => {
+      // s0 (the new upload) sorts before the claim-time key s1; its read is cut short on the second pass.
+      mock.list
+        .mockResolvedValueOnce([entry("s1"), entry("s2")])
+        .mockResolvedValueOnce([entry("s0", { indexedRevision: null }), entry("s1"), entry("s2")]);
+      mock.finish.mockResolvedValueOnce(false);
+      mock.ingest.mockResolvedValueOnce({
+        units: 0,
+        ocrPages: 0,
+        embedded: false,
+        skipped: "aborted",
+      });
+      const after = { sourceKind: "vault", sourceId: "s1" };
+      await runUnitSync(job({ state: { after, rescan: true } }), farDeadline());
+      const saved = mock.saveProgress.mock.calls[0][3];
+      expect(saved.retry).toEqual({ sourceKind: "vault", sourceId: "s0" });
+      expect(saved).not.toHaveProperty("after");
+    });
+
     it("restarts at most once per slice and leaves a second rescan to the next slice", async () => {
       mock.list.mockResolvedValue([entry("s1")]);
       mock.finish.mockResolvedValue(false);
