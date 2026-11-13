@@ -40,6 +40,11 @@ describe("embedUnits", () => {
     await expect(embedUnits(["a"])).rejects.toThrow(/dimension/i);
   });
 
+  test("throws when the model returns a different number of vectors than inputs", async () => {
+    embedManyMock.mockResolvedValue({ embeddings: [vec(1)] });
+    await expect(embedUnits(["a", "b"])).rejects.toThrow(/2.*1|1.*2/);
+  });
+
   test("returns [] without calling the model for empty input", async () => {
     await expect(embedUnits([])).resolves.toEqual([]);
     expect(embedManyMock).not.toHaveBeenCalled();

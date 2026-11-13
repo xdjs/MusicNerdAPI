@@ -8,7 +8,7 @@ import { EMBED_BATCH, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
  * @param texts - The texts to embed.
  * @param opts - An abort signal forwarded to every model call.
  * @returns One vector per text, in the same order as `texts`.
- * @throws If the model returns a vector that is not `EMBEDDING_DIMENSIONS` long.
+ * @throws If the model returns a different number of vectors than texts, or a vector that is not `EMBEDDING_DIMENSIONS` long.
  */
 export async function embedUnits(
   texts: string[],
@@ -16,11 +16,18 @@ export async function embedUnits(
 ): Promise<number[][]> {
   const vectors: number[][] = [];
   for (let start = 0; start < texts.length; start += EMBED_BATCH) {
+    const batch = texts.slice(start, start + EMBED_BATCH);
     const { embeddings } = await embedMany({
       model: MODEL_EMBEDDING,
-      values: texts.slice(start, start + EMBED_BATCH),
+      values: batch,
       abortSignal: opts.signal,
     });
+    // Vectors are matched to texts by position, so a dropped item would shift every later one.
+    if (embeddings.length !== batch.length) {
+      throw new Error(
+        `Embedding count mismatch: expected ${batch.length}, got ${embeddings.length}`,
+      );
+    }
     for (const vector of embeddings) {
       if (vector.length !== EMBEDDING_DIMENSIONS) {
         throw new Error(

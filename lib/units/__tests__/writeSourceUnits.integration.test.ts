@@ -82,6 +82,16 @@ describe("writeSourceUnits", () => {
     await writeSourceUnits(store as never, input([draft(0)], [[0.1, 0.2]]));
     expect((await rows())[0].embedding).toBe("[0.1,0.2]");
   });
+  it("refuses embeddings that do not match the units one to one", async () => {
+    await expect(
+      writeSourceUnits(store as never, input([draft(0), draft(1)], [[0.1]])),
+    ).rejects.toThrow(/2.*1|1.*2/);
+    expect(await rows()).toHaveLength(0);
+  });
+  it("writes null for an empty embedding", async () => {
+    await writeSourceUnits(store as never, input([draft(0)], [[]]));
+    expect((await rows())[0].embedding).toBeNull();
+  });
   it("batches inserts past 100 rows", async () => {
     const units = Array.from({ length: 205 }, (_, i) => draft(i));
     expect(await writeSourceUnits(store as never, input(units))).toBe(205);

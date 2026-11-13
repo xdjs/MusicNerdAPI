@@ -25,6 +25,11 @@ export async function writeSourceUnits(
   },
 ): Promise<number> {
   const { sourceKind, sourceId, artistId, sourceRevision, title, url, units, embeddings } = input;
+  if (embeddings && embeddings.length !== units.length) {
+    throw new Error(
+      `Embedding count mismatch: ${units.length} units but ${embeddings.length} embeddings`,
+    );
+  }
   // The table name is a code constant, never input. Key share blocks a concurrent delete until we commit.
   const locked = await tx.execute(
     sql`select 1 from ${sql.raw(SOURCE_TABLE[sourceKind])} where id = ${sourceId}::uuid for key share`,
@@ -36,7 +41,9 @@ export async function writeSourceUnits(
   for (let start = 0; start < units.length; start += INSERT_BATCH) {
     const values = units.slice(start, start + INSERT_BATCH).map((unit, offset) => {
       const embedding = embeddings?.[start + offset];
-      const vector = embedding ? sql`${JSON.stringify(embedding)}::extensions.vector` : sql`null`;
+      const vector = embedding?.length
+        ? sql`${JSON.stringify(embedding)}::extensions.vector`
+        : sql`null`;
       return sql`(${sourceKind}, ${sourceId}::uuid, ${artistId}::uuid, ${sourceRevision}, ${unit.unitIndex}, ${unit.locator}, ${title}, ${url}, ${unit.text}, ${unit.textHash}, ${unit.tokens}, ${unit.ocr}, ${UNIT_INGEST_VERSION}, ${vector})`;
     });
     await tx.execute(sql`insert into source_units
