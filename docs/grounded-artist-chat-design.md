@@ -45,6 +45,7 @@ Today the chat sends whole PDFs to the model as bytes, two per answer, and ranks
 - Supabase Postgres with pgvector available; one database shared by Web and API.
 - Every model call goes through the Vercel AI Gateway; the hosted Evals workflow holds the credential; secrets never leave Vercel or GitHub.
 - Both repositories are public.
+- External clients keep working untouched: SleeveNote (and Bopping) query artists by Spotify ID through the public lookups the API serves at `api.musicnerd.net`, and the legacy `api.musicnerd.xyz` domain still points at the Web app for them. Nothing in this design changes those routes, the `artists` table, the middleware, CORS or the domains; the implementation plan checks them in every PR.
 - The existing consumers of `extracted_text` (bio, fun facts, Lore rebuild, research review) keep working: that column stays populated.
 - The eval already extracts page-marked text from PDFs the way ingestion will (`lib/evals/readPdfChatEvidence.ts`), so the judge and the chat will finally read the same representation.
 

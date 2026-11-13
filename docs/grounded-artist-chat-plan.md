@@ -22,6 +22,7 @@
 - API repo rules (`AGENTS.md`): one exported function per file, named after the file, test beside it in `__tests__/`; TDD (see the test fail first); conventional commits; no env vars, dependencies or abstractions before the task that needs them; docs PR first for any public contract change.
 - Base branch for API work: `claude/1424-chat-followup-history` (API #118, stacked on #117), which carries the page-marked PDF renderer, the eval gates, `MODEL_JUDGE` and `keepCurrentPdfTurns`. #117 and #118 merge before part 1's chat PRs. `origin/main` has moved past them (`6ebb8d5`), so A1 starts by merging `origin/main` into its branch and resolving conflicts there.
 - Staging allowance stays 30 questions per visitor-hour and 200 per day; evals wait for it, never raise it.
+- External clients are untouched. SleeveNote (with Bopping) is an HTTP client that queries by Spotify ID through the public lookups served by this API at `api.musicnerd.net` (`app/api/searchArtists`, `findArtistBySpotifyID`, `findArtistByIG`, `findTwitterHandle`, `trackLinks`, `leaderboard`, `artist/[id]/image`, `artistBio/[id]`) and through the legacy `api.musicnerd.xyz` domain that still points at the Web app (API `AGENTS.md:54`). Part 1 changes none of those routes, the `artists` table, `middleware`, CORS or either domain. Every PR in the map ends with the lookup route tests passing unchanged, and after each production deploy of the API a public `GET /api/findArtistBySpotifyID` and `GET /api/searchArtists` are called once and compared to the documented shape in Docs `artist-lookups.json`. A PR that has to touch any of those files stops and asks Pete first.
 
 ## Review Focus
 
@@ -30,6 +31,7 @@
 3. A PDF whose every page is empty and whose vision pass fails: the upload still completes, zero units are written, the failure is recorded in the ingest outcome (Tasks 10, 11).
 4. A question made of stopwords or an empty string: full-text search returns no rows and no SQL error (Task 13).
 5. The embedding call failing at upload time: units are written without embeddings, full-text search still finds them, and `unit_sync` fills the embeddings later (Tasks 10, 12).
+6. A SleeveNote lookup by Spotify ID during and after the migration and the `unit_sync` backfill: the public lookups answer with the same shape and latency; the backfill runs inside the research cron's existing per-minute budget and takes no lock the lookups use (Tasks 1, 12: the lookup route tests run in every PR; the post-deploy GET check is Step 5 of Task 1's rollout and Step 6 of Task 12).
 
 ---
 
