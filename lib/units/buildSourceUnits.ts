@@ -2,9 +2,14 @@ import { createHash } from "node:crypto";
 import { extractPdfPages } from "@/lib/units/extractPdfPages";
 import { isBrokenExtraction } from "@/lib/units/isBrokenExtraction";
 import { readPageWithVision } from "@/lib/units/readPageWithVision";
-import { slicePdfPage } from "@/lib/units/slicePdfPage";
+import { slicePdfPages } from "@/lib/units/slicePdfPages";
 import { splitTextUnits } from "@/lib/units/splitTextUnits";
-import { MAX_INGEST_PAGES, MAX_OCR_PAGES, MAX_PAGE_CHARS } from "@/lib/units/types";
+import {
+  MAX_INGEST_PAGES,
+  MAX_OCR_PAGES,
+  MAX_PAGE_CHARS,
+  OCR_CONCURRENCY,
+} from "@/lib/units/types";
 import type { UnitDraft, UnitSourceInput } from "@/lib/units/types";
 
 function draft(unitIndex: number, locator: string, text: string, ocr: boolean): UnitDraft {
@@ -22,15 +27,17 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  * Turn one source's body into unit drafts for the page-level text index.
  *
  * PDFs yield one unit per physical page (locator `p.N`); a page whose extracted text
- * is broken or empty is read with vision and marked `ocr`. A page that cannot be read
- * (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
+ * is broken or empty is read with vision and marked `ocr`. The pages for vision are cut from one
+ * parse of the document and read `OCR_CONCURRENCY` at a time; drafts keep page order. A page that
+ * cannot be read (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
  * An empty vision read is a blank page: no draft, no failure, and not counted in `ocrPages`.
  *
  * @param input - The source and its body.
- * @param deps - `ocr: false` skips vision and reports `needsOcr`; `readPage` overrides the vision read; `signal` is passed to it; `pdfTimeoutMs` bounds the PDF parse.
+ * @param deps - `ocr: false` skips vision and reports `needsOcr`; `readPage` overrides the vision read; `signal` is passed to it and to the parse; `pdfTimeoutMs` bounds the PDF parse.
  * @returns The drafts, the count of vision-read pages, `failed` when a vision read
  * threw ("vision") or the PDF could not be parsed ("extract", with no units; this
- * function does not rethrow; an aborted signal stops the loop and also sets "vision"), and whether the PDF was cut at the page limit.
+ * function does not rethrow), whether the PDF was cut at the page limit, and `aborted` when the
+ * signal cut the parse or the vision reads short (no further read is started; also sets `failed`).
  */
 export async function buildSourceUnits(
   input: UnitSourceInput,
@@ -46,15 +53,17 @@ export async function buildSourceUnits(
   failed?: "vision" | "extract";
   truncated: boolean;
   needsOcr: boolean;
+  aborted: boolean;
 }> {
   const body = input.body;
-  if (body.kind === "none") return { units: [], ocrPages: 0, truncated: false, needsOcr: false };
+  if (body.kind === "none")
+    return { units: [], ocrPages: 0, truncated: false, needsOcr: false, aborted: false };
 
   if (body.kind !== "pdf") {
     const units = splitTextUnits(body.text, body.kind).map((u, i) =>
       draft(i, u.locator, u.text, false),
     );
-    return { units, ocrPages: 0, truncated: false, needsOcr: false };
+    return { units, ocrPages: 0, truncated: false, needsOcr: false, aborted: false };
   }
 
   let extracted: { pages: string[]; truncated: boolean };
@@ -65,44 +74,69 @@ export async function buildSourceUnits(
       signal: deps.signal,
     });
   } catch {
-    return { units: [], ocrPages: 0, failed: "extract", truncated: false, needsOcr: false };
+    return {
+      units: [],
+      ocrPages: 0,
+      failed: "extract",
+      truncated: false,
+      needsOcr: false,
+      aborted: deps.signal?.aborted === true,
+    };
   }
 
   const readPage =
     deps.readPage ??
     ((pageBytes: Uint8Array) => readPageWithVision(pageBytes, { signal: deps.signal }));
-  const units: UnitDraft[] = [];
-  let ocrPages = 0;
   let failed: "vision" | undefined;
-  let visionAttempts = 0;
   let needsOcr = false;
 
-  for (let i = 0; i < extracted.pages.length; i++) {
-    if (deps.signal?.aborted) {
+  // Which pages go to vision, in page order, up to the per-document cap.
+  const visionPages: number[] = [];
+  for (const [i, text] of extracted.pages.entries()) {
+    if (!isBrokenExtraction(text)) continue;
+    if (deps.ocr === false) needsOcr = true;
+    else if (visionPages.length >= MAX_OCR_PAGES) failed = "vision";
+    else visionPages.push(i);
+  }
+
+  const read = new Map<number, string>();
+  let aborted = false;
+  if (visionPages.length > 0) {
+    let slices: Uint8Array[] = [];
+    try {
+      slices = await slicePdfPages(body.bytes, visionPages);
+    } catch {
       failed = "vision";
-      break;
     }
-    let text = extracted.pages[i];
-    let ocr = false;
-    if (isBrokenExtraction(text)) {
-      if (deps.ocr === false) {
-        needsOcr = true;
-        continue;
+    // A small pool: each worker takes the next page until none is left or the signal aborts.
+    let next = 0;
+    const worker = async () => {
+      while (next < slices.length) {
+        if (deps.signal?.aborted) {
+          aborted = true;
+          return;
+        }
+        const k = next++;
+        try {
+          read.set(visionPages[k], (await readPage(slices[k])).trim());
+        } catch {
+          failed = "vision";
+          if (deps.signal?.aborted) aborted = true;
+        }
       }
-      if (visionAttempts >= MAX_OCR_PAGES) {
-        failed = "vision";
-        continue;
-      }
-      visionAttempts++;
-      try {
-        text = (await readPage(await slicePdfPage(body.bytes, i))).trim();
-      } catch {
-        failed = "vision";
-        continue;
-      }
-      ocr = true;
-    }
-    text = text.slice(0, MAX_PAGE_CHARS);
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(OCR_CONCURRENCY, slices.length) }, () => worker()),
+    );
+    if (aborted) failed = "vision";
+  }
+
+  const units: UnitDraft[] = [];
+  let ocrPages = 0;
+  for (const [i, page] of extracted.pages.entries()) {
+    const ocr = isBrokenExtraction(page);
+    // A broken page with no read (not sent, failed, or cut short) is skipped.
+    const text = (ocr ? (read.get(i) ?? "") : page).slice(0, MAX_PAGE_CHARS);
     if (!text) continue;
     if (ocr) ocrPages++;
     units.push(draft(units.length, `p.${i + 1}`, text, ocr));
@@ -114,5 +148,6 @@ export async function buildSourceUnits(
     ...(failed ? { failed } : {}),
     truncated: extracted.truncated,
     needsOcr,
+    aborted,
   };
 }

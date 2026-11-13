@@ -20,7 +20,7 @@ async function fitsInline(bytes: Buffer, contentType: string): Promise<boolean> 
 
 /**
  * Index a just-saved upload now when it is small, otherwise queue a `unit_sync` job. The job is
- * also queued when the inline pass needs OCR, failed, or wrote units it could not embed.
+ * also queued when the inline pass needs OCR, was cut short, failed, or wrote units it could not embed.
  * Never rejects: an upload that was saved must still succeed.
  *
  * @param input - The saved vault row id, its artist, and the uploaded bytes and type.
@@ -44,7 +44,8 @@ export async function ingestUploadInline(input: {
       );
       // Units written without embeddings are filled by the job's re-embed pass.
       const unembedded = outcome.units > 0 && !outcome.embedded;
-      if (outcome.skipped !== "needs-ocr" && !outcome.failed && !unembedded) return;
+      const deferred = outcome.skipped === "needs-ocr" || outcome.skipped === "aborted";
+      if (!deferred && !outcome.failed && !unembedded) return;
     }
     await queueUnitSync(input.artistId);
   } catch (caught) {

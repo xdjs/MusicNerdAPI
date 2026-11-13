@@ -27,9 +27,10 @@ const PARSE_RESERVE_MS = 8_000;
  * the job then starts over from the top instead of finishing (once per slice; the database clears the
  * flag atomically, so a rescan that lands mid-slice is never lost).
  *
- * A vision read cut short (by the deadline or a model error) writes the pages it read, stamped with
- * the current revision, so a later sync treats the source as indexed and does not retry it until
- * its revision changes. Accepted for v1.
+ * A read cut short by the deadline writes nothing (`ingestSource` reports `skipped: "aborted"`); the
+ * slice stops there and the next one reads the source again first (`state.retry`), this time with
+ * `stampPartial`, so a document that cannot finish in one slice is stamped partial and counted as a
+ * failure instead of looping. A vision read failed by the model writes the pages it read.
  *
  * @param job - The claimed job.
  * @param deadline - When the slice must stop, in epoch milliseconds.
@@ -37,8 +38,10 @@ const PARSE_RESERVE_MS = 8_000;
  */
 export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   // The flag belongs to the row: the slice never writes it back, so only the database clears it.
-  const { rescan: _rescan, ...saved } = job.state;
+  const { rescan: _rescan, retry: savedRetry, ...saved } = job.state;
   let after = savedKey(saved.after);
+  // A source whose read was cut short last slice: read it again, once, before moving on.
+  let retry = savedKey(savedRetry);
   let failures = typeof saved.failures === "number" ? saved.failures : 0;
   let handled = 0;
   let restarted = false;
@@ -53,10 +56,22 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
     const start = resumeAfter ? sources.findIndex(e => compareKeys(e, resumeAfter) > 0) : 0;
     let cursor = start === -1 ? total : start;
 
+    let cutShort = false;
     while (cursor < total && canStart()) {
       const entry = sources[cursor];
+      const key = { sourceKind: entry.sourceKind, sourceId: entry.sourceId };
+      // The retry is spent here, or when its source has gone from the list.
+      const stampPartial = retry !== null && compareKeys(entry, retry) === 0;
+      if (retry && compareKeys(entry, retry) >= 0) retry = null;
       try {
-        if (!(await syncSource(entry, deadline))) failures++;
+        const result = await syncSource(entry, deadline, stampPartial);
+        if (result === "aborted") {
+          // Not stamped and not a failure: the next slice starts here and reads it whole.
+          retry = key;
+          cutShort = true;
+          break;
+        }
+        if (result === "failed") failures++;
       } catch (error) {
         failures++;
         // Never the message: a failed query's message carries its bound parameters, which can be unit text.
@@ -65,15 +80,15 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
           `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.name : "unknown"}${typeof code === "string" ? ` ${code}` : ""}`,
         );
       }
-      after = { sourceKind: entry.sourceKind, sourceId: entry.sourceId };
+      after = key;
       handled++;
       cursor++;
     }
 
     // `cursor` and `total` are display counters for this slice's list; `state.after` is the resume point.
-    const state = { ...saved, failures, ...(after ? { after } : {}) };
+    const state = { ...saved, failures, ...(after ? { after } : {}), ...(retry ? { retry } : {}) };
     const progress = `units ${cursor}/${total}, failures ${failures}`;
-    if (cursor < total) {
+    if (cursor < total || cutShort) {
       await saveUnitSyncProgress(job.id, cursor, total, state);
       // A slice too short to start one source waits for a longer one rather than spinning this tick.
       return handled === 0 ? { progress, done: false, waiting: true } : { progress, done: false };
@@ -107,33 +122,38 @@ function compareKeys(a: SourceKey, b: SourceKey): number {
   return 0;
 }
 
-/** Sync one source; false when it failed without throwing. Database errors propagate. */
-async function syncSource(entry: UnitSyncEntry, deadline: number): Promise<boolean> {
+/** Sync one source; "failed" when it failed without throwing. Database errors propagate. */
+async function syncSource(
+  entry: UnitSyncEntry,
+  deadline: number,
+  stampPartial: boolean,
+): Promise<"ok" | "failed" | "aborted"> {
   const { sourceKind, sourceId } = entry;
   const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
   if (entry.sourceRevision === null) {
     await db.execute(
       sql`delete from source_units where source_kind = ${sourceKind} and source_id = ${sourceId}::uuid`,
     );
-    return true;
+    return "ok";
   }
   if (entry.indexedRevision !== entry.sourceRevision) {
     // The parse is bound to the deadline too: the platform kills the invocation past it.
     const pdfTimeoutMs = Math.min(JOB_PDF_TIMEOUT_MS, deadline - Date.now() - PARSE_RESERVE_MS);
     const outcome = await ingestSource(
       { sourceKind, sourceId },
-      { pdfTimeoutMs, ocr: true, signal },
+      { pdfTimeoutMs, ocr: true, signal, stampPartial },
     );
     if (outcome.failed)
       console.warn(`[unit_sync] ${sourceKind} source ${sourceId} failed: ${outcome.failed}`);
-    return !outcome.failed;
+    if (outcome.skipped === "aborted") return "aborted";
+    return outcome.failed ? "failed" : "ok";
   }
-  if (!entry.needsEmbedding) return true;
+  if (!entry.needsEmbedding) return "ok";
 
   const units = await db.execute<{ id: string; text: string }>(
     sql`select id::text as id, text from source_units where source_kind = ${sourceKind} and source_id = ${sourceId}::uuid and source_revision = ${entry.sourceRevision} and embedding is null order by unit_index`,
   );
-  if (units.length === 0) return true;
+  if (units.length === 0) return "ok";
   const embeddings = await embedUnits(
     units.map(u => u.text),
     { signal },
@@ -144,5 +164,5 @@ async function syncSource(entry: UnitSyncEntry, deadline: number): Promise<boole
         sql`update source_units set embedding = ${JSON.stringify(embeddings[i])}::extensions.vector where id = ${u.id}::uuid`,
       );
   });
-  return true;
+  return "ok";
 }

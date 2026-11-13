@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { socialPostRevisionSql } from "@/lib/sourcePublication/socialPostRevisionSql";
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
+import { UNIT_INGEST_VERSION } from "@/lib/units/types";
 import type { UnitSourceKind, UnitSyncEntry } from "@/lib/units/types";
 
 /**
@@ -12,7 +13,8 @@ import type { UnitSourceKind, UnitSyncEntry } from "@/lib/units/types";
  * or approved (the public corpus's scope, `loadPublicResearchOriginals`). Units whose row no longer
  * exists in its table come back as orphans with a null `sourceRevision`. Units of a row that exists
  * but does not count right now are left out: neither ingested nor deleted, since eligibility is
- * checked when the index is read, never cached in it.
+ * checked when the index is read, never cached in it. A source whose units were written by an
+ * ingest older than `UNIT_INGEST_VERSION` reports a null `indexedRevision`, so it is rebuilt.
  *
  * @param artistId - The artist.
  * @returns One entry per source, ordered by kind then id in byte order (`collate "C"`), the order `runUnitSync` resumes in.
@@ -45,7 +47,10 @@ export async function listArtistUnitSources(artistId: string): Promise<UnitSyncE
     ),
     indexed as (
       select u.source_kind, u.source_id,
-             case when count(distinct u.source_revision) = 1 then min(u.source_revision) end as indexed_revision,
+             -- Units from an older ingest are stale whatever their revision: they are rebuilt.
+             case when count(distinct u.source_revision) = 1
+                   and min(u.ingest_version) >= ${UNIT_INGEST_VERSION}
+                  then min(u.source_revision) end as indexed_revision,
              bool_or(u.embedding is null) as needs_embedding
         from source_units u
        where u.artist_id = ${artistId}::uuid

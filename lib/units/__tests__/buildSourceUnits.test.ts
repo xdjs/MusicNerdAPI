@@ -138,6 +138,7 @@ describe("buildSourceUnits", () => {
     expect(result.units).toEqual([]);
     // The parse itself is bound to the signal.
     expect(result.failed).toBe("extract");
+    expect(result.aborted).toBe(true);
   });
 
   test("an abort mid-document keeps the pages built so far and stops", async () => {
@@ -154,6 +155,116 @@ describe("buildSourceUnits", () => {
     expect(readPage).toHaveBeenCalledTimes(1);
     expect(result.units.map(u => u.locator)).toEqual(["p.1", "p.2"]);
     expect(result.failed).toBe("vision");
+    expect(result.aborted).toBe(true);
+  });
+
+  test("a read that fails because the signal aborted reports aborted", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const controller = new AbortController();
+    const readPage = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    });
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), {
+      readPage,
+      signal: controller.signal,
+    });
+    expect(result).toMatchObject({ failed: "vision", aborted: true });
+  });
+
+  test("a finished read is not aborted, even when a page failed", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const readPage = vi.fn().mockRejectedValue(new Error("vision down"));
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), {
+      readPage,
+      signal: new AbortController().signal,
+    });
+    expect(result).toMatchObject({ failed: "vision", aborted: false });
+  });
+
+  test("reads at most four pages at once and keeps drafts in page order", async () => {
+    const bytes = await twoPagePdf(Array.from({ length: 10 }, () => ""));
+    let inFlight = 0;
+    let peak = 0;
+    let calls = 0;
+    const readPage = vi.fn(async () => {
+      const n = ++calls;
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      // Later pages finish first.
+      await new Promise(resolve => setTimeout(resolve, (11 - n) * 3));
+      inFlight--;
+      return `Page read ${n}`;
+    });
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), { readPage });
+    expect(readPage).toHaveBeenCalledTimes(10);
+    expect(peak).toBe(4);
+    expect(result.units.map(u => [u.unitIndex, u.locator, u.text])).toEqual(
+      Array.from({ length: 10 }, (_, i) => [i, `p.${i + 1}`, `Page read ${i + 1}`]),
+    );
+    expect(result.ocrPages).toBe(10);
+    expect(result.aborted).toBe(false);
+  });
+
+  test("an abort while four reads are in flight starts no more and keeps the finished ones", async () => {
+    const bytes = await twoPagePdf(Array.from({ length: 10 }, () => ""));
+    const controller = new AbortController();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const readPage = vi.fn(async () => {
+      await gate;
+      return "Read before the abort";
+    });
+    const built = buildSourceUnits(input({ kind: "pdf", bytes }), {
+      readPage,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(readPage).toHaveBeenCalledTimes(4));
+    controller.abort();
+    release();
+    const result = await built;
+    expect(readPage).toHaveBeenCalledTimes(4);
+    expect(result.units.map(u => u.locator)).toEqual(["p.1", "p.2", "p.3", "p.4"]);
+    expect(result).toMatchObject({ failed: "vision", aborted: true, ocrPages: 4 });
+  });
+
+  test("slices every page that needs vision from one parse of the document", async () => {
+    vi.resetModules();
+    const slicePdfPages = vi
+      .fn()
+      .mockImplementation(async (_b: Uint8Array, indexes: number[]) =>
+        indexes.map(i => new Uint8Array([i])),
+      );
+    vi.doMock("@/lib/units/slicePdfPages", () => ({ slicePdfPages }));
+    const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
+    const bytes = await twoPagePdf([PAGE_ONE, "", ""]);
+    const readPage = vi.fn(async (page: Uint8Array) => `Read page index ${page[0]}`);
+    const result = await build(input({ kind: "pdf", bytes }), { readPage });
+    expect(slicePdfPages).toHaveBeenCalledOnce();
+    expect(slicePdfPages).toHaveBeenCalledWith(bytes, [1, 2]);
+    expect(result.units.map(u => u.text)).toEqual([
+      expect.stringContaining("Alpha one"),
+      "Read page index 1",
+      "Read page index 2",
+    ]);
+    vi.doUnmock("@/lib/units/slicePdfPages");
+    vi.resetModules();
+  });
+
+  test("a document the slicer cannot parse fails its vision pages and keeps its text pages", async () => {
+    vi.resetModules();
+    const slicePdfPages = vi.fn().mockRejectedValue(new Error("unparseable"));
+    vi.doMock("@/lib/units/slicePdfPages", () => ({ slicePdfPages }));
+    const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
+    const readPage = vi.fn();
+    const result = await build(input({ kind: "pdf", bytes: await twoPagePdf([PAGE_ONE, ""]) }), {
+      readPage,
+    });
+    expect(readPage).not.toHaveBeenCalled();
+    expect(result.units.map(u => u.locator)).toEqual(["p.1"]);
+    expect(result).toMatchObject({ failed: "vision", aborted: false });
+    vi.doUnmock("@/lib/units/slicePdfPages");
+    vi.resetModules();
   });
 
   test("markdown bodies use section locators", async () => {
@@ -168,7 +279,13 @@ describe("buildSourceUnits", () => {
 
   test("a none body yields no units", async () => {
     const result = await buildSourceUnits(input({ kind: "none" }));
-    expect(result).toEqual({ units: [], ocrPages: 0, truncated: false, needsOcr: false });
+    expect(result).toEqual({
+      units: [],
+      ocrPages: 0,
+      truncated: false,
+      needsOcr: false,
+      aborted: false,
+    });
   });
 
   test("hash and token count are set", async () => {

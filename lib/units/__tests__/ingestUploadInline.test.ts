@@ -67,6 +67,12 @@ describe("ingestUploadInline", () => {
     expect(mock.queue).toHaveBeenCalledWith("a1");
   });
 
+  it("queues when the inline pass was cut short", async () => {
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, skipped: "aborted" });
+    await ingestUploadInline(input("application/pdf"));
+    expect(mock.queue).toHaveBeenCalledWith("a1");
+  });
+
   it("queues when the outcome carries a failure", async () => {
     mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, failed: "extract" });
     await ingestUploadInline(input("application/pdf"));

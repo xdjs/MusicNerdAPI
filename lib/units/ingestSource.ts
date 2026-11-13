@@ -16,7 +16,11 @@ import { PDF_PARSE_TIMEOUT_MS } from "@/lib/vaultUpload/const";
  * A source with no text clears its stale units. Database errors propagate.
  *
  * @param ref - The source to ingest.
- * @param opts - `bytes` are PDF bytes already in hand; `embed: false` skips embedding; `pdfTimeoutMs` bounds the PDF parse; `ocr: false` skips vision and writes nothing when a page needs it (`skipped: "needs-ocr"`).
+ * A read cut short by the signal writes nothing (`skipped: "aborted"`), so the next attempt redoes the
+ * whole document rather than stamping part of it as current; `stampPartial: true` writes the pages
+ * read instead (with `failed`), for a last attempt that must not loop.
+ *
+ * @param opts - `bytes` are PDF bytes already in hand; `embed: false` skips embedding; `pdfTimeoutMs` bounds the PDF parse; `ocr: false` skips vision and writes nothing when a page needs it (`skipped: "needs-ocr"`); `stampPartial` (default false) writes an aborted read's pages.
  * @returns What was written and why anything was skipped or failed.
  */
 export async function ingestSource(
@@ -27,6 +31,7 @@ export async function ingestSource(
     embed?: boolean;
     pdfTimeoutMs?: number;
     ocr?: boolean;
+    stampPartial?: boolean;
   } = {},
 ): Promise<IngestOutcome> {
   const input = await loadUnitSource(ref, { bytes: opts.bytes, signal: opts.signal });
@@ -40,6 +45,9 @@ export async function ingestSource(
   // Text-only pass: leave the whole document for a later ingest with OCR rather than index part of it.
   if (opts.ocr === false && built.needsOcr)
     return { units: 0, ocrPages: 0, embedded: false, skipped: "needs-ocr" };
+  // Cut short: write nothing, so the source stays stale and is read whole next time.
+  if (built.aborted && !opts.stampPartial)
+    return { units: 0, ocrPages: 0, embedded: false, skipped: "aborted" };
   const base = {
     sourceKind: input.sourceKind,
     sourceId: input.sourceId,

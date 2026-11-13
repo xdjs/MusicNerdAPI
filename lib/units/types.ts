@@ -43,7 +43,7 @@ export type UnitSyncEntry = {
   sourceId: string;
   /** The source's current revision; null for an orphan, whose units must go. */
   sourceRevision: string | null;
-  /** The revision the source's units carry, when they all carry one; null when unindexed or mixed. */
+  /** The revision the source's units carry, when they all carry one from the current ingest version; null when unindexed, mixed or older. */
   indexedRevision: string | null;
   /** Some unit of the source has no embedding. */
   needsEmbedding: boolean;
@@ -53,7 +53,7 @@ export type IngestOutcome = {
   units: number;
   ocrPages: number;
   embedded: boolean;
-  skipped?: "not-found" | "no-text" | "too-large" | "needs-ocr";
+  skipped?: "not-found" | "no-text" | "too-large" | "needs-ocr" | "aborted";
   failed?: "vision" | "extract";
 };
 
@@ -65,6 +65,8 @@ export const INLINE_INGEST_MAX_PAGES = 40;
 export const MAX_UNIT_CHARS = 6000;
 // The most pages of one document sent to the vision model.
 export const MAX_OCR_PAGES = 60;
+// Vision reads of one document in flight at once.
+export const OCR_CONCURRENCY = 4;
 export const MAX_PAGE_CHARS = 24000;
 // A unit_sync slice starts no source with less than this left before its deadline.
 export const MIN_SOURCE_START_MS = 20_000;

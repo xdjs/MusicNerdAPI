@@ -303,6 +303,50 @@ describe("runUnitSync", () => {
     expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 0, 1, { backfill: true, failures: 0 });
   });
 
+  describe("a source whose read was cut short (aborted)", () => {
+    it("is not stamped, not counted, and is retried first in the next slice", async () => {
+      mock.list.mockResolvedValue([
+        entry("s1", { indexedRevision: null }),
+        entry("s2", { indexedRevision: null }),
+        entry("s3", { indexedRevision: null }),
+      ]);
+      mock.ingest
+        .mockResolvedValueOnce({ units: 1, ocrPages: 0, embedded: true })
+        .mockResolvedValueOnce({ units: 0, ocrPages: 0, embedded: false, skipped: "aborted" });
+      const outcome = await runUnitSync(job({ state: {} }), farDeadline());
+      expect(mock.ingest).toHaveBeenCalledTimes(2);
+      expect(mock.ingest.mock.calls[1][1]).toMatchObject({ stampPartial: false });
+      expect(outcome).toEqual({ progress: "units 1/3, failures 0", done: false });
+      expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 1, 3, {
+        failures: 0,
+        after: { sourceKind: "vault", sourceId: "s1" },
+        retry: { sourceKind: "vault", sourceId: "s2" },
+      });
+    });
+
+    it("is retried once with stampPartial, which keeps today's partial write and counts a failure", async () => {
+      mock.list.mockResolvedValue([
+        entry("s1"),
+        entry("s2", { indexedRevision: null }),
+        entry("s3", { indexedRevision: null }),
+      ]);
+      mock.ingest
+        .mockResolvedValueOnce({ units: 3, ocrPages: 3, embedded: true, failed: "vision" })
+        .mockResolvedValueOnce({ units: 1, ocrPages: 0, embedded: true });
+      const retry = { sourceKind: "vault", sourceId: "s2" };
+      const after = { sourceKind: "vault", sourceId: "s1" };
+      const outcome = await runUnitSync(job({ state: { after, retry } }), farDeadline());
+      expect(mock.ingest.mock.calls.map(c => [c[0].sourceId, c[1].stampPartial])).toEqual([
+        ["s2", true],
+        ["s3", false],
+      ]);
+      expect(outcome.done).toBe(true);
+      // The retry is spent, whatever its outcome.
+      expect(mock.finish.mock.calls[0][1]).not.toHaveProperty("retry");
+      expect(mock.finish.mock.calls[0][1].failures).toBe(1);
+    });
+  });
+
   describe("rescan (a source queued while the job was live)", () => {
     it("starts over from the top once when a rescan is pending at the end, then completes", async () => {
       // s0 was added while the job was live; it sorts before the saved key.

@@ -29,10 +29,17 @@ const socialRevision = async (sourceId: string) =>
       [sourceId],
     )
   ).rows[0].r;
-const unit = (kind: string, sourceId: string, revision: string, index: number, embedded = true) =>
+const unit = (
+  kind: string,
+  sourceId: string,
+  revision: string,
+  index: number,
+  embedded = true,
+  ingestVersion = 1,
+) =>
   client.query(
-    `insert into source_units(source_kind,source_id,artist_id,source_revision,unit_index,embedding) values($1,$2,$3,$4,$5,$6)`,
-    [kind, sourceId, artist, revision, index, embedded ? "[0.1]" : null],
+    `insert into source_units(source_kind,source_id,artist_id,source_revision,unit_index,embedding,ingest_version) values($1,$2,$3,$4,$5,$6,$7)`,
+    [kind, sourceId, artist, revision, index, embedded ? "[0.1]" : null, ingestVersion],
   );
 
 beforeAll(async () => {
@@ -41,7 +48,7 @@ beforeAll(async () => {
     create table artist_social_posts(id uuid,artist_id uuid,caption text,is_own_post boolean,raw jsonb);
     create table artist_research_candidates(id uuid,artist_id uuid,identity text,curation text,current_revision text);
     create table artist_research_evidence(id uuid,candidate_id uuid,artist_id uuid,revision text);
-    create table source_units(source_kind text,source_id uuid,artist_id uuid,source_revision text,unit_index integer,embedding text);
+    create table source_units(source_kind text,source_id uuid,artist_id uuid,source_revision text,unit_index integer,embedding text,ingest_version integer not null);
     create function knowledge_social_post_snapshot(s artist_social_posts) returns jsonb language sql as 'select to_jsonb(s)';
     create function knowledge_source_fingerprint(j jsonb) returns text language sql as 'select ''fp:'' || md5(j::text)';
   `);
@@ -56,6 +63,7 @@ beforeAll(async () => {
   await vault(4, artist, null, "web page text");
   await vault(5, artist, null, "two revisions");
   await vault(6, other, null, "another artist");
+  await vault(7, artist, null, "indexed by an older ingest");
   const post = (n: number, own: boolean, raw: string) =>
     client.query(
       "insert into artist_social_posts(id,artist_id,caption,is_own_post,raw) values($1,$2,$3,$4,$5)",
@@ -94,6 +102,7 @@ beforeAll(async () => {
   await unit("vault", id(1), await vaultRevision(id(1)), 1);
   await unit("vault", id(4), "stale", 0);
   await unit("vault", id(4), "stale", 1, false);
+  await unit("vault", id(7), await vaultRevision(id(7)), 0, true, 0);
   await unit("vault", id(5), "rev-x", 0);
   await unit("vault", id(5), "rev-y", 1);
   await unit("social", id(10), await socialRevision(id(10)), 0, false);
@@ -119,6 +128,7 @@ describe("listArtistUnitSources", () => {
       ["vault", id(2)],
       ["vault", id(4)],
       ["vault", id(5)],
+      ["vault", id(7)],
       ["vault", id(99)],
     ]);
   });
@@ -157,6 +167,14 @@ describe("listArtistUnitSources", () => {
       needsEmbedding: false,
     });
     expect(byId.get(id(22))).toMatchObject({ sourceRevision: "rev-new", indexedRevision: null });
+  });
+
+  it("treats units written by an older ingest version as stale, so they are rebuilt", async () => {
+    const byId = new Map((await listArtistUnitSources(artist)).map(e => [e.sourceId, e]));
+    expect(byId.get(id(7))).toMatchObject({
+      sourceRevision: await vaultRevision(id(7)),
+      indexedRevision: null,
+    });
   });
 
   it("flags units whose source row is gone as orphans, in each kind's table", async () => {
