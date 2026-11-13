@@ -4,7 +4,7 @@ import { isBrokenExtraction } from "@/lib/units/isBrokenExtraction";
 import { readPageWithVision } from "@/lib/units/readPageWithVision";
 import { slicePdfPage } from "@/lib/units/slicePdfPage";
 import { splitTextUnits } from "@/lib/units/splitTextUnits";
-import { MAX_INGEST_PAGES, MAX_PAGE_CHARS } from "@/lib/units/types";
+import { MAX_INGEST_PAGES, MAX_OCR_PAGES, MAX_PAGE_CHARS } from "@/lib/units/types";
 import type { UnitDraft, UnitSourceInput } from "@/lib/units/types";
 
 function draft(unitIndex: number, locator: string, text: string, ocr: boolean): UnitDraft {
@@ -23,13 +23,13 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  *
  * PDFs yield one unit per physical page (locator `p.N`); a page whose extracted text
  * is broken or empty is read with vision and marked `ocr`. A page that cannot be read
- * (vision throws) or is still empty afterwards is skipped, so `unitIndex` stays dense.
+ * (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
  *
  * @param input - The source and its body.
  * @param deps - `readPage` overrides the vision read; `signal` is passed to it.
  * @returns The drafts, the count of vision-read pages, `failed` when a vision read
  * threw ("vision") or the PDF could not be parsed ("extract", with no units; this
- * function does not rethrow), and whether the PDF was cut at the page limit.
+ * function does not rethrow; an aborted signal stops the loop and also sets "vision"), and whether the PDF was cut at the page limit.
  */
 export async function buildSourceUnits(
   input: UnitSourceInput,
@@ -63,11 +63,21 @@ export async function buildSourceUnits(
   const units: UnitDraft[] = [];
   let ocrPages = 0;
   let failed: "vision" | undefined;
+  let visionAttempts = 0;
 
   for (let i = 0; i < extracted.pages.length; i++) {
+    if (deps.signal?.aborted) {
+      failed = "vision";
+      break;
+    }
     let text = extracted.pages[i];
     let ocr = false;
     if (isBrokenExtraction(text)) {
+      if (visionAttempts >= MAX_OCR_PAGES) {
+        failed = "vision";
+        continue;
+      }
+      visionAttempts++;
       try {
         text = (await readPage(await slicePdfPage(body.bytes, i))).trim();
       } catch {

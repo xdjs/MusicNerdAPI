@@ -100,6 +100,46 @@ describe("buildSourceUnits", () => {
     expect(result).toMatchObject({ units: [], failed: "extract", ocrPages: 0, truncated: false });
   });
 
+  test("a document with 61 broken pages sends exactly 60 to vision", async () => {
+    const bytes = await twoPagePdf(Array.from({ length: 61 }, () => ""));
+    const readPage = vi.fn().mockResolvedValue("Read text");
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), { readPage });
+    expect(readPage).toHaveBeenCalledTimes(60);
+    expect(result.units).toHaveLength(60);
+    expect(result.ocrPages).toBe(60);
+    expect(result.failed).toBe("vision");
+  });
+
+  test("an already-aborted signal stops before any vision call", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const readPage = vi.fn().mockResolvedValue("never");
+    const controller = new AbortController();
+    controller.abort();
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), {
+      readPage,
+      signal: controller.signal,
+    });
+    expect(readPage).not.toHaveBeenCalled();
+    expect(result.units).toEqual([]);
+    expect(result.failed).toBe("vision");
+  });
+
+  test("an abort mid-document keeps the pages built so far and stops", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, "", ""]);
+    const controller = new AbortController();
+    const readPage = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      return "Page two read";
+    });
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), {
+      readPage,
+      signal: controller.signal,
+    });
+    expect(readPage).toHaveBeenCalledTimes(1);
+    expect(result.units.map(u => u.locator)).toEqual(["p.1", "p.2"]);
+    expect(result.failed).toBe("vision");
+  });
+
   test("markdown bodies use section locators", async () => {
     const text = "# Intro\nHello there.\n\n# Tour\nWe toured.";
     const result = await buildSourceUnits(input({ kind: "markdown", text }));

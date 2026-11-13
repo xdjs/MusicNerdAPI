@@ -51,6 +51,8 @@ export const EMBED_BATCH = 64;
 export const MAX_INGEST_PAGES = 300;
 export const INLINE_INGEST_MAX_PAGES = 40;
 export const MAX_UNIT_CHARS = 6000;
+// The most pages of one document sent to the vision model.
+export const MAX_OCR_PAGES = 60;
 export const MAX_PAGE_CHARS = 24000;
 export const SEARCH_CANDIDATES = 20;
 export const SEARCH_LIMIT = 8;
