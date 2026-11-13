@@ -6,8 +6,10 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 const MAX_MESSAGES = 12;
 /** Parts per message: an answer is a few tool steps, their sources and text; this bounds the work on a hostile body. */
 const MAX_PARTS = 64;
-/** Documents one answer may cite: what its searches numbered, each document once. */
-const MAX_DOCUMENTS = 16;
+/** Documents one answer may carry: six steps of eight search hits, each document once. */
+const MAX_DOCUMENTS = 48;
+/** The highest document number a long conversation can reach. */
+const MAX_DOCUMENT_N = 256;
 const question = z.string().trim().min(1).max(500);
 
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
@@ -22,7 +24,7 @@ const isPdfRead = (part: { type: string }) =>
 
 /** A document a search numbered, as the tool output names it: enough to check it and to number it again. */
 const documentRef = z.object({
-  n: z.number().int().min(1).max(64),
+  n: z.number().int().min(1).max(MAX_DOCUMENT_N),
   sourceKind: z.enum(["vault", "social", "evidence"]),
   sourceId: z.uuid(),
   revision: z.string().min(1).max(300),
@@ -46,7 +48,7 @@ type DocumentRef = z.infer<typeof documentRef>;
 
 /**
  * The documents an answer's completed searches and reads numbered, the first of each
- * `(sourceKind, sourceId)`; null when one cannot be identified or there are more than 16.
+ * `(sourceKind, sourceId)`, at most the first 48; null when one cannot be identified.
  */
 function citedDocuments(
   parts: { type: string; state?: unknown; output?: unknown }[],
@@ -67,7 +69,7 @@ function citedDocuments(
       if (!byKey.has(key)) byKey.set(key, ref);
     }
   }
-  return byKey.size > MAX_DOCUMENTS ? null : [...byKey.values()];
+  return [...byKey.values()].slice(0, MAX_DOCUMENTS);
 }
 
 const message = z
@@ -86,7 +88,7 @@ const message = z
     if (reads.length > MAX_CHAT_PDF_READS || reads.some(read => !read.success))
       return { id, role, parts: [] };
     // The same for an answer from the document tools (keepCurrentCitedTurns): its documents
-    // must all be identified, and at most 16, or the answer is not replayed. Only answers cite;
+    // must all be identified, or the answer is not replayed; past 48 it keeps the first 48. Only answers cite;
     // tool parts on a user message are ignored, so they can never empty the question.
     const documents = role === "assistant" ? citedDocuments(parts) : [];
     if (!documents) return { id, role, parts: [] };
@@ -131,7 +133,7 @@ export type ArtistChatBody = z.infer<typeof chatBodySchema>;
  * also carries `pdfReads`, the documents and revisions it depends on, for
  * `keepCurrentPdfTurns` to check before the model sees it; one that searched the
  * artist's documents carries `documents`, the numbered documents and revisions it may
- * cite (at most 16), for `keepCurrentCitedTurns`.
+ * cite (the first 48), for `keepCurrentCitedTurns`.
  *
  * @param request - The chat request.
  * @returns The messages, or a 400 response.

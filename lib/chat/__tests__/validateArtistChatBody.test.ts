@@ -310,15 +310,8 @@ it("keeps documents a readUnits output carries", async () => {
 });
 
 it.each([
-  ["17 documents", [Array.from({ length: 17 }, (_, i) => doc(i + 1))]],
-  [
-    "17 documents over two searches",
-    [
-      Array.from({ length: 9 }, (_, i) => doc(i + 1)),
-      Array.from({ length: 8 }, (_, i) => doc(i + 10)),
-    ],
-  ],
-  ["n out of range", [[doc(65)]]],
+  ["49 documents in one list", [Array.from({ length: 49 }, (_, i) => doc(i + 1))]],
+  ["n out of range", [[doc(257)]]],
   ["n zero", [[doc(0)]]],
   ["an unknown kind", [[doc(1, { sourceKind: "web" })]]],
   ["a non-uuid source", [[doc(1, { sourceId: "x" })]]],
@@ -346,17 +339,49 @@ it.each([
   expect(JSON.stringify(result)).not.toContain("Unverifiable");
 });
 
-it("keeps 16 documents", async () => {
-  const docs = Array.from({ length: 16 }, (_, i) => doc(i + 1));
+it("keeps 48 documents numbered up to 256 over six searches", async () => {
+  const docs = Array.from({ length: 48 }, (_, i) => doc(i + 209));
   const result = await validateArtistChatBody(
     post({
       messages: [
-        { id: "a", role: "assistant", parts: [search(docs), { type: "text", text: "Many [16]." }] },
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...Array.from({ length: 6 }, (_, i) => search(docs.slice(i * 8, i * 8 + 8))),
+            { type: "text", text: "Many [256]." },
+          ],
+        },
         user("And?"),
       ],
     }),
   );
   expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual(docs);
+});
+
+it("keeps the text and the first 48 documents of an answer whose searches numbered more", async () => {
+  const docs = Array.from({ length: 50 }, (_, i) => doc(i + 1));
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...Array.from({ length: 7 }, (_, i) => search(docs.slice(i * 8, i * 8 + 8))),
+            { type: "text", text: "Many searches [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: unknown[] }).messages[0]).toEqual({
+    id: "a",
+    role: "assistant",
+    parts: [{ type: "text", text: "Many searches [1]." }],
+    documents: docs.slice(0, 48),
+  });
 });
 
 it("does not replay a read-only answer whose read names no documents", async () => {
