@@ -140,19 +140,44 @@ describe("runUnitSync", () => {
     expect(outcome.done).toBe(true);
   });
 
+  it("bounds the PDF parse by the slice deadline, keeping 8 s to persist", async () => {
+    mock.list.mockResolvedValue([entry("s1", { indexedRevision: null })]);
+    await runUnitSync(job(), now + 30_000);
+    expect(mock.ingest.mock.calls[0][1].pdfTimeoutMs).toBe(22_000);
+  });
+
+  it("does not start a source with less than 20 s left, keeping the cursor", async () => {
+    mock.list.mockResolvedValue([
+      entry("s1", { indexedRevision: null }),
+      entry("s2", { indexedRevision: null }),
+    ]);
+    mock.ingest.mockImplementation(async () => {
+      now += 11_000;
+      return { units: 1, ocrPages: 0, embedded: true };
+    });
+    // 0 s starts (30 s left); at 11 s only 19 s remain.
+    const outcome = await runUnitSync(job(), now + 30_000);
+    expect(mock.ingest).toHaveBeenCalledOnce();
+    expect(outcome).toEqual({ progress: "units 1/2, failures 0", done: false });
+    expect(mock.saveProgress.mock.calls[0][3].after).toEqual({
+      sourceKind: "vault",
+      sourceId: "s1",
+    });
+  });
+
   it("stops before the deadline with done false and saves the next cursor and total", async () => {
     mock.list.mockResolvedValue([
       entry("s1", { indexedRevision: null }),
       entry("s2", { indexedRevision: null }),
       entry("s3", { indexedRevision: null }),
     ]);
-    const deadline = now + 30_000;
+    const deadline = now + 40_000;
     mock.ingest.mockImplementation(async () => {
       now += 12_000;
       return { units: 1, ocrPages: 0, embedded: true };
     });
     const outcome = await runUnitSync(job(), deadline);
-    // 0 s and 12 s start; at 24 s only 6 s remain, inside the 8 s reserve.
+    // 0 s and 12 s start; at 24 s only 16 s remain, under the 20 s needed to start a source.
     expect(mock.ingest).toHaveBeenCalledTimes(2);
     expect(outcome).toEqual({ progress: "units 2/3, failures 0", done: false });
     expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 2, 3, {
@@ -272,7 +297,7 @@ describe("runUnitSync", () => {
 
   it("waits for a longer slice when the budget cannot fit one source", async () => {
     mock.list.mockResolvedValue([entry("s1", { indexedRevision: null })]);
-    const outcome = await runUnitSync(job(), now + 7_000);
+    const outcome = await runUnitSync(job(), now + 19_999);
     expect(mock.ingest).not.toHaveBeenCalled();
     expect(outcome).toEqual({ progress: "units 0/1, failures 0", done: false, waiting: true });
     expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 0, 1, { backfill: true, failures: 0 });

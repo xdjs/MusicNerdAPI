@@ -66,6 +66,8 @@ export const MAX_UNIT_CHARS = 6000;
 // The most pages of one document sent to the vision model.
 export const MAX_OCR_PAGES = 60;
 export const MAX_PAGE_CHARS = 24000;
+// A unit_sync slice starts no source with less than this left before its deadline.
+export const MIN_SOURCE_START_MS = 20_000;
 export const SEARCH_CANDIDATES = 20;
 export const SEARCH_LIMIT = 8;
 export const MAX_UNITS_PER_DOCUMENT = 3;

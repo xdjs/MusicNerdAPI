@@ -6,12 +6,13 @@ import { finishUnitSync } from "@/lib/units/finishUnitSync";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { listArtistUnitSources } from "@/lib/units/listArtistUnitSources";
 import { saveUnitSyncProgress } from "@/lib/units/saveUnitSyncProgress";
+import { MIN_SOURCE_START_MS } from "@/lib/units/types";
 import type { UnitSyncEntry } from "@/lib/units/types";
 
-/** No source is started with less than this left before the slice deadline. */
-const START_RESERVE_MS = 8_000;
 /** The PDF parse budget inside the job (Ruling R2); the upload path keeps its own, shorter one. */
 const JOB_PDF_TIMEOUT_MS = 45_000;
+/** Left after the parse for the rest of the source and the slice's own write. */
+const PARSE_RESERVE_MS = 8_000;
 
 /**
  * One slice of a `unit_sync` job: bring the artist's page-level text index in line with their sources.
@@ -41,7 +42,8 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
   let failures = typeof saved.failures === "number" ? saved.failures : 0;
   let handled = 0;
   let restarted = false;
-  const canStart = () => Date.now() < deadline - START_RESERVE_MS;
+  // A source started late would run past the deadline (Ruling R2, amended): wait for the next slice.
+  const canStart = () => deadline - Date.now() >= MIN_SOURCE_START_MS;
 
   for (;;) {
     const sources = await listArtistUnitSources(job.artistId);
@@ -116,9 +118,11 @@ async function syncSource(entry: UnitSyncEntry, deadline: number): Promise<boole
     return true;
   }
   if (entry.indexedRevision !== entry.sourceRevision) {
+    // The parse is bound to the deadline too: the platform kills the invocation past it.
+    const pdfTimeoutMs = Math.min(JOB_PDF_TIMEOUT_MS, deadline - Date.now() - PARSE_RESERVE_MS);
     const outcome = await ingestSource(
       { sourceKind, sourceId },
-      { pdfTimeoutMs: JOB_PDF_TIMEOUT_MS, ocr: true, signal },
+      { pdfTimeoutMs, ocr: true, signal },
     );
     if (outcome.failed)
       console.warn(`[unit_sync] ${sourceKind} source ${sourceId} failed: ${outcome.failed}`);

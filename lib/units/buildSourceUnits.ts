@@ -61,6 +61,7 @@ export async function buildSourceUnits(
     extracted = await extractPdfPages(body.bytes, {
       maxPages: MAX_INGEST_PAGES,
       timeoutMs: deps.pdfTimeoutMs,
+      signal: deps.signal,
     });
   } catch {
     return { units: [], ocrPages: 0, failed: "extract", truncated: false, needsOcr: false };

@@ -136,7 +136,8 @@ describe("buildSourceUnits", () => {
     });
     expect(readPage).not.toHaveBeenCalled();
     expect(result.units).toEqual([]);
-    expect(result.failed).toBe("vision");
+    // The parse itself is bound to the signal.
+    expect(result.failed).toBe("extract");
   });
 
   test("an abort mid-document keeps the pages built so far and stops", async () => {
@@ -177,16 +178,17 @@ describe("buildSourceUnits", () => {
     expect(unit.tokens).toBe(Math.ceil(unit.text.length / 4));
   });
 
-  test("pdfTimeoutMs reaches the PDF extractor", async () => {
+  test("pdfTimeoutMs and the signal reach the PDF extractor", async () => {
     vi.resetModules();
     const extractPdfPages = vi.fn().mockResolvedValue({ pages: [PAGE_ONE], truncated: false });
     vi.doMock("@/lib/units/extractPdfPages", () => ({ extractPdfPages }));
     const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
     const bytes = new Uint8Array([1, 2, 3]);
-    await build(input({ kind: "pdf", bytes }), { pdfTimeoutMs: 1234 });
+    const signal = new AbortController().signal;
+    await build(input({ kind: "pdf", bytes }), { pdfTimeoutMs: 1234, signal });
     expect(extractPdfPages).toHaveBeenCalledWith(
       bytes,
-      expect.objectContaining({ timeoutMs: 1234 }),
+      expect.objectContaining({ timeoutMs: 1234, signal }),
     );
     vi.doUnmock("@/lib/units/extractPdfPages");
     vi.resetModules();
