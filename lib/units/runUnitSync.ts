@@ -1,12 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
-import { completeResearchJob } from "@/lib/research/completeResearchJob";
-import { saveJobProgress } from "@/lib/research/saveJobProgress";
-import { saveJobState } from "@/lib/research/saveJobState";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 import { embedUnits } from "@/lib/units/embedUnits";
+import { finishUnitSync } from "@/lib/units/finishUnitSync";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { listArtistUnitSources } from "@/lib/units/listArtistUnitSources";
+import { saveUnitSyncProgress } from "@/lib/units/saveUnitSyncProgress";
 import type { UnitSyncEntry } from "@/lib/units/types";
 
 /** No source is started with less than this left before the slice deadline. */
@@ -23,6 +22,10 @@ const JOB_PDF_TIMEOUT_MS = 45_000;
  * skipped, never stopping the slice. The list is rebuilt every slice, so the slice resumes after the
  * last source handled (`state.after`, a kind and id), not at a position.
  *
+ * A source queued while the job is live sets `state.rescan` (`queueUnitSync`); at the end of the list
+ * the job then starts over from the top instead of finishing (once per slice; the database clears the
+ * flag atomically, so a rescan that lands mid-slice is never lost).
+ *
  * A vision read cut short (by the deadline or a model error) writes the pages it read, stamped with
  * the current revision, so a later sync treats the source as indexed and does not retry it until
  * its revision changes. Accepted for v1.
@@ -32,44 +35,57 @@ const JOB_PDF_TIMEOUT_MS = 45_000;
  * @returns What the slice did; never document text.
  */
 export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
-  const sources = await listArtistUnitSources(job.artistId);
-  const total = sources.length;
-  const after = savedKey(job.state.after);
-  // Resume after the last source handled, by key: deleting orphans shifts every later position.
-  const start = after ? sources.findIndex(e => compareKeys(e, after) > 0) : 0;
-  let cursor = start === -1 ? total : start;
-  const first = cursor;
-  let failures = typeof job.state.failures === "number" ? job.state.failures : 0;
-  let last: SourceKey | null = null;
+  // The flag belongs to the row: the slice never writes it back, so only the database clears it.
+  const { rescan: _rescan, ...saved } = job.state;
+  let after = savedKey(saved.after);
+  let failures = typeof saved.failures === "number" ? saved.failures : 0;
+  let handled = 0;
+  let restarted = false;
+  const canStart = () => Date.now() < deadline - START_RESERVE_MS;
 
-  while (cursor < total && Date.now() < deadline - START_RESERVE_MS) {
-    const entry = sources[cursor];
-    try {
-      if (!(await syncSource(entry, deadline))) failures++;
-    } catch (error) {
-      failures++;
-      // Never the message: a failed query's message carries its bound parameters, which can be unit text.
-      const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
-      console.warn(
-        `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.name : "unknown"}${typeof code === "string" ? ` ${code}` : ""}`,
-      );
+  for (;;) {
+    const sources = await listArtistUnitSources(job.artistId);
+    const total = sources.length;
+    // Resume after the last source handled, by key: deleting orphans shifts every later position.
+    const resumeAfter = after;
+    const start = resumeAfter ? sources.findIndex(e => compareKeys(e, resumeAfter) > 0) : 0;
+    let cursor = start === -1 ? total : start;
+
+    while (cursor < total && canStart()) {
+      const entry = sources[cursor];
+      try {
+        if (!(await syncSource(entry, deadline))) failures++;
+      } catch (error) {
+        failures++;
+        // Never the message: a failed query's message carries its bound parameters, which can be unit text.
+        const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+        console.warn(
+          `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.name : "unknown"}${typeof code === "string" ? ` ${code}` : ""}`,
+        );
+      }
+      after = { sourceKind: entry.sourceKind, sourceId: entry.sourceId };
+      handled++;
+      cursor++;
     }
-    last = { sourceKind: entry.sourceKind, sourceId: entry.sourceId };
-    cursor++;
-  }
 
-  // `cursor` and `total` are display counters for this slice's list; `state.after` is the resume point.
-  const state = { ...job.state, failures, ...(last ? { after: last } : {}) };
-  const progress = `units ${cursor}/${total}, failures ${failures}`;
-  if (cursor >= total) {
-    // Keep the claim while writing the count, then finish, as `finishSocialIngest` does.
-    await saveJobState(job.id, state);
-    await completeResearchJob(job.id);
-    return { progress, done: true };
+    // `cursor` and `total` are display counters for this slice's list; `state.after` is the resume point.
+    const state = { ...saved, failures, ...(after ? { after } : {}) };
+    const progress = `units ${cursor}/${total}, failures ${failures}`;
+    if (cursor < total) {
+      await saveUnitSyncProgress(job.id, cursor, total, state);
+      // A slice too short to start one source waits for a longer one rather than spinning this tick.
+      return handled === 0 ? { progress, done: false, waiting: true } : { progress, done: false };
+    }
+    if (await finishUnitSync(job.id, state)) return { progress, done: true };
+    // A rescan was pending: sources may have been added before the resume key. Start over.
+    after = null;
+    if (restarted || !canStart()) {
+      const { after: _after, ...fromTop } = state;
+      await saveUnitSyncProgress(job.id, 0, total, fromTop);
+      return { progress: `units 0/${total}, failures ${failures}`, done: false };
+    }
+    restarted = true;
   }
-  await saveJobProgress(job.id, cursor, { total, state });
-  // A slice too short to start one source waits for a longer one rather than spinning this tick.
-  return cursor === first ? { progress, done: false, waiting: true } : { progress, done: false };
 }
 
 type SourceKey = { sourceKind: string; sourceId: string };
