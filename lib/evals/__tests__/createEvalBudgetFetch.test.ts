@@ -143,6 +143,48 @@ describe("createEvalBudgetFetch", () => {
     await expect(reservedFor("openai/gpt-5.5")).rejects.toThrow("unpriced model");
     await expect(reservedFor("google/gemini-3.1-pro-preview")).rejects.toThrow("unpriced model");
   });
+  it("prices a gateway embedding request by its input size at the embedding model's rate", async () => {
+    const embeddingUrl = "https://ai-gateway.vercel.sh/v4/ai/embedding-model";
+    const embed = (values: string[], model = "openai/text-embedding-3-small") => ({
+      method: "POST",
+      headers: { "ai-model-id": model },
+      body: JSON.stringify({ values }),
+    });
+    const send = vi.fn().mockResolvedValue(new Response("{}"));
+    const guard = createEvalBudgetFetch(send);
+    const values = ["x".repeat(4000)];
+    await guard.fetch(embeddingUrl, embed(values));
+    const tokens = Math.ceil(JSON.stringify(values).length / 4);
+    expect(guard.snapshot().reservedUsd).toBeCloseTo(Math.ceil(tokens * 0.02) / 1000000, 9);
+    expect(guard.snapshot().paidRequests).toBe(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    await expect(
+      createEvalBudgetFetch(send).fetch(
+        embeddingUrl,
+        embed(["q"], "openai/text-embedding-3-large"),
+      ),
+    ).rejects.toThrow("unpriced model");
+    await expect(
+      createEvalBudgetFetch(send).fetch(embeddingUrl, {
+        ...embed(["q"]),
+        body: JSON.stringify({ input: ["q"] }),
+      }),
+    ).rejects.toThrow("missing values");
+  });
+  it("fails closed on any other gateway model path but leaves other gateway paths as they were", async () => {
+    const send = vi.fn();
+    for (const path of ["image-model", "video-model", "reranking-model"]) {
+      const guard = createEvalBudgetFetch(send);
+      await expect(
+        guard.fetch(`https://ai-gateway.vercel.sh/v4/ai/${path}`, request()),
+      ).rejects.toThrow("unpriced gateway path");
+      expect(guard.snapshot().blocked).toBe(true);
+    }
+    await expect(
+      createEvalBudgetFetch(send).fetch("https://ai-gateway.vercel.sh/v1/credits", request()),
+    ).rejects.toThrow("unapproved network destination");
+    expect(send).not.toHaveBeenCalled();
+  });
   it("reserves search credits and passes through Braintrust logging", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);

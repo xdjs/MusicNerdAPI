@@ -13,6 +13,8 @@ const PRICED_MODELS: Record<string, { input: number; output: number; file: numbe
   "google/gemini-3.8-flash": { input: 1, output: 6, file: 0.125 },
   "google/gemini-4-hydrogen": { input: 2, output: 10, file: 0.25 },
   "openai/gpt-5.4": { input: 4, output: 20, file: 0.5 },
+  // Embedding model (MODEL_EMBEDDING): $0.02 per million input tokens, charged per estimated token.
+  "openai/text-embedding-3-small": { input: 0.02, output: 0, file: 0 },
 };
 const MAX_PAID_REQUESTS = 150;
 
@@ -148,6 +150,18 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       const fileMicros = Math.ceil(fileCharacters * price.file);
       reservation =
         (bytes + 8192) * price.input + Number(body.maxOutputTokens) * price.output + fileMicros;
+    } else if (
+      url.hostname === "ai-gateway.vercel.sh" &&
+      url.pathname.endsWith("/embedding-model")
+    ) {
+      // The gateway embedding call posts { values: string[] } with the model id in `ai-model-id`.
+      const model = new Headers(init.headers).get("ai-model-id");
+      const price = model ? PRICED_MODELS[model] : undefined;
+      if (!price) return fail("unpriced model");
+      if (!Array.isArray(body.values)) return fail("missing values");
+      reservation = Math.ceil(Math.ceil(JSON.stringify(body.values).length / 4) * price.input);
+    } else if (url.hostname === "ai-gateway.vercel.sh" && url.pathname.endsWith("-model")) {
+      return fail("unpriced gateway path");
     } else if (url.hostname === "api.tavily.com" && url.pathname === "/search") {
       if (Object.keys(body).some(key => !["query", "include_domains", "max_results"].includes(key)))
         return fail("unpriced search options");

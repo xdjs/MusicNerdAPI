@@ -16,11 +16,17 @@ on:
           - pdf106-pete-smoke
           - pdf106-four-paired
           - vision-page
+          - retrieval
+          - units-backfill
         default: chat
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
         default: "5"
+      label:
+        description: "retrieval only: print each hit's source id, page locator, title and public URL (never text) so the cases can be labelled"
+        type: boolean
+        default: false
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -30,7 +36,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.
@@ -51,6 +57,8 @@ jobs:
       VERCEL: "1"
       # The chat-pdf-text suite's trial count (evals/chat-pdf-text.eval.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
+      # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
+      RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
 
     steps:
       - uses: actions/checkout@v4
