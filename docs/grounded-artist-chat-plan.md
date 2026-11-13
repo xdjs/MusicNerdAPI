@@ -371,6 +371,18 @@ test("a missing source is reported as skipped", ...)
 
 ---
 
+### Task 11b: catch-up hook for Web-side approvals (Web, added 2026-11-13)
+
+**Why:** the Web approves and publishes vault sources by direct database writes (`approvePendingLoreSource.ts`, `queries/updateVaultSourceStatus.ts`, `reviewArtistLinkSuggestion.ts`, `setSourcePublication.ts`), which bump `updated_at` and so change the source's revision; nothing on the API side sees those writes. The API queues `unit_sync` after uploads and when a text-producing research job finishes (ruling R15), but a Web approval alone would leave the units hidden until the next sync.
+
+**Files (Web):**
+- Create: `src/server/utils/units/queueUnitSync.ts` + test (the same insert as the API's: `artist_research_jobs`, kind `unit_sync`, status `pending`, `on conflict (artist_id, kind) where status in ('pending','running') do update set state = coalesce(state,'{}'::jsonb) || '{"rescan":true}'::jsonb`)
+- Modify: the four write sites above, calling it after their commit; tests for each.
+
+- [ ] Steps: failing tests first; implement; `npm test`; commit `feat(units): queue a unit sync when a source's status or publication changes`. Lands as a Web PR after W1 (0066) is applied.
+
+---
+
 ### Task 12: `unit_sync` job and backfill
 
 **Files:**
@@ -569,3 +581,15 @@ test("webSearch refuses a third call", ...)
 - Spec coverage: ingest (Tasks 3 to 12), store/index (1, 2, 8), retrieve (13), answer loop (16, 18), conversation (15, 17), evaluation (14, 19), migration steps 1 to 6 (1, 11 to 12, 14, 18 to 20). Partner API and Web retirements: separate plans by design. The spec's "status line names what is being read" is Task 20's Web change; "Searching 14 documents…" is not possible from a tool part and is written as "Searching saved documents…" (my call).
 - Names used consistently: `UnitSourceKind`, `UnitDraft`, `UnitHit`, `IngestOutcome`, `ChatDocumentRef`, `ChatDocuments`, `searchUnits`, `readUnits`, `assertDocumentsCurrent`, `keepCurrentCitedTurns`, `getChatRetrievalMode`, `MODEL_EMBEDDING`, `MODEL_OCR`, `vaultSourceRevisionSql`, `socialPostRevisionSql`, `eligibleUnitsSql`.
 - Calls made here, not in the spec: output cap 1,500 tokens; 2 web searches per answer; inline ingest up to 40 pages; `WEAK_COSINE_DISTANCE` 0.6; `musicnerd://kind/id` URL for documents without a public URL; `unit_sync` as one job kind per artist with a manual backfill insert; PGlite tests use a text domain for `vector` and the real operator is covered in CI by Task 21.
+
+## Amendments made during execution (2026-11-13)
+
+Recorded here so the plan stays the argument for what was built; the full rulings with costs are in the execution ledger.
+- Inline ingest at upload never runs the vision pass and is bounded (5 s inspect, 10 s parse, 20 s overall); anything else, including scanned pages, is queued (R13). The vision pass caps at 60 pages per document, reads four pages at a time from one parsed document, and a read cut short by a slice deadline is never stamped as current (R11, R14).
+- `unit_sync` resumes by source key, rescans once when a source was queued during a live job, caps a slice at 20 s, starts no source with under 20 s left, keeps the last 20 failures per job, and is queued when a text-producing research job finishes (R15); orphans are missing rows only; units of present-but-ineligible rows are neither ingested nor deleted.
+- The one-time `extracted_text` fill for a scanned document runs before its units are stamped and only on a complete read (R12).
+- The retrieval eval gained a `units-backfill` suite that indexes the three eval artists' sources on staging in-process, because staging has no API worker (R16); labels are made from a hosted listing of titles, URLs and locators, never text.
+- `readUnits` accepts an empty locator list meaning the whole document within the budget (R19); a bad locator is reported distinctly from a withdrawn document.
+- Citation numbers carried from earlier turns are seeded into the numberer and never renumbered (R18); a read-only turn carries its document so the currency rule applies to it.
+- Published interview answers are already public under the follow-up/onboarding-publish rule and stay on the "latest" path in this version; indexing them as units is a follow-up.
+- The vector query runs with `hnsw.iterative_scan` so a small artist's filtered search cannot come back empty (Task 21).
