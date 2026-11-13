@@ -9,6 +9,7 @@ import { runIngest } from "@/lib/research/runIngest";
 import { runLoreRefresh } from "@/lib/research/runLoreRefresh";
 import { runSourceSearchJob } from "@/lib/research/runSourceSearchJob";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
+import { runUnitSync } from "@/lib/units/runUnitSync";
 
 /**
  * Runs one slice of a claimed job with the runner for its kind.
@@ -40,7 +41,6 @@ export async function runResearchJob(job: ResearchJob, deadline: number): Promis
     case "latest_refresh":
       return runLatestRefresh(job, deadline);
     case "unit_sync":
-      // Task 12 registers the runner and claims the kind; until then no worker claims it.
-      throw new Error("unit_sync has no runner yet");
+      return runUnitSync(job, deadline);
   }
 }

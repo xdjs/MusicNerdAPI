@@ -37,6 +37,18 @@ export type UnitHit = {
   score: number;
 };
 
+/** One row of `listArtistUnitSources`: a source next to what the text index holds for it. */
+export type UnitSyncEntry = {
+  sourceKind: UnitSourceKind;
+  sourceId: string;
+  /** The source's current revision; null for an orphan, whose units must go. */
+  sourceRevision: string | null;
+  /** The revision the source's units carry, when they all carry one; null when unindexed or mixed. */
+  indexedRevision: string | null;
+  /** Some unit of the source has no embedding. */
+  needsEmbedding: boolean;
+};
+
 export type IngestOutcome = {
   units: number;
   ocrPages: number;

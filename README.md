@@ -62,3 +62,7 @@ New preparation jobs also save a versioned `public_about` envelope, separate fro
 An exact, bounded biography passage from an identity-assessed platform profile matching a saved artist account is preferred. A similar artist/domain name is not ownership proof; custom-domain websites without ownership evidence use the researched fallback. For researched About, displayed sources are the union of validated citations in the research document and its About summary, so summarization cannot drop attribution for upstream evidence. The About must itself carry valid citations. Unknown source references or unsafe source URLs withhold the public projection. Public output contains only prose and source attribution, never the private document or original text.
 
 Admin corrections to directory About carry `public_about.editedByAdmin: true`. Directory preparation preserves the entire corrected preparation on conflict, including during overlapping generation, while finishing its job. Web read-time eligibility still withdraws invalid source/identity evidence; automatic preparation never clears this human-edit protection. See MusicNerdWeb#1569.
+
+### Page-level text index (`unit_sync`)
+
+The research worker's `unit_sync` job needs Web migration **0066** applied first; backfilling every artist is one manual SQL insert of pending `unit_sync` jobs, run by hand through an authorized connection (the statement is in the PR that added the job).
