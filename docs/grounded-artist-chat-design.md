@@ -1,6 +1,6 @@
 # Grounded artist chat: ingestion, retrieval, answers and the partner API
 
-Design proposal for Pete, 2026-11-13. Status: draft for decision; nothing in it is built. Written by Claude after the #1424 work, when Pete asked for the whole flow to be reconsidered rather than tuned.
+Design proposal for Pete, 2026-11-13. Status: approved by Pete on 2026-11-13, with the changes marked "amended 2026-11-13" below agreed in the same conversation; nothing in it is built yet. Written by Claude after the #1424 work, when Pete asked for the whole flow to be reconsidered rather than tuned.
 
 ## Intent
 
@@ -13,6 +13,10 @@ Today the chat sends whole PDFs to the model as bytes, two per answer, and ranks
 - OCR is in the first version: a scanned page is read, not skipped.
 - The native whole-PDF read is removed, not kept as a fallback. Existing uploads (mostly Dutchyyy's) are reprocessed.
 - Build for the long term. Retrieval recommendation below follows from that.
+- The grounding check is enforced on the partner answer and only recorded on the streamed chat (amended 2026-11-13).
+- The retrieval eval runs before the chat switch and gates it (amended 2026-11-13).
+- The first version searches without a model rewrite of the question; alias expansion needs no model (amended 2026-11-13).
+- The vision pass has two triggers: no text layer, or extracted text that looks broken (amended 2026-11-13).
 
 ## Goals
 
@@ -101,7 +105,7 @@ A single `ingestSource(sourceId)` job in the API, run on upload, on approval, an
 - **Units.** PDF: one unit per physical page, text from the page renderer the eval uses today, with `[page N]` as the unit locator. Web page: no HTML is kept today, only block text capped at 50,000 characters whose hash is part of the revision; so for existing pages the units are sections of that stored text with paragraph-offset locators ("[2, ¶14]"), never a re-fetch, which would break the same-revision guarantee (my call). From the switch on, the extraction job also stores a markdown rendering with headings beside the text, so new pages get heading-path locators ("[2, §Early years]"). Social post: one unit, locator is the post. Text or markdown upload: units by heading, or the whole file when short. Interview answer: one unit per answer, locator is the question.
 - **Markdown, not plain text.** Headings, lists and tables survive as markdown; running headers, footers and page numbers inside the text are stripped where detectable. Tables matter for discographies and credits.
 - **Every kind of source the chat already draws on.** Units come from vault documents (PDF, text and markdown uploads, web pages), the artist's own social posts (caption plus reel transcript), research evidence originals, and the artist's published interview and onboarding answers (`artist_interview_answers`), which are the artist's own words and often the best source. That is four of the five kinds `loadPublicResearchOriginals` assembles today. The fifth, latest-provider items (Spotify and Deezer releases, refreshed daily or faster), churns too fast for an index and is structured data, not prose: it stays on its existing "latest" path and the model keeps the `retrieval=latest` tool for it (my call). One table and one search for everything written; one live tool for what is current.
-- **OCR.** A PDF page whose text layer is empty or near-empty is rendered to an image and read by a vision model through the gateway, once, and stored like any other page with `ocr = true`. Image uploads (press photos, flyers, scans) get the same treatment: one unit of OCR text plus a one-line description. Audio uploads are out of scope for the first version (the reel-transcript path is the obvious later home). Cost is per scanned page at ingest, never at question time.
+- **OCR, the vision pass.** Text extraction is the path for every PDF with a text layer, which is every current upload. A page goes to a vision model through the gateway only when its text layer is empty or near-empty, or when the extracted text looks broken: words fused without spaces, a high share of non-word characters, or a column layout the extractor has scrambled (amended 2026-11-13; the detection heuristic is the builder's). The page is read once and stored like any other page with `ocr = true`. How the page reaches the model: the API has no PDF rasterizer (`pdf-parse` and `sharp` do not render pages), so the first version splits the document into one-page PDFs and sends each page as a file part, the way the chat sends bytes today; rendering pages to images is a later option if a model needs it. The builder proves this on one of Dutchyyy's pages before the queue design is committed (my call). Image uploads (press photos, flyers, scans) get the same treatment: one unit of OCR text plus a one-line description. Audio uploads are out of scope for the first version (the reel-transcript path is the obvious later home). Cost is per scanned page at ingest, never at question time: about a tenth of a cent on Gemini Flash or a third of a cent on Sonnet at gateway list prices on 2026-11-13.
 - **Sizes.** The upload limit stays 10 MB. Reading no longer fetches bytes at question time, so the 4 MiB and 50-page chat limits go away; ingest handles up to a page cap (about 300) in the same terminable worker the inspector uses today.
 - **Provenance per unit:** source kind and id, unit index, locator, character count, hash of the unit text, `ocr` flag, ingested-at, the ingest version (so a better extractor can reprocess selectively), and the source revision the units were built from.
 - **When units exist.** For a text-layer document, units and embeddings are written in the same request that completes the upload (one pdf-parse pass, one batched embedding call), so a document is searchable the moment it is approved. OCR, image uploads and documents past a size threshold go to the existing research-jobs queue in one-minute slices, and the backfill runs through the same queue. Until a document's units exist, `listDocuments` reports it as "indexing" and the status line can say so; the chat answers from what is indexed and never falls back to reading bytes (my call). The shared queue is enough for the current corpus; a dedicated worker is an operations decision for later, noted under "Left to the builder".
@@ -121,7 +125,7 @@ A `source_units` table (name to be settled by the builder): `id`, `source_kind` 
 
 Recommendation for "build for the long term": keyword and vector together, fused. Keyword search alone misses paraphrase ("who produced" versus "production credit"); vectors alone miss exact names, dates and catalogue numbers, which is most of what a music fan asks. Together they cover each other, and the fusion is twenty lines of SQL.
 
-- **Query rewriting.** A cheap model turns the question into two or three search strings (the question itself, a keyword form, an alias-expanded form using the artist's known names). Cost: one small call per question.
+- **Search strings.** The first version searches with the question itself and an alias-expanded form built from the artist's known names, which needs no model call (amended 2026-11-13). A model rewrite (a keyword form, a paraphrase) is added only when the retrieval eval shows a paraphrase gap; when it is, it runs in parallel with the raw-question search and its lists are fused in as they arrive, so the rewrite never delays the first results.
 - **Candidates.** For each string: top 20 by `ts_rank_cd` on the GIN index and top 20 by cosine distance on the HNSW index, filtered to the artist and to currently published sources.
 - **Fusion.** Reciprocal rank fusion across all lists; then at most three units per document and the top eight overall. A re-ranker slot is left in the design and left empty.
 - **Returned to the model:** for each hit, the document number `n` (citation numbers are assigned here, once per document per conversation), the locator, and the unit text trimmed to about 1,200 characters around the matched span. Reading a whole unit, or neighbouring units, is a second tool.
@@ -143,7 +147,7 @@ The two-reads-per-answer limit disappears. What bounds an answer instead is a to
 
 - **First signal under a second.** The status line already exists on the artist page; it now names what is being searched and read ("Searching 14 documents…", "Reading timeline.pdf p.2…").
 - **Plan, retrieve, expand, write.** The instructions ask for one `searchPassages` call first, expansion only when a claim needs more than the trimmed passage, and writing from what was read. The inventory and two-source rules from #117 stay as instructions; they become cheap because a scan is a search, not a whole-file read.
-- **Grounding check before the stream ends.** A second, cheap pass (the judge model's smaller sibling, or the same model at low effort) checks each cited sentence against its passage and marks any it cannot support. Unsupported sentences are dropped from the answer or softened, and the fact is recorded for the eval. This is what makes the partner answer trustworthy without a human in the loop; cost is one small call per answer.
+- **Grounding check.** A second, cheap pass (the judge model's smaller sibling, or the same model at low effort) checks each cited sentence against its passage and marks any it cannot support. Where it is enforced depends on the transport (amended 2026-11-13). The partner answer endpoint is not streamed, so there the check runs before the response is returned: unsupported sentences are dropped or softened and `grounded` reports the result. The chat is streamed, so by the time the check finishes the text is already on the page; there the check runs after the stream, is recorded for the eval and surfaced as a marker on the message, and never rewrites what the reader has seen. Holding the chat answer until the check passes would give back the first-text time this design buys. This is what makes the partner answer trustworthy without a human in the loop; cost is one small call per answer.
 - **Abstention.** When the fused top results are weak (a score floor) and web search is unavailable or also weak, the answer says so plainly.
 - **Streaming.** Unchanged transport; planning narration stays gated as in #117.
 
@@ -164,7 +168,7 @@ The two-reads-per-answer limit disappears. What bounds an answer instead is a to
 
 ### 7. Evaluation
 
-- **Retrieval eval (new):** a hand-labelled set of question to (document, locator) pairs for the staging fixtures; score recall at 8 and reciprocal rank. Runs without a chat model, so it is cheap and can run on every change to ingestion or ranking.
+- **Retrieval eval (new):** a hand-labelled set of question to (document, locator) pairs for the staging fixtures; score recall at 8 and reciprocal rank. Runs without a chat model, so it is cheap and can run on every change to ingestion or ranking. It is built right after the backfill and must pass before the chat switch (migration step 4, amended 2026-11-13); its floor is proposed from the first run against the labelled set.
 - **Answer eval:** the existing chat suite and gates, judged by GPT-5.4, unchanged in method; its PDF evidence adapter becomes a read of the stored units, since the model and the judge now see the same text.
 - **Follow-up eval:** the two-turn case from #118, extended to citation carry-over.
 - **Latency and cost:** first signal, first text, total time and tokens per answer recorded per row; thresholds proposed after the first backfilled run.
@@ -175,9 +179,10 @@ The two-reads-per-answer limit disappears. What bounds an answer instead is a to
 1. Add the table and indexes (one migration, additive).
 2. Ship `ingestSource` and run it on new uploads; nothing reads the units yet.
 3. Backfill: a job over existing approved sources, oldest first, Dutchyyy's documents first by hand; the existing research "advance" scheduler pattern can drive it. Record failures per source.
-4. Switch the chat tools to passages behind a flag on staging; run the eval; compare to the #117 record.
-5. Remove the native read, the two-file limit and `readPdfSource`; the eval's PDF evidence adapter reads units.
-6. Ship the partner endpoints last, after the chat has run on passages for a release.
+4. Retrieval eval: label the question-to-page set from the twelve chat cases and their follow-ups, run it against the backfilled index, and tune ranking until recall at 8 meets the floor. Nothing switches until this passes (amended 2026-11-13).
+5. Switch the chat tools to passages behind a flag on staging; run the answer eval; compare to the #117 record.
+6. Remove the native read, the two-file limit and `readPdfSource`; the eval's PDF evidence adapter reads units.
+7. Ship the partner endpoints last, after the chat has run on passages for a release.
 
 ### 9. Cost and latency (estimates, to be measured)
 
@@ -186,7 +191,9 @@ The two-reads-per-answer limit disappears. What bounds an answer instead is a to
 | Input per PDF-backed answer | ~1,500 tokens per page read, up to two whole files | ~2,000 to 12,000 tokens of passages |
 | Answer start | 7 to 12 s | 3 to 6 s (no file fetch, no whole-file read) |
 | Ingest per PDF page | one pdf-parse pass | one pass plus one embedding; plus one vision call if scanned |
-| Per question extra calls | none | one rewrite, one grounding check (small models) |
+| Per question extra calls | none | one grounding check (small model); a rewrite only if the retrieval eval calls for it |
+| Cost per PDF-backed answer | about 14 cents measured (`docs/chat-eval-pdf-evidence.md`) | 1 to 3 cents: 2k to 12k passage tokens at Sonnet 5.5's gateway list price of $2 per million input tokens (2026-11-13) |
+| Embedding at ingest | none | $0.02 per million tokens on `openai/text-embedding-3-small` (gateway list, 2026-11-13); the whole current corpus for a few cents |
 
 ## Cleanups found on the way
 
@@ -202,7 +209,7 @@ Not part of the design, but found while mapping the flow and cheap to fix in pas
 
 ## Left to the builder
 
-Table and column names; the exact unit size for HTML, social and evidence text; the embedding model and dimension; the OCR model and how a "near-empty" text layer is detected; the rewrite and grounding models; the RRF constant and score floor; how the backfill job is scheduled and how failures are retried; the page cap at ingest; the shape of the running summary; the retrieval eval's labelled set (built from the twelve chat cases plus their follow-ups); migration numbering (both repositories share the database and each keeps a schema file; the migration lands once, in the Web repo's `drizzle/`, and both schema files are updated).
+Table and column names; the exact unit size for HTML, social and evidence text; the embedding model and dimension; the OCR model and how a "near-empty" text layer is detected; the rewrite and grounding models; the RRF constant and score floor; how the backfill job is scheduled and how failures are retried; the page cap at ingest; the broken-extraction heuristic and the one-page PDF split for the vision pass; the retrieval eval's labelled set (built from the twelve chat cases plus their follow-ups); migration numbering (both repositories share the database and each keeps a schema file; the migration lands once, in the Web repo's `drizzle/`, and both schema files are updated).
 
 ## Where the Web stands (decided with Pete, 2026-11-13)
 
@@ -225,4 +232,4 @@ Partner access in the first version: the existing research key with one allowanc
 
 ## Open questions for Pete
 
-None outstanding. Decisions recorded above: OCR in v1; native read removed; hybrid retrieval; Web scope and partner keys as in the previous section.
+None outstanding. Decisions recorded above: OCR in v1 with two triggers; native read removed; hybrid retrieval; grounding check enforced on the partner answer and recorded on the chat; retrieval eval before the switch; no model rewrite in the first version; Web scope and partner keys as in the previous section. Approved by Pete on 2026-11-13.
