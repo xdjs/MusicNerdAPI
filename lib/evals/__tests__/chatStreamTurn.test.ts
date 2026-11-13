@@ -54,6 +54,10 @@ describe("chatStreamTurn", () => {
 
     const turn = await chatStreamTurn({ artistId: "a1", question: "Where?" }, fakeClock());
 
+    // The fake clock advances 100 ms per read: the first tool step is the first signal, the
+    // first text delta comes later.
+    expect(turn.firstSignalMs).toBe(100);
+    expect(turn.firstSignalMs).toBeLessThan(turn.firstTextMs);
     const [request, artistId] = postArtistChatHandler.mock.calls[0];
     expect(artistId).toBe("a1");
     expect((await request.json()).messages).toEqual([

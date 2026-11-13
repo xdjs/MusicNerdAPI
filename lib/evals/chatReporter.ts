@@ -3,6 +3,7 @@ import { checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
 const SCORE_COLUMNS = [
+  "first_signal",
   "first_text",
   "total_time",
   "citations",
@@ -35,6 +36,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
     console.log(
       [
         "case".padEnd(28),
+        "signal",
         "first",
         "total",
         ...SCORE_COLUMNS.map(c => c.slice(0, 10).padStart(10)),
@@ -55,6 +57,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       console.log(
         [
           label.padEnd(28),
+          `${output.firstSignalMs ?? "-"}`.padStart(6),
           `${output.firstTextMs ?? "-"}`.padStart(5),
           `${output.totalMs ?? "-"}`.padStart(5),
           ...SCORE_COLUMNS.map(c => cell(r.scores?.[c]).padStart(10)),

@@ -83,6 +83,16 @@ Eval(
         output.error
           ? null
           : scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
+      // What the artist page shows first is a progress line from the first tool step; this is
+      // the time to that, reported beside first_text and not gated either.
+      ({ output }) =>
+        output.error
+          ? null
+          : scoreWithinBudget(
+              "first_signal",
+              output.firstSignalMs ?? output.firstTextMs,
+              FIRST_TEXT_BUDGET_MS,
+            ),
       ({ output }) =>
         output.error ? null : scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),
       // An unanswerable question is right to cite nothing, so citations are not scored there.
