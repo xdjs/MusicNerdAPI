@@ -78,7 +78,7 @@ export async function loadUnitSource(
       text: string;
       revision: string;
     }>(
-      sql`select s.artist_id, s.url, coalesce(s.caption, '') || coalesce(E'\n\n' || nullif(btrim(s.raw->'_musicnerdTranscript'->>'text'), ''), '') as text, ${socialPostRevisionSql()} as revision from artist_social_posts s where s.id = ${sourceId}::uuid and s.is_own_post = true and s.raw->'isRepost' is distinct from 'true'::jsonb`,
+      sql`select s.artist_id, s.url, case when t.speech is not null then coalesce(nullif(s.caption, '') || E'\n\n', '') || t.speech else coalesce(s.caption, '') end as text, ${socialPostRevisionSql()} as revision from artist_social_posts s left join lateral (select case when s.platform = 'instagram' and s.raw->'_musicnerdTranscript'->'version' = '1'::jsonb and s.raw->'_musicnerdTranscript'->>'actor' = 'apify/instagram-reel-scraper' and jsonb_typeof(s.raw->'_musicnerdTranscript'->'text') = 'string' and btrim(s.raw->'_musicnerdTranscript'->>'text') <> '' then s.raw->'_musicnerdTranscript'->>'text' end as speech) t on true where s.id = ${sourceId}::uuid and s.is_own_post = true and s.raw->'isRepost' is distinct from 'true'::jsonb and s.raw->'isRetweet' is distinct from 'true'::jsonb`,
     );
     if (!row) return null;
     return {
@@ -99,7 +99,7 @@ export async function loadUnitSource(
     original_text: string;
     revision: string;
   }>(
-    sql`select e.artist_id, e.title, c.url, e.original_text, e.revision from artist_research_evidence e join artist_research_candidates c on c.id = e.candidate_id where e.id = ${sourceId}::uuid`,
+    sql`select e.artist_id, e.title, c.url, e.original_text, e.revision from artist_research_evidence e join artist_research_candidates c on c.id = e.candidate_id and c.artist_id = e.artist_id where e.id = ${sourceId}::uuid`,
   );
   if (!row) return null;
   return {

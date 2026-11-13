@@ -47,8 +47,8 @@ const insertVault = (
 beforeAll(async () => {
   await client.exec(`
     create table artist_vault_sources(id uuid,artist_id uuid,url text,title text,file_name text,file_path text,content_type text,extracted_text text,publication text not null default 'inherit',status text,updated_at timestamptz,created_at timestamptz default '2026-01-02T00:00:00Z');
-    create table artist_social_posts(id uuid,artist_id uuid,caption text,url text,is_own_post boolean,raw jsonb);
-    create table artist_research_candidates(id uuid,url text);
+    create table artist_social_posts(id uuid,artist_id uuid,platform text,caption text,url text,is_own_post boolean,raw jsonb);
+    create table artist_research_candidates(id uuid,artist_id uuid,url text);
     create table artist_research_evidence(id uuid,candidate_id uuid,artist_id uuid,revision text,title text,original_text text);
     create function knowledge_social_post_snapshot(s artist_social_posts) returns jsonb language sql as 'select to_jsonb(s)';
     create function knowledge_source_fingerprint(j jsonb) returns text language sql as 'select ''fp:'' || md5(j::text)';
@@ -86,27 +86,42 @@ beforeAll(async () => {
     file_path: "p/c.csv",
     content_type: "text/csv",
   });
+  const tr = (o: Record<string, unknown>) =>
+    JSON.stringify({
+      _musicnerdTranscript: {
+        version: 1,
+        actor: "apify/instagram-reel-scraper",
+        text: "spoken words",
+        ...o,
+      },
+    });
+  const post = (n: number, platform: string, caption: string | null, own: boolean, raw: string) =>
+    client.query(
+      "insert into artist_social_posts(id,artist_id,platform,caption,url,is_own_post,raw) values($1,$2,$3,$4,$5,$6,$7)",
+      [id(n), artist, platform, caption, `https://instagram.com/p/${n}`, own, raw],
+    );
+  await post(10, "instagram", "Caption here", true, tr({}));
+  await post(11, "instagram", "Reposted", true, '{"isRepost":true}');
+  await post(12, "instagram", "Not mine", false, "{}");
+  await post(13, "instagram", "Only caption", true, "{}");
+  await post(14, "tiktok", "Wrong platform", true, tr({}));
+  await post(15, "instagram", "Wrong version", true, tr({ version: 2 }));
+  await post(16, "instagram", "Wrong actor", true, tr({ actor: "someone/else" }));
+  await post(17, "instagram", "Retweeted", true, '{"isRetweet":true}');
+  await post(18, "instagram", null, true, tr({ text: "  only speech  " }));
+  await post(19, "instagram", "Padded", true, tr({ text: "  padded  " }));
+  await post(22, "instagram", "Non-string", true, tr({ text: 5 }));
   await client.query(
-    `insert into artist_social_posts values($1,$2,'Caption here','https://instagram.com/p/x',true,$3),
-     ($4,$2,'Reposted','https://instagram.com/p/y',true,'{"isRepost":true}'),
-     ($5,$2,'Not mine','https://instagram.com/p/z',false,'{}'),
-     ($6,$2,'Only caption','https://instagram.com/p/w',true,'{}')`,
-    [
-      id(10),
-      artist,
-      JSON.stringify({ _musicnerdTranscript: { version: 1, text: "spoken words" } }),
-      id(11),
-      id(12),
-      id(13),
-    ],
-  );
-  await client.query(
-    "insert into artist_research_candidates values($1,'https://example.com/found')",
-    [id(20)],
+    "insert into artist_research_candidates values($1,$2,'https://example.com/found'),($3,$4,'https://example.com/other')",
+    [id(20), artist, id(23), "00000000-0000-4000-8000-000000000002"],
   );
   await client.query(
     "insert into artist_research_evidence values($1,$2,$3,'rev-7','Found title','original words')",
     [id(21), id(20), artist],
+  );
+  await client.query(
+    "insert into artist_research_evidence values($1,$2,$3,'rev-8','Mismatch','x')",
+    [id(24), id(23), artist],
   );
 }, 30000);
 afterAll(async () => client.close());
@@ -202,11 +217,42 @@ describe("loadUnitSource", () => {
       sourceKind: "social",
       artistId: artist,
       title: null,
-      url: "https://instagram.com/p/x",
+      url: "https://instagram.com/p/10",
       extractedTextIsNull: false,
       body: { kind: "plain", text: "Caption here\n\nspoken words" },
     });
     expect(s?.sourceRevision).toMatch(/^fp:[0-9a-f]{32}$/);
+  });
+
+  it("leaves out a transcript the public corpus would exclude", async () => {
+    for (const [n, caption] of [
+      [14, "Wrong platform"],
+      [15, "Wrong version"],
+      [16, "Wrong actor"],
+      [22, "Non-string"],
+    ] as const) {
+      const s = await loadUnitSource({ sourceKind: "social", sourceId: id(n) });
+      expect(s?.body).toEqual({ kind: "plain", text: caption });
+    }
+  });
+
+  it("appends the transcript untrimmed and omits the separator when there is no caption", async () => {
+    expect((await loadUnitSource({ sourceKind: "social", sourceId: id(19) }))?.body).toEqual({
+      kind: "plain",
+      text: "Padded\n\n  padded  ",
+    });
+    expect((await loadUnitSource({ sourceKind: "social", sourceId: id(18) }))?.body).toEqual({
+      kind: "plain",
+      text: "  only speech  ",
+    });
+  });
+
+  it("returns null for retweets", async () => {
+    expect(await loadUnitSource({ sourceKind: "social", sourceId: id(17) })).toBeNull();
+  });
+
+  it("returns null for evidence whose artist differs from its candidate's", async () => {
+    expect(await loadUnitSource({ sourceKind: "evidence", sourceId: id(24) })).toBeNull();
   });
 
   it("loads a social post without a transcript as the caption alone", async () => {
