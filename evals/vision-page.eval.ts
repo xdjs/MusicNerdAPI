@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { APICallError } from "ai";
 import { Eval } from "braintrust";
 import { MODEL_OCR } from "@/lib/ai/const";
 import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
@@ -35,10 +36,16 @@ Eval("music-nerd", {
       const bytes = new Uint8Array(readFileSync(FIXTURE));
       return { transcription: await readPageWithVision(bytes), error: undefined };
     } catch (error) {
-      return {
-        transcription: "",
-        error: error instanceof Error ? error.message : "vision call failed",
-      };
+      const message = error instanceof Error ? error.message : "vision call failed";
+      // Logged for the Actions run (the Braintrust output is private); never the transcription.
+      console.error(
+        "vision-page: " +
+          message +
+          (APICallError.isInstance(error)
+            ? ` status=${error.statusCode} body=${(error.responseBody ?? "").slice(0, 300)}`
+            : ""),
+      );
+      return { transcription: "", error: message };
     }
   },
   scores: [
