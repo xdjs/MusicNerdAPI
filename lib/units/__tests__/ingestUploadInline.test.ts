@@ -105,10 +105,12 @@ describe("ingestUploadInline", () => {
     expect(mock.queue).not.toHaveBeenCalled();
   });
 
-  it("queues an image", async () => {
-    await ingestUploadInline(input("image/png"));
+  it.each(["image/png", "image/jpeg"])("neither ingests nor queues an image (%s)", async type => {
+    // An image has no text for the index: a job for it would do nothing.
+    await ingestUploadInline(input(type));
     expect(mock.ingest).not.toHaveBeenCalled();
-    expect(mock.queue).toHaveBeenCalledWith("a1");
+    expect(mock.inspect).not.toHaveBeenCalled();
+    expect(mock.queue).not.toHaveBeenCalled();
   });
 
   it("queues and warns with the source id when ingestion throws", async () => {

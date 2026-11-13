@@ -19,8 +19,8 @@ async function fitsInline(bytes: Buffer, contentType: string): Promise<boolean> 
 }
 
 /**
- * Index a just-saved upload now when it is small, otherwise queue a `unit_sync` job. The job is
- * also queued when the inline pass needs OCR, was cut short, failed, or wrote units it could not embed.
+ * Index a just-saved upload now when it is small, otherwise queue a `unit_sync` job. Images are
+ * skipped (nothing to index). The job is also queued when the inline pass needs OCR, was cut short, failed, or wrote units it could not embed.
  * Never rejects: an upload that was saved must still succeed.
  *
  * @param input - The saved vault row id, its artist, and the uploaded bytes and type.
@@ -31,6 +31,8 @@ export async function ingestUploadInline(input: {
   bytes: Buffer;
   contentType: string;
 }): Promise<void> {
+  // An image has no text for the index; a queued job would find nothing to do.
+  if (input.contentType.startsWith("image/")) return;
   try {
     if (await fitsInline(input.bytes, input.contentType)) {
       const outcome = await ingestSource(
