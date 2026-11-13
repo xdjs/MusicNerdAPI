@@ -15,7 +15,7 @@ const CHANGED = { error: "Source changed or is no longer public" } as const;
  * @param artistId - The artist.
  * @param documents - The chat's document registry.
  * @param budget - Tokens left for reads in this answer; decremented by each unit returned.
- * @returns The tool.
+ * @returns The tool. A read that returns units lists its document in `documents`, as `searchPassages` does.
  */
 export function createReadUnitsTool(
   artistId: string,
@@ -50,7 +50,24 @@ export function createReadUnitsTool(
         budget.remainingTokens -= unit.tokens;
         units.push({ locator: unit.locator, text: unit.text });
       }
-      return { n, title: ref.title, units, truncated, missing: read.missing };
+      return {
+        n,
+        title: ref.title,
+        units,
+        truncated,
+        missing: read.missing,
+        // The document read, as searchPassages lists it, so a later turn replays this answer only while it is current.
+        documents: [
+          {
+            n,
+            sourceKind: ref.sourceKind,
+            sourceId: ref.sourceId,
+            revision: ref.revision,
+            title: ref.title,
+            url: ref.url,
+          },
+        ],
+      };
     },
   });
 }

@@ -29,31 +29,38 @@ const documentRef = z.object({
   title: z.string().min(1).max(300),
   url: z.string().nullable(),
 });
-/** `searchPassages` always lists the documents it numbered; `readUnits` reads documents already
- * numbered and today lists none, so `documents` is optional there. */
-const documentParts = {
-  "tool-searchPassages": z.object({
-    state: z.literal("output-available"),
-    output: z.object({ documents: z.array(documentRef).max(MAX_DOCUMENTS) }),
-  }),
-  "tool-readUnits": z.object({
-    state: z.literal("output-available"),
-    output: z.object({ documents: z.array(documentRef).max(MAX_DOCUMENTS).optional() }),
-  }),
-};
+const documentList = z.array(documentRef).max(MAX_DOCUMENTS);
+/** `searchPassages` always lists the documents it numbered; `readUnits` lists the document it read
+ * whenever it returned units. A read that returned none (an error) read nothing to replay. */
+const listsDocuments = z.object({
+  state: z.literal("output-available"),
+  output: z.object({ documents: documentList }),
+});
+const mayListDocuments = z.object({
+  state: z.literal("output-available"),
+  output: z.object({ documents: documentList.optional() }),
+});
+const readReturnedUnits = (part: { output?: unknown }) =>
+  typeof part.output === "object" && part.output !== null && "units" in part.output;
 type DocumentRef = z.infer<typeof documentRef>;
 
 /**
  * The documents an answer's completed searches and reads numbered, the first of each
  * `(sourceKind, sourceId)`; null when one cannot be identified or there are more than 16.
  */
-function citedDocuments(parts: { type: string; state?: unknown }[]): DocumentRef[] | null {
+function citedDocuments(
+  parts: { type: string; state?: unknown; output?: unknown }[],
+): DocumentRef[] | null {
   const byKey = new Map<string, DocumentRef>();
   for (const part of parts) {
     if (part.type !== "tool-searchPassages" && part.type !== "tool-readUnits") continue;
     // A call that did not complete numbered nothing the answer could cite.
     if (part.state !== "output-available") continue;
-    const parsed = documentParts[part.type].safeParse(part);
+    const schema =
+      part.type === "tool-searchPassages" || readReturnedUnits(part)
+        ? listsDocuments
+        : mayListDocuments;
+    const parsed = schema.safeParse(part);
     if (!parsed.success) return null;
     for (const ref of parsed.data.output.documents ?? []) {
       const key = `${ref.sourceKind}:${ref.sourceId}`;
@@ -79,8 +86,9 @@ const message = z
     if (reads.length > MAX_CHAT_PDF_READS || reads.some(read => !read.success))
       return { id, role, parts: [] };
     // The same for an answer from the document tools (keepCurrentCitedTurns): its documents
-    // must all be identified, and at most 16, or the answer is not replayed.
-    const documents = citedDocuments(parts);
+    // must all be identified, and at most 16, or the answer is not replayed. Only answers cite;
+    // tool parts on a user message are ignored, so they can never empty the question.
+    const documents = role === "assistant" ? citedDocuments(parts) : [];
     if (!documents) return { id, role, parts: [] };
     const text = parts.flatMap(part => {
       const parsed = textPart.safeParse(part);

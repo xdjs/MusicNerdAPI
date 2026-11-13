@@ -252,7 +252,14 @@ it("keeps the documents an answer's searches numbered, first of each document, w
             {
               type: "tool-readUnits",
               state: "output-available",
-              output: { n: 1, title: "Doc 1", units: [], truncated: false, missing: [] },
+              output: {
+                n: 1,
+                title: "Doc 1",
+                units: [],
+                truncated: false,
+                missing: [],
+                documents: [doc(1)],
+              },
             },
             search([doc(4)], "output-error"),
             { type: "text", text: "Dutchy [1, p. 1][3]." },
@@ -350,4 +357,84 @@ it("keeps 16 documents", async () => {
     }),
   );
   expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual(docs);
+});
+
+it("does not replay a read-only answer whose read names no documents", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: {
+                n: 1,
+                title: "Doc 1",
+                units: [{ locator: "p. 1", text: "t" }],
+                truncated: false,
+                missing: [],
+              },
+            },
+            { type: "text", text: "Stale read [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(result)).not.toContain("Stale read");
+  // A read that failed numbered nothing and read nothing: the answer stays.
+  const failed = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: { error: "Unknown document number" },
+            },
+            { type: "text", text: "Nothing read." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(failed)).toContain("Nothing read.");
+});
+
+it("keeps a user message's text whatever tool parts it carries, and gives it no documents", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            search(Array.from({ length: 17 }, (_, i) => doc(i + 1))),
+            { type: "text", text: "First question" },
+          ],
+        },
+        { id: "a", role: "assistant", parts: [{ type: "text", text: "Answer." }] },
+        {
+          id: "u2",
+          role: "user",
+          parts: [search([doc(1)]), { type: "text", text: "Second question" }],
+        },
+      ],
+    }),
+  );
+  expect(result).toEqual({
+    messages: [
+      user("First question", "u1"),
+      { id: "a", role: "assistant", parts: [{ type: "text", text: "Answer." }] },
+      user("Second question", "u2"),
+    ],
+  });
 });

@@ -26,8 +26,11 @@ export async function keepCurrentCitedTurns(
   artistId: string,
 ): Promise<{ messages: HistoryMessage[]; prior: { n: number; ref: ChatDocumentRef }[] }> {
   const lookups = new Map<string, Pick<ChatDocumentRef, "sourceKind" | "sourceId" | "revision">>();
-  for (const { documents } of messages)
-    for (const { sourceKind, sourceId, revision } of documents ?? [])
+  // Only answers cite documents; whatever a user message carries is neither looked up nor judged.
+  const cites = (message: ArtistChatBody["messages"][number]) =>
+    message.role === "assistant" ? (message.documents ?? []) : [];
+  for (const message of messages)
+    for (const { sourceKind, sourceId, revision } of cites(message))
       lookups.set(revisionKey({ sourceKind, sourceId, revision }), {
         sourceKind,
         sourceId,
@@ -45,12 +48,12 @@ export async function keepCurrentCitedTurns(
 
   const kept = pdfKept
     .map(({ id }) => messages[Number(id)])
-    .filter(({ documents }) => (documents ?? []).every(ref => current.has(revisionKey(ref))));
+    .filter(message => cites(message).every(ref => current.has(revisionKey(ref))));
 
   const prior: { n: number; ref: ChatDocumentRef }[] = [];
   const numbered = new Set<string>();
   const taken = new Set<number>();
-  const cited = kept.flatMap(({ documents }) => documents ?? []).sort((a, b) => a.n - b.n);
+  const cited = kept.flatMap(cites).sort((a, b) => a.n - b.n);
   for (const { n, ...ref } of cited) {
     if (numbered.has(refKey(ref)) || taken.has(n)) continue;
     numbered.add(refKey(ref));

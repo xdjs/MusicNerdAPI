@@ -47,12 +47,29 @@ describe("createReadUnitsTool", () => {
       ],
       truncated: false,
       missing: [],
+      documents: [{ n: 1, ...ref }],
     });
     expect(readUnits).toHaveBeenCalledWith("artist-1", { sourceKind: "vault", sourceId: "doc-a" }, [
       "p. 1",
       "p. 3",
     ]);
     expect(budget.remainingTokens).toBe(700);
+  });
+
+  test("names the document it read, so a later turn can check it is still current", async () => {
+    readUnits.mockResolvedValue({ revision: "r1", units: [unit(1, 10)], missing: [] });
+    const { run } = setup();
+    const output = (await run(1, ["p. 1"])) as { documents?: unknown };
+    expect(output.documents).toEqual([
+      {
+        n: 1,
+        sourceKind: "vault",
+        sourceId: "doc-a",
+        revision: "r1",
+        title: "Liner notes",
+        url: "https://example.com/a",
+      },
+    ]);
   });
 
   test("refuses a document number it never handed out", async () => {
@@ -91,6 +108,7 @@ describe("createReadUnitsTool", () => {
       ],
       truncated: true,
       missing: [],
+      documents: [{ n: 1, ...ref }],
     });
     expect(budget.remainingTokens).toBe(100);
     // The budget is shared across calls: the next read gets nothing it cannot fit whole.
@@ -101,6 +119,7 @@ describe("createReadUnitsTool", () => {
       units: [],
       truncated: true,
       missing: [],
+      documents: [{ n: 1, ...ref }],
     });
     expect(budget.remainingTokens).toBe(100);
   });
@@ -118,6 +137,7 @@ describe("createReadUnitsTool", () => {
       units: [1, 2, 3].map(page => ({ locator: `p. ${page}`, text: `page ${page}` })),
       truncated: false,
       missing: [],
+      documents: [{ n: 1, ...ref }],
     };
     expect(await run(1)).toEqual(whole);
     expect(await run(1, [])).toEqual(whole);
@@ -138,6 +158,7 @@ describe("createReadUnitsTool", () => {
       units: [1, 2, 3].map(page => ({ locator: `p. ${page}`, text: `page ${page}` })),
       truncated: true,
       missing: [],
+      documents: [{ n: 1, ...ref }],
     });
     expect(budget.remainingTokens).toBe(0);
   });
@@ -158,6 +179,7 @@ describe("createReadUnitsTool", () => {
       units: [{ locator: "p. 2", text: "page 2" }],
       truncated: false,
       missing: ["p. 99"],
+      documents: [{ n: 1, ...ref }],
     });
   });
 

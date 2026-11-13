@@ -206,3 +206,41 @@ it("asks nothing of the database for a conversation without documents", async ()
   expect(await keepCurrentCitedTurns(plain, "artist")).toEqual({ messages: plain, prior: [] });
   expect(findCurrentDocuments).not.toHaveBeenCalled();
 });
+
+it("drops a read-only turn when the document it read moved on", async () => {
+  const history = [
+    { id: "1", role: "user" as const, parts: text("q") },
+    {
+      id: "2",
+      role: "assistant" as const,
+      parts: text("Search [1]."),
+      documents: [doc(1, "vault", "r1", 7)],
+    },
+    { id: "3", role: "user" as const, parts: text("q") },
+    // Only read document 1 again: its documents come from the read.
+    {
+      id: "4",
+      role: "assistant" as const,
+      parts: text("Read [1]."),
+      documents: [doc(1, "vault", "r1", 7)],
+    },
+    { id: "5", role: "user" as const, parts: text("q") },
+  ];
+  findCurrentDocuments.mockResolvedValue(new Set());
+  const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
+  expect(kept.map(m => m.id)).toEqual(["1", "3", "5"]);
+  expect(prior).toEqual([]);
+});
+
+it("never drops a user message, whatever it carries", async () => {
+  const history = [
+    { id: "1", role: "user" as const, parts: text("q1"), documents: [doc(1)] },
+    { id: "2", role: "assistant" as const, parts: text("a") },
+    { id: "3", role: "user" as const, parts: text("q2") },
+  ];
+  findCurrentDocuments.mockResolvedValue(new Set());
+  const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
+  expect(kept.map(m => m.id)).toEqual(["1", "2", "3"]);
+  expect(prior).toEqual([]);
+  expect(findCurrentDocuments).not.toHaveBeenCalled();
+});
