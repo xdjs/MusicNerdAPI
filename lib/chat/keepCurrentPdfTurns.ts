@@ -10,7 +10,9 @@ export type HistoryMessage = Pick<Message, "id" | "role" | "parts">;
  * every document it read is still published for this artist at the revision it read; one
  * whose document was withdrawn or changed is dropped, as every PDF answer was before, so a
  * follow-up can never replay evidence the fan could no longer open. This is the same
- * eligibility check the read tool makes before each model step.
+ * eligibility check the read tool makes before each model step. The validator admits at most
+ * two reads per answer and twelve messages, so a conversation costs at most 24 lookups, each
+ * distinct document once.
  *
  * @param messages - The validated body's messages.
  * @param artistId - The artist the conversation is about.
