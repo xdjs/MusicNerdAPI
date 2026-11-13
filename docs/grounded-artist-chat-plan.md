@@ -20,9 +20,9 @@
 - Every model call is a gateway string id. Models: chat `MODEL_CHAT` (`anthropic/claude-sonnet-5.5`), judge `MODEL_JUDGE` (`openai/gpt-5.4`), embeddings `openai/text-embedding-3-small` (1536 dimensions), vision pass `google/gemini-3.8-flash`.
 - Budgets per answer: 12,000 tokens of retrieved text, 6 steps, 1,500 output tokens, 2 web searches. Ingest: 300 pages per document, 10 MB upload limit unchanged, 40 pages inline at upload (more goes to the queue).
 - API repo rules (`AGENTS.md`): one exported function per file, named after the file, test beside it in `__tests__/`; TDD (see the test fail first); conventional commits; no env vars, dependencies or abstractions before the task that needs them; docs PR first for any public contract change.
-- Base branch for API work: `claude/1424-chat-followup-history` (API #118, stacked on #117), which carries the page-marked PDF renderer, the eval gates, `MODEL_JUDGE` and `keepCurrentPdfTurns`. #117 and #118 merge before part 1's chat PRs. `origin/main` has moved past them (`6ebb8d5`), so A1 starts by merging `origin/main` into its branch and resolving conflicts there.
+- Base branch for API work: `origin/main` after #117 (merged 2026-11-13 as `7a171a6`) and #120 (the re-landed #118) are in, which carry the page-marked PDF renderer, the eval gates, `MODEL_JUDGE` and `keepCurrentPdfTurns`. A1 branches from that main; if #120 is not merged yet when A1 starts, A1 branches from #120's head.
 - Staging allowance stays 30 questions per visitor-hour and 200 per day; evals wait for it, never raise it.
-- External clients are untouched. SleeveNote (with Bopping) is an HTTP client that queries by Spotify ID through the public lookups served by this API at `api.musicnerd.net` (`app/api/searchArtists`, `findArtistBySpotifyID`, `findArtistByIG`, `findTwitterHandle`, `trackLinks`, `leaderboard`, `artist/[id]/image`, `artistBio/[id]`) and through the legacy `api.musicnerd.xyz` domain that still points at the Web app (API `AGENTS.md:54`). Part 1 changes none of those routes, the `artists` table, `middleware`, CORS or either domain. Every PR in the map ends with the lookup route tests passing unchanged, and after each production deploy of the API a public `GET /api/findArtistBySpotifyID` and `GET /api/searchArtists` are called once and compared to the documented shape in Docs `artist-lookups.json`. A PR that has to touch any of those files stops and asks Pete first.
+- External clients are untouched. SleeveNote (with Bopping) is an HTTP client that queries by Spotify ID through the public lookups served by this API at `api.musicnerd.net` (`app/api/searchArtists`, `findArtistBySpotifyID`, `findArtistByIG`, `findTwitterHandle`, `trackLinks`, `leaderboard`, `artist/[id]/image`, `artistBio/[id]`) and through the legacy `api.musicnerd.xyz` domain that still points at the Web app (API `AGENTS.md:54`). Part 1 changes none of those routes, the `artists` table, `middleware`, CORS or either domain. Every PR in the map ends with the lookup route tests passing unchanged, and after each production deploy of the API, `POST /api/findArtistBySpotifyID` with `{"spotifyID": ...}` and `POST /api/searchArtists` with `{"query": ...}` (the documented methods in Docs `artist-lookups.json`) are called once against `api.musicnerd.net` and compared to the documented shape. A PR that has to touch any of those files stops and asks Pete first.
 
 ## Review Focus
 
@@ -40,7 +40,7 @@
 | PR | Repo | Branch (from) | Tasks |
 | --- | --- | --- | --- |
 | W1 | Web | `claude/0066-source-units` (origin/main) | 1 |
-| A1 | API | `claude/units-ingest` (#118 head) | 2 to 12 |
+| A1 | API | `claude/units-ingest` (main after #117 and #120) | 2 to 12 |
 | A2 | API | `claude/units-retrieval` (A1) | 13, 14, 21 |
 | A3 | API | `claude/units-chat` (A2) | 15 to 19 |
 | A4 + W2 + D1 | API, Web, Docs | `claude/units-switch` (A3), `claude/chat-passages-labels`, docs branch | 20 |
