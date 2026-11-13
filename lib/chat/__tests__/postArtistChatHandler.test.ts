@@ -1,7 +1,8 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import { simulateReadableStream } from "ai";
 import { KnowledgeError } from "@/lib/knowledge/KnowledgeError";
+import { buildArtistChatInstructions } from "@/lib/chat/buildArtistChatInstructions";
 import { originalFixture } from "./originalFixture";
 
 const m = vi.hoisted(() => ({
@@ -40,6 +41,22 @@ vi.mock("@/lib/sourcePublication/assertPublicSourceCurrent", () => ({
 vi.mock("@/lib/search/webSearch", () => ({ webSearch: m.webSearch }));
 vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({ loadChatPdfs: m.pdfLoad }));
 vi.mock("@/lib/chatPdf/readChatPdf", () => ({ readChatPdf: m.pdfRead }));
+const u = vi.hoisted(() => ({
+  latest: vi.fn(),
+  search: vi.fn(),
+  read: vi.fn(),
+  list: vi.fn(),
+  findCurrent: vi.fn(),
+  assertDocs: vi.fn(),
+}));
+vi.mock("@/lib/questionResearch/loadPublicLatestResearchOriginals", () => ({
+  loadPublicLatestResearchOriginals: u.latest,
+}));
+vi.mock("@/lib/units/searchUnits", () => ({ searchUnits: u.search }));
+vi.mock("@/lib/units/readUnits", () => ({ readUnits: u.read }));
+vi.mock("@/lib/units/listArtistDocuments", () => ({ listArtistDocuments: u.list }));
+vi.mock("@/lib/units/findCurrentDocuments", () => ({ findCurrentDocuments: u.findCurrent }));
+vi.mock("@/lib/units/assertDocumentsCurrent", () => ({ assertDocumentsCurrent: u.assertDocs }));
 const { postArtistChatHandler } = await import("@/lib/chat/postArtistChatHandler");
 
 const artistId = "11111111-1111-4111-8111-111111111111";
@@ -518,4 +535,206 @@ it("replays an earlier PDF answer only while the document is still published at 
   expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
     "Dutchy was the producer alias",
   );
+});
+
+describe("with CHAT_RETRIEVAL=units", () => {
+  const uuid = (n: number) => `44444444-4444-4444-8444-${String(n).padStart(12, "0")}`;
+  const doc = (id: number, url: string | null, sourceKind = "vault" as const) => ({
+    sourceKind,
+    sourceId: uuid(id),
+    revision: `r${id}`,
+    title: `Doc ${id}`,
+    url,
+  });
+  const hit = (d: ReturnType<typeof doc>, locator: string, text: string) => ({
+    sourceKind: d.sourceKind,
+    sourceId: d.sourceId,
+    sourceRevision: d.revision,
+    unitIndex: 0,
+    locator,
+    title: d.title,
+    url: d.url,
+    text,
+    score: 1,
+  });
+  const key = (d: ReturnType<typeof doc>) => `${d.sourceKind}:${d.sourceId}:${d.revision}`;
+
+  beforeEach(() => {
+    vi.stubEnv("CHAT_RETRIEVAL", "units");
+    u.latest.mockResolvedValue([]);
+    u.search.mockResolvedValue({ hits: [], weak: true });
+    u.list.mockResolvedValue([]);
+    u.findCurrent.mockResolvedValue(new Set());
+    u.assertDocs.mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("never loads the whole corpus, offers exactly the six tools, caps output at 1500 tokens and sends the units instructions", async () => {
+    const model = new MockLanguageModelV4({ doStream: [textStep("Hi.")] });
+    m.model = model;
+    const response = await post(ask("Who is this?"));
+    expect(response.status).toBe(200);
+    await chunksOf(response);
+    expect(m.originals).not.toHaveBeenCalled();
+    expect(u.latest).toHaveBeenCalledWith(artistId);
+    const call = model.doStreamCalls[0];
+    expect((call.tools ?? []).map(t => t.name).sort()).toEqual([
+      "listDocuments",
+      "readSource",
+      "readUnits",
+      "searchPassages",
+      "searchSources",
+      "webSearch",
+    ]);
+    expect(call.maxOutputTokens).toBe(1500);
+    expect(call.prompt[0]).toEqual({
+      role: "system",
+      content: buildArtistChatInstructions("Dutchyyy", new Date(), "units"),
+    });
+    expect(m.pdfRead).not.toHaveBeenCalled();
+  });
+
+  it("numbers earlier answers' documents as they were and revalidates every registered document once per step", async () => {
+    const earlierNoUrl = doc(1, null);
+    const earlier = doc(2, "https://a.example/doc");
+    const fresh = doc(3, "https://c.example/doc");
+    u.findCurrent.mockResolvedValue(new Set([key(earlierNoUrl), key(earlier)]));
+    u.search.mockResolvedValue({
+      hits: [hit(earlier, "p. 2", "Dutchy was the alias."), hit(fresh, "p. 1", "Night Label.")],
+      weak: false,
+    });
+    const model = new MockLanguageModelV4({
+      doStream: [toolStep("searchPassages", { query: "alias" }), textStep("Dutchy [2, p.2].")],
+    });
+    m.model = model;
+    const chunks = await chunksOf(
+      await post({
+        messages: [
+          { id: "1", role: "user", parts: [{ type: "text", text: "What names?" }] },
+          {
+            id: "2",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-searchPassages",
+                toolCallId: "c",
+                state: "output-available",
+                input: { query: "names" },
+                output: {
+                  results: [],
+                  weak: false,
+                  documents: [
+                    { n: 1, ...earlierNoUrl },
+                    { n: 2, ...earlier },
+                  ],
+                },
+              },
+              { type: "text", text: "Dutchy was the producer alias [1, p.1]." },
+            ],
+          },
+          { id: "3", role: "user", parts: [{ type: "text", text: "Which alias first?" }] },
+        ],
+      }),
+    );
+    expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain(
+      "Dutchy was the producer alias [1, p.1].",
+    );
+    expect(chunks.filter(c => c.type === "source-url").map(c => [c.sourceId, c.url])).toEqual([
+      ["1", `musicnerd://vault/${uuid(1)}`],
+      ["2", "https://a.example/doc"],
+      ["3", "https://c.example/doc"],
+    ]);
+    const output = chunks.find(c => c.type === "tool-output-available").output;
+    expect(output.results.map((r: { n: number }) => r.n)).toEqual([2, 3]);
+    expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
+      names: ["Dutchyyy"],
+      signal: expect.any(AbortSignal),
+    });
+    // One check before each of the two model steps, each with every document numbered so far.
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(u.assertDocs).toHaveBeenCalledTimes(2);
+    const checked = u.assertDocs.mock.calls.map(([id, refs]) => [
+      id,
+      refs.map((r: { sourceId: string }) => r.sourceId),
+    ]);
+    expect(checked).toEqual([
+      [artistId, [uuid(1), uuid(2)]],
+      [artistId, [uuid(1), uuid(2), uuid(3)]],
+    ]);
+    expect(m.assertCurrent).not.toHaveBeenCalled();
+  });
+
+  it("stops before the next model forward when a numbered document is revoked", async () => {
+    u.search.mockResolvedValue({ hits: [hit(doc(1, null), "p. 1", "Text")], weak: false });
+    u.assertDocs
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error("Source changed or is no longer public"));
+    const model = new MockLanguageModelV4({
+      doStream: [toolStep("searchPassages", { query: "label" }), textStep("Must not be delivered")],
+    });
+    m.model = model;
+    const chunks = await chunksOf(await post(ask("What label?")));
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(chunks.some(c => c.type === "error")).toBe(true);
+    expect(chunks.some(c => c.type === "text-delta")).toBe(false);
+  });
+
+  it("shares one 12,000-token read budget across the answer's reads", async () => {
+    const d = doc(1, "https://a.example/doc");
+    u.search.mockResolvedValue({ hits: [hit(d, "p. 1", "Text")], weak: false });
+    u.read.mockResolvedValue({
+      revision: d.revision,
+      units: [{ locator: "p. 1", text: "Page one.", tokens: 7000 }],
+      missing: [],
+    });
+    m.model = new MockLanguageModelV4({
+      doStream: [
+        toolStep("searchPassages", { query: "label" }),
+        toolStep("readUnits", { n: 1 }),
+        toolStep("readUnits", { n: 1, locators: ["p. 1"] }),
+        textStep("Night Label [1, p.1]."),
+      ],
+    });
+    const chunks = await chunksOf(await post(ask("What label?")));
+    const reads = chunks
+      .filter(c => c.type === "tool-output-available")
+      .slice(1)
+      .map(c => c.output);
+    expect(reads.map(r => [r.units.length, r.truncated])).toEqual([
+      [1, false],
+      [0, true],
+    ]);
+  });
+
+  it("serves searchSources and readSource from the latest originals only", async () => {
+    u.latest.mockResolvedValue([
+      {
+        ...originalFixture(
+          "latest:spotify:album1",
+          "https://open.spotify.com/album/fixture",
+          "New album Cedar out now",
+        ),
+        publishedAt: "2026-10-01T00:00:00Z",
+      },
+    ]);
+    m.model = new MockLanguageModelV4({
+      doStream: [
+        toolStep("searchSources", { query: "new album", retrieval: "latest" }),
+        toolStep("readSource", { sourceId: "latest:spotify:album1" }),
+        textStep("Cedar [1]."),
+      ],
+    });
+    const chunks = await chunksOf(await post(ask("What is the newest release?")));
+    const outputs = chunks.filter(c => c.type === "tool-output-available").map(c => c.output);
+    expect(outputs[0].sources.map((s: { sourceId: string }) => s.sourceId)).toEqual([
+      "latest:spotify:album1",
+    ]);
+    expect(outputs[1]).toMatchObject({ n: 1, text: "New album Cedar out now" });
+    expect(chunks.filter(c => c.type === "source-url").map(c => c.url)).toEqual([
+      "https://open.spotify.com/album/fixture",
+    ]);
+    expect(m.originals).not.toHaveBeenCalled();
+  });
 });

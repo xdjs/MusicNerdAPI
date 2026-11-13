@@ -88,6 +88,15 @@ describe("streamText", () => {
     });
   });
 
+  it("caps the output tokens when asked, and sends no cap otherwise", async () => {
+    sdkStreamText.mockReturnValue(streamOf([]));
+    await streamText({ prompt: "hi", maxOutputTokens: 1500 });
+    expect(sdkStreamText.mock.calls[0][0].maxOutputTokens).toBe(1500);
+    sdkStreamText.mockReturnValue(streamOf([]));
+    await streamText({ prompt: "hi" });
+    expect(sdkStreamText.mock.calls[1][0]).not.toHaveProperty("maxOutputTokens");
+  });
+
   it("passes messages, tools, the stop condition and the abort signal through", async () => {
     sdkStreamText.mockReturnValue(streamOf([]));
     const tools = { searchSources: {} } as never;
