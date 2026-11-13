@@ -26,14 +26,18 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  * (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
  *
  * @param input - The source and its body.
- * @param deps - `readPage` overrides the vision read; `signal` is passed to it.
+ * @param deps - `readPage` overrides the vision read; `signal` is passed to it; `pdfTimeoutMs` bounds the PDF parse.
  * @returns The drafts, the count of vision-read pages, `failed` when a vision read
  * threw ("vision") or the PDF could not be parsed ("extract", with no units; this
  * function does not rethrow; an aborted signal stops the loop and also sets "vision"), and whether the PDF was cut at the page limit.
  */
 export async function buildSourceUnits(
   input: UnitSourceInput,
-  deps: { readPage?: (pageBytes: Uint8Array) => Promise<string>; signal?: AbortSignal } = {},
+  deps: {
+    readPage?: (pageBytes: Uint8Array) => Promise<string>;
+    signal?: AbortSignal;
+    pdfTimeoutMs?: number;
+  } = {},
 ): Promise<{
   units: UnitDraft[];
   ocrPages: number;
@@ -52,7 +56,10 @@ export async function buildSourceUnits(
 
   let extracted: { pages: string[]; truncated: boolean };
   try {
-    extracted = await extractPdfPages(body.bytes, { maxPages: MAX_INGEST_PAGES });
+    extracted = await extractPdfPages(body.bytes, {
+      maxPages: MAX_INGEST_PAGES,
+      timeoutMs: deps.pdfTimeoutMs,
+    });
   } catch {
     return { units: [], ocrPages: 0, failed: "extract", truncated: false };
   }

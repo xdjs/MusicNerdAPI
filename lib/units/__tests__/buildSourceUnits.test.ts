@@ -161,4 +161,19 @@ describe("buildSourceUnits", () => {
     expect(unit.textHash).toBe(createHash("sha256").update(unit.text).digest("hex"));
     expect(unit.tokens).toBe(Math.ceil(unit.text.length / 4));
   });
+
+  test("pdfTimeoutMs reaches the PDF extractor", async () => {
+    vi.resetModules();
+    const extractPdfPages = vi.fn().mockResolvedValue({ pages: [PAGE_ONE], truncated: false });
+    vi.doMock("@/lib/units/extractPdfPages", () => ({ extractPdfPages }));
+    const { buildSourceUnits: build } = await import("@/lib/units/buildSourceUnits");
+    const bytes = new Uint8Array([1, 2, 3]);
+    await build(input({ kind: "pdf", bytes }), { pdfTimeoutMs: 1234 });
+    expect(extractPdfPages).toHaveBeenCalledWith(
+      bytes,
+      expect.objectContaining({ timeoutMs: 1234 }),
+    );
+    vi.doUnmock("@/lib/units/extractPdfPages");
+    vi.resetModules();
+  });
 });
