@@ -11,6 +11,8 @@ type PdfOutput = {
   title?: string;
   pages?: number;
   sha256?: string;
+  /** The publication revision read, so a later turn can tell whether the document changed. */
+  revision?: string;
   error?: string;
 };
 
@@ -44,6 +46,7 @@ export function createChatPdfTools(
         title: source.title,
         pages: file.pages,
         sha256: file.hash,
+        revision: source.revision,
       };
     } catch {
       return {

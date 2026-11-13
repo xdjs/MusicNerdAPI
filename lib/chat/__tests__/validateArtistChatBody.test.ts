@@ -109,3 +109,75 @@ it("does not replay previous named PDF answers as evidence after access can chan
   );
   expect(JSON.stringify(result)).not.toContain("Revoked fact");
 });
+
+it("keeps an earlier PDF answer with the reads it depends on, when every read is identified", async () => {
+  const sourceId = "33333333-3333-4333-8333-333333333333";
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("What names?", "1"),
+        {
+          id: "pdf",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "tool-readPdfSource",
+              toolCallId: "c",
+              state: "output-available",
+              input: { sourceId },
+              output: {
+                sourceId,
+                n: 1,
+                title: "timeline.pdf",
+                pages: 13,
+                sha256: "x",
+                revision: "r1",
+              },
+            },
+            { type: "source-url", sourceId: "1", url: "https://x.supabase.co/timeline.pdf" },
+            { type: "text", text: "Dutchy and Dutchmassive [1, p.1]." },
+          ],
+        },
+        user("Which is the producer alias?", "3"),
+      ],
+    }),
+  );
+  expect(result).toEqual({
+    messages: [
+      user("What names?", "1"),
+      {
+        id: "pdf",
+        role: "assistant",
+        parts: [{ type: "text", text: "Dutchy and Dutchmassive [1, p.1]." }],
+        pdfReads: [{ sourceId, revision: "r1" }],
+      },
+      user("Which is the producer alias?", "3"),
+    ],
+  });
+});
+
+it("does not replay a PDF answer whose read ended in an error or lacks a revision", async () => {
+  for (const output of [
+    { error: "PDF unavailable" },
+    { sourceId: "33333333-3333-4333-8333-333333333333", n: 1 },
+    undefined,
+  ]) {
+    const result = await validateArtistChatBody(
+      post({
+        messages: [
+          {
+            id: "pdf",
+            role: "assistant",
+            parts: [
+              { type: "tool-readPdfSource", state: "output-available", output },
+              { type: "text", text: "Revoked fact [1]." },
+            ],
+          },
+          user("What does that PDF say?"),
+        ],
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain("Revoked fact");
+  }
+});

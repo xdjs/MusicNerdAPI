@@ -455,3 +455,67 @@ it("keeps planning narration written before a tool call off the stream", async (
     "readSource",
   ]);
 });
+
+it("replays an earlier PDF answer only while the document is still published at the revision it read", async () => {
+  const id = "22222222-2222-4222-8222-222222222222";
+  const pdf = (revision: string) => ({
+    id,
+    title: "timeline.pdf",
+    url: "https://public.example/timeline.pdf",
+    path: "a/timeline.pdf",
+    size: 100,
+    revision,
+    claimId: "c1",
+  });
+  const conversation = {
+    messages: [
+      { id: "1", role: "user", parts: [{ type: "text", text: "What names?" }] },
+      {
+        id: "2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-readPdfSource",
+            toolCallId: "c",
+            state: "output-available",
+            input: { sourceId: id },
+            output: {
+              sourceId: id,
+              n: 1,
+              title: "timeline.pdf",
+              pages: 13,
+              sha256: "x",
+              revision: "v1",
+            },
+          },
+          { type: "text", text: "Dutchy was the producer alias [1, p.1]." },
+        ],
+      },
+      { id: "3", role: "user", parts: [{ type: "text", text: "Which years?" }] },
+    ],
+  };
+
+  m.pdfLoad.mockResolvedValue([pdf("v1")]);
+  let model = new MockLanguageModelV4({ doStream: [textStep("2012 to 2019.")] });
+  m.model = model;
+  await chunksOf(await post(conversation));
+  let prompt = JSON.stringify(model.doStreamCalls[0].prompt);
+  expect(prompt).toContain("Dutchy was the producer alias [1, p.1].");
+  expect(prompt).toContain("Which years?");
+
+  m.pdfLoad.mockResolvedValue([pdf("v2")]);
+  model = new MockLanguageModelV4({ doStream: [textStep("Let me check.")] });
+  m.model = model;
+  await chunksOf(await post(conversation));
+  prompt = JSON.stringify(model.doStreamCalls[0].prompt);
+  expect(prompt).not.toContain("Dutchy was the producer alias");
+  expect(prompt).toContain("Which years?");
+
+  m.pdfLoad.mockResolvedValue([]);
+  model = new MockLanguageModelV4({ doStream: [textStep("Let me check.")] });
+  m.model = model;
+  await chunksOf(await post(conversation));
+  expect(JSON.stringify(model.doStreamCalls[0].prompt)).not.toContain(
+    "Dutchy was the producer alias",
+  );
+});

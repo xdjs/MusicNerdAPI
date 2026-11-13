@@ -13,20 +13,27 @@ type Clock = { now: () => number };
 
 const realClock: Clock = { now: () => performance.now() };
 
+/** An earlier message of the conversation, as the artist page sends it back. */
+export type HistoryMessage = { id: string; role: "user" | "assistant"; parts: unknown[] };
+
 /**
  * One question through the streaming chat endpoint, in process, reading the UI message
  * stream the way `useChat` does: the first `text-delta` is when a fan first sees text, and
  * the end of the stream is the finished answer. `source-url` parts are the citable sources.
+ * The turn's `assistantParts` are what a client would send back as this answer in a
+ * follow-up: its completed PDF reads and its text.
  *
  * @param input - The case.
  * @param input.artistId - The artist's id on the database the suite runs against.
  * @param input.question - The fan's question.
  * @param clock - Time source; tests pass a fake one.
+ * @param history - Earlier messages sent before the question, for a follow-up.
  * @returns The answer, its sources and timings, or the error it ended in.
  */
 export async function chatStreamTurn(
   input: { artistId: string; question: string },
   clock: Clock = realClock,
+  history: HistoryMessage[] = [],
 ): Promise<ChatTurn> {
   const { artistId, question } = input;
   const started = clock.now();
@@ -35,7 +42,14 @@ export async function chatStreamTurn(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-real-ip": VISITOR_IP },
       body: JSON.stringify({
-        messages: [{ id: "eval", role: "user", parts: [{ type: "text", text: question }] }],
+        messages: [
+          ...history,
+          {
+            id: `eval-${history.length + 1}`,
+            role: "user",
+            parts: [{ type: "text", text: question }],
+          },
+        ],
       }),
     }),
     artistId,
@@ -85,7 +99,7 @@ export async function chatStreamTurn(
       firstSignal ??= clock.now();
       toolNames.set(chunk.toolCallId, chunk.toolName);
       if (chunk.type === "tool-input-available")
-        tools.push({ name: chunk.toolName, input: chunk.input });
+        tools.push({ name: chunk.toolName, input: chunk.input, toolCallId: chunk.toolCallId });
     } else if (chunk.type === "tool-output-available") {
       const tool = toolNames.get(chunk.toolCallId) ?? "";
       if (tool === "readPdfSource" || tool === "readNamedPdf")
@@ -110,11 +124,22 @@ export async function chatStreamTurn(
         ...(await readPdfChatEvidence(read.tool, read.toolCallId, read.output, source.url)),
       );
   }
+  const assistantParts: unknown[] = [
+    ...pdfReads.map(read => ({
+      type: `tool-${read.tool}`,
+      toolCallId: read.toolCallId,
+      state: "output-available",
+      input: tools.find(t => t.toolCallId === read.toolCallId)?.input ?? {},
+      output: read.output,
+    })),
+    { type: "text", text: answer },
+  ];
   return {
     answer,
     sources,
     evidence,
     tools,
+    assistantParts,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
     firstSignalMs: firstSignal === undefined ? totalMs : Math.round(firstSignal - started),
     totalMs,

@@ -6,7 +6,8 @@ import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { chatReporter } from "@/lib/evals/chatReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
-import { chatStreamTurn } from "@/lib/evals/chatStreamTurn";
+import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn";
+import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
@@ -32,6 +33,13 @@ globalThis.fetch = budget.fetch;
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 
+/** A row of the suite: a case, or a case's follow-up asked with the first answer in the conversation. */
+type ChatRow = ChatCase & { followUpOf?: string };
+
+// Follow-up rows reuse the first answer of their case (rows run in order, one at a time), so
+// a follow-up costs one question, not two. A first turn that errored is asked again.
+const firstTurns = new Map<string, ChatTurn>();
+
 Eval(
   "music-nerd",
   {
@@ -49,9 +57,9 @@ Eval(
     // One question at a time, so the timings are not measuring each other.
     maxConcurrency: 1,
     data: () =>
-      CHAT_CASES.flatMap(c =>
-        Array.from({ length: c.trials ?? 1 }, (_, i) => ({
-          input: c,
+      CHAT_CASES.flatMap(c => [
+        ...Array.from({ length: c.trials ?? 1 }, (_, i) => ({
+          input: c as ChatRow,
           expected: { answerable: c.answerable, reference: c.reference },
           metadata: {
             key: c.key,
@@ -60,8 +68,26 @@ Eval(
             ...(c.trials ? { trial: i + 1, trials: c.trials } : {}),
           },
         })),
-      ),
-    task: async (input: ChatCase) => {
+        ...(c.followUp
+          ? [
+              {
+                input: {
+                  ...c,
+                  key: `${c.key}/follow-up`,
+                  question: c.followUp.question,
+                  followUpOf: c.key,
+                } as ChatRow,
+                expected: { answerable: true, reference: c.followUp.reference },
+                metadata: {
+                  key: `${c.key}/follow-up`,
+                  artist: c.artistName,
+                  note: `Follow-up to ${c.key}, asked with its answer in the conversation.`,
+                },
+              },
+            ]
+          : []),
+      ]),
+    task: async (input: ChatRow) => {
       // A latched guard must not consume further question-admission rows or SDK retries.
       if (budget.snapshot().blocked)
         return {
@@ -72,7 +98,19 @@ Eval(
           totalMs: 0,
           error: `Not attempted: ${budget.snapshot().stopReason}`,
         };
-      const turn = await withAllowanceWait(() => chatStreamTurn(input));
+      let history: HistoryMessage[] = [];
+      if (input.followUpOf) {
+        const first = CHAT_CASES.find(c => c.key === input.followUpOf)!;
+        const earlier =
+          firstTurns.get(first.key) ?? (await withAllowanceWait(() => chatStreamTurn(first)));
+        if (earlier.error) return { ...earlier, error: `First turn failed: ${earlier.error}` };
+        history = [
+          { id: "eval-1", role: "user", parts: [{ type: "text", text: first.question }] },
+          { id: "eval-2", role: "assistant", parts: earlier.assistantParts ?? [] },
+        ];
+      }
+      const turn = await withAllowanceWait(() => chatStreamTurn(input, undefined, history));
+      if (!input.followUpOf && !turn.error) firstTurns.set(input.key, turn);
       console.log(
         `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
       );

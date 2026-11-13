@@ -61,7 +61,7 @@ describe("chatStreamTurn", () => {
     const [request, artistId] = postArtistChatHandler.mock.calls[0];
     expect(artistId).toBe("a1");
     expect((await request.json()).messages).toEqual([
-      { id: "eval", role: "user", parts: [{ type: "text", text: "Where?" }] },
+      { id: "eval-1", role: "user", parts: [{ type: "text", text: "Where?" }] },
     ]);
     expect(request.headers.get("x-real-ip")).toBe("192.0.2.1");
     expect(turn.answer).toBe("Born in Richmond [1].");
@@ -197,9 +197,76 @@ describe("chatStreamTurn tool record", () => {
       ]),
     );
     const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
-    expect(turn.tools).toEqual([
+    expect(turn.tools).toMatchObject([
       { name: "searchSources", input: { query: "q" } },
       { name: "searchPdfSources", input: { query: "q" } },
+    ]);
+  });
+});
+
+describe("chatStreamTurn follow-ups", () => {
+  it("sends earlier messages before the question and returns this answer as the parts a client would send back", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        {
+          type: "tool-input-available",
+          toolCallId: "r",
+          toolName: "readPdfSource",
+          input: { sourceId: "pdf-1" },
+        },
+        {
+          type: "source-url",
+          sourceId: "1",
+          url: "https://x.supabase.co/t.pdf",
+          title: "timeline.pdf",
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "r",
+          output: {
+            sourceId: "pdf-1",
+            n: 1,
+            title: "timeline.pdf",
+            pages: 2,
+            sha256: "no",
+            revision: "r1",
+          },
+        },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "Dutchy [1, p.1]." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const history = [
+      { id: "eval-1", role: "user" as const, parts: [{ type: "text", text: "What names?" }] },
+      { id: "a1", role: "assistant" as const, parts: [{ type: "text", text: "Three names [1]." }] },
+    ];
+    const turn = await chatStreamTurn(
+      { artistId: "a1", question: "Which is the producer?" },
+      fakeClock(),
+      history,
+    );
+    const body = await postArtistChatHandler.mock.calls[0][0].json();
+    expect(body.messages).toEqual([
+      ...history,
+      { id: "eval-3", role: "user", parts: [{ type: "text", text: "Which is the producer?" }] },
+    ]);
+    expect(turn.assistantParts).toEqual([
+      {
+        type: "tool-readPdfSource",
+        toolCallId: "r",
+        state: "output-available",
+        input: { sourceId: "pdf-1" },
+        output: {
+          sourceId: "pdf-1",
+          n: 1,
+          title: "timeline.pdf",
+          pages: 2,
+          sha256: "no",
+          revision: "r1",
+        },
+      },
+      { type: "text", text: "Dutchy [1, p.1]." },
     ]);
   });
 });
