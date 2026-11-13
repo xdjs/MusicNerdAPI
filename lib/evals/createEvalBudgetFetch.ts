@@ -108,7 +108,10 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
           message.content.some(
             (part: { type?: string; kind?: string }) =>
               !part ||
-              (!["text", "tool-call", "tool-result", "reasoning"].includes(part.type ?? "") &&
+              // "file" is allowed here only to reach collectFileParts below, which prices PDFs and refuses the rest.
+              (!["text", "file", "tool-call", "tool-result", "reasoning"].includes(
+                part.type ?? "",
+              ) &&
                 !(part.type === "custom" && part.kind === "anthropic.message_start")),
           )
         )
