@@ -17,11 +17,11 @@ const JOB_PDF_TIMEOUT_MS = 45_000;
 /**
  * One slice of a `unit_sync` job: bring the artist's page-level text index in line with their sources.
  *
- * Walks `listArtistUnitSources` from `job.cursor`: an orphan's units are deleted, a source whose
+ * Walks `listArtistUnitSources` from where the last slice stopped: an orphan's units are deleted, a source whose
  * indexed revision differs from its current one is ingested with OCR, and a current source with
  * units lacking embeddings is re-embedded. A source that fails is counted in `state.failures` and
- * skipped, never stopping the slice. The cursor indexes a list rebuilt every slice; a source added
- * between slices can shift it by one, and the next queued sync catches what this one missed.
+ * skipped, never stopping the slice. The list is rebuilt every slice, so the slice resumes after the
+ * last source handled (`state.after`, a kind and id), not at a position.
  *
  * A vision read cut short (by the deadline or a model error) writes the pages it read, stamped with
  * the current revision, so a later sync treats the source as indexed and does not retry it until
@@ -34,9 +34,13 @@ const JOB_PDF_TIMEOUT_MS = 45_000;
 export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   const sources = await listArtistUnitSources(job.artistId);
   const total = sources.length;
-  const start = Math.min(Math.max(job.cursor ?? 0, 0), total);
-  let cursor = start;
+  const after = savedKey(job.state.after);
+  // Resume after the last source handled, by key: deleting orphans shifts every later position.
+  const start = after ? sources.findIndex(e => compareKeys(e, after) > 0) : 0;
+  let cursor = start === -1 ? total : start;
+  const first = cursor;
   let failures = typeof job.state.failures === "number" ? job.state.failures : 0;
+  let last: SourceKey | null = null;
 
   while (cursor < total && Date.now() < deadline - START_RESERVE_MS) {
     const entry = sources[cursor];
@@ -44,14 +48,18 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
       if (!(await syncSource(entry, deadline))) failures++;
     } catch (error) {
       failures++;
+      // Never the message: a failed query's message carries its bound parameters, which can be unit text.
+      const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
       console.warn(
-        `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.name : "unknown"}${typeof code === "string" ? ` ${code}` : ""}`,
       );
     }
+    last = { sourceKind: entry.sourceKind, sourceId: entry.sourceId };
     cursor++;
   }
 
-  const state = { ...job.state, failures };
+  // `cursor` and `total` are display counters for this slice's list; `state.after` is the resume point.
+  const state = { ...job.state, failures, ...(last ? { after: last } : {}) };
   const progress = `units ${cursor}/${total}, failures ${failures}`;
   if (cursor >= total) {
     // Keep the claim while writing the count, then finish, as `finishSocialIngest` does.
@@ -61,7 +69,24 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
   }
   await saveJobProgress(job.id, cursor, { total, state });
   // A slice too short to start one source waits for a longer one rather than spinning this tick.
-  return cursor === start ? { progress, done: false, waiting: true } : { progress, done: false };
+  return cursor === first ? { progress, done: false, waiting: true } : { progress, done: false };
+}
+
+type SourceKey = { sourceKind: string; sourceId: string };
+
+/** The resume key saved in job state, or null when there is none (a fresh job). */
+function savedKey(value: unknown): SourceKey | null {
+  const key = value as Partial<SourceKey> | null | undefined;
+  return typeof key?.sourceKind === "string" && typeof key.sourceId === "string"
+    ? { sourceKind: key.sourceKind, sourceId: key.sourceId }
+    : null;
+}
+
+/** Kind then id in byte order, matching `listArtistUnitSources`'s `collate "C"` ordering. */
+function compareKeys(a: SourceKey, b: SourceKey): number {
+  if (a.sourceKind !== b.sourceKind) return a.sourceKind < b.sourceKind ? -1 : 1;
+  if (a.sourceId !== b.sourceId) return a.sourceId < b.sourceId ? -1 : 1;
+  return 0;
 }
 
 /** Sync one source; false when it failed without throwing. Database errors propagate. */

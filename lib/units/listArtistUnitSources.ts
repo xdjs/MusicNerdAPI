@@ -9,11 +9,13 @@ import type { UnitSourceKind, UnitSyncEntry } from "@/lib/units/types";
  *
  * Sources: vault rows with extracted text or a PDF, the artist's own posts that are not reposts or
  * retweets, and evidence at its candidate's current revision for a confirmed candidate still pending
- * or approved (the public corpus's scope, `loadPublicResearchOriginals`). Units of any other source,
- * because its row is gone or no longer counts, come back as orphans with a null `sourceRevision`.
+ * or approved (the public corpus's scope, `loadPublicResearchOriginals`). Units whose row no longer
+ * exists in its table come back as orphans with a null `sourceRevision`. Units of a row that exists
+ * but does not count right now are left out: neither ingested nor deleted, since eligibility is
+ * checked when the index is read, never cached in it.
  *
  * @param artistId - The artist.
- * @returns One entry per source, ordered by kind then id so a job cursor can index into it.
+ * @returns One entry per source, ordered by kind then id in byte order (`collate "C"`), the order `runUnitSync` resumes in.
  */
 export async function listArtistUnitSources(artistId: string): Promise<UnitSyncEntry[]> {
   const rows = await db.execute<{
@@ -49,14 +51,22 @@ export async function listArtistUnitSources(artistId: string): Promise<UnitSyncE
        where u.artist_id = ${artistId}::uuid
        group by u.source_kind, u.source_id
     )
-    select coalesce(s.source_kind, i.source_kind) as source_kind,
-           coalesce(s.source_id, i.source_id)::text as source_id,
-           s.source_revision,
-           i.indexed_revision,
-           coalesce(i.needs_embedding, false) as needs_embedding
-      from sources s
-      full join indexed i on i.source_kind = s.source_kind and i.source_id = s.source_id
-     order by 1, 2`);
+    select * from (
+      select s.source_kind, s.source_id::text as source_id, s.source_revision,
+             i.indexed_revision, coalesce(i.needs_embedding, false) as needs_embedding
+        from sources s
+        left join indexed i on i.source_kind = s.source_kind and i.source_id = s.source_id
+      union all
+      select i.source_kind, i.source_id::text, null, i.indexed_revision, i.needs_embedding
+        from indexed i
+       where case i.source_kind
+               when 'vault' then not exists (select 1 from artist_vault_sources v where v.id = i.source_id)
+               when 'social' then not exists (select 1 from artist_social_posts s where s.id = i.source_id)
+               when 'evidence' then not exists (select 1 from artist_research_evidence e where e.id = i.source_id)
+               else false
+             end
+    ) listed
+     order by source_kind collate "C", source_id collate "C"`);
   return rows.map(row => ({
     sourceKind: row.source_kind,
     sourceId: row.source_id,

@@ -158,24 +158,54 @@ describe("runUnitSync", () => {
     expect(outcome).toEqual({ progress: "units 2/3, failures 0", done: false });
     expect(mock.saveProgress).toHaveBeenCalledWith("job-1", 2, {
       total: 3,
-      state: { backfill: true, failures: 0 },
+      state: { backfill: true, failures: 0, after: { sourceKind: "vault", sourceId: "s2" } },
     });
     expect(mock.complete).not.toHaveBeenCalled();
   });
 
-  it("resumes at the job's cursor and finishes with done true", async () => {
+  it("resumes after the saved key and finishes with done true", async () => {
     mock.list.mockResolvedValue([
       entry("s1", { indexedRevision: null }),
       entry("s2", { indexedRevision: null }),
       entry("s3", { indexedRevision: null }),
     ]);
-    const outcome = await runUnitSync(job({ cursor: 2, state: { failures: 1 } }), farDeadline());
+    const after = { sourceKind: "vault", sourceId: "s2" };
+    const outcome = await runUnitSync(
+      job({ cursor: 2, state: { failures: 1, after } }),
+      farDeadline(),
+    );
     expect(mock.ingest).toHaveBeenCalledOnce();
     expect(mock.ingest.mock.calls[0][0]).toEqual({ sourceKind: "vault", sourceId: "s3" });
     expect(outcome).toEqual({ progress: "units 3/3, failures 1", done: true });
-    expect(mock.saveState).toHaveBeenCalledWith("job-1", { failures: 1 });
+    expect(mock.saveState).toHaveBeenCalledWith("job-1", {
+      failures: 1,
+      after: { sourceKind: "vault", sourceId: "s3" },
+    });
     expect(mock.complete).toHaveBeenCalledWith("job-1");
     expect(mock.saveProgress).not.toHaveBeenCalled();
+  });
+
+  it("does not skip a source when an orphan before the cursor was deleted between slices", async () => {
+    // Slice 1 deleted the orphan "e-gone" and processed "s1"; the list now starts one shorter.
+    mock.list.mockResolvedValue([
+      entry("s1", { indexedRevision: null }),
+      entry("s2", { indexedRevision: null }),
+      entry("s3", { indexedRevision: null }),
+    ]);
+    const after = { sourceKind: "vault", sourceId: "s1" };
+    await runUnitSync(job({ cursor: 2, state: { after } }), farDeadline());
+    expect(mock.ingest.mock.calls.map(c => c[0].sourceId)).toEqual(["s2", "s3"]);
+  });
+
+  it("resumes after a saved key that has itself disappeared, in kind-then-id order", async () => {
+    mock.list.mockResolvedValue([
+      entry("e1", { sourceKind: "evidence", indexedRevision: null }),
+      entry("p2", { sourceKind: "social", indexedRevision: null }),
+      entry("v1", { indexedRevision: null }),
+    ]);
+    const after = { sourceKind: "social", sourceId: "p1" };
+    await runUnitSync(job({ state: { after } }), farDeadline());
+    expect(mock.ingest.mock.calls.map(c => c[0].sourceId)).toEqual(["p2", "v1"]);
   });
 
   it("finishes an artist with nothing to index", async () => {
@@ -194,13 +224,29 @@ describe("runUnitSync", () => {
       entry("s3", { indexedRevision: null }),
     ]);
     mock.ingest
-      .mockRejectedValueOnce(new Error("connection reset"))
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Failed query: insert …\nparams: secret unit text"), {
+          name: "DrizzleQueryError",
+          cause: { code: "57P01" },
+        }),
+      )
       .mockResolvedValueOnce({ units: 1, ocrPages: 1, embedded: true, failed: "vision" })
       .mockResolvedValueOnce({ units: 1, ocrPages: 0, embedded: true });
     const outcome = await runUnitSync(job(), farDeadline());
     expect(mock.ingest).toHaveBeenCalledTimes(3);
     expect(outcome).toEqual({ progress: "units 3/3, failures 2", done: true });
-    expect(mock.saveState).toHaveBeenCalledWith("job-1", { backfill: true, failures: 2 });
+    expect(mock.saveState).toHaveBeenCalledWith("job-1", {
+      backfill: true,
+      failures: 2,
+      after: { sourceKind: "vault", sourceId: "s3" },
+    });
+    const logged = vi
+      .mocked(console.warn)
+      .mock.calls.map(c => c.join(" "))
+      .join("\n");
+    expect(logged).toContain("vault source s1 failed: DrizzleQueryError 57P01");
+    expect(logged).not.toContain("secret unit text");
+    expect(logged).not.toContain("Failed query");
   });
 
   it("counts a failed re-embed and keeps going", async () => {
@@ -209,11 +255,17 @@ describe("runUnitSync", () => {
       entry("s2", { indexedRevision: null }),
     ]);
     mock.execute.mockResolvedValue([{ id: "u1", text: "first" }]);
-    mock.embed.mockRejectedValue(new Error("gateway down"));
+    mock.embed.mockRejectedValue(new Error("gateway down: first"));
     const outcome = await runUnitSync(job(), farDeadline());
     expect(mock.txExecute).not.toHaveBeenCalled();
     expect(mock.ingest).toHaveBeenCalledOnce();
     expect(outcome.progress).toBe("units 2/2, failures 1");
+    const logged = vi
+      .mocked(console.warn)
+      .mock.calls.map(c => c.join(" "))
+      .join("\n");
+    expect(logged).toContain("vault source s1 failed: Error");
+    expect(logged).not.toContain("first");
   });
 
   it("waits for a longer slice when the budget cannot fit one source", async () => {

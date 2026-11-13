@@ -65,7 +65,8 @@ export async function ingestSource(
       );
     } catch (error) {
       console.warn(
-        `Embedding failed for ${input.sourceKind} source ${input.sourceId}: ${error instanceof Error ? error.message : "unknown error"}`,
+        // The name only: a provider error's message can echo the request, which is unit text.
+        `Embedding failed for ${input.sourceKind} source ${input.sourceId}: ${error instanceof Error ? error.name : "unknown error"}`,
       );
     }
   }

@@ -100,6 +100,9 @@ beforeAll(async () => {
   await unit("evidence", id(20), "rev-a", 0);
   await unit("vault", id(99), "gone", 0);
   await unit("evidence", id(24), "rev-d", 0);
+  await unit("evidence", id(98), "gone-e", 0);
+  await unit("social", id(97), "gone-s", 0);
+  await unit("social", id(11), "repost", 0);
 }, 30000);
 afterAll(async () => client.close());
 
@@ -109,8 +112,9 @@ describe("listArtistUnitSources", () => {
     expect(list.map(e => [e.sourceKind, e.sourceId])).toEqual([
       ["evidence", id(20)],
       ["evidence", id(22)],
-      ["evidence", id(24)],
+      ["evidence", id(98)],
       ["social", id(10)],
+      ["social", id(97)],
       ["vault", id(1)],
       ["vault", id(2)],
       ["vault", id(4)],
@@ -155,7 +159,7 @@ describe("listArtistUnitSources", () => {
     expect(byId.get(id(22))).toMatchObject({ sourceRevision: "rev-new", indexedRevision: null });
   });
 
-  it("flags units whose source row is gone, or no longer counts, as orphans", async () => {
+  it("flags units whose source row is gone as orphans, in each kind's table", async () => {
     const byId = new Map((await listArtistUnitSources(artist)).map(e => [e.sourceId, e]));
     expect(byId.get(id(99))).toEqual({
       sourceKind: "vault",
@@ -164,7 +168,15 @@ describe("listArtistUnitSources", () => {
       indexedRevision: "gone",
       needsEmbedding: false,
     });
-    expect(byId.get(id(24))).toMatchObject({ sourceKind: "evidence", sourceRevision: null });
+    expect(byId.get(id(98))).toMatchObject({ sourceKind: "evidence", sourceRevision: null });
+    expect(byId.get(id(97))).toMatchObject({ sourceKind: "social", sourceRevision: null });
+  });
+
+  it("neither lists nor orphans the units of a row that exists but no longer counts", async () => {
+    const ids = (await listArtistUnitSources(artist)).map(e => e.sourceId);
+    // A rejected candidate's evidence and a repost keep their units: eligibility is checked at read time.
+    expect(ids).not.toContain(id(24));
+    expect(ids).not.toContain(id(11));
   });
 
   it("leaves out sources with nothing to index, other people's posts, and other artists", async () => {

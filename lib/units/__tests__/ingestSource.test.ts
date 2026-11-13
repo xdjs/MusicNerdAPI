@@ -117,7 +117,7 @@ describe("ingestSource", () => {
       ocrPages: 0,
       truncated: false,
     });
-    mocks.embedUnits.mockRejectedValue(new Error("gateway down"));
+    mocks.embedUnits.mockRejectedValue(new Error("gateway down: secret page text"));
 
     const outcome = await ingestSource(REF);
 
@@ -128,6 +128,7 @@ describe("ingestSource", () => {
     expect(message).toContain("vault");
     expect(message).toContain("src-1");
     expect(message).not.toContain("secret page text");
+    expect(message).toContain("Error");
   });
 
   test("an all-empty PDF whose vision pass fails writes nothing and does not throw", async () => {
