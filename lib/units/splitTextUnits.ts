@@ -4,7 +4,7 @@ type TextUnit = { locator: string; text: string };
 type Group = { firstParagraph: number; cutPart: number; text: string };
 
 const PARAGRAPH_BREAK = /\n[ \t]*\n/;
-const HEADING = /^#{1,6}[ \t]+(.*)$/;
+const HEADING_PREFIX = /^#{1,6}[ \t]/;
 // Each paragraph is charged its own length plus the 2-character break after it.
 const BREAK_COST = 2;
 
@@ -77,8 +77,8 @@ export function splitTextUnits(
 
   const sections: { heading: string; lines: string[] }[] = [{ heading: "Top", lines: [] }];
   for (const line of text.split(/\r?\n/)) {
-    const heading = HEADING.exec(line);
-    if (heading) sections.push({ heading: headingText(heading[1]), lines: [] });
+    const prefix = HEADING_PREFIX.exec(line);
+    if (prefix) sections.push({ heading: headingText(line.slice(prefix[0].length)), lines: [] });
     else sections[sections.length - 1].lines.push(line);
   }
 

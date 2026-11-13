@@ -66,4 +66,13 @@ describe("splitTextUnits", () => {
     expect(units.map(u => u.text)).toEqual(["body"]);
     expect(units2.map(u => u.text)).toEqual(["body"]);
   });
+  test("a heading line ending in a line terminator after many spaces parses promptly", () => {
+    for (const terminator of ["\u2028", "\u2029", "\r"]) {
+      const start = Date.now();
+      const units = splitTextUnits("#" + " ".repeat(100000) + terminator + "x\nbody", "markdown");
+      expect(Date.now() - start).toBeLessThan(500);
+      expect(units.length).toBeGreaterThan(0);
+      for (const unit of units) expect(unit.locator).not.toMatch(/[\u2028\u2029\r]/);
+    }
+  });
 });
