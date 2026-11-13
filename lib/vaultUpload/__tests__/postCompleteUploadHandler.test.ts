@@ -440,13 +440,13 @@ it("dispatches signed independent tickets without granting claimant operations",
 });
 
 describe("postCompleteUploadHandler ingest at upload", () => {
-  it("indexes the saved row after it is written, before the Lore refresh", async () => {
+  it("indexes the saved row last, after it is written and the Lore refresh is queued", async () => {
     const order: string[] = [];
     mock.insert.mockImplementation(async () => (order.push("insert"), { id: "source" }));
     ingest.mockImplementation(async () => void order.push("ingest"));
     mock.queue.mockImplementation(async () => (order.push("queue"), true));
     expect((await complete(req({ ticket }))).status).toBe(200);
-    expect(order).toEqual(["insert", "ingest", "queue"]);
+    expect(order).toEqual(["insert", "queue", "ingest"]);
     expect(ingest).toHaveBeenCalledWith({
       sourceId: "source",
       artistId,

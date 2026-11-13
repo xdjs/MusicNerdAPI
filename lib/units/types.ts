@@ -41,7 +41,7 @@ export type IngestOutcome = {
   units: number;
   ocrPages: number;
   embedded: boolean;
-  skipped?: "not-found" | "no-text" | "too-large";
+  skipped?: "not-found" | "no-text" | "too-large" | "needs-ocr";
   failed?: "vision" | "extract";
 };
 

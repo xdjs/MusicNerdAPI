@@ -2,6 +2,7 @@ import { inspectChatPdf } from "@/lib/chatPdf/inspectChatPdf";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { queueUnitSync } from "@/lib/units/queueUnitSync";
 import { INLINE_INGEST_MAX_PAGES } from "@/lib/units/types";
+import { PDF_PARSE_TIMEOUT_MS } from "@/lib/vaultUpload/const";
 
 const isText = (type: string) => type.startsWith("text/") || type === "application/json";
 
@@ -9,7 +10,7 @@ async function fitsInline(bytes: Buffer, contentType: string): Promise<boolean> 
   if (isText(contentType)) return true;
   if (contentType !== "application/pdf") return false;
   try {
-    const pages = await inspectChatPdf(bytes, AbortSignal.timeout(30_000));
+    const pages = await inspectChatPdf(bytes, AbortSignal.timeout(5_000));
     return pages <= INLINE_INGEST_MAX_PAGES;
   } catch {
     // Over the read limit or unreadable here: leave it to the queued job.
@@ -31,8 +32,16 @@ export async function ingestUploadInline(input: {
 }): Promise<void> {
   try {
     if (await fitsInline(input.bytes, input.contentType)) {
-      await ingestSource({ sourceKind: "vault", sourceId: input.sourceId }, { bytes: input.bytes });
-      return;
+      const outcome = await ingestSource(
+        { sourceKind: "vault", sourceId: input.sourceId },
+        {
+          bytes: input.bytes,
+          ocr: false,
+          signal: AbortSignal.timeout(20_000),
+          pdfTimeoutMs: PDF_PARSE_TIMEOUT_MS,
+        },
+      );
+      if (outcome.skipped !== "needs-ocr" && !outcome.failed) return;
     }
     await queueUnitSync(input.artistId);
   } catch (caught) {

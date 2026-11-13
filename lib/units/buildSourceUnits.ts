@@ -26,7 +26,7 @@ function draft(unitIndex: number, locator: string, text: string, ocr: boolean): 
  * (vision throws, the per-document vision cap is reached) or is still empty afterwards is skipped, so `unitIndex` stays dense.
  *
  * @param input - The source and its body.
- * @param deps - `readPage` overrides the vision read; `signal` is passed to it; `pdfTimeoutMs` bounds the PDF parse.
+ * @param deps - `ocr: false` skips vision and reports `needsOcr`; `readPage` overrides the vision read; `signal` is passed to it; `pdfTimeoutMs` bounds the PDF parse.
  * @returns The drafts, the count of vision-read pages, `failed` when a vision read
  * threw ("vision") or the PDF could not be parsed ("extract", with no units; this
  * function does not rethrow; an aborted signal stops the loop and also sets "vision"), and whether the PDF was cut at the page limit.
@@ -37,21 +37,23 @@ export async function buildSourceUnits(
     readPage?: (pageBytes: Uint8Array) => Promise<string>;
     signal?: AbortSignal;
     pdfTimeoutMs?: number;
+    ocr?: boolean;
   } = {},
 ): Promise<{
   units: UnitDraft[];
   ocrPages: number;
   failed?: "vision" | "extract";
   truncated: boolean;
+  needsOcr: boolean;
 }> {
   const body = input.body;
-  if (body.kind === "none") return { units: [], ocrPages: 0, truncated: false };
+  if (body.kind === "none") return { units: [], ocrPages: 0, truncated: false, needsOcr: false };
 
   if (body.kind !== "pdf") {
     const units = splitTextUnits(body.text, body.kind).map((u, i) =>
       draft(i, u.locator, u.text, false),
     );
-    return { units, ocrPages: 0, truncated: false };
+    return { units, ocrPages: 0, truncated: false, needsOcr: false };
   }
 
   let extracted: { pages: string[]; truncated: boolean };
@@ -61,7 +63,7 @@ export async function buildSourceUnits(
       timeoutMs: deps.pdfTimeoutMs,
     });
   } catch {
-    return { units: [], ocrPages: 0, failed: "extract", truncated: false };
+    return { units: [], ocrPages: 0, failed: "extract", truncated: false, needsOcr: false };
   }
 
   const readPage =
@@ -71,6 +73,7 @@ export async function buildSourceUnits(
   let ocrPages = 0;
   let failed: "vision" | undefined;
   let visionAttempts = 0;
+  let needsOcr = false;
 
   for (let i = 0; i < extracted.pages.length; i++) {
     if (deps.signal?.aborted) {
@@ -80,6 +83,10 @@ export async function buildSourceUnits(
     let text = extracted.pages[i];
     let ocr = false;
     if (isBrokenExtraction(text)) {
+      if (deps.ocr === false) {
+        needsOcr = true;
+        continue;
+      }
       if (visionAttempts >= MAX_OCR_PAGES) {
         failed = "vision";
         continue;
@@ -99,5 +106,11 @@ export async function buildSourceUnits(
     units.push(draft(units.length, `p.${i + 1}`, text, ocr));
   }
 
-  return { units, ocrPages, ...(failed ? { failed } : {}), truncated: extracted.truncated };
+  return {
+    units,
+    ocrPages,
+    ...(failed ? { failed } : {}),
+    truncated: extracted.truncated,
+    needsOcr,
+  };
 }

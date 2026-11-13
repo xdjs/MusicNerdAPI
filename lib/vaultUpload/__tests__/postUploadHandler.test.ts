@@ -252,7 +252,7 @@ it("requires stable sign/complete identity for independent contributions, withou
 });
 
 describe("postUploadHandler ingest at upload", () => {
-  it("indexes the saved row after it is written, with its id, artist, bytes and type", async () => {
+  it("indexes the saved row last, after the write and the refresh, with its id, artist, bytes and type", async () => {
     const order: string[] = [];
     mock.insert.mockImplementation(async () => (order.push("insert"), { id: "src-1" }));
     ingest.mockImplementation(async () => void order.push("ingest"));
@@ -261,7 +261,7 @@ describe("postUploadHandler ingest at upload", () => {
       req(new File([png], "press-photo.png", { type: "image/png" })),
     );
     expect(res.status).toBe(200);
-    expect(order).toEqual(["insert", "ingest", "queue"]);
+    expect(order).toEqual(["insert", "queue", "ingest"]);
     expect(ingest).toHaveBeenCalledWith({
       sourceId: "src-1",
       artistId: "artist-x",

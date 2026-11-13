@@ -130,15 +130,15 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
       (await getAuthorizedVaultUpload(ticket.artistId, ticket.path, userId, expectedClaimId));
     if (!source) throw new Error("Upload source was not saved");
     unpublishedPath = undefined;
-    // After the row is committed; never rejects.
+    const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
+    await cleanupSavedUpload(ticket.path);
+    // Last step, after the row, the refresh and the cleanup; bounded and never rejects.
     await ingestUploadInline({
       sourceId: source.id,
       artistId: ticket.artistId,
       bytes: buffer,
       contentType: ticket.type,
     });
-    const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
-    await cleanupSavedUpload(ticket.path);
     const warning =
       [
         refreshWarning,

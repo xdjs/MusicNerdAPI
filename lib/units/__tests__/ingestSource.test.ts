@@ -256,6 +256,26 @@ describe("ingestSource", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
+  test("with ocr off, a document that needs OCR writes nothing and reports needs-ocr", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source());
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "one")],
+      ocrPages: 0,
+      truncated: false,
+      needsOcr: true,
+    });
+
+    const outcome = await ingestSource(REF, { ocr: false });
+
+    expect(mocks.buildSourceUnits).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ocr: false }),
+    );
+    expect(outcome).toEqual({ units: 0, ocrPages: 0, embedded: false, skipped: "needs-ocr" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.embedUnits).not.toHaveBeenCalled();
+  });
+
   test("database errors propagate", async () => {
     mocks.loadUnitSource.mockResolvedValue(source());
     mocks.buildSourceUnits.mockResolvedValue({

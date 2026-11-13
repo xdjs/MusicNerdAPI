@@ -19,7 +19,10 @@ beforeEach(() => {
 describe("ingestUploadInline", () => {
   it("ingests a 2-page PDF inline with its bytes", async () => {
     await ingestUploadInline(input("application/pdf"));
-    expect(mock.ingest).toHaveBeenCalledWith({ sourceKind: "vault", sourceId: "s1" }, { bytes });
+    expect(mock.ingest).toHaveBeenCalledWith(
+      { sourceKind: "vault", sourceId: "s1" },
+      expect.objectContaining({ bytes, ocr: false, pdfTimeoutMs: 10_000 }),
+    );
     expect(mock.queue).not.toHaveBeenCalled();
   });
 
@@ -45,8 +48,43 @@ describe("ingestUploadInline", () => {
 
   it.each(["text/plain", "text/markdown", "application/json"])("ingests %s inline", async type => {
     await ingestUploadInline(input(type));
-    expect(mock.ingest).toHaveBeenCalledWith({ sourceKind: "vault", sourceId: "s1" }, { bytes });
+    expect(mock.ingest).toHaveBeenCalledWith(
+      { sourceKind: "vault", sourceId: "s1" },
+      expect.objectContaining({ bytes, ocr: false, pdfTimeoutMs: 10_000 }),
+    );
     expect(mock.inspect).not.toHaveBeenCalled();
+  });
+
+  it("passes an abort signal to the ingest and the inspection", async () => {
+    await ingestUploadInline(input("application/pdf"));
+    expect(mock.ingest.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(mock.inspect.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+  });
+
+  it("queues when the document needs OCR", async () => {
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, skipped: "needs-ocr" });
+    await ingestUploadInline(input("application/pdf"));
+    expect(mock.queue).toHaveBeenCalledWith("a1");
+  });
+
+  it("queues when the outcome carries a failure", async () => {
+    mock.ingest.mockResolvedValue({ units: 0, ocrPages: 0, embedded: false, failed: "extract" });
+    await ingestUploadInline(input("application/pdf"));
+    expect(mock.queue).toHaveBeenCalledWith("a1");
+  });
+
+  it("queues and warns with the id only when the ingest is aborted", async () => {
+    mock.ingest.mockRejectedValue(new DOMException("secret text", "AbortError"));
+    await ingestUploadInline(input("application/pdf"));
+    expect(mock.queue).toHaveBeenCalledWith("a1");
+    const warned = vi.mocked(console.warn).mock.calls.flat().join(" ");
+    expect(warned).toContain("s1");
+    expect(warned).not.toContain("secret text");
+  });
+
+  it("does not queue after a clean inline ingest", async () => {
+    await ingestUploadInline(input("text/plain"));
+    expect(mock.queue).not.toHaveBeenCalled();
   });
 
   it("queues an image", async () => {

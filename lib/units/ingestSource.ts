@@ -16,7 +16,7 @@ import { PDF_PARSE_TIMEOUT_MS } from "@/lib/vaultUpload/const";
  * A source with no text clears its stale units. Database errors propagate.
  *
  * @param ref - The source to ingest.
- * @param opts - `bytes` are PDF bytes already in hand; `embed: false` skips embedding; `pdfTimeoutMs` bounds the PDF parse.
+ * @param opts - `bytes` are PDF bytes already in hand; `embed: false` skips embedding; `pdfTimeoutMs` bounds the PDF parse; `ocr: false` skips vision and writes nothing when a page needs it (`skipped: "needs-ocr"`).
  * @returns What was written and why anything was skipped or failed.
  */
 export async function ingestSource(
@@ -26,6 +26,7 @@ export async function ingestSource(
     signal?: AbortSignal;
     embed?: boolean;
     pdfTimeoutMs?: number;
+    ocr?: boolean;
   } = {},
 ): Promise<IngestOutcome> {
   const input = await loadUnitSource(ref, { bytes: opts.bytes, signal: opts.signal });
@@ -34,7 +35,11 @@ export async function ingestSource(
   const built = await buildSourceUnits(input, {
     signal: opts.signal,
     pdfTimeoutMs: opts.pdfTimeoutMs ?? PDF_PARSE_TIMEOUT_MS,
+    ocr: opts.ocr,
   });
+  // Text-only pass: leave the whole document for a later ingest with OCR rather than index part of it.
+  if (opts.ocr === false && built.needsOcr)
+    return { units: 0, ocrPages: 0, embedded: false, skipped: "needs-ocr" };
   const base = {
     sourceKind: input.sourceKind,
     sourceId: input.sourceId,

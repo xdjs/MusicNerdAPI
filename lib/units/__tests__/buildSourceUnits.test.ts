@@ -45,6 +45,21 @@ describe("buildSourceUnits", () => {
     expect(readPage).not.toHaveBeenCalled();
   });
 
+  test("with ocr off a blank page is skipped, never read, and flagged", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, ""]);
+    const readPage = vi.fn();
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), { readPage, ocr: false });
+    expect(readPage).not.toHaveBeenCalled();
+    expect(result.units).toHaveLength(1);
+    expect(result.needsOcr).toBe(true);
+  });
+
+  test("needsOcr is false when every page has text", async () => {
+    const bytes = await twoPagePdf([PAGE_ONE, PAGE_TWO]);
+    const result = await buildSourceUnits(input({ kind: "pdf", bytes }), { ocr: false });
+    expect(result.needsOcr).toBe(false);
+  });
+
   test("an empty page is read by the vision pass", async () => {
     const bytes = await twoPagePdf([PAGE_ONE, ""]);
     const readPage = vi.fn().mockResolvedValue("Text read from the scanned page");
@@ -152,7 +167,7 @@ describe("buildSourceUnits", () => {
 
   test("a none body yields no units", async () => {
     const result = await buildSourceUnits(input({ kind: "none" }));
-    expect(result).toEqual({ units: [], ocrPages: 0, truncated: false });
+    expect(result).toEqual({ units: [], ocrPages: 0, truncated: false, needsOcr: false });
   });
 
   test("hash and token count are set", async () => {
