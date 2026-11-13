@@ -12,3 +12,16 @@ it("numbers sources from 1 in order of first citation and writes one source-url 
     [{ type: "source-url", sourceId: "2", url: "https://b.example/2", title: "B" }],
   ]);
 });
+
+it("seeds carried numbers, writes their parts, and continues after the highest, leaving gaps", () => {
+  const writer = { write: vi.fn(), merge: vi.fn(), onError: undefined };
+  const cite = createChatCitations(writer, [
+    { n: 1, url: "https://a.example/1", title: "A" },
+    { n: 3, url: "https://c.example/3", title: "C" },
+    { n: 3, url: "https://c.example/3", title: "C" },
+  ]);
+  expect(writer.write.mock.calls.map(([p]) => p.sourceId)).toEqual(["1", "3"]);
+  expect(cite({ url: "https://c.example/3", title: "C" })).toBe(3);
+  expect(cite({ url: "https://d.example/4", title: "D" })).toBe(4);
+  expect(writer.write).toHaveBeenCalledTimes(3);
+});

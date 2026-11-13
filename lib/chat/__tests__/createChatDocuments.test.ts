@@ -11,9 +11,16 @@ const ref = (over: Partial<ChatDocumentRef> = {}): ChatDocumentRef => ({
   ...over,
 });
 
+const urlOf = (r: ChatDocumentRef) => r.url ?? `musicnerd://${r.sourceKind}/${r.sourceId}`;
+
 const setup = (prior: { n: number; ref: ChatDocumentRef }[] = []) => {
   const write = vi.fn();
-  const cite = createChatCitations({ write } as never);
+  const cite = createChatCitations(
+    { write } as never,
+    [...prior]
+      .sort((a, b) => a.n - b.n)
+      .map(({ n, ref }) => ({ n, url: urlOf(ref), title: ref.title })),
+  );
   return { write, docs: createChatDocuments(cite, prior) };
 };
 
@@ -48,9 +55,15 @@ describe("createChatDocuments", () => {
   });
 
   it("gives distinct numbers to different documents sharing a url", () => {
-    const { docs } = setup();
+    const { write, docs } = setup();
     docs.register(ref());
     expect(docs.register(ref({ sourceId: "b" }))).toBe(2);
+    expect(write.mock.calls[1][0]).toEqual({
+      type: "source-url",
+      sourceId: "2",
+      url: "musicnerd://vault/b",
+      title: "Doc A",
+    });
     expect(docs.get(1)?.sourceId).toBe("a");
     expect(docs.get(2)?.sourceId).toBe("b");
   });
@@ -71,5 +84,43 @@ describe("createChatDocuments", () => {
 
   it("get returns undefined for an unknown number", () => {
     expect(setup().docs.get(9)).toBeUndefined();
+  });
+
+  it("keeps a gapped prior numbering and numbers the next document after the highest", () => {
+    const c = ref({ sourceId: "c", url: "https://example.com/c" });
+    const { write, docs } = setup([
+      { n: 1, ref: ref() },
+      { n: 3, ref: c },
+    ]);
+    expect(docs.get(1)?.sourceId).toBe("a");
+    expect(docs.get(3)?.sourceId).toBe("c");
+    expect(docs.get(2)).toBeUndefined();
+    expect(write.mock.calls.map(x => x[0].sourceId)).toEqual(["1", "3"]);
+    expect(docs.register(ref({ sourceId: "d", url: "https://example.com/d" }))).toBe(4);
+  });
+
+  it("throws when cite was not seeded with a gapped prior", () => {
+    const cite = createChatCitations({ write: vi.fn() } as never);
+    expect(() =>
+      createChatDocuments(cite, [
+        { n: 1, ref: ref() },
+        { n: 3, ref: ref({ sourceId: "c", url: "https://example.com/c" }) },
+      ]),
+    ).toThrow("prior document n expected 3, cite returned 2");
+  });
+
+  it("keeps two prior documents that share a url distinct when cite is seeded with the synthetic url", () => {
+    const b = ref({ sourceId: "b" });
+    const cite = createChatCitations({ write: vi.fn() } as never, [
+      { n: 1, url: "https://example.com/a", title: "Doc A" },
+      { n: 2, url: "musicnerd://vault/b", title: "Doc A" },
+    ]);
+    const docs = createChatDocuments(cite, [
+      { n: 1, ref: ref() },
+      { n: 2, ref: b },
+    ]);
+    expect(docs.get(1)?.sourceId).toBe("a");
+    expect(docs.get(2)?.sourceId).toBe("b");
+    expect(docs.register(ref({ sourceId: "c", url: "https://example.com/c" }))).toBe(3);
   });
 });
