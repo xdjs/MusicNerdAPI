@@ -27,6 +27,7 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 export const platformType = pgEnum("platform_type", ["social", "web3", "listen"]);
@@ -595,6 +596,48 @@ export const artistVaultSources = pgTable(
     // The (artist_id, url) unique index is migration 0014 in MusicNerdWeb; declared
     // here so `onConflictDoNothing({ target })` can name it.
     uniqueIndex("artist_vault_sources_artist_url_uniq").on(table.artistId, table.url),
+  ],
+);
+
+// Page-level text index for artist chat search. MusicNerdWeb owns the migration (0066);
+// the generated `search` tsvector column and the GIN/HNSW indexes live there only.
+export const sourceUnits = pgTable(
+  "source_units",
+  {
+    id: uuid()
+      .default(sql`uuid_generate_v4()`)
+      .primaryKey()
+      .notNull(),
+    sourceKind: text("source_kind").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    artistId: uuid("artist_id").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    unitIndex: integer("unit_index").notNull(),
+    locator: text().notNull(),
+    title: text(),
+    url: text(),
+    text: text().notNull(),
+    textHash: text("text_hash").notNull(),
+    tokens: integer().notNull(),
+    ocr: boolean().default(false).notNull(),
+    ingestVersion: integer("ingest_version").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`(now() AT TIME ZONE 'utc'::text)`)
+      .notNull(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.artistId],
+      foreignColumns: [artists.id],
+      name: "source_units_artist_id_fkey",
+    }).onDelete("cascade"),
+    uniqueIndex("source_units_source_unit_uniq").on(
+      table.sourceKind,
+      table.sourceId,
+      table.unitIndex,
+    ),
+    index("source_units_artist").on(table.artistId, table.sourceKind, table.sourceId),
   ],
 );
 
