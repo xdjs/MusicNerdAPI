@@ -43,4 +43,27 @@ describe("splitTextUnits", () => {
     expect(splitTextUnits("   ", "plain")).toEqual([]);
     expect(splitTextUnits("", "markdown")).toEqual([]);
   });
+  test("CRLF text splits into paragraphs like LF text", () => {
+    expect(splitTextUnits("one\r\n\r\ntwo\r\n\r\nthree", "plain", 8)).toEqual([
+      { locator: "¶1", text: "one" },
+      { locator: "¶2", text: "two" },
+      { locator: "¶3", text: "three" },
+    ]);
+    const units = splitTextUnits("Intro\r\n\r\n## Career\r\nSigned.\r\n\r\nTour.", "markdown");
+    expect(units.map(u => u.locator)).toEqual(["§Top", "§Career"]);
+    expect(units[1].text).toBe("Signed.\n\nTour.");
+  });
+  test("closing # marks are stripped from heading text", () => {
+    expect(splitTextUnits("## Early years ##\nBorn.", "markdown").map(u => u.locator)).toEqual([
+      "§Early years",
+    ]);
+  });
+  test("a heading line of # plus 100000 spaces parses promptly", () => {
+    const start = Date.now();
+    const units = splitTextUnits("#" + " ".repeat(100000) + "x\nbody", "markdown");
+    const units2 = splitTextUnits("# " + "# ".repeat(50000) + "x\nbody", "markdown");
+    expect(Date.now() - start).toBeLessThan(500);
+    expect(units.map(u => u.text)).toEqual(["body"]);
+    expect(units2.map(u => u.text)).toEqual(["body"]);
+  });
 });

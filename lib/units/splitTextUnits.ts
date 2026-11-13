@@ -4,7 +4,7 @@ type TextUnit = { locator: string; text: string };
 type Group = { firstParagraph: number; cutPart: number; text: string };
 
 const PARAGRAPH_BREAK = /\n[ \t]*\n/;
-const HEADING = /^#{1,6}[ \t]+(.*?)[ \t#]*$/;
+const HEADING = /^#{1,6}[ \t]+(.*)$/;
 // Each paragraph is charged its own length plus the 2-character break after it.
 const BREAK_COST = 2;
 
@@ -51,6 +51,13 @@ function pack(paragraphs: string[], maxChars: number): Group[] {
   return groups;
 }
 
+/** Trims whitespace and closing # marks with a single linear scan (no regex backtracking on user text). */
+function headingText(raw: string): string {
+  let end = raw.length;
+  while (end > 0 && (raw[end - 1] === "#" || raw[end - 1] === " " || raw[end - 1] === "\t")) end--;
+  return raw.slice(0, end).trim();
+}
+
 function withPart(locator: string, part: number): string {
   return part > 1 ? `${locator} (${part})` : locator;
 }
@@ -60,6 +67,7 @@ export function splitTextUnits(
   kind: "markdown" | "plain",
   maxChars = MAX_UNIT_CHARS,
 ): TextUnit[] {
+  text = text.replace(/\r\n?/g, "\n");
   if (kind === "plain") {
     return pack(paragraphsOf(text), maxChars).map(group => ({
       locator: withPart(`¶${group.firstParagraph}`, group.cutPart),
@@ -70,7 +78,7 @@ export function splitTextUnits(
   const sections: { heading: string; lines: string[] }[] = [{ heading: "Top", lines: [] }];
   for (const line of text.split(/\r?\n/)) {
     const heading = HEADING.exec(line);
-    if (heading) sections.push({ heading: heading[1].trim(), lines: [] });
+    if (heading) sections.push({ heading: headingText(heading[1]), lines: [] });
     else sections[sections.length - 1].lines.push(line);
   }
 
