@@ -3,15 +3,18 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { SEARCH_CANDIDATES } from "@/lib/units/types";
 
 const execute = vi.fn();
-vi.mock("@/lib/db/db", () => ({ db: { execute } }));
+vi.mock("@/lib/db/db", () => ({
+  db: { transaction: (run: (tx: { execute: typeof execute }) => unknown) => run({ execute }) },
+}));
 const { searchUnitsByVector } = await import("@/lib/units/searchUnitsByVector");
 
 const artist = "00000000-0000-4000-8000-000000000001";
-const rendered = () => new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
+const render = (n: number) => new PgDialect().sqlToQuery(execute.mock.calls[n][0]);
+const rendered = () => render(execute.mock.calls.length - 1);
 
 beforeEach(() => execute.mockReset());
 
-// PGlite has no pgvector; the operator itself runs against real Postgres in Task 21.
+// PGlite has no pgvector; the operator and the HNSW settings run against real Postgres in searchUnitsByVector.postgres.test.ts.
 describe("searchUnitsByVector", () => {
   test("orders eligible embedded units by cosine distance to the bound vector", async () => {
     execute.mockResolvedValue([]);
@@ -32,6 +35,15 @@ describe("searchUnitsByVector", () => {
     // The eligibility predicate guards every row.
     expect(q.sql).toContain("u.source_revision");
     expect(q.sql).toContain("artist_research_evidence");
+  });
+
+  test("sets the HNSW scan settings locally before the select, in the same transaction", async () => {
+    execute.mockResolvedValue([]);
+    await searchUnitsByVector(artist, [1, 0]);
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(render(0).sql).toContain("set_config('hnsw.ef_search', '100', true)");
+    expect(render(1).sql).toContain("set_config('hnsw.iterative_scan', 'strict_order', true)");
+    expect(render(2).sql).toContain("from source_units u");
   });
 
   test("defaults the limit to SEARCH_CANDIDATES and maps rows to hits", async () => {

@@ -9,6 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,7 +29,12 @@ jobs:
       - run: pnpm type-check
       - run: pnpm lint:check
       - run: pnpm format:check
+      # The migration the vector test applies; switch the branch to main once Web PR #1684 merges.
+      - run: curl -fsSL https://raw.githubusercontent.com/xdjs/MusicNerdWeb/claude/0066-source-units/drizzle/0066_source_units.sql -o /tmp/0066_source_units.sql
       - run: pnpm test
+        env:
+          MUSICNERD_UNITS_TEST_URL: postgres://postgres:test@localhost:5432/postgres
+          MUSICNERD_0066_SQL: /tmp/0066_source_units.sql
 
   build:
     runs-on: ubuntu-latest
