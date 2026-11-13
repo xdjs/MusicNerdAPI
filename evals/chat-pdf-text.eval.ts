@@ -9,15 +9,15 @@ import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
 
 /**
- * Experiment suite (xdjs/MusicNerdWeb#1424, 2026-11-12): asks the acceptance question
- * `trials` times and records whether every alias from the Dutchyyy timeline PDF appears,
- * so two PDF read variants can be compared. The variant is the handler's own switch,
- * `CHAT_PDF_TEXT_ALONGSIDE=1`, which hands the model the PDF's extracted text with page
- * markers beside the original bytes. Each answer is also graded by several candidate judge
- * models, `CHAT_JUDGES` (comma-separated gateway ids), to choose `MODEL_JUDGE` on evidence.
+ * Alias-coverage suite (xdjs/MusicNerdWeb#1424): asks the acceptance question `trials` times
+ * and records whether every alias the reference names appears, so a change to PDF reading
+ * can be compared as a rate rather than a single sample. Each answer is also graded by the
+ * candidate judge models in `CHAT_JUDGES` (comma-separated gateway ids), which is how
+ * `MODEL_JUDGE` was chosen on 2026-11-13 (docs/chat-eval-pdf-evidence.md). Answers are not
+ * printed: the repository is public and the source is a Lore document.
  *
- * Hosted: the Evals workflow, suite `chat-pdf-text`, with the `pdf_text_alongside` and
- * `trials` inputs. Local: `pnpm eval:local evals/chat-pdf-text.eval.ts`.
+ * Hosted: the Evals workflow, suite `chat-pdf-text`, with the `trials` input. Local:
+ * `pnpm eval:local evals/chat-pdf-text.eval.ts`.
  */
 
 const budget = createEvalBudgetFetch(globalThis.fetch);
@@ -26,7 +26,6 @@ globalThis.fetch = budget.fetch;
 const SHA = process.env.GITHUB_SHA ?? "local";
 const CASE = CHAT_CASES.find(c => c.key === "dutchyyy-alias-years")!;
 const TRIALS = Math.min(10, Math.max(1, Number(process.env.CHAT_TRIALS) || 5));
-const VARIANT = process.env.CHAT_PDF_TEXT_ALONGSIDE === "1" ? "text-alongside" : "bytes-only";
 const JUDGES = (
   process.env.CHAT_JUDGES ?? "google/gemini-3.8-flash,google/gemini-4-hydrogen,openai/gpt-5.4"
 )
@@ -42,12 +41,11 @@ const mentions = (answer: string, alias: string) =>
   );
 
 Eval("music-nerd", {
-  experimentName: experimentName(`chat-pdf-text ${VARIANT}`, MODEL_CHAT, SHA),
+  experimentName: experimentName("chat-pdf-text", MODEL_CHAT, SHA),
   metadata: {
     suite: "chat-pdf-text",
     model: MODEL_CHAT,
     sha: SHA,
-    variant: VARIANT,
     trials: TRIALS,
     judges: JUDGES,
     rubric: "cited-evidence-v2",
@@ -57,7 +55,7 @@ Eval("music-nerd", {
     Array.from({ length: TRIALS }, (_, i) => ({
       input: CASE,
       expected: { answerable: CASE.answerable, reference: CASE.reference },
-      metadata: { key: CASE.key, trial: i + 1, variant: VARIANT },
+      metadata: { key: CASE.key, trial: i + 1 },
     })),
   task: async input => {
     if (budget.snapshot().blocked)
@@ -75,7 +73,7 @@ Eval("music-nerd", {
     const present = ALIASES.filter(a => mentions(turn.answer, a));
     const missing = ALIASES.filter(a => !present.includes(a));
     console.log(
-      `\n[${VARIANT}] first=${turn.firstTextMs}ms total=${turn.totalMs}ms tools=${(turn.tools ?? []).map(t => t.name).join(">")} missing=${JSON.stringify(missing)}${turn.error ? ` error=${turn.error}` : ""}\n${turn.answer}\n`,
+      `[alias-coverage] trial first=${turn.firstTextMs}ms total=${turn.totalMs}ms tools=${(turn.tools ?? []).map(t => t.name).join(">")} missing=${JSON.stringify(missing)}${turn.error ? ` error=${turn.error}` : ""}`,
     );
     return { ...turn, present, missing };
   },

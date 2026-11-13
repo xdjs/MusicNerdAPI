@@ -16,10 +16,6 @@ on:
           - pdf106-pete-smoke
           - pdf106-four-paired
         default: chat
-      pdf_text_alongside:
-        description: "chat-pdf-text only: hand the model the PDF's extracted text beside the original"
-        type: boolean
-        default: false
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
@@ -52,8 +48,7 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      # The chat-pdf-text experiment suite's switches (evals/chat-pdf-text.eval.ts).
-      CHAT_PDF_TEXT_ALONGSIDE: ${{ inputs.pdf_text_alongside && '1' || '' }}
+      # The chat-pdf-text suite's trial count (evals/chat-pdf-text.eval.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
 
     steps:
