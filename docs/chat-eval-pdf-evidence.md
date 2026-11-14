@@ -209,3 +209,53 @@ The last run of the night (1edf353, run 43573446295), after the units-mode promp
 - The default is still `legacy`. The passages path is faster and fails fewer gates, and it is not yet as complete as the whole-PDF read on questions that need every page of one document. The next step with evidence behind it is deterministic: when a search stops at the per-document cap for a short document, return that whole document instead of leaving the read to the model.
 - Answers and judge reasons were not read by anyone: they live in the private Braintrust experiments named after each run's commit.
 - Query cost of the any-term match on production-sized data is unmeasured.
+
+## Second staging record: whole units, replay fixes and the switch decision (2026-11-14, daytime)
+
+All runs are hosted, on staging, judged by `openai/gpt-5.4`. No answer, passage or judge reason was printed or read; per-question observations come from scores, the tool trace, the `mentions` check and the judge's issue categories.
+
+### A defect in what the model was shown
+
+`searchPassages` cut each hit to a window around the first match of any query word. Text-section units average 3,963 characters and 32 of 41 were longer than the window, so the model usually saw the start of an article. In `willie-colon-blades` the sentence carrying the second account sits at character 2,890 of a 5,957-character unit while common words first match at character 115; the model never saw it, on any earlier run. A search result is now the whole unit (up to 6,000 characters; a longer page gets the window covering the most distinct query terms), and a short document with at least two hits is returned whole.
+
+Effect, measured: the required names and albums appear in answers (`mentions` 0.79 before, 0.94 to 1 after); mean answer time fell from 5.5 s to between 3.8 s and 5.9 s.
+
+### Follow-up conversations
+
+Reading the Web client against this API found that the second follow-up of a passage conversation was rejected (the 64-part limit counted `source-url` parts the API itself re-sends), and that an answer re-citing an earlier document from memory was dropped from the history although the prompt allows it. Both are fixed here; the client change is xdjs/MusicNerdWeb#1686.
+
+### The two questions that fail on both paths
+
+Three trials each, same judge, same day:
+
+| Question | Legacy | Passages |
+| --- | --- | --- |
+| `willie-colon-blades`, relevance | 0.22, 0.25, 0.30; never names the second album | three-trial means 0.52, 0.63, 0.37, 0.44; names both albums every time |
+| `dutchyyy-aliases`, relevance | two of three trials unscorable (a citation did not resolve); the third 0.55 | three-trial means 0.57, 0.65, 0.55, 0.58; always scorable |
+| Mean answer time on these | 9.6 s | 5.6 to 5.9 s |
+
+The judge's categories are stable: on the first, `invented_distinction`, `unsupported_claim` and the missing statement that the accounts disagree; on the second, `miscategorised_item` and `extra_unrequested_facts`. Three prompt rules aimed at exactly those categories and a higher reasoning effort (`medium`, three trials) did not move the scores beyond their run-to-run spread, which is 0.35 to 0.78 for one question at one setting. Both are marked known-hard (see "Pass and fail").
+
+### Full run at the final head (`ada57dc`, run 43626347460): gates passed
+
+|  | Result |
+| --- | --- |
+| Nine ordinary questions | relevance 0.82 to 1, groundedness 0.70 to 1 |
+| `dutchyyy-alias-years`, three trials | relevance 0.72, 0.84, 0.89; groundedness 0.56, 0.62, 0.78 |
+| Follow-up | 0.72 / 0.94 |
+| Known-hard: `willie-colon-blades` | 0.44 / 0.55 over three trials |
+| Known-hard: `dutchyyy-aliases` | 0.58 / 0.59 over three trials |
+| Citations, evidence scorable, status signal, total time | 1 on every row |
+| Answer time | mean 4.9 s, median 4.8 s, slowest 7.4 s |
+| Spend guard | 76 requests, 11.32 dollars reserved |
+
+Means by question are about 0.87 for relevance and 0.86 for groundedness; the `means:` line the reporter prints averages rows, where the six known-hard trials weigh more (0.79 and 0.78).
+
+### What is still open
+
+- The two known-hard questions are real gaps, not solved.
+- The Chill Factor was missing from two of three `dutchyyy-alias-years` answers in the final run although the whole timeline was in view.
+- The judge ticks `extra_unrequested_facts` on many answers since the model sees more text.
+- Answer text reaches the eval in one burst at the end of the answer (15 to 117 text deltas within 13 ms). Where that buffering happens is not known and it has not been checked in a browser; the status line covers the wait.
+- The any-term text query is unmeasured on production-sized data.
+- The default is still `legacy`. Production switches by setting `CHAT_RETRIEVAL=units` after the index exists there; the legacy path is removed in a later change.
