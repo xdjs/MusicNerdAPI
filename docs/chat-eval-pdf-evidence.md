@@ -146,3 +146,48 @@ The `retrieval` suite (`evals/retrieval.eval.ts`) measures the page-level text i
 **Labelling.** Run `gh workflow run evals.yml -f suite=retrieval -f label=true`. The hosted log then lists one line per hit on stderr: `label <case> #<rank> <sourceKind> <sourceId> <locator> <title> <url>`, without text, and one `signals <case> textMatched=<bool> anyTextMatched=<bool> bestVector=<score|none> weak=<bool>` line per case: `textMatched` is the strict (`and`) match and the best vector score, the two inputs of the `weak` flag, and `anyTextMatched` whether the ranking text lists matched at all. `weak` is a hint for obviously empty retrievals; it does not detect unanswerable questions (measured 2026-11-14), so the chat decides from the passages. The labeller opens each public document at the listed page, decides which units answer the question, and writes the facts into `retrievalLabels.ts` (the known Dutchyyy PDF pages are in those cases' `note`). The labels of 2026-11-14 were located by keyword from the audited reference answers in `chatCases.ts`, independently of the ranking under test. Only public documents are opened; nothing from a private source is copied into the repository. Pete confirms the labels in the pull request. A case that cannot pass is reported, not relabelled; ranking (`RRF_K`, candidate counts, alias expansion) is tuned until the gates pass.
 
 The spend guard's embedding path suffix (`/embedding-model`) is read from the installed AI SDK gateway provider; the first hosted run confirms it, and a different suffix is fixed in the same pull request.
+
+## First staging record of chat on passages (2026-11-14)
+
+Everything here ran in the hosted Evals workflow against staging. Staging holds 680 units for the three eval artists, all embedded (`units-backfill`, Actions run 43562930795). No answer or passage text appears in any log; the per-question observations below come from scores, the tool trace and the `mentions` check.
+
+### Retrieval
+
+Labels were located by keyword from the audited references in `chatCases.ts`, independently of the ranking: sixteen facts over twelve answerable questions, each fact satisfied by any one of its units (`lib/evals/retrievalLabels.ts`). They were confirmed by the controller under Pete's delegation and await his own read.
+
+| Variant | Facts in the top 8 | Missed |
+| --- | --- | --- |
+| 3 units per document, strict text match, 20 candidates | 13 of 16 | Glide account (Blades); The Chill Factor (both alias questions) |
+| 5 per document, strict | 13 of 16 | the same three |
+| 3 per document, any-term text match (adopted) | 15 of 16 | The Chill Factor (aliases) |
+| 5 per document, any-term | 14 of 16 | The Chill Factor (aliases); the 2012 example |
+| 5 per document, any-term, 40 candidates | 15 of 16 | The Chill Factor (aliases) |
+
+Both gates pass on every variant (mean recall at least 0.8; every question has an answering unit in the top 8). The adopted default scores mean recall 0.96 (run 43565093604). The `weak` flag does not detect unanswerable questions: the control's best vector score (0.480) sits inside the range of the answerable ones (0.445 to 0.689). It is now documented as a hint for empty retrievals only, and the model decides from the passages; it abstained correctly on the control in every run.
+
+### Chat, paired on one commit (9d81e20, judge `openai/gpt-5.4`)
+
+|                               | Legacy (run 43570209842) | Passages (run 43568739679) |
+| ----------------------------- | ------------------------ | -------------------------- |
+| Gate failures                 | 4                        | 1                          |
+| Answer relevance, mean        | 0.88                     | 0.86                       |
+| Source groundedness, mean     | 0.95                     | 0.89                       |
+| Citations / evidence scorable | 0.98 / 0.93              | 1 / 1                      |
+| First text within 5 s         | 0                        | 0.53                       |
+| Total time                    | 6.9 to 12.7 s            | 3.6 to 7.9 s               |
+
+Legacy failed `bio-ritmo-30th` (0.35), `willie-colon-blades` (0.34) and `dutchyyy-aliases` (a dangling citation, so unscorable). Passages failed `willie-colon-blades` (0.28). Legacy was stronger on `dutchyyy-alias-years` (relevance 0.93 against 0.79, groundedness 0.89 against 0.66): it always reads all 13 pages of the timeline, and the passages path read the whole document in none of that run's three trials.
+
+The last run of the night (1edf353, run 43573446295), after the units-mode prompt regained the legacy sentence about one-time and parenthetical items: relevance 0.89, groundedness 0.90, citations 1, first text 0.67, one gate failure (`willie-colon-blades`, 0.25).
+
+### What the `mentions` check and the trace show
+
+- `willie-colon-blades` fails on both paths in every run (five passages runs: 0.25 to 0.38). The answer names Metiendo Mano and omits The Good, the Bad, the Ugly; the reference requires both accounts and the uncertainty. Groundedness is high (0.95 to 1), so the answer is supported but one-sided. Retrieval finds both accounts for the literal question; the model's own single search and its choice to commit are the gap.
+- The Chill Factor appears when the model reads the whole timeline (`readUnits` without locators, 13 units) and is usually missing when it answers from three pages of it: in the last run, trials that read the whole document scored 7 of 7 and 6 of 7 required terms, the trial that did not scored 5 of 7, and `dutchyyy-aliases` (no whole read) omitted it.
+- An ordinary answer is two model steps: one `searchPassages` call of about 0.8 s, then the answer. The first tool call lands 1.5 to 2.6 s in, which is model latency.
+
+### Not done, and why
+
+- The default is still `legacy`. The passages path is faster and fails fewer gates, and it is not yet as complete as the whole-PDF read on questions that need every page of one document. The next step with evidence behind it is deterministic: when a search stops at the per-document cap for a short document, return that whole document instead of leaving the read to the model.
+- Answers and judge reasons were not read by anyone: they live in the private Braintrust experiments named after each run's commit.
+- Query cost of the any-term match on production-sized data is unmeasured.
