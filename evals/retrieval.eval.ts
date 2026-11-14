@@ -2,6 +2,7 @@ import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import { RETRIEVAL_CASES, type ExpectedUnit } from "@/lib/evals/retrievalCases";
+import { describeEvalError } from "@/lib/evals/describeEvalError";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { searchUnits } from "@/lib/units/searchUnits";
@@ -106,7 +107,7 @@ Eval(
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`[retrieval] ${input.key} error=${message}`);
+        console.error(`[retrieval] ${input.key}: ${describeEvalError(error)}`);
         return { hits: [], weak: false, error: message };
       }
     },

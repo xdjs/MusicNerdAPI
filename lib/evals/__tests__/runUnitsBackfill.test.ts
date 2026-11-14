@@ -54,6 +54,7 @@ it("ingests stale sources and re-ingests current ones missing embeddings, leavin
     embeddedFalse: 0,
     noText: 0,
     stale: 0,
+    reasons: {},
   });
 });
 
@@ -93,6 +94,7 @@ it("counts failures, thrown errors and sources skipped once the budget blocks", 
   const result = await runUnitsBackfill("artist", { blocked: () => ++calls > 2 });
   expect(ingestSource).toHaveBeenCalledTimes(2);
   expect(result).toMatchObject({ ingested: 0, failed: 3, stale: 3 });
+  expect(result.reasons).toEqual({ vision: 1, "Error: boom": 1, "budget blocked": 1 });
 });
 
 it("counts a source whose every vision read failed as failed and stale, not as no text", async () => {

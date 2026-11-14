@@ -3,6 +3,7 @@ import { Eval } from "braintrust";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import { RETRIEVAL_CASES } from "@/lib/evals/retrievalCases";
 import { experimentName } from "@/lib/evals/experimentName";
+import { describeEvalError } from "@/lib/evals/describeEvalError";
 import { runUnitsBackfill } from "@/lib/evals/runUnitsBackfill";
 
 /**
@@ -27,11 +28,20 @@ Eval("music-nerd", {
   maxConcurrency: 1,
   data: () => ARTISTS.map(artistId => ({ input: { artistId }, metadata: { artistId } })),
   task: async (input: { artistId: string }) => {
-    const result = await runUnitsBackfill(input.artistId, {
-      blocked: () => budget.snapshot().blocked,
-    });
-    console.log(`[units-backfill] ${JSON.stringify(result)}`);
-    return result;
+    try {
+      const result = await runUnitsBackfill(input.artistId, {
+        blocked: () => budget.snapshot().blocked,
+      });
+      const { sources, ingested, failed, noText, embeddedFalse, stale, unitsWritten, reasons } =
+        result;
+      console.log(
+        `[units-backfill] ${input.artistId} sources=${sources} ingested=${ingested} failed=${failed} noText=${noText} embeddedFalse=${embeddedFalse} stale=${stale} unitsWritten=${unitsWritten} reasons=${JSON.stringify(reasons)}`,
+      );
+      return result;
+    } catch (error) {
+      console.error(`[units-backfill] ${input.artistId}: ${describeEvalError(error)}`);
+      throw error;
+    }
   },
   scores: [
     ({ output }) => ({

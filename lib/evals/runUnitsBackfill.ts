@@ -1,3 +1,4 @@
+import { describeEvalError } from "@/lib/evals/describeEvalError";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { listArtistUnitSources } from "@/lib/units/listArtistUnitSources";
 import type { UnitSyncEntry } from "@/lib/units/types";
@@ -13,6 +14,8 @@ export type UnitsBackfillCounts = {
   noText: number;
   /** Sources still stale or missing vectors after the run, other than `noText` ones. */
   stale: number;
+  /** Why sources failed, counted by safe reason string: no titles or text. */
+  reasons: Record<string, number>;
 };
 
 /** A source the index does not yet hold in full: at another revision, or with units lacking vectors. */
@@ -36,9 +39,12 @@ export async function runUnitsBackfill(
   const entries = await listArtistUnitSources(artistId);
   const counts = { ingested: 0, failed: 0, unitsWritten: 0, embeddedFalse: 0, noText: 0 };
   const empty = new Set<string>();
+  const reasons = new Map<string, number>();
+  const note = (reason: string) => reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
   for (const e of entries.filter(needsWork)) {
     if (opts.blocked()) {
       counts.failed += 1;
+      note("budget blocked");
       continue;
     }
     try {
@@ -48,19 +54,22 @@ export async function runUnitsBackfill(
       );
       counts.unitsWritten += outcome.units;
       // A failed read can also report no text (every vision read failed): it stays stale.
-      if (outcome.failed) counts.failed += 1;
-      else if (outcome.skipped === "no-text" || outcome.skipped === "not-found") {
+      if (outcome.failed) {
+        counts.failed += 1;
+        note(String(outcome.failed));
+      } else if (outcome.skipped === "no-text" || outcome.skipped === "not-found") {
         counts.noText += 1;
         empty.add(keyOf(e));
       } else {
         counts.ingested += 1;
         if (outcome.units > 0 && !outcome.embedded) counts.embeddedFalse += 1;
       }
-    } catch {
+    } catch (error) {
       counts.failed += 1;
+      note(describeEvalError(error));
     }
   }
   const after = await listArtistUnitSources(artistId);
   const stale = after.filter(e => needsWork(e) && !empty.has(keyOf(e))).length;
-  return { sources: entries.length, ...counts, stale };
+  return { sources: entries.length, ...counts, stale, reasons: Object.fromEntries(reasons) };
 }
