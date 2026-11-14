@@ -24,7 +24,8 @@ const MAX_SEARCHES = 4;
  * units is read through `readUnits` (so eligibility and currency hold as for the `readUnits` tool),
  * and its units not already shown are appended after the ranked results, in document order, when
  * they total at most `SHORT_DOCUMENT_CHARS` characters and fit the read budget; otherwise nothing is
- * added. At most one document per call; `expanded` names it, and its `shown` equals its `units`.
+ * added. A ranked hit of that document shown windowed is replaced by its whole unit, and that
+ * extra text counts toward the characters and the budget. At most one document per call; `expanded` names it, and its `shown` equals its `units`.
  *
  * @param artistId - The artist.
  * @param documents - The chat's document registry.
@@ -67,6 +68,8 @@ export function createSearchPassagesTool(
       const registered = new Map<number, ChatDocumentRef>();
       const shown = new Map<number, number>();
       const results: { n: number; locator: string; title: string; passage: string }[] = [];
+      // The results whose unit was cut to a window.
+      const windowed = new Set<(typeof results)[number]>();
       let truncated = false;
       for (const hit of hits) {
         const passage = trimToPassage(hit.text, query);
@@ -86,7 +89,9 @@ export function createSearchPassagesTool(
         const n = documents.register(ref);
         if (!registered.has(n)) registered.set(n, documents.get(n) ?? ref);
         shown.set(n, (shown.get(n) ?? 0) + 1);
-        results.push({ n, locator: hit.locator, title: ref.title, passage });
+        const result = { n, locator: hit.locator, title: ref.title, passage };
+        results.push(result);
+        if (passage.length < hit.text.length) windowed.add(result);
       }
       const listed = [...registered];
       const totals = listed.length
@@ -112,12 +117,27 @@ export function createSearchPassagesTool(
         );
         // A document that changed or went private since it was numbered is not expanded.
         if (whole && whole.revision === ref.revision) {
-          const seen = new Set(results.filter(r => r.n === n).map(r => r.locator));
+          const full = new Map(whole.units.map(unit => [unit.locator, unit.text]));
+          const mine = results.filter(r => r.n === n);
+          const seen = new Set(mine.map(r => r.locator));
           const rest = whole.units.filter(unit => !seen.has(unit.locator));
-          const chars = rest.reduce((sum, unit) => sum + unit.text.length, 0);
-          const tokens = rest.reduce((sum, unit) => sum + Math.ceil(unit.text.length / 4), 0);
+          // A ranked hit shown windowed is replaced by its whole unit, and that text is counted too.
+          const widened = mine.filter(r => windowed.has(r) && full.has(r.locator));
+          const extraChars = widened.reduce(
+            (sum, r) => sum + full.get(r.locator)!.length - r.passage.length,
+            0,
+          );
+          const extraTokens = widened.reduce(
+            (sum, r) =>
+              sum + Math.ceil(full.get(r.locator)!.length / 4) - Math.ceil(r.passage.length / 4),
+            0,
+          );
+          const chars = rest.reduce((sum, unit) => sum + unit.text.length, 0) + extraChars;
+          const tokens =
+            rest.reduce((sum, unit) => sum + Math.ceil(unit.text.length / 4), 0) + extraTokens;
           if (chars <= SHORT_DOCUMENT_CHARS && tokens <= opts.budget.remainingTokens) {
             opts.budget.remainingTokens -= tokens;
+            for (const r of widened) r.passage = full.get(r.locator)!;
             for (const unit of rest)
               results.push({ n, locator: unit.locator, title: ref.title, passage: unit.text });
             totals.set(`${ref.sourceKind}:${ref.sourceId}`, whole.units.length);

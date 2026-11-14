@@ -320,6 +320,51 @@ describe("createSearchPassagesTool", () => {
       expect(budget.remainingTokens).toBe(100_000 - 2 * 2 - 11 * 10);
     });
 
+    test("carries a windowed hit in full, charged to the limit and the budget", async () => {
+      const big = "x".repeat(9000);
+      const hit = { ...unitHit("a", 0), text: big };
+      const { run, read, budget } = setup([hit, unitHit("a", 1)], false, 100_000, { "vault:a": 3 });
+      read.mockResolvedValue({
+        revision: "rev",
+        units: [
+          { locator: "p.1", text: big, tokens: 2250 },
+          { locator: "p.2", text: "text a 1", tokens: 2 },
+          { locator: "p.3", text: "third", tokens: 2 },
+        ],
+        missing: [],
+      });
+      const out = await run("q");
+      expect(out.expanded).toBe(1);
+      expect(out.results.find(r => r.locator === "p.1")!.passage).toHaveLength(9000);
+      expect(out.results.filter(r => r.locator === "p.1")).toHaveLength(1);
+      expect(out.results.map(r => r.locator)).toEqual(["p.1", "p.2", "p.3"]);
+      // 9000 chars (2250 tokens) + 8 chars (2) for the hits, then 5 chars (2) for p.3.
+      expect(budget.remainingTokens).toBe(100_000 - 2250 - 2 - 2);
+    });
+
+    test("is not expanded when carrying a windowed hit in full goes over the limit", async () => {
+      const big = "x".repeat(24_000);
+      const third = "y".repeat(15_000);
+      const hit = { ...unitHit("a", 0), text: big };
+      const { run, read, budget } = setup([hit, unitHit("a", 1)], false, 100_000, { "vault:a": 3 });
+      read.mockResolvedValue({
+        revision: "rev",
+        units: [
+          { locator: "p.1", text: big, tokens: 6000 },
+          { locator: "p.2", text: "text a 1", tokens: 2 },
+          { locator: "p.3", text: third, tokens: 3750 },
+        ],
+        missing: [],
+      });
+      const before = await run("q");
+      expect(before.expanded).toBeNull();
+      const windowed = before.results.find(r => r.locator === "p.1")!.passage;
+      expect(windowed.length).toBeLessThan(24_000);
+      expect(windowed).toHaveLength(PASSAGE_CHARS);
+      expect(before.results).toHaveLength(2);
+      expect(budget.remainingTokens).toBe(100_000 - Math.ceil(PASSAGE_CHARS / 4) - 2);
+    });
+
     test("is not expanded on a single hit", async () => {
       const { run, read } = setup([unitHit("a", 0), unitHit("b", 0)], false, 100_000, thirteen);
       read.mockResolvedValue(wholeDocument("a", 13));
