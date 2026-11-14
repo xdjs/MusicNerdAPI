@@ -1,19 +1,7 @@
 import { embedMany } from "ai";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
-import {
-  EMBED_BATCH,
-  EMBED_BATCH_CHARS,
-  EMBED_INPUT_CHARS,
-  EMBEDDING_DIMENSIONS,
-} from "@/lib/units/types";
-
-/** The part of a text that is sent: at most `EMBED_INPUT_CHARS`, cut at whitespace when there is some in the last 200 characters. */
-function truncateForEmbedding(text: string): string {
-  if (text.length <= EMBED_INPUT_CHARS) return text;
-  const cut = text.slice(0, EMBED_INPUT_CHARS);
-  const space = cut.search(/\s\S*$/);
-  return space >= EMBED_INPUT_CHARS - 200 ? cut.slice(0, space) : cut;
-}
+import { truncateForEmbedding } from "@/lib/units/truncateForEmbedding";
+import { EMBED_BATCH, EMBED_BATCH_CHARS, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
 
 /**
  * Embeds unit texts through the AI Gateway, batches of at most `EMBED_BATCH` inputs and `EMBED_BATCH_CHARS` characters.

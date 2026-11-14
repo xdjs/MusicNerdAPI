@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
-import { EMBEDDING_DIMENSIONS } from "@/lib/units/types";
+import { EMBED_INPUT_CHARS, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
 
 vi.mock("ai", () => ({ embed: vi.fn() }));
 const { embed } = await import("ai");
@@ -26,5 +26,11 @@ describe("embedQuery", () => {
   test("throws when the vector has the wrong dimension", async () => {
     embedMock.mockResolvedValue({ embedding: [1, 2, 3] });
     await expect(embedQuery("x")).rejects.toThrow(/dimension/i);
+  });
+
+  test("cuts an oversized query to EMBED_INPUT_CHARS", async () => {
+    embedMock.mockResolvedValue({ embedding: new Array<number>(EMBEDDING_DIMENSIONS).fill(0) });
+    await embedQuery("q".repeat(EMBED_INPUT_CHARS + 500));
+    expect(embedMock.mock.calls[0][0].value).toHaveLength(EMBED_INPUT_CHARS);
   });
 });
