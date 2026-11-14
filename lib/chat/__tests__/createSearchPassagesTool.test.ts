@@ -7,26 +7,49 @@ import { unitHit } from "@/lib/units/__tests__/fixtures/unitHit";
 type Output = {
   results: { n: number; locator: string; title: string; passage: string }[];
   weak: boolean;
-  documents: { n: number; sourceKind: string; sourceId: string; revision: string }[];
+  documents: {
+    n: number;
+    sourceKind: string;
+    sourceId: string;
+    revision: string;
+    units: number;
+    shown: number;
+  }[];
 };
 
 const call = { toolCallId: "c", messages: [] } as never;
 
-const setup = (hits: UnitHit[], weak = false, remainingTokens = 100_000) => {
+const setup = (
+  hits: UnitHit[],
+  weak = false,
+  remainingTokens = 100_000,
+  totals: Record<string, number> = {},
+) => {
   let next = 0;
   const cite = vi.fn(() => ++next);
   const documents = createChatDocuments(cite);
   const search = vi.fn().mockResolvedValue({ hits, weak });
+  // Every hit document has 10 units unless the test says otherwise.
+  const count = vi.fn(
+    async (_artist: string, refs: { sourceKind: string; sourceId: string }[]) =>
+      new Map(
+        refs.map(ref => {
+          const key = `${ref.sourceKind}:${ref.sourceId}`;
+          return [key, totals[key] ?? 10] as const;
+        }),
+      ),
+  );
   const signal = new AbortController().signal;
   const budget = { remainingTokens };
   const tool = createSearchPassagesTool("artist-1", documents, {
     names: ["Dutchyyy"],
     signal,
     search,
+    count,
     budget,
   });
   const run = async (query: string) => (await tool.execute!({ query }, call)) as Output;
-  return { cite, documents, search, signal, run, budget };
+  return { cite, documents, search, count, signal, run, budget };
 };
 
 describe("createSearchPassagesTool", () => {
@@ -59,6 +82,8 @@ describe("createSearchPassagesTool", () => {
           revision: "rev",
           title: "Doc a",
           url: "https://example.com/a",
+          units: 10,
+          shown: 2,
         },
         {
           n: 2,
@@ -67,6 +92,8 @@ describe("createSearchPassagesTool", () => {
           revision: "rev",
           title: "Untitled",
           url: null,
+          units: 10,
+          shown: 1,
         },
       ],
     });
@@ -81,6 +108,46 @@ describe("createSearchPassagesTool", () => {
     const again = await run("tour");
     expect(cite).toHaveBeenCalledTimes(2);
     expect(again.documents.map(d => d.n)).toEqual([1, 2]);
+  });
+
+  test("counts every listed document's units in one call and reports how many were shown", async () => {
+    const { run, count } = setup(
+      [unitHit("a", 0), unitHit("b", 0), unitHit("a", 4), unitHit("a", 7)],
+      false,
+      100_000,
+      { "vault:a": 13, "vault:b": 1 },
+    );
+    const out = await run("every alias");
+    expect(count).toHaveBeenCalledOnce();
+    expect(count).toHaveBeenCalledWith("artist-1", [
+      { sourceKind: "vault", sourceId: "a" },
+      { sourceKind: "vault", sourceId: "b" },
+    ]);
+    expect(out.documents.map(d => [d.n, d.units, d.shown])).toEqual([
+      [1, 13, 3],
+      [2, 1, 1],
+    ]);
+  });
+
+  test("falls back to the shown count for a document the count no longer finds", async () => {
+    const { run, count } = setup([unitHit("a", 0), unitHit("a", 1)]);
+    count.mockResolvedValueOnce(new Map());
+    const out = await run("q");
+    expect(out.documents.map(d => [d.units, d.shown])).toEqual([[2, 2]]);
+  });
+
+  test("counts nothing when nothing was returned", async () => {
+    const { run, count } = setup([]);
+    await run("q");
+    expect(count).not.toHaveBeenCalled();
+  });
+
+  test("tells the model each document lists its units shown out of its total", () => {
+    const { description } = createSearchPassagesTool("artist-1", createChatDocuments(vi.fn()), {
+      names: [],
+      budget: { remainingTokens: 1 },
+    });
+    expect(description).toMatch(/each document lists how many of its units were shown/i);
   });
 
   test("searchPassages reports weak results", async () => {
@@ -165,7 +232,7 @@ describe("createSearchPassagesTool", () => {
     );
     const out = await run("q");
     expect(out.results.map(r => r.n)).toEqual([1]);
-    expect(out.documents.map(d => d.n)).toEqual([1]);
+    expect(out.documents.map(d => [d.n, d.shown])).toEqual([[1, 1]]);
     expect((out as Output & { truncated: boolean }).truncated).toBe(true);
     expect(budget.remainingTokens).toBe(50);
     expect(cite).toHaveBeenCalledTimes(1);

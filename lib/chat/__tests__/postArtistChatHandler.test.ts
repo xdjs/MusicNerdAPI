@@ -48,6 +48,7 @@ const u = vi.hoisted(() => ({
   list: vi.fn(),
   findCurrent: vi.fn(),
   assertDocs: vi.fn(),
+  count: vi.fn(),
 }));
 vi.mock("@/lib/questionResearch/loadPublicLatestResearchOriginals", () => ({
   loadPublicLatestResearchOriginals: u.latest,
@@ -57,6 +58,7 @@ vi.mock("@/lib/units/readUnits", () => ({ readUnits: u.read }));
 vi.mock("@/lib/units/listArtistDocuments", () => ({ listArtistDocuments: u.list }));
 vi.mock("@/lib/units/findCurrentDocuments", () => ({ findCurrentDocuments: u.findCurrent }));
 vi.mock("@/lib/units/assertDocumentsCurrent", () => ({ assertDocumentsCurrent: u.assertDocs }));
+vi.mock("@/lib/units/countDocumentUnits", () => ({ countDocumentUnits: u.count }));
 const { postArtistChatHandler } = await import("@/lib/chat/postArtistChatHandler");
 
 const artistId = "11111111-1111-4111-8111-111111111111";
@@ -566,6 +568,7 @@ describe("with CHAT_RETRIEVAL=units", () => {
     u.list.mockResolvedValue([]);
     u.findCurrent.mockResolvedValue(new Set());
     u.assertDocs.mockResolvedValue(undefined);
+    u.count.mockResolvedValue(new Map());
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -601,6 +604,12 @@ describe("with CHAT_RETRIEVAL=units", () => {
     const earlier = doc(2, "https://a.example/doc");
     const fresh = doc(3, "https://c.example/doc");
     u.findCurrent.mockResolvedValue(new Set([key(earlierNoUrl), key(earlier)]));
+    u.count.mockResolvedValue(
+      new Map([
+        [`vault:${uuid(2)}`, 13],
+        [`vault:${uuid(3)}`, 1],
+      ]),
+    );
     u.search.mockResolvedValue({
       hits: [hit(earlier, "p.2", "Dutchy was the alias."), hit(fresh, "p.1", "Night Label.")],
       weak: false,
@@ -648,6 +657,22 @@ describe("with CHAT_RETRIEVAL=units", () => {
     ]);
     const output = chunks.find(c => c.type === "tool-output-available").output;
     expect(output.results.map((r: { n: number }) => r.n)).toEqual([2, 3]);
+    // Each listed document says how many of its units the search showed, out of its total.
+    expect(
+      output.documents.map((d: { n: number; units: number; shown: number }) => [
+        d.n,
+        d.units,
+        d.shown,
+      ]),
+    ).toEqual([
+      [2, 13, 1],
+      [3, 1, 1],
+    ]);
+    expect(u.count).toHaveBeenCalledOnce();
+    expect(u.count).toHaveBeenCalledWith(artistId, [
+      { sourceKind: "vault", sourceId: uuid(2) },
+      { sourceKind: "vault", sourceId: uuid(3) },
+    ]);
     expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
       names: ["Dutchyyy"],
       signal: expect.any(AbortSignal),

@@ -81,13 +81,14 @@ describe("units mode", () => {
     expect(text).not.toMatch(/searchPdfSources|readPdfSource|readNamedPdf/);
   });
 
-  it("states the tool rules in order: search, read, list, cite, firsts, weak, abstain, latest", () => {
+  it("states the tool rules in order: search, read, list, every item, cite, firsts, weak, abstain, latest", () => {
     const rules = [
       /start every question with searchPassages/i,
       /readUnits only when a claim needs more than the passage/i,
       /omit locators to read a whole short document/i,
       /listDocuments for questions about every or all/i,
       /before saying something is absent/i,
+      /asks for every item of a kind/i,
       /\[n, p\.N\]/,
       /\[n, §Heading\] or \[n, ¶N\]/,
       /first, earliest or when/i,
@@ -97,6 +98,16 @@ describe("units mode", () => {
     ].map(rule => text.search(rule));
     expect(rules.every(at => at >= 0)).toBe(true);
     expect([...rules].sort((a, b) => a - b)).toEqual(rules);
+  });
+
+  it("reads a whole partly shown document of 40 units or fewer when every item of a kind is asked for", () => {
+    expect(text).toMatch(
+      /when a question asks for every item of a kind \(all names, all aliases, all releases, all years, a full list or timeline\) and a document shows only part of its units/i,
+    );
+    expect(text).toMatch(
+      /read that whole document with readUnits \(omit locators\) before answering/i,
+    );
+    expect(text).toMatch(/as long as it has 40 units or fewer; cite the pages you used/i);
   });
 
   it("takes citation numbers only from the tools, including numbers from earlier turns", () => {

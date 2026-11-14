@@ -22,7 +22,9 @@ const pdfReadPart = z.object({
 const isPdfRead = (part: { type: string }) =>
   part.type === "tool-readPdfSource" || part.type === "tool-readNamedPdf";
 
-/** A document a search numbered, as the tool output names it: enough to check it and to number it again. */
+/** A document a search numbered, as the tool output names it: enough to check it and to number it
+ * again. Other fields of the output's entry (`units`, `shown`) are not needed for replay: they may be
+ * present or not, and are dropped. */
 const documentRef = z.object({
   n: z.number().int().min(1).max(MAX_DOCUMENT_N),
   sourceKind: z.enum(["vault", "social", "evidence"]),
