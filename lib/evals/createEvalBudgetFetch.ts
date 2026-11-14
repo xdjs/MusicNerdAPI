@@ -62,15 +62,32 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   let paidRequests = 0;
   let blocked = false;
   let stopReason: string | undefined;
+  let blockedBy: string | undefined;
+  // Short fixed label of the request being judged; never a URL query, body or header value.
+  let kind = "unknown";
   const fail = (reason: string): never => {
     blocked = true;
-    stopReason ??= reason;
+    if (stopReason === undefined) {
+      stopReason = reason;
+      blockedBy = kind;
+      console.error(`[eval-budget] blocked: ${reason} (${kind})`);
+    }
     throw new Error(`Eval budget guard: ${reason}`);
   };
   const guarded: typeof fetch = async (input, init) => {
     const url = new URL(
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
     );
+    kind =
+      url.hostname === "ai-gateway.vercel.sh"
+        ? url.pathname.endsWith("/language-model")
+          ? "language-model"
+          : url.pathname.endsWith("/embedding-model")
+            ? "embedding-model"
+            : "other-gateway"
+        : url.hostname === "api.tavily.com"
+          ? "tavily"
+          : `host:${url.hostname}`;
     if (url.protocol !== "https:") return fail("HTTPS required");
     // Logging is not model execution. Other Braintrust endpoints are not allowed here.
     if (
@@ -178,6 +195,12 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   };
   return {
     fetch: guarded,
-    snapshot: () => ({ reservedUsd: reservedMicros / 1000000, paidRequests, blocked, stopReason }),
+    snapshot: () => ({
+      reservedUsd: reservedMicros / 1000000,
+      paidRequests,
+      blocked,
+      stopReason,
+      blockedBy,
+    }),
   };
 }

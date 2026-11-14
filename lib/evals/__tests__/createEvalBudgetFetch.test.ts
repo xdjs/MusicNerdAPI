@@ -290,4 +290,68 @@ describe("createEvalBudgetFetch", () => {
       guard.fetch("https://project.supabase.co/rest/v1/artists", { method: "GET" }),
     ).rejects.toThrow();
   });
+  describe("says why it stopped", () => {
+    const secretUrl = `${gateway}?secret=1`;
+    const secretInit = { ...request("unlisted/model", "secret text") };
+    const spy = () => vi.spyOn(console, "error").mockImplementation(() => {});
+
+    it("logs one line with the reason and request kind on the first refusal only", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow("unpriced model");
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] blocked: unpriced model (language-model)",
+        );
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow("run already stopped");
+        expect(logged).toHaveBeenCalledTimes(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("carries blockedBy in the snapshot", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        expect(guard.snapshot().blockedBy).toBeUndefined();
+        await expect(guard.fetch("https://example.com/x?secret=1", secretInit)).rejects.toThrow();
+        expect(guard.snapshot()).toMatchObject({
+          stopReason: "unapproved network destination",
+          blockedBy: "host:example.com",
+        });
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it.each([
+      ["https://ai-gateway.vercel.sh/v4/ai/embedding-model", "embedding-model"],
+      ["https://ai-gateway.vercel.sh/v4/ai/image-model", "other-gateway"],
+      ["https://api.tavily.com/search", "tavily"],
+    ])("labels %s as %s", async (url, kind) => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(url, { method: "GET" })).rejects.toThrow();
+        expect(guard.snapshot().blockedBy).toBe(kind);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("never logs a URL query string or body text", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow();
+        const line = String(logged.mock.calls[0]?.[0]);
+        expect(line).not.toContain("secret");
+        expect(line).not.toContain("?");
+      } finally {
+        logged.mockRestore();
+      }
+    });
+  });
 });

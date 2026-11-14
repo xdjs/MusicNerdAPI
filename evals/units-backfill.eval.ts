@@ -37,6 +37,11 @@ Eval("music-nerd", {
       console.log(
         `[units-backfill] ${input.artistId} sources=${sources} ingested=${ingested} failed=${failed} noText=${noText} embeddedFalse=${embeddedFalse} stale=${stale} unitsWritten=${unitsWritten} reasons=${JSON.stringify(reasons)}`,
       );
+      const snap = budget.snapshot();
+      if (snap.blocked)
+        console.log(
+          `[units-backfill] budget blocked: ${snap.stopReason} (${snap.blockedBy}) requests=${snap.paidRequests}`,
+        );
       return result;
     } catch (error) {
       console.error(`[units-backfill] ${input.artistId}: ${describeEvalError(error)}`);
