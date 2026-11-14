@@ -15,7 +15,14 @@ describe("judgeAnswer", () => {
       answerable: false,
       answer: "  ",
     });
-    expect(verdict).toEqual({ relevance: 0, groundedness: 0, reason: "The answer is empty." });
+    expect(verdict).toEqual({
+      relevance: 0,
+      groundedness: 0,
+      reason: "The answer is empty.",
+      issues: [],
+      unsupportedCitations: [],
+      missingRequired: 0,
+    });
     expect(generateObject).not.toHaveBeenCalled();
   });
 

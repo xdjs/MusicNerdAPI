@@ -6,6 +6,7 @@ import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { chatReporter } from "@/lib/evals/chatReporter";
 import { experimentName } from "@/lib/evals/experimentName";
+import { formatJudgeIssues } from "@/lib/evals/formatJudgeIssues";
 import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
 import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
@@ -52,7 +53,7 @@ Eval(
       model: MODEL_CHAT,
       sha: SHA,
       retrieval: getChatRetrievalMode(),
-      rubric: "cited-evidence-v3",
+      rubric: "cited-evidence-v4",
       judgeModel: MODEL_JUDGE,
       budgetUsd: 10,
       priorReservedUsd: 0.104224,
@@ -179,7 +180,18 @@ Eval(
           answerable: expected.answerable,
           turn: output,
         });
-        const metadata = { reason: result.verdict?.reason ?? result.unscoredReason };
+        // Enum values and integers only: the reason is never printed (the repository is public).
+        if (result.verdict) console.log(`[chat] ${input.key} ${formatJudgeIssues(result.verdict)}`);
+        const metadata = {
+          reason: result.verdict?.reason ?? result.unscoredReason,
+          ...(result.verdict
+            ? {
+                issues: result.verdict.issues,
+                unsupportedCitations: result.verdict.unsupportedCitations,
+                missingRequired: result.verdict.missingRequired,
+              }
+            : {}),
+        };
         return [
           { name: "evidence_scorable", score: result.verdict ? 1 : 0, metadata },
           { name: "answer_relevance", score: result.verdict?.relevance ?? null, metadata },

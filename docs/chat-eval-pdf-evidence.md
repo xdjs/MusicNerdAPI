@@ -62,6 +62,8 @@ Before this change the suite recorded six scores per case and nothing could fail
 | total_time                   | 1 on every row (each answer within 20 s)                  |
 | errors                       | no row may end in an error                                |
 
+The judge also reports `issues` from a closed list, `unsupportedCitations` and `missingRequired`; the suite prints them per row as `[chat] <key> judge: issues=[...] unsupported=[...] missing=<n>` (enum values and integers only, never the judge's reason) and keeps them in the Braintrust score metadata.
+
 The `first_text` score (text within five seconds) was removed on 2026-11-14: Pete decided it is not a requirement, since answers that read or research take longer. The time to first text is still printed per row. Instead there must be activity while the chat reads and the average answer time must be known and acceptable (Pete, 2026-11-14): `first_signal`, the status line within five seconds, is gated on every row that did not end in an error, and the mean answer time over questions is gated at 8 s (`MEAN_TOTAL_BUDGET_MS`; measured mean 5.5 s over 75 rows on 2026-11-14), with rows that ended in an error left out since they already fail. The reporter prints `answer time: mean, median, slowest` over the same per-question times after the means line.
 
 The `mentions` score (`lib/evals/scoreMentions.ts`) is reported, not gated: for cases that list `mentions` in `chatCases.ts`, it is the share of those terms (taken from the public reference answers) that the answer names as whole words after normalising case, accents and punctuation, and the log prints one `mentions=<matched>/<total> missing=[...]` line per case with our own terms, never answer text.
