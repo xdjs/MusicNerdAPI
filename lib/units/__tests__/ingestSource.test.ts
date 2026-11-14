@@ -157,7 +157,9 @@ describe("ingestSource", () => {
     await ingestSource(REF);
 
     const message = warn.mock.calls[0].join(" ");
-    expect(message).toContain("AI_RetryError maxRetriesExceeded 429");
+    expect(message).toContain(
+      "AI_RetryError maxRetriesExceeded attempts=1 last=AI_APICallError status=429",
+    );
     expect(message).not.toContain("secret page text");
   });
 
