@@ -31,12 +31,20 @@ describe("mergeParentEvidence", () => {
     expect(mergeParentEvidence(t, p)).toEqual(t);
   });
 
-  it("adds the parent's rows and source for a number cited only from the parent", () => {
-    const t = turn("A [2].", [src(1, "u1")], [ev(1, "u1")]);
+  it("adds the parent's rows for a number the follow-up re-sent with the same URL, never a source", () => {
+    const t = turn("A [1][2].", [src(1, "u1"), src(2, "u2")], [ev(1, "u1")]);
     const p = turn("", [src(2, "u2")], [ev(2, "u2"), ev(2, "u2", "second"), ev(3, "u3")]);
     const merged = mergeParentEvidence(t, p);
     expect(merged.sources).toEqual([src(1, "u1"), src(2, "u2")]);
     expect(merged.evidence).toEqual([ev(1, "u1"), ev(2, "u2"), ev(2, "u2", "second")]);
+  });
+
+  it("leaves a number the follow-up has no source for missing, and adds no source", () => {
+    const t = turn("A [1][2].", [src(1, "u1")], [ev(1, "u1")]);
+    const p = turn("", [src(2, "u2")], [ev(2, "u2")]);
+    const merged = mergeParentEvidence(t, p);
+    expect(merged.sources).toEqual([src(1, "u1")]);
+    expect(merged.evidence).toEqual([ev(1, "u1")]);
   });
 
   it("keeps the follow-up's own source and adds only missing evidence", () => {
