@@ -541,3 +541,57 @@ it("keeps an answer whose fifth search hit the cap, with the documents of the se
     });
   }
 });
+
+const answerWith = (parts: unknown[]) =>
+  validateArtistChatBody(
+    post({
+      messages: [user("q1", "1"), { id: "2", role: "assistant", parts }, user("q2", "3")],
+    }),
+  );
+const toolParts = (count: number) => Array.from({ length: count }, () => search([doc(1), doc(2)]));
+
+it("ignores parts the API never reads before the part limit applies", async () => {
+  const sources = Array.from({ length: 100 }, (_, i) => ({
+    type: "source-url",
+    sourceId: String(i),
+    url: `https://a.example/${i}`,
+  }));
+  const reasoning = { type: "reasoning", text: "thinking" };
+  const rest = [{ type: "step-start" }, ...toolParts(3), { type: "text", text: "Dutchy [1]." }];
+  const withSources = await answerWith([...sources, reasoning, ...rest]);
+  const without = await answerWith(rest);
+  expect(withSources).not.toBeInstanceOf(NextResponse);
+  expect(withSources).toEqual(without);
+  expect(JSON.stringify(withSources)).toContain("Dutchy");
+  expect(JSON.stringify(withSources)).toContain('"documents"');
+});
+
+it("still rejects more than 64 readable parts, and more than 512 raw parts", async () => {
+  expect(await answerWith(toolParts(65))).toBeInstanceOf(NextResponse);
+  expect(await answerWith(toolParts(64))).not.toBeInstanceOf(NextResponse);
+  const sources = (count: number) =>
+    Array.from({ length: count }, () => ({ type: "source-url", url: "https://a.example" }));
+  const text = [{ type: "text", text: "x" }];
+  expect(await answerWith([...sources(511), ...text])).not.toBeInstanceOf(NextResponse);
+  expect(await answerWith([...sources(512), ...text])).toBeInstanceOf(NextResponse);
+});
+
+it("accepts a slimmed passage-tool output and gives the same documents as the full one", async () => {
+  const slim = (output: unknown) => ({
+    type: "tool-searchPassages",
+    toolCallId: "s",
+    state: "output-available",
+    output,
+  });
+  const text = { type: "text", text: "Dutchy [1]." };
+  const full = await answerWith([search([doc(1), doc(2)]), text]);
+  const slimmed = await answerWith([slim({ documents: [doc(1), doc(2)] }), text]);
+  expect(slimmed).not.toBeInstanceOf(NextResponse);
+  expect(slimmed).toEqual(full);
+  const refused = await answerWith([
+    slim({ error: "Search limit reached", results: [], documents: [] }),
+    search([doc(1), doc(2)]),
+    text,
+  ]);
+  expect(refused).toEqual(full);
+});

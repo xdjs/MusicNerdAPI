@@ -4,8 +4,12 @@ import { MAX_CHAT_PDF_READS } from "@/lib/chatPdf/types";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 const MAX_MESSAGES = 12;
-/** Parts per message: an answer is a few tool steps, their sources and text; this bounds the work on a hostile body. */
+/** Readable parts per message (text and tool parts): an answer is a few tool steps and its text; this bounds the work on a hostile body. */
 const MAX_PARTS = 64;
+/** Raw parts per message, before unread ones (`source-url`, `step-start`, `reasoning`, ...) are discarded. */
+const MAX_RAW_PARTS = 512;
+/** The API only reads text and tool parts; every other part is dropped before any limit applies. */
+const isReadPart = ({ type }: { type: string }) => type === "text" || type.startsWith("tool-");
 /** Documents one answer may carry: six steps of eight search hits, each document once. */
 const MAX_DOCUMENTS = 48;
 /** The highest document number a long conversation can reach. */
@@ -82,7 +86,13 @@ const message = z
     id: z.string(),
     role: z.enum(["user", "assistant"]),
     // Tool, source and step parts are the client's record of earlier turns; only their text is context.
-    parts: z.array(z.looseObject({ type: z.string() })).max(MAX_PARTS),
+    // The API re-sends a source-url part for every earlier document, so parts it never reads are
+    // discarded first and the limit counts what remains.
+    parts: z
+      .array(z.looseObject({ type: z.string() }))
+      .max(MAX_RAW_PARTS)
+      .transform(parts => parts.filter(isReadPart))
+      .pipe(z.array(z.looseObject({ type: z.string() })).max(MAX_PARTS)),
   })
   .transform(({ id, role, parts }) => {
     const reads = parts.filter(isPdfRead).map(part => pdfReadPart.safeParse(part));
