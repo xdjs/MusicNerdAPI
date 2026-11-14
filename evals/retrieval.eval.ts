@@ -5,6 +5,7 @@ import { RETRIEVAL_CASES, type RetrievalFact } from "@/lib/evals/retrievalCases"
 import { describeEvalError } from "@/lib/evals/describeEvalError";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
+import { formatSearchSignals } from "@/lib/evals/formatSearchSignals";
 import { scoreRetrievalFacts, type FactResult } from "@/lib/evals/scoreRetrievalFacts";
 import { getSearchTuning } from "@/lib/units/getSearchTuning";
 import { searchUnits } from "@/lib/units/searchUnits";
@@ -20,7 +21,8 @@ import type { UnitSourceKind } from "@/lib/units/types";
  * Unit text is never logged or returned: output is source ids, locators, titles, public URLs
  * and scores. With `RETRIEVAL_LABEL=1` (workflow input `label`) each hit is also printed to
  * stderr as one line, so the labeller can open the public document and write the facts into
- * `lib/evals/retrievalLabels.ts`.
+ * `lib/evals/retrievalLabels.ts`, followed by one `signals` line per case (text matched, best
+ * vector score, weak) so the `weak` flag can be checked.
  *
  * Ranking variants are compared without code edits through `UNITS_MAX_PER_DOCUMENT`,
  * `UNITS_TEXT_MODE` and `UNITS_CANDIDATES` (workflow inputs `units_*`, see
@@ -102,15 +104,17 @@ Eval(
       if (budget.snapshot().blocked)
         return failed(input, `Not attempted: ${budget.snapshot().stopReason}`);
       try {
-        const { hits, weak } = await searchUnits(input.artistId, input.question, {
+        const { hits, weak, signals } = await searchUnits(input.artistId, input.question, {
           names: [input.artistName],
         });
-        if (LABEL)
+        if (LABEL) {
           hits.forEach((h, i) =>
             console.error(
               `label ${input.key} #${i + 1} ${h.sourceKind} ${h.sourceId} ${h.locator} ${h.title ?? "-"} ${h.url ?? "-"}`,
             ),
           );
+          console.error(formatSearchSignals(input.key, { weak, signals }));
+        }
         console.log(`[retrieval] ${input.key} hits=${hits.length} weak=${weak}`);
         const units = hits.map(h => ({
           sourceKind: h.sourceKind,

@@ -20,7 +20,9 @@ import { SEARCH_LIMIT, WEAK_COSINE_DISTANCE, type UnitHit } from "@/lib/units/ty
  * @param opts.names - The artist's names, display name first (see `expandSearchQueries`).
  * @param opts.signal - Aborts the embedding call; an aborted search throws instead of degrading.
  * @param opts.deps - Replaces the collaborators (and the environment's tuning) in tests.
- * @returns The hits and `weak`: no text match anywhere and no vector closer than `WEAK_COSINE_DISTANCE`.
+ * @returns The hits; `weak`: no text match anywhere and no vector closer than `WEAK_COSINE_DISTANCE`;
+ * and `signals`, the two inputs of `weak`: whether any text list matched, and the best vector score
+ * (`1 - cosine distance`, null when no vector hit came back).
  */
 export async function searchUnits(
   artistId: string,
@@ -35,7 +37,11 @@ export async function searchUnits(
       tuning?: SearchTuning;
     };
   },
-): Promise<{ hits: UnitHit[]; weak: boolean }> {
+): Promise<{
+  hits: UnitHit[];
+  weak: boolean;
+  signals: { textMatched: boolean; bestVectorScore: number | null };
+}> {
   const byText = opts.deps?.byText ?? searchUnitsByText;
   const byVector = opts.deps?.byVector ?? searchUnitsByVector;
   const embed = opts.deps?.embed ?? embedQuery;
@@ -73,7 +79,8 @@ export async function searchUnits(
   }
 
   const textMatched = textLists.some(list => list.length > 0);
-  const bestVector = Math.max(-Infinity, ...vectorList.map(hit => hit.score));
-  const weak = !textMatched && !(bestVector >= 1 - WEAK_COSINE_DISTANCE);
-  return { hits, weak };
+  const bestVectorScore = vectorList.length ? Math.max(...vectorList.map(hit => hit.score)) : null;
+  const weak =
+    !textMatched && !(bestVectorScore !== null && bestVectorScore >= 1 - WEAK_COSINE_DISTANCE);
+  return { hits, weak, signals: { textMatched, bestVectorScore } };
 }

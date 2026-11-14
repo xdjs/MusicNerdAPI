@@ -98,6 +98,7 @@ describe("searchUnits", () => {
     expect(await searchUnits(artist, "q", { names: [], deps: deps({}) })).toEqual({
       hits: [],
       weak: true,
+      signals: { textMatched: false, bestVectorScore: null },
     });
   });
 
@@ -129,5 +130,23 @@ describe("searchUnits", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  test("reports the signals behind weak: any text match and the best vector score", async () => {
+    const d = deps({ vector: [hit("a", 0, 0.31), hit("b", 0, 0.42)] });
+    expect(await searchUnits(artist, "q", { names: [], deps: d })).toMatchObject({
+      weak: !(0.42 >= 1 - WEAK_COSINE_DISTANCE),
+      signals: { textMatched: false, bestVectorScore: 0.42 },
+    });
+    d.byText.mockResolvedValueOnce([hit("t", 0, 0.3)]);
+    expect((await searchUnits(artist, "q", { names: [], deps: d })).signals).toEqual({
+      textMatched: true,
+      bestVectorScore: 0.42,
+    });
+    const textOnly = deps({ embedError: new Error("down") });
+    expect((await searchUnits(artist, "q", { names: [], deps: textOnly })).signals).toEqual({
+      textMatched: false,
+      bestVectorScore: null,
+    });
   });
 });
