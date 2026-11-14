@@ -43,8 +43,7 @@ const rows = () =>
 
 beforeAll(async () => {
   await client.exec(`
-    create schema extensions;
-    create domain extensions.vector as text;
+    create domain public.vector as text;
     create table artist_vault_sources(id uuid primary key);
     create table artist_social_posts(id uuid primary key);
     create table artist_research_evidence(id uuid primary key);
