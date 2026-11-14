@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import { EMBEDDING_DIMENSIONS, type UnitDraft, type UnitSourceKind } from "@/lib/units/types";
 import { assertLocalTestUrl } from "./fixtures/assertLocalTestUrl";
+import { closeScratchDatabase } from "./fixtures/closeScratchDatabase";
 
 const shared = vi.hoisted(() => ({ database: null as unknown }));
 vi.mock("@/lib/db/db", () => ({
@@ -105,11 +106,8 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
     for (const statement of sourceUnitsDdl()) await client.unsafe(statement);
   }, 60000);
 
-  afterAll(async () => {
-    await client?.end({ timeout: 5 });
-    if (admin && scratch) await admin.unsafe(`drop database if exists ${scratch} with (force)`);
-    await admin?.end({ timeout: 5 });
-  }, 60000);
+  // The scratch database is dropped even if closing the test client fails.
+  afterAll(() => closeScratchDatabase({ client, admin, scratch }), 60000);
 
   beforeEach(async () => {
     await client.unsafe(`
