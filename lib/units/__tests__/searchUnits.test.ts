@@ -47,8 +47,8 @@ describe("searchUnits", () => {
     expect(d.embed).toHaveBeenCalledOnce();
     expect(d.embed.mock.calls[0]).toEqual(["first tour", { signal: undefined }]);
     expect(d.byText.mock.calls).toEqual([
-      [artist, "first tour", SEARCH_CANDIDATES, "and"],
-      [artist, "first tour Mike Dean", SEARCH_CANDIDATES, "and"],
+      [artist, "first tour", SEARCH_CANDIDATES, "or"],
+      [artist, "first tour Mike Dean", SEARCH_CANDIDATES, "or"],
     ]);
     expect(d.byVector).toHaveBeenCalledWith(artist, vector, SEARCH_CANDIDATES);
   });

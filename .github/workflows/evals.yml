@@ -39,7 +39,7 @@ on:
         type: string
         default: ""
       units_text_mode:
-        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps and"
+        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps or"
         type: string
         default: ""
       units_candidates:
