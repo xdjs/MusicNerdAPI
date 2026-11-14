@@ -133,7 +133,7 @@ describe("runUnitSync", () => {
     expect(mock.txExecute).toHaveBeenCalledTimes(2);
     const [first, second] = mock.txExecute.mock.calls.map(c => c[0]);
     expect(sqlOf(first)).toMatch(
-      /update source_units set embedding = \$::extensions.vector where id = \$/,
+      /update source_units set embedding = \$::public.vector where id = \$/,
     );
     expect(first.queryChunks).toEqual(expect.arrayContaining(["[0.1,0.2]", "u1"]));
     expect(second.queryChunks).toEqual(expect.arrayContaining(["[0.3,0.4]", "u2"]));

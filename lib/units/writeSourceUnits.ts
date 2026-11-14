@@ -41,8 +41,9 @@ export async function writeSourceUnits(
   for (let start = 0; start < units.length; start += INSERT_BATCH) {
     const values = units.slice(start, start + INSERT_BATCH).map((unit, offset) => {
       const embedding = embeddings?.[start + offset];
+      // public, not extensions: the app role has no USAGE on the extensions schema.
       const vector = embedding?.length
-        ? sql`${JSON.stringify(embedding)}::extensions.vector`
+        ? sql`${JSON.stringify(embedding)}::public.vector`
         : sql`null`;
       return sql`(${sourceKind}, ${sourceId}::uuid, ${artistId}::uuid, ${sourceRevision}, ${unit.unitIndex}, ${unit.locator}, ${title}, ${url}, ${unit.text}, ${unit.textHash}, ${unit.tokens}, ${unit.ocr}, ${UNIT_INGEST_VERSION}, ${vector})`;
     });

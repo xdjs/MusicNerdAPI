@@ -189,7 +189,7 @@ async function syncSource(
   await db.transaction(async tx => {
     for (const [i, u] of units.entries())
       await tx.execute(
-        sql`update source_units set embedding = ${JSON.stringify(embeddings[i])}::extensions.vector where id = ${u.id}::uuid`,
+        sql`update source_units set embedding = ${JSON.stringify(embeddings[i])}::public.vector where id = ${u.id}::uuid`,
       );
   });
   return "ok";
