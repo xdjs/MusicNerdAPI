@@ -706,12 +706,12 @@ describe("with CHAT_RETRIEVAL=units", () => {
     expect(chunks.some(c => c.type === "text-delta")).toBe(false);
   });
 
-  it("shares one 12,000-token read budget across the answer's reads", async () => {
+  it("shares one 16,000-token read budget across the answer's reads", async () => {
     const d = doc(1, "https://a.example/doc");
     u.search.mockResolvedValue({ hits: [hit(d, "p.1", "Text")], weak: false });
     u.read.mockResolvedValue({
       revision: d.revision,
-      units: [{ locator: "p.1", text: "Page one.", tokens: 7000 }],
+      units: [{ locator: "p.1", text: "Page one.", tokens: 9000 }],
       missing: [],
     });
     m.model = new MockLanguageModelV4({

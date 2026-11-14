@@ -181,6 +181,14 @@ describe("createSearchPassagesTool", () => {
     expect(last.passage).toBe(end.slice(-PASSAGE_CHARS));
   });
 
+  test("returns a 2,000-character unit whole, whatever the query matches", async () => {
+    const page = `${"a".repeat(900)} Night Label ${"b".repeat(1087)}`;
+    expect(page).toHaveLength(2000);
+    const { run } = setup([{ ...unitHit("a", 0), text: page }]);
+    const [{ passage }] = (await run("night label")).results;
+    expect(passage).toBe(page);
+  });
+
   test("starts at the beginning when no query term appears, and keeps short text whole", async () => {
     const long = "y".repeat(5000);
     const { run } = setup([

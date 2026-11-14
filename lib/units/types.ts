@@ -80,6 +80,8 @@ export const SEARCH_CANDIDATES = 20;
 export const SEARCH_LIMIT = 8;
 export const MAX_UNITS_PER_DOCUMENT = 3;
 export const RRF_K = 60;
-export const PASSAGE_CHARS = 1200;
-export const READ_UNITS_TOKEN_BUDGET = 12000;
+// Staging 2026-11-14: PDF page units average ~1,990 chars (584 to 3,204); 1,200 showed ~60% of a page and PDF answers scored lowest on groundedness.
+export const PASSAGE_CHARS = 2400;
+// Staging 2026-11-14: an "every item" answer reads a 13-unit document (~6,500 tokens) after an 8-result search.
+export const READ_UNITS_TOKEN_BUDGET = 16000;
 export const WEAK_COSINE_DISTANCE = 0.6;
