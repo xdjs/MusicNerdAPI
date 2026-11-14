@@ -1,7 +1,7 @@
 /** One scored retrieval row as the gates read it. */
 export type RetrievalGateRow = {
   key: string;
-  /** The case has expected units; only labelled cases gate. */
+  /** The case has facts; only labelled cases gate. */
   labelled: boolean;
   /** Set when the search ended in an error. */
   error?: string;
@@ -29,7 +29,7 @@ export function checkRetrievalGates(rows: RetrievalGateRow[]): string[] {
   for (const r of labelled) {
     if (r.error) failures.push(`${r.key}: ended in an error (${r.error}).`);
     if (!r.scores.reciprocal_rank)
-      failures.push(`${r.key}: no expected unit in the top ${RETRIEVAL_GATES.maxRank} results.`);
+      failures.push(`${r.key}: no labelled fact in the top ${RETRIEVAL_GATES.maxRank} results.`);
   }
   const mean = labelled.reduce((sum, r) => sum + (r.scores.recall_at_8 ?? 0), 0) / labelled.length;
   if (mean < RETRIEVAL_GATES.meanRecall)

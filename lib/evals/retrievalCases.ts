@@ -1,8 +1,7 @@
 import { CHAT_CASES } from "@/lib/evals/chatCases";
-import type { UnitSourceKind } from "@/lib/units/types";
+import { RETRIEVAL_LABELS, type RetrievalFact } from "@/lib/evals/retrievalLabels";
 
-/** One unit a good search returns: a source and the page (or chunk) locator within it. */
-export type ExpectedUnit = { sourceKind: UnitSourceKind; sourceId: string; locator: string };
+export type { ExpectedUnit, RetrievalFact } from "@/lib/evals/retrievalLabels";
 
 /** One retrieval-suite question: the chat suite's, with the units a search should surface. */
 export type RetrievalCase = {
@@ -14,17 +13,17 @@ export type RetrievalCase = {
   /** False when the stored sources cannot answer it: the right search is weak and returns nothing worth reading. */
   answerable: boolean;
   /**
-   * Units that answer the question; empty until labelled (the suite still runs and scores 0
-   * recall there, and unlabelled cases never gate). Source ids are UUIDs, not secrets.
+   * The facts that answer the question, each found when any one of its units is retrieved
+   * (`retrievalLabels.ts`). Empty for the unanswerable case, which never gates.
    */
-  expected: ExpectedUnit[];
-  /** What the case tests, plus known page numbers where the source id is not yet labelled. */
+  facts: RetrievalFact[];
+  /** What the case tests, plus known PDF page numbers. */
   note: string;
   /** A second question asked as its own row; labelled on its own. */
-  followUp?: { question: string; expected: ExpectedUnit[]; note: string };
+  followUp?: { question: string; facts: RetrievalFact[]; note: string };
 };
 
-/** Page numbers `chatCases.ts` records for the Dutchyyy discography timeline PDF, kept until its source id is labelled. */
+/** Page numbers `chatCases.ts` records for the Dutchyyy discography timeline PDF, as context for the labels. */
 const PDF_PAGES: Record<string, string> = {
   "dutchyyy-aliases":
     "Known PDF pages: 1 (overview of the three aliases), 2 (The Chill Factor, 2001).",
@@ -34,8 +33,7 @@ const PDF_PAGES: Record<string, string> = {
 
 /**
  * The twelve chat questions plus the #118 follow-up, for measuring what the text index returns
- * before any model reads it. Labels are written by the labelling run (`RETRIEVAL_LABEL=1`, see
- * `docs/chat-eval-pdf-evidence.md`) and confirmed by Pete.
+ * before any model reads it, with the facts each should surface (`retrievalLabels.ts`).
  */
 export const RETRIEVAL_CASES: RetrievalCase[] = CHAT_CASES.map(c => ({
   key: c.key,
@@ -43,13 +41,13 @@ export const RETRIEVAL_CASES: RetrievalCase[] = CHAT_CASES.map(c => ({
   artistName: c.artistName,
   question: c.question,
   answerable: c.answerable,
-  expected: [],
+  facts: RETRIEVAL_LABELS[c.key] ?? [],
   note: PDF_PAGES[c.key] ? `${c.note} ${PDF_PAGES[c.key]}` : c.note,
   ...(c.followUp
     ? {
         followUp: {
           question: c.followUp.question,
-          expected: [],
+          facts: RETRIEVAL_LABELS[`${c.key}/follow-up`] ?? [],
           note: "Known PDF page: 1 (the timeline's overview of the producer alias).",
         },
       }

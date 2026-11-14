@@ -1,8 +1,7 @@
 import { Reporter } from "braintrust";
-import { checkRetrievalGates, type RetrievalGateRow } from "@/lib/evals/retrievalGates";
-
-const cell = (value: number | null | undefined) =>
-  value === null || value === undefined ? "-" : String(Math.round(value * 100) / 100);
+import { formatRetrievalReport, type RetrievalReportRow } from "@/lib/evals/formatRetrievalReport";
+import { checkRetrievalGates } from "@/lib/evals/retrievalGates";
+import type { FactResult } from "@/lib/evals/scoreRetrievalFacts";
 
 /** The parts of a Braintrust result row the reporter reads; the SDK types them as a union. */
 type ResultRow = {
@@ -13,35 +12,34 @@ type ResultRow = {
 };
 
 /**
- * The retrieval suite's reporter: one row per case (hits, recall, rank, weak, labelled), the
- * Braintrust experiment link, then `checkRetrievalGates`. Returning false makes `braintrust eval`
- * exit non-zero. Prints keys and numbers only, never unit text.
+ * The retrieval suite's reporter: `formatRetrievalReport` (one row per case, then each missed
+ * fact), the Braintrust experiment link, then `checkRetrievalGates`. Returning false makes `braintrust eval`
+ * exit non-zero. Prints keys, numbers and fact names only, never unit text.
  */
 export const retrievalReporter = Reporter<boolean>("retrieval-gates", {
   reportEval(evaluator, result) {
-    const rows: RetrievalGateRow[] = [];
+    const rows: RetrievalReportRow[] = [];
     console.log(`\n${evaluator.evalName}`);
-    console.log(
-      ["case".padEnd(34), "hits", "recall", "rank", "weak".padEnd(5), "labelled"].join(" "),
-    );
     for (const r of result.results as unknown as ResultRow[]) {
       const metadata = (r.metadata ?? {}) as { key?: unknown; labelled?: unknown };
-      const output = (r.output ?? {}) as { hits?: unknown[]; weak?: boolean; error?: string };
-      const key = String(metadata.key ?? "");
-      const labelled = metadata.labelled === true;
+      const output = (r.output ?? {}) as {
+        hits?: unknown[];
+        weak?: boolean;
+        facts?: FactResult[];
+        error?: string;
+      };
       const error = output.error ?? (r.error ? String(r.error) : undefined);
-      rows.push({ key, labelled, ...(error ? { error } : {}), scores: r.scores ?? {} });
-      console.log(
-        [
-          key.padEnd(34),
-          String(output.hits?.length ?? "-").padStart(4),
-          cell(r.scores?.recall_at_8).padStart(6),
-          cell(r.scores?.reciprocal_rank).padStart(4),
-          String(output.weak ?? "-").padEnd(5),
-          labelled ? "yes" : "no",
-        ].join(" ") + (error ? `  error: ${error}` : ""),
-      );
+      rows.push({
+        key: String(metadata.key ?? ""),
+        labelled: metadata.labelled === true,
+        ...(error ? { error } : {}),
+        scores: r.scores ?? {},
+        hits: output.hits?.length ?? null,
+        weak: output.weak ?? null,
+        facts: output.facts ?? [],
+      });
     }
+    for (const line of formatRetrievalReport(rows)) console.log(line);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkRetrievalGates(rows);
     if (failures.length) {

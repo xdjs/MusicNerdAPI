@@ -40,13 +40,13 @@ describe("checkRetrievalGates", () => {
   it("names a labelled case whose expected page is not in the top results", () => {
     const failures = checkRetrievalGates([row("a", 1, 1), row("b", 1, 1), row("c", 0, 0)]);
     expect(failures).toContain(
-      `c: no expected unit in the top ${RETRIEVAL_GATES.maxRank} results.`,
+      `c: no labelled fact in the top ${RETRIEVAL_GATES.maxRank} results.`,
     );
   });
 
   it("counts an unscored labelled case as a miss", () => {
     const failures = checkRetrievalGates([{ ...row("a", null, null), error: "boom" }]);
     expect(failures).toContain("a: ended in an error (boom).");
-    expect(failures).toContain("a: no expected unit in the top 8 results.");
+    expect(failures).toContain("a: no labelled fact in the top 8 results.");
   });
 });
