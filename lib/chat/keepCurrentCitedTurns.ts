@@ -1,4 +1,5 @@
 import type { ChatDocumentRef } from "@/lib/chat/createChatDocuments";
+import { findCitationNumbers } from "@/lib/chat/findCitationNumbers";
 import { type HistoryMessage, keepCurrentPdfTurns } from "@/lib/chat/keepCurrentPdfTurns";
 import type { ArtistChatBody } from "@/lib/chat/validateArtistChatBody";
 import { findCurrentDocuments } from "@/lib/units/findCurrentDocuments";
@@ -10,21 +11,38 @@ const revisionKey = (ref: { sourceKind: string; sourceId: string; revision: stri
 
 /**
  * The conversation the model may see, and the documents it has numbered. An earlier answer that
- * cited the artist's documents stays only while every one is still public at the revision it was
- * numbered at, so a follow-up never replays evidence the fan could no longer open; an answer that
- * read a PDF goes through `keepCurrentPdfTurns` first, as before. Every distinct document in the
- * history is looked up in one query (`findCurrentDocuments`), none when there are none.
+ * cited the artist's documents stays only while it is current, so a follow-up never replays
+ * evidence the fan could no longer open:
+ *
+ * - An answer's currency set is its own documents plus those of every earlier answer in the
+ *   conversation (a running union, oldest first, whether or not the earlier answer is kept), and it
+ *   stays only if all of them are still public at the revision they were numbered at. An answer can
+ *   re-cite an earlier number from memory, so a withdrawal drops every later answer: conservative by
+ *   design.
+ * - An answer whose text cites a document form (`[n, p.N]`, `[n, §…]`, `[n, ¶N]`) but carries no
+ *   documents at all cannot be checked, and is dropped. A plain `[n]` answer (web, readSource, or a
+ *   client that sends text only) stays under the running union.
+ * - An answer that read a PDF goes through `keepCurrentPdfTurns` first, as before.
+ *
+ * Every distinct document in the history is looked up in one query (`findCurrentDocuments`), none
+ * when there are none.
  *
  * @param messages - The validated body's messages.
  * @param artistId - The artist the conversation is about.
- * @returns The messages to send, without `documents` or `pdfReads`; and `prior`, the documents of
+ * @returns The messages to send, without `documents` or `pdfReads`; `prior`, the documents of
  *   the kept answers by ascending `n`, each document once at its first number (a number already
- *   held by another document is left out, so `createChatDocuments` can always re-register them).
+ *   held by another document is left out, so `createChatDocuments` can always re-register them);
+ *   and `highestCitedNumber`, the highest `[n]` any kept answer's text cites (0 for none), above
+ *   which new numbers start so a number is never reused in a conversation.
  */
 export async function keepCurrentCitedTurns(
   messages: ArtistChatBody["messages"],
   artistId: string,
-): Promise<{ messages: HistoryMessage[]; prior: { n: number; ref: ChatDocumentRef }[] }> {
+): Promise<{
+  messages: HistoryMessage[];
+  prior: { n: number; ref: ChatDocumentRef }[];
+  highestCitedNumber: number;
+}> {
   const lookups = new Map<string, Pick<ChatDocumentRef, "sourceKind" | "sourceId" | "revision">>();
   // Only answers cite documents; whatever a user message carries is neither looked up nor judged.
   const cites = (message: ArtistChatBody["messages"][number]) =>
@@ -46,9 +64,29 @@ export async function keepCurrentCitedTurns(
     lookups.size ? findCurrentDocuments(artistId, [...lookups.values()]) : new Set<string>(),
   ]);
 
-  const kept = pdfKept
-    .map(({ id }) => messages[Number(id)])
-    .filter(message => cites(message).every(ref => current.has(revisionKey(ref))));
+  const pdfKeptIndexes = new Set(pdfKept.map(({ id }) => Number(id)));
+  const textOf = (message: ArtistChatBody["messages"][number]) =>
+    message.parts.map(part => part.text).join("\n");
+  const kept: ArtistChatBody["messages"] = [];
+  // False from the first answer that numbered a document no longer current: every later answer goes.
+  let unionCurrent = true;
+  for (const [index, message] of messages.entries()) {
+    const own = cites(message);
+    if (own.some(ref => !current.has(revisionKey(ref)))) unionCurrent = false;
+    if (!pdfKeptIndexes.has(index)) continue;
+    if (message.role === "assistant") {
+      if (!unionCurrent) continue;
+      const documentForm = findCitationNumbers(textOf(message)).some(c => c.locator !== null);
+      if (documentForm && own.length === 0) continue;
+    }
+    kept.push(message);
+  }
+  const highestCitedNumber = Math.max(
+    0,
+    ...kept
+      .filter(message => message.role === "assistant")
+      .flatMap(message => findCitationNumbers(textOf(message)).map(c => c.n)),
+  );
 
   const prior: { n: number; ref: ChatDocumentRef }[] = [];
   const numbered = new Set<string>();
@@ -60,5 +98,9 @@ export async function keepCurrentCitedTurns(
     taken.add(n);
     prior.push({ n, ref });
   }
-  return { messages: kept.map(({ id, role, parts }) => ({ id, role, parts })), prior };
+  return {
+    messages: kept.map(({ id, role, parts }) => ({ id, role, parts })),
+    prior,
+    highestCitedNumber,
+  };
 }

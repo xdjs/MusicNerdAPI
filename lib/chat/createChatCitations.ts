@@ -9,14 +9,16 @@ export type CiteSource = (source: { url: string; title: string }) => number;
  *
  * @param writer - The chat response's writer.
  * @param seed - Sources numbered in earlier turns: each fixes `url` to `n` and writes its part now; new numbers continue after the highest `n`, leaving any gaps as gaps.
+ * @param highestCited - The highest number earlier answers cited (`keepCurrentCitedTurns`); new numbers also start above it, so a number from an earlier turn (a web result, say) never comes back meaning another source.
  * @returns `cite`, which returns a source's number.
  */
 export function createChatCitations(
   writer: UIMessageStreamWriter,
   seed: { n: number; url: string; title: string }[] = [],
+  highestCited = 0,
 ): CiteSource {
   const numbers = new Map<string, number>();
-  let highest = 0;
+  let highest = highestCited;
   const assign = (n: number, url: string, title: string) => {
     numbers.set(url, n);
     highest = Math.max(highest, n);

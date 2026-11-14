@@ -73,13 +73,21 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
     if (getChatRetrievalMode() === "units") {
       const name = artist.name ?? "This artist";
       // An earlier answer is replayed only while every document it numbered (and any PDF it read) is current.
-      const { messages, prior } = await keepCurrentCitedTurns(body.messages, artistId);
+      const { messages, prior, highestCitedNumber } = await keepCurrentCitedTurns(
+        body.messages,
+        artistId,
+      );
       // The whole-corpus load is gone; searchSources/readSource keep only the "latest" path.
       const originals = await loadPublicLatestResearchOriginals(artistId);
       const prompt = await convertToModelMessages(messages);
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
-          const cite = createChatCitations(writer, seedCitationsFromPrior(prior));
+          // A number an earlier answer used is never reused for another source.
+          const cite = createChatCitations(
+            writer,
+            seedCitationsFromPrior(prior),
+            highestCitedNumber,
+          );
           const documents = createChatDocuments(cite, prior);
           const budget = { remainingTokens: READ_UNITS_TOKEN_BUDGET };
           await streamText({

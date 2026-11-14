@@ -25,3 +25,15 @@ it("seeds carried numbers, writes their parts, and continues after the highest, 
   expect(cite({ url: "https://d.example/4", title: "D" })).toBe(4);
   expect(writer.write).toHaveBeenCalledTimes(3);
 });
+
+it("starts new numbers above a higher number earlier answers cited, never reusing one", () => {
+  const writer = { write: vi.fn(), merge: vi.fn(), onError: undefined };
+  const cite = createChatCitations(writer, [{ n: 1, url: "https://a.example/1", title: "A" }], 5);
+  expect(cite({ url: "https://web.example/", title: "Web" })).toBe(6);
+  const low = createChatCitations(
+    { write: vi.fn(), merge: vi.fn(), onError: undefined },
+    [{ n: 4, url: "https://a.example/1", title: "A" }],
+    2,
+  );
+  expect(low({ url: "https://web.example/", title: "Web" })).toBe(5);
+});

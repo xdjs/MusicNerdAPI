@@ -104,6 +104,16 @@ describe("units mode", () => {
     expect(text).not.toMatch(/numbers restart each turn/i);
   });
 
+  it("carries only document numbers across turns; web and readSource results are fetched again", () => {
+    expect(text).toMatch(
+      /only numbers from searchPassages, readUnits or listDocuments carry across turns/i,
+    );
+    expect(text).toMatch(
+      /a webSearch, searchSources or readSource result from an earlier answer must be fetched again in this turn before you cite it/i,
+    );
+    expect(text).not.toMatch(/so you may cite it again; never invent one/);
+  });
+
   it("reads two documents for firsts and dates and reports disagreement", () => {
     expect(text).toMatch(/read at least two documents/i);
     expect(text).toMatch(/report the disagreement instead of picking one/i);

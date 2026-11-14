@@ -737,4 +737,36 @@ describe("with CHAT_RETRIEVAL=units", () => {
     ]);
     expect(m.originals).not.toHaveBeenCalled();
   });
+
+  it("numbers a new source above every number a kept earlier answer cited", async () => {
+    u.latest.mockResolvedValue([
+      {
+        ...originalFixture(
+          "latest:spotify:album1",
+          "https://open.spotify.com/album/fixture",
+          "New album Cedar out now",
+        ),
+        publishedAt: "2026-10-01T00:00:00Z",
+      },
+    ]);
+    m.model = new MockLanguageModelV4({
+      doStream: [
+        toolStep("readSource", { sourceId: "latest:spotify:album1" }),
+        textStep("Cedar [6]."),
+      ],
+    });
+    const chunks = await chunksOf(
+      await post({
+        messages: [
+          { id: "1", role: "user", parts: [{ type: "text", text: "Any tour?" }] },
+          // A text-only earlier answer citing web results up to [5].
+          { id: "2", role: "assistant", parts: [{ type: "text", text: "Yes [2][5]." }] },
+          { id: "3", role: "user", parts: [{ type: "text", text: "Newest release?" }] },
+        ],
+      }),
+    );
+    const read = chunks.find(c => c.type === "tool-output-available").output;
+    expect(read).toMatchObject({ n: 6 });
+    expect(chunks.filter(c => c.type === "source-url").map(c => c.sourceId)).toEqual(["6"]);
+  });
 });
