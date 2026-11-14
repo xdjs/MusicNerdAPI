@@ -50,6 +50,7 @@ describe("advanceResearch", () => {
         "question_research",
         "spotify_match",
         "catalog_match",
+        "unit_sync",
       ],
       artistId: "artist-1",
       excludeIds: ["x"],

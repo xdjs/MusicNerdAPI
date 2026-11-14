@@ -3,6 +3,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { downloadObject } from "@/lib/storage/downloadObject";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
+import { ingestUploadInline } from "@/lib/units/ingestUploadInline";
 import { LORE_UPLOAD_BUCKET, VAULT_BUCKET } from "@/lib/storage/const";
 import { independentUploadReceipt } from "./independentUploadReceipt";
 import type { IndependentUploadTicket } from "./independentUploadTypes";
@@ -56,6 +57,13 @@ export async function completeIndependentLoreUpload(
       sourceType: getUploadSourceType(ticket.type),
     });
     if (!saved) throw new Error("Contribution was not saved");
+    // After the receipt transaction committed; never rejects.
+    await ingestUploadInline({
+      sourceId: saved.id,
+      artistId: ticket.artistId,
+      bytes,
+      contentType: ticket.type,
+    });
     return ok(saved);
   } catch (caught) {
     if (caught instanceof OwnershipChangedError)

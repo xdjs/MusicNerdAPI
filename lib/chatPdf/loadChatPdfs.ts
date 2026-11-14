@@ -1,4 +1,5 @@
 import { publicVaultSourceSql } from "@/lib/sourcePublication/publicVaultSourceSql";
+import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
@@ -35,7 +36,7 @@ export async function loadChatPdfs(
   // This digest detects extraction changes since discovery, not agreement with original bytes.
   return db.execute<ChatPdf>(sql`
     select v.id, coalesce(v.title, v.file_name, 'PDF') as title, v.url, v.file_path as path,
-      v.file_size as size, coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) || ':' || v.publication as revision,
+      v.file_size as size, ${vaultSourceRevisionSql()} as revision,
       c.id::text as "claimId",
       left(btrim(regexp_replace(left(coalesce(v.extracted_text, ''), 2000), '\\s+', ' ', 'g')), 240) as preview
     from artist_vault_sources v

@@ -48,3 +48,17 @@ it("sends a Gemini thinking level and an Anthropic effort as provider options, o
   });
   expect(sdkGenerateText.mock.calls[1][0].providerOptions).not.toHaveProperty("google");
 });
+
+it("passes a conversation of model messages through as the prompt", async () => {
+  const prompt = [
+    {
+      role: "user" as const,
+      content: [
+        { type: "text" as const, text: "read" },
+        { type: "file" as const, data: new Uint8Array([1]), mediaType: "application/pdf" },
+      ],
+    },
+  ];
+  await generateText({ prompt });
+  expect(sdkGenerateText.mock.calls[0][0].prompt).toBe(prompt);
+});

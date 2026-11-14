@@ -14,3 +14,9 @@ export const MODEL_CHAT = "anthropic/claude-sonnet-5.5";
  * call, and the fastest (docs/chat-eval-pdf-evidence.md).
  */
 export const MODEL_JUDGE = "openai/gpt-5.4";
+
+/** Embeds source units for hybrid search; priced from the gateway list on 2026-11-13. */
+export const MODEL_EMBEDDING = "openai/text-embedding-3-small";
+
+/** Reads scanned PDF pages as images (OCR); priced from the gateway list on 2026-11-13. */
+export const MODEL_OCR = "google/gemini-3.8-flash";
