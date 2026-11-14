@@ -316,10 +316,10 @@ describe("createEvalBudgetFetch", () => {
       try {
         const guard = createEvalBudgetFetch(vi.fn());
         expect(guard.snapshot().blockedBy).toBeUndefined();
-        await expect(guard.fetch("https://example.com/x?secret=1", secretInit)).rejects.toThrow();
+        await expect(guard.fetch("https://api.tavily.com/other", secretInit)).rejects.toThrow();
         expect(guard.snapshot()).toMatchObject({
           stopReason: "unapproved network destination",
-          blockedBy: "host:example.com",
+          blockedBy: "tavily",
         });
       } finally {
         logged.mockRestore();
@@ -349,6 +349,50 @@ describe("createEvalBudgetFetch", () => {
         const line = String(logged.mock.calls[0]?.[0]);
         expect(line).not.toContain("secret");
         expect(line).not.toContain("?");
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("refuses an unknown destination without latching, logging once per host", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn().mockResolvedValue(new Response("ok"));
+        const guard = createEvalBudgetFetch(send);
+        const s3 = "https://bucket.s3.us-east-1.amazonaws.com/bundle?secret=1";
+        const put = { method: "PUT", body: new Uint8Array([1, 2]) } as unknown as RequestInit;
+        await expect(guard.fetch(s3, put)).rejects.toThrow("unapproved network destination");
+        await expect(guard.fetch(s3, put)).rejects.toThrow("unapproved network destination");
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] refused: unapproved network destination (host:bucket.s3.us-east-1.amazonaws.com)",
+        );
+        expect(guard.snapshot()).toMatchObject({
+          blocked: false,
+          stopReason: undefined,
+          refusedHosts: ["bucket.s3.us-east-1.amazonaws.com"],
+        });
+        await guard.fetch("https://ai-gateway.vercel.sh/v4/ai/embedding-model", {
+          method: "POST",
+          headers: { "ai-model-id": "openai/text-embedding-3-small" },
+          body: JSON.stringify({ values: ["hello"] }),
+        });
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(guard.snapshot().paidRequests).toBe(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("still latches on a malformed request to a paid provider", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(gateway, { ...request(), body: "{" })).rejects.toThrow(
+          "invalid JSON body",
+        );
+        await expect(guard.fetch(gateway, request())).rejects.toThrow("run already stopped");
+        expect(guard.snapshot().blocked).toBe(true);
       } finally {
         logged.mockRestore();
       }

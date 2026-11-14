@@ -49,6 +49,9 @@ function collectFileParts(value: unknown, into: string[]): void {
  * never refund failed calls, and latch closed at the approved ten-dollar envelope.
  * Rates include headroom over the October 29 Gateway catalog and Tavily PAYG rates.
  * Native PDF input is priced per base64 character, far above its page-based billing.
+ * Destination rule: only a violation on a paid provider (ai-gateway.vercel.sh, api.tavily.com)
+ * latches the run closed. Any other destination is refused for that request alone and does not
+ * stop the run, so tooling that talks to its own hosts cannot starve later priced calls.
  * This is a reservation ledger, not a provider invoice. No shared settings change.
  */
 export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 0) {
@@ -65,6 +68,7 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   let blockedBy: string | undefined;
   // Short fixed label of the request being judged; never a URL query, body or header value.
   let kind = "unknown";
+  const refusedHosts = new Set<string>();
   const fail = (reason: string): never => {
     blocked = true;
     if (stopReason === undefined) {
@@ -102,6 +106,15 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       url.pathname.startsWith("/storage/v1/object/public/")
     )
       return send(input, init);
+    // Not a paid provider: refuse this request only. It must not stop the run, because
+    // tooling (the Braintrust CLI's S3 bundle upload) legitimately talks to other hosts.
+    if (url.hostname !== "ai-gateway.vercel.sh" && url.hostname !== "api.tavily.com") {
+      if (!refusedHosts.has(url.hostname)) {
+        refusedHosts.add(url.hostname);
+        console.error(`[eval-budget] refused: unapproved network destination (${kind})`);
+      }
+      throw new Error("Eval budget guard: unapproved network destination");
+    }
     if (blocked) return fail("run already stopped");
     if (typeof init?.body !== "string" || init.method !== "POST")
       return fail("unexpected request shape");
@@ -183,7 +196,7 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       if (Object.keys(body).some(key => !["query", "include_domains", "max_results"].includes(key)))
         return fail("unpriced search options");
       reservation = 16000; // two credits at $0.008; current request defaults to one.
-    } else return fail("unapproved network destination");
+    } else return fail("unapproved network destination"); // a paid host with an unapproved path
     if (paidRequests >= MAX_PAID_REQUESTS || reservedMicros + reservation > CEILING_MICROS)
       return fail("approved request/spend envelope exhausted");
     reservedMicros += reservation;
@@ -201,6 +214,7 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       blocked,
       stopReason,
       blockedBy,
+      refusedHosts: [...refusedHosts],
     }),
   };
 }
