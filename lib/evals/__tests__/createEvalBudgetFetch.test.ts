@@ -384,6 +384,70 @@ describe("createEvalBudgetFetch", () => {
       }
     });
 
+    it("refuses a non-https request to an unknown host without latching or sending", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn().mockResolvedValue(new Response("ok"));
+        const guard = createEvalBudgetFetch(send);
+        const local = "http://localhost:4318/v1/traces?secret=1";
+        await expect(guard.fetch(local, { method: "POST", body: "{}" })).rejects.toThrow(
+          "unapproved network destination",
+        );
+        await expect(guard.fetch(local, { method: "POST", body: "{}" })).rejects.toThrow(
+          "unapproved network destination",
+        );
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] refused: unapproved network destination (host:localhost)",
+        );
+        expect(guard.snapshot()).toMatchObject({
+          blocked: false,
+          stopReason: undefined,
+          refusedHosts: ["localhost"],
+        });
+        expect(send).not.toHaveBeenCalled();
+        await guard.fetch("https://ai-gateway.vercel.sh/v4/ai/embedding-model", {
+          method: "POST",
+          headers: { "ai-model-id": "openai/text-embedding-3-small" },
+          body: JSON.stringify({ values: ["hello"] }),
+        });
+        expect(send).toHaveBeenCalledTimes(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("does not send a non-https request to an allowed free host", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn();
+        const guard = createEvalBudgetFetch(send);
+        await expect(
+          guard.fetch("http://api.braintrust.dev/logs3", { method: "POST", body: "{}" }),
+        ).rejects.toThrow("unapproved network destination");
+        expect(send).not.toHaveBeenCalled();
+        expect(guard.snapshot().blocked).toBe(false);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it.each(["http://ai-gateway.vercel.sh/v4/ai/language-model", "http://api.tavily.com/search"])(
+      "still latches on a non-https request to the paid host %s",
+      async url => {
+        const logged = spy();
+        try {
+          const send = vi.fn();
+          const guard = createEvalBudgetFetch(send);
+          await expect(guard.fetch(url, request())).rejects.toThrow("HTTPS required");
+          expect(guard.snapshot()).toMatchObject({ blocked: true, stopReason: "HTTPS required" });
+          expect(send).not.toHaveBeenCalled();
+        } finally {
+          logged.mockRestore();
+        }
+      },
+    );
+
     it("still latches on a malformed request to a paid provider", async () => {
       const logged = spy();
       try {

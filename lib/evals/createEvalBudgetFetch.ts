@@ -50,8 +50,11 @@ function collectFileParts(value: unknown, into: string[]): void {
  * Rates include headroom over the October 29 Gateway catalog and Tavily PAYG rates.
  * Native PDF input is priced per base64 character, far above its page-based billing.
  * Destination rule: only a violation on a paid provider (ai-gateway.vercel.sh, api.tavily.com)
- * latches the run closed. Any other destination is refused for that request alone and does not
- * stop the run, so tooling that talks to its own hosts cannot starve later priced calls.
+ * latches the run closed, including a non-HTTPS request to one of them. Any other destination is
+ * refused for that request alone and does not stop the run, so tooling that talks to its own
+ * hosts cannot starve later priced calls; that covers a non-HTTPS request to any other host
+ * (even an otherwise allowed one such as api.braintrust.dev), which is refused before anything is
+ * sent. Nothing is ever sent for a refused or latched request.
  * This is a reservation ledger, not a provider invoice. No shared settings change.
  */
 export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 0) {
@@ -69,6 +72,16 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   // Short fixed label of the request being judged; never a URL query, body or header value.
   let kind = "unknown";
   const refusedHosts = new Set<string>();
+  const isPaidHost = (hostname: string) =>
+    hostname === "ai-gateway.vercel.sh" || hostname === "api.tavily.com";
+  /** Refuses this request only: logged once per host, the run keeps going. */
+  const refuseDestination = (hostname: string): never => {
+    if (!refusedHosts.has(hostname)) {
+      refusedHosts.add(hostname);
+      console.error(`[eval-budget] refused: unapproved network destination (${kind})`);
+    }
+    throw new Error("Eval budget guard: unapproved network destination");
+  };
   const fail = (reason: string): never => {
     blocked = true;
     if (stopReason === undefined) {
@@ -92,7 +105,10 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
         : url.hostname === "api.tavily.com"
           ? "tavily"
           : `host:${url.hostname}`;
-    if (url.protocol !== "https:") return fail("HTTPS required");
+    if (url.protocol !== "https:") {
+      if (isPaidHost(url.hostname)) return fail("HTTPS required");
+      return refuseDestination(url.hostname);
+    }
     // Logging is not model execution. Other Braintrust endpoints are not allowed here.
     if (
       (url.hostname === "api.braintrust.dev" || url.hostname === "www.braintrust.dev") &&
@@ -108,13 +124,7 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       return send(input, init);
     // Not a paid provider: refuse this request only. It must not stop the run, because
     // tooling (the Braintrust CLI's S3 bundle upload) legitimately talks to other hosts.
-    if (url.hostname !== "ai-gateway.vercel.sh" && url.hostname !== "api.tavily.com") {
-      if (!refusedHosts.has(url.hostname)) {
-        refusedHosts.add(url.hostname);
-        console.error(`[eval-budget] refused: unapproved network destination (${kind})`);
-      }
-      throw new Error("Eval budget guard: unapproved network destination");
-    }
+    if (!isPaidHost(url.hostname)) return refuseDestination(url.hostname);
     if (blocked) return fail("run already stopped");
     if (typeof init?.body !== "string" || init.method !== "POST")
       return fail("unexpected request shape");
