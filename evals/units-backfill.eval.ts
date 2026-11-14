@@ -3,13 +3,13 @@ import { Eval } from "braintrust";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import { RETRIEVAL_CASES } from "@/lib/evals/retrievalCases";
 import { experimentName } from "@/lib/evals/experimentName";
-import { ingestSource } from "@/lib/units/ingestSource";
-import { listArtistUnitSources } from "@/lib/units/listArtistUnitSources";
+import { runUnitsBackfill } from "@/lib/evals/runUnitsBackfill";
 
 /**
  * One-time backfill of the page-level text index for the retrieval suite's artists, on the
  * staging database, once Web migration 0066 is applied there and before the `retrieval` suite.
- * Ingests every source whose indexed revision is not its current one, with OCR. Output is
+ * Ingests, with OCR, every source whose indexed revision is not its current one or whose units
+ * lack embeddings (`runUnitsBackfill`), and scores `indexed` 1 when nothing is left stale. Output is
  * counts only: no source text, ids or titles.
  *
  *   hosted: the Evals workflow, suite `units-backfill`
@@ -27,38 +27,17 @@ Eval("music-nerd", {
   maxConcurrency: 1,
   data: () => ARTISTS.map(artistId => ({ input: { artistId }, metadata: { artistId } })),
   task: async (input: { artistId: string }) => {
-    const entries = await listArtistUnitSources(input.artistId);
-    const stale = entries.filter(
-      e => e.sourceRevision !== null && e.indexedRevision !== e.sourceRevision,
-    );
-    let ingested = 0;
-    let failed = 0;
-    let unitsWritten = 0;
-    for (const e of stale) {
-      if (budget.snapshot().blocked) {
-        failed += 1;
-        continue;
-      }
-      try {
-        const outcome = await ingestSource(
-          { sourceKind: e.sourceKind, sourceId: e.sourceId },
-          { ocr: true, pdfTimeoutMs: 45_000, signal: AbortSignal.timeout(50_000) },
-        );
-        if (outcome.failed) failed += 1;
-        else ingested += 1;
-        unitsWritten += outcome.units;
-      } catch {
-        failed += 1;
-      }
-    }
-    const result = { sources: entries.length, ingested, failed, unitsWritten };
+    const result = await runUnitsBackfill(input.artistId, {
+      blocked: () => budget.snapshot().blocked,
+    });
     console.log(`[units-backfill] ${JSON.stringify(result)}`);
     return result;
   },
   scores: [
     ({ output }) => ({
       name: "indexed",
-      score: output.unitsWritten > 0 || output.sources === 0 ? 1 : 0,
+      // A clean rerun scores 1: nothing is left stale or without vectors.
+      score: output.stale === 0 ? 1 : 0,
     }),
   ],
 });
