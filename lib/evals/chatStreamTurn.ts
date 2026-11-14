@@ -20,7 +20,8 @@ export type HistoryMessage = { id: string; role: "user" | "assistant"; parts: un
 /**
  * One question through the streaming chat endpoint, in process, reading the UI message
  * stream the way `useChat` does: the first `text-delta` is when a fan first sees text, and
- * the end of the stream is the finished answer. `source-url` parts are the citable sources.
+ * the end of the stream is the finished answer. The number of text deltas and the time of the
+ * last one show whether the answer streams or arrives in one burst. `source-url` parts are the citable sources.
  * The turn's `assistantParts` are what a client would send back as this answer in a
  * follow-up: its completed PDF and passage reads and its text.
  *
@@ -76,6 +77,8 @@ export async function chatStreamTurn(
 
   let answer = "";
   let firstText: number | undefined;
+  let lastText: number | undefined;
+  let textDeltas = 0;
   let firstSignal: number | undefined;
   let error: string | undefined;
   const sources: ChatTurn["sources"] = [];
@@ -129,7 +132,9 @@ export async function chatStreamTurn(
         else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
       }
     } else if (chunk.type === "text-delta") {
-      firstText ??= clock.now();
+      lastText = clock.now();
+      textDeltas += 1;
+      firstText ??= lastText;
       firstSignal ??= firstText;
       answer += chunk.delta;
     } else if (chunk.type === "source-url") {
@@ -170,6 +175,8 @@ export async function chatStreamTurn(
     steps,
     assistantParts,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
+    textDeltas,
+    ...(lastText === undefined ? {} : { lastTextMs: Math.round(lastText - started) }),
     firstSignalMs: firstSignal === undefined ? totalMs : Math.round(firstSignal - started),
     totalMs,
     ...(error ? { error } : {}),

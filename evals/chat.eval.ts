@@ -118,9 +118,12 @@ Eval(
       console.log(
         `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
       );
-      // Tool names, counts and timings only: no query, title, url or passage text.
+      // Tool names, counts and timings only: no query, title, url or passage text. `text=` is the
+      // number of text deltas and the times of the first and last, to show whether text streams.
       console.log(
-        `[chat] ${input.key} trace: steps=${turn.steps ?? 0}${(turn.trace ?? [])
+        `[chat] ${input.key} trace: steps=${turn.steps ?? 0} text=${turn.textDeltas ?? 0}@${turn.firstTextMs}-${turn.lastTextMs ?? ""}${(
+          turn.trace ?? []
+        )
           .map(t => ` | ${t.name}@${t.atMs}-${t.doneMs ?? ""} ${t.summary || "pending"}`)
           .join("")}`,
       );

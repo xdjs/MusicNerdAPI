@@ -78,6 +78,34 @@ describe("chatStreamTurn", () => {
     expect(turn.error).toBeUndefined();
   });
 
+  it("counts the text deltas and times the last one, to show whether text streams", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "t", toolName: "searchPassages", input: {} },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "One " },
+        { type: "text-delta", id: "x", delta: "two " },
+        { type: "text-delta", id: "x", delta: "three." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    // Clock reads: start 100, tool 200, deltas 300, 400, 500, end 600.
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.textDeltas).toBe(3);
+    expect(turn.firstTextMs).toBe(200);
+    expect(turn.lastTextMs).toBe(400);
+    expect(turn.totalMs).toBe(500);
+  });
+
+  it("reports no text deltas and no last text time for an answer without text", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([{ type: "tool-input-available", toolCallId: "t", toolName: "x", input: {} }]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.textDeltas).toBe(0);
+    expect(turn.lastTextMs).toBeUndefined();
+  });
+
   it("records a text-free trace of the tool calls in order and counts steps", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
       streamOf([
