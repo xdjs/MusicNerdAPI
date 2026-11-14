@@ -108,6 +108,9 @@ describe("units mode", () => {
       /read that whole document with readUnits \(omit locators\) before answering/i,
     );
     expect(text).toMatch(/as long as it has 40 units or fewer; cite the pages you used/i);
+    expect(text).toContain(
+      "cite the pages you used. Include items a document mentions elsewhere, including one-time or parenthetical uses, and say how the document labels them, for example documented once in a given year.",
+    );
   });
 
   it("takes citation numbers only from the tools, including numbers from earlier turns", () => {
