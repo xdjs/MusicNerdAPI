@@ -37,3 +37,19 @@ it("starts new numbers above a higher number earlier answers cited, never reusin
   );
   expect(low({ url: "https://web.example/", title: "Web" })).toBe(5);
 });
+
+it("throws on a seed that gives one URL two numbers or one number two URLs", () => {
+  const writer = () => ({ write: vi.fn(), merge: vi.fn(), onError: undefined });
+  expect(() =>
+    createChatCitations(writer(), [
+      { n: 1, url: "https://a.example/1", title: "A" },
+      { n: 2, url: "https://a.example/1", title: "A" },
+    ]),
+  ).toThrow("seed gives one URL both 1 and 2");
+  expect(() =>
+    createChatCitations(writer(), [
+      { n: 1, url: "https://a.example/1", title: "A" },
+      { n: 1, url: "https://b.example/2", title: "B" },
+    ]),
+  ).toThrow("seed gives 1 to two sources");
+});
