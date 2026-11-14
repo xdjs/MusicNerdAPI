@@ -1,5 +1,6 @@
 import { RetryError } from "ai";
 import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
+import { readErrorStatus } from "@/lib/units/readErrorStatus";
 
 const NAME = /^[A-Za-z_]{1,60}$/;
 const KIND = /^[a-z_]{1,40}$/;
@@ -7,14 +8,10 @@ const KIND = /^[a-z_]{1,40}$/;
 /** ` status=` and ` type=` fields read from an error-like object, each only when it has a safe shape. */
 function fields(value: unknown): string {
   if (typeof value !== "object" || value === null) return "";
-  const { statusCode, type } = value as { statusCode?: unknown; type?: unknown };
+  const { type } = value as { type?: unknown };
+  const statusCode = readErrorStatus(value);
   let out = "";
-  if (
-    Number.isInteger(statusCode) &&
-    (statusCode as number) >= 100 &&
-    (statusCode as number) <= 599
-  )
-    out += ` status=${statusCode}`;
+  if (statusCode !== undefined) out += ` status=${statusCode}`;
   if (typeof type === "string" && KIND.test(type)) out += ` type=${type}`;
   return out;
 }

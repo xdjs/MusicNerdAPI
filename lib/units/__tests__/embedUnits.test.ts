@@ -1,3 +1,4 @@
+import { APICallError, RetryError } from "ai";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
@@ -8,10 +9,16 @@ import {
   EMBEDDING_DIMENSIONS,
 } from "@/lib/units/types";
 
-vi.mock("ai", () => ({ embedMany: vi.fn() }));
+vi.mock("ai", async importOriginal => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  embedMany: vi.fn(),
+}));
 const { embedMany } = await import("ai");
 const { embedUnits } = await import("@/lib/units/embedUnits");
 const embedManyMock = vi.mocked(embedMany) as unknown as ReturnType<typeof vi.fn>;
+
+const apiError = (statusCode?: number) =>
+  new APICallError({ message: "m", url: "https://x.example", requestBodyValues: {}, statusCode });
 
 /** A full-length vector whose first component identifies the input. */
 const vec = (marker: number) => {
@@ -106,7 +113,7 @@ describe("embedUnits", () => {
 
   test("splits a failing batch of 16 in halves and keeps order", async () => {
     const texts = Array.from({ length: 16 }, (_, i) => `t${i}`);
-    embedManyMock.mockRejectedValueOnce(new Error("boom"));
+    embedManyMock.mockRejectedValueOnce(apiError(400));
     embedManyMock.mockImplementation(async (args: { values: string[] }) => ({
       embeddings: args.values.map(t => vec(Number(t.slice(1)))),
     }));
@@ -119,8 +126,9 @@ describe("embedUnits", () => {
 
   test("isolates one bad input and names its position without its text", async () => {
     const texts = ["a0", "a1", "secret2", "a3", "a4"];
+    const badInput = apiError(422);
     embedManyMock.mockImplementation(async (args: { values: string[] }) => {
-      if (args.values.includes("secret2")) throw new Error("provider down");
+      if (args.values.includes("secret2")) throw badInput;
       return { embeddings: args.values.map(() => vec(1)) };
     });
 
@@ -129,7 +137,7 @@ describe("embedUnits", () => {
     expect(error).toBeInstanceOf(EmbeddingInputError);
     expect(error).toMatchObject({ index: 2, total: 5 });
     expect(error.message).not.toContain("secret2");
-    expect(error.cause).toEqual(new Error("provider down"));
+    expect(error.cause).toBe(badInput);
     expect(embedManyMock.mock.calls.length).toBeGreaterThan(2);
   });
 
@@ -138,6 +146,62 @@ describe("embedUnits", () => {
     controller.abort();
     embedManyMock.mockRejectedValue(new Error("aborted"));
     await expect(embedUnits(["a", "b"], { signal: controller.signal })).rejects.toThrow("aborted");
+    expect(embedManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not split an abort error thrown without an aborted signal", async () => {
+    const abort = new DOMException("aborted", "AbortError");
+    embedManyMock.mockRejectedValue(abort);
+    await expect(embedUnits(["a", "b"])).rejects.toBe(abort);
+    expect(embedManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rethrows a 429 from a 16-input batch after exactly one call", async () => {
+    const texts = Array.from({ length: 16 }, (_, i) => `t${i}`);
+    const limited = apiError(429);
+    embedManyMock.mockRejectedValue(limited);
+    await expect(embedUnits(texts)).rejects.toBe(limited);
+    expect(embedManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("splits a 16-input batch for a 400 and names the failing index", async () => {
+    const texts = Array.from({ length: 16 }, (_, i) => (i === 11 ? "bad" : `t${i}`));
+    embedManyMock.mockImplementation(async (args: { values: string[] }) => {
+      if (args.values.includes("bad")) throw apiError(400);
+      return { embeddings: args.values.map(() => vec(1)) };
+    });
+    const error = await embedUnits(texts).catch(e => e);
+    expect(error).toBeInstanceOf(EmbeddingInputError);
+    expect(error).toMatchObject({ index: 11, total: 16 });
+  });
+
+  test("splits for a non-retryable retry error with a 400", async () => {
+    const wrapped = new RetryError({
+      message: "m",
+      reason: "errorNotRetryable",
+      errors: [apiError(400)],
+    });
+    embedManyMock.mockRejectedValue(wrapped);
+    const error = await embedUnits(["a", "b"]).catch(e => e);
+    expect(error).toBeInstanceOf(EmbeddingInputError);
+    expect(embedManyMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not split a retry-exhausted 500", async () => {
+    const exhausted = new RetryError({
+      message: "m",
+      reason: "maxRetriesExceeded",
+      errors: [apiError(500)],
+    });
+    embedManyMock.mockRejectedValue(exhausted);
+    await expect(embedUnits(["a", "b", "c", "d"])).rejects.toBe(exhausted);
+    expect(embedManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not split an error without a status", async () => {
+    const failure = new Error("approved request/spend envelope exhausted");
+    embedManyMock.mockRejectedValue(failure);
+    await expect(embedUnits(["a", "b"])).rejects.toBe(failure);
     expect(embedManyMock).toHaveBeenCalledTimes(1);
   });
 });
