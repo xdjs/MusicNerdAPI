@@ -60,6 +60,10 @@ export type IngestOutcome = {
 export const UNIT_INGEST_VERSION = 1;
 export const EMBEDDING_DIMENSIONS = 1536;
 export const EMBED_BATCH = 64;
+// The most characters sent in one embedding request.
+export const EMBED_BATCH_CHARS = 100_000;
+// The most characters of one unit sent for embedding; the stored unit text is not changed.
+export const EMBED_INPUT_CHARS = 16_000;
 export const MAX_INGEST_PAGES = 300;
 export const INLINE_INGEST_MAX_PAGES = 40;
 export const MAX_UNIT_CHARS = 6000;

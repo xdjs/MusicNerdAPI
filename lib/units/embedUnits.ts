@@ -1,9 +1,23 @@
 import { embedMany } from "ai";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
-import { EMBED_BATCH, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
+import {
+  EMBED_BATCH,
+  EMBED_BATCH_CHARS,
+  EMBED_INPUT_CHARS,
+  EMBEDDING_DIMENSIONS,
+} from "@/lib/units/types";
+
+/** The part of a text that is sent: at most `EMBED_INPUT_CHARS`, cut at whitespace when there is some in the last 200 characters. */
+function truncateForEmbedding(text: string): string {
+  if (text.length <= EMBED_INPUT_CHARS) return text;
+  const cut = text.slice(0, EMBED_INPUT_CHARS);
+  const space = cut.search(/\s\S*$/);
+  return space >= EMBED_INPUT_CHARS - 200 ? cut.slice(0, space) : cut;
+}
 
 /**
- * Embeds unit texts through the AI Gateway, `EMBED_BATCH` at a time.
+ * Embeds unit texts through the AI Gateway, batches of at most `EMBED_BATCH` inputs and `EMBED_BATCH_CHARS` characters.
+ * Each input is cut to `EMBED_INPUT_CHARS` for the model; the caller's text is unchanged.
  *
  * @param texts - The texts to embed.
  * @param opts - An abort signal forwarded to every model call.
@@ -14,9 +28,22 @@ export async function embedUnits(
   texts: string[],
   opts: { signal?: AbortSignal } = {},
 ): Promise<number[][]> {
+  const inputs = texts.map(truncateForEmbedding);
   const vectors: number[][] = [];
-  for (let start = 0; start < texts.length; start += EMBED_BATCH) {
-    const batch = texts.slice(start, start + EMBED_BATCH);
+  for (let start = 0; start < inputs.length;) {
+    let end = start;
+    let chars = 0;
+    // A single input always fits: it is at most EMBED_INPUT_CHARS, below EMBED_BATCH_CHARS.
+    while (
+      end < inputs.length &&
+      end - start < EMBED_BATCH &&
+      (end === start || chars + inputs[end].length <= EMBED_BATCH_CHARS)
+    ) {
+      chars += inputs[end].length;
+      end++;
+    }
+    const batch = inputs.slice(start, end);
+    start = end;
     const { embeddings } = await embedMany({
       model: MODEL_EMBEDDING,
       values: batch,

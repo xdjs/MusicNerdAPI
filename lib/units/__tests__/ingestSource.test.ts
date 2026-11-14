@@ -1,3 +1,4 @@
+import { APICallError, RetryError } from "ai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ingestSource } from "@/lib/units/ingestSource";
 import type { UnitDraft, UnitSourceInput } from "@/lib/units/types";
@@ -129,6 +130,35 @@ describe("ingestSource", () => {
     expect(message).toContain("src-1");
     expect(message).not.toContain("secret page text");
     expect(message).toContain("Error");
+  });
+
+  test("names the retry reason and provider status when the embedding call gives up", async () => {
+    mocks.loadUnitSource.mockResolvedValue(source());
+    mocks.buildSourceUnits.mockResolvedValue({
+      units: [unit(0, "page one")],
+      ocrPages: 0,
+      truncated: false,
+    });
+    mocks.embedUnits.mockRejectedValue(
+      new RetryError({
+        message: "secret page text",
+        reason: "maxRetriesExceeded",
+        errors: [
+          new APICallError({
+            message: "secret page text",
+            url: "https://x.example",
+            requestBodyValues: {},
+            statusCode: 429,
+          }),
+        ],
+      }),
+    );
+
+    await ingestSource(REF);
+
+    const message = warn.mock.calls[0].join(" ");
+    expect(message).toContain("AI_RetryError maxRetriesExceeded 429");
+    expect(message).not.toContain("secret page text");
   });
 
   test("an all-empty PDF whose vision pass fails writes nothing and does not throw", async () => {

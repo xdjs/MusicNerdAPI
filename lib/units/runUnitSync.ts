@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
+import { describeEmbeddingError } from "@/lib/units/describeEmbeddingError";
 import { embedUnits } from "@/lib/units/embedUnits";
 import { finishUnitSync } from "@/lib/units/finishUnitSync";
 import { ingestSource } from "@/lib/units/ingestSource";
@@ -92,11 +93,12 @@ export async function runUnitSync(job: ResearchJob, deadline: number): Promise<S
         }
         if (typeof result === "object") fail(entry, result.failed);
       } catch (error) {
-        fail(entry, error instanceof Error ? error.name : "unknown");
+        const reason = describeEmbeddingError(error);
+        fail(entry, reason);
         // Never the message: a failed query's message carries its bound parameters, which can be unit text.
         const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
         console.warn(
-          `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${error instanceof Error ? error.name : "unknown"}${typeof code === "string" ? ` ${code}` : ""}`,
+          `[unit_sync] ${entry.sourceKind} source ${entry.sourceId} failed: ${reason}${typeof code === "string" ? ` ${code}` : ""}`,
         );
       }
       after = key;

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { buildSourceUnits } from "@/lib/units/buildSourceUnits";
+import { describeEmbeddingError } from "@/lib/units/describeEmbeddingError";
 import { embedUnits } from "@/lib/units/embedUnits";
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import { loadUnitSource } from "@/lib/units/loadUnitSource";
@@ -73,8 +74,8 @@ export async function ingestSource(
       );
     } catch (error) {
       console.warn(
-        // The name only: a provider error's message can echo the request, which is unit text.
-        `Embedding failed for ${input.sourceKind} source ${input.sourceId}: ${error instanceof Error ? error.name : "unknown error"}`,
+        // Name, retry reason and status only: a provider error's message can echo the request, which is unit text.
+        `Embedding failed for ${input.sourceKind} source ${input.sourceId}: ${describeEmbeddingError(error)}`,
       );
     }
   }
