@@ -81,12 +81,12 @@ export async function keepCurrentCitedTurns(
     }
     kept.push(message);
   }
-  const highestCitedNumber = Math.max(
-    0,
-    ...kept
-      .filter(message => message.role === "assistant")
-      .flatMap(message => findCitationNumbers(textOf(message)).map(c => c.n)),
-  );
+  // A loop, not Math.max(...): a long answer can hold more markers than a call has arguments.
+  let highestCitedNumber = 0;
+  for (const message of kept)
+    if (message.role === "assistant")
+      for (const { n } of findCitationNumbers(textOf(message)))
+        if (n > highestCitedNumber) highestCitedNumber = n;
 
   const prior: { n: number; ref: ChatDocumentRef }[] = [];
   const numbered = new Set<string>();

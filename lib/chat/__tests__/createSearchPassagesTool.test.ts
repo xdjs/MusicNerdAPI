@@ -136,7 +136,11 @@ describe("createSearchPassagesTool", () => {
   test("allows four searches per answer and refuses the fifth without searching", async () => {
     const { run, search } = setup([unitHit("a", 0)]);
     await Promise.all([run("a"), run("b"), run("c"), run("d")]);
-    expect(await run("e")).toEqual({ error: "Search limit reached for this answer" });
+    expect(await run("e")).toEqual({
+      error: "Search limit reached for this answer",
+      results: [],
+      documents: [],
+    });
     expect(search).toHaveBeenCalledTimes(4);
   });
 

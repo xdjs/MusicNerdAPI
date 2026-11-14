@@ -59,7 +59,8 @@ export function createSearchPassagesTool(
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       // Counted before the await, so parallel calls in one step cannot slip past the cap.
-      if (++searches > MAX_SEARCHES) return { error: "Search limit reached for this answer" };
+      if (++searches > MAX_SEARCHES)
+        return { error: "Search limit reached for this answer", results: [], documents: [] };
       const { hits, weak } = await search(artistId, query, {
         names: opts.names,
         signal: opts.signal,

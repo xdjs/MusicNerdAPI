@@ -47,11 +47,12 @@ export async function runUnitsBackfill(
         { ocr: true, pdfTimeoutMs: 45_000, signal: AbortSignal.timeout(50_000) },
       );
       counts.unitsWritten += outcome.units;
-      if (outcome.skipped === "no-text" || outcome.skipped === "not-found") {
+      // A failed read can also report no text (every vision read failed): it stays stale.
+      if (outcome.failed) counts.failed += 1;
+      else if (outcome.skipped === "no-text" || outcome.skipped === "not-found") {
         counts.noText += 1;
         empty.add(keyOf(e));
-      } else if (outcome.failed) counts.failed += 1;
-      else {
+      } else {
         counts.ingested += 1;
         if (outcome.units > 0 && !outcome.embedded) counts.embeddedFalse += 1;
       }

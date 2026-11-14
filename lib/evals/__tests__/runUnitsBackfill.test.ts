@@ -94,3 +94,16 @@ it("counts failures, thrown errors and sources skipped once the budget blocks", 
   expect(ingestSource).toHaveBeenCalledTimes(2);
   expect(result).toMatchObject({ ingested: 0, failed: 3, stale: 3 });
 });
+
+it("counts a source whose every vision read failed as failed and stale, not as no text", async () => {
+  const scanned = entry("scanned", { indexedRevision: null });
+  listArtistUnitSources.mockResolvedValue([scanned]);
+  ingestSource.mockResolvedValue(
+    outcome({ units: 0, embedded: false, skipped: "no-text", failed: "vision" }),
+  );
+  expect(await runUnitsBackfill("artist", notBlocked)).toMatchObject({
+    failed: 1,
+    noText: 0,
+    stale: 1,
+  });
+});

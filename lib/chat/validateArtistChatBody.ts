@@ -44,6 +44,9 @@ const mayListDocuments = z.object({
 });
 const readReturnedUnits = (part: { output?: unknown }) =>
   typeof part.output === "object" && part.output !== null && "units" in part.output;
+/** A search refused at the per-answer cap returns an error and numbers nothing. */
+const searchRefused = (part: { output?: unknown }) =>
+  typeof part.output === "object" && part.output !== null && "error" in part.output;
 type DocumentRef = z.infer<typeof documentRef>;
 
 /**
@@ -59,7 +62,7 @@ function citedDocuments(
     // A call that did not complete numbered nothing the answer could cite.
     if (part.state !== "output-available") continue;
     const schema =
-      part.type === "tool-searchPassages" || readReturnedUnits(part)
+      (part.type === "tool-searchPassages" && !searchRefused(part)) || readReturnedUnits(part)
         ? listsDocuments
         : mayListDocuments;
     const parsed = schema.safeParse(part);

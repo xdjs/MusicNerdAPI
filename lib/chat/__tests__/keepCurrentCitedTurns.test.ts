@@ -332,3 +332,12 @@ it("reports the highest number any kept answer cites, beyond its documents", asy
   expect(prior).toEqual([{ n: 1, ref: ref(doc(1)) }]);
   expect(highestCitedNumber).toBe(6);
 });
+
+it("finds the highest number in an answer with 200,000 markers without overflowing the stack", async () => {
+  const history = [
+    { id: "2", role: "assistant" as const, parts: text(`${"[1]".repeat(200_000)} [7]`) },
+    { id: "5", role: "user" as const, parts: text("q") },
+  ];
+  const { highestCitedNumber } = await keepCurrentCitedTurns(history, "artist");
+  expect(highestCitedNumber).toBe(7);
+});

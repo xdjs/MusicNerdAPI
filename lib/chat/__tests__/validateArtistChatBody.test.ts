@@ -463,3 +463,34 @@ it("keeps a user message's text whatever tool parts it carries, and gives it no 
     ],
   });
 });
+
+it("keeps an answer whose fifth search hit the cap, with the documents of the searches that ran", async () => {
+  const capped = {
+    type: "tool-searchPassages",
+    toolCallId: "s5",
+    state: "output-available",
+    input: { query: "more" },
+    output: { error: "Search limit reached for this answer", results: [], documents: [] },
+  };
+  const bare = { ...capped, output: { error: "Search limit reached for this answer" } };
+  for (const part of [capped, bare]) {
+    const result = await validateArtistChatBody(
+      post({
+        messages: [
+          {
+            id: "a",
+            role: "assistant",
+            parts: [search([doc(1)]), part, { type: "text", text: "Capped [1, p.1]." }],
+          },
+          user("And?"),
+        ],
+      }),
+    );
+    expect((result as { messages: unknown[] }).messages[0]).toEqual({
+      id: "a",
+      role: "assistant",
+      parts: [{ type: "text", text: "Capped [1, p.1]." }],
+      documents: [doc(1)],
+    });
+  }
+});
