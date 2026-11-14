@@ -27,8 +27,9 @@ const mean = (values: number[]) =>
 /**
  * Why a chat run fails, one sentence each; empty when it passes. A question with trials
  * contributes the mean of its trials, so every question weighs the same in the run means.
- * first_text is reported but never gates: the chat reads sources before it writes, so the
- * five-second target waits on a product change (a status line while reading).
+ * The first_text score was removed on 2026-11-14: text within five seconds is not a
+ * requirement, since answers that read or research take longer. first_signal is reported
+ * and never gates.
  *
  * Gates: no row ends in an error; total_time is 1 on every row; citations and
  * evidence_scorable are 1 on every answerable row; relevance and groundedness means over

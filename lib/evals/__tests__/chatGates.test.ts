@@ -5,7 +5,6 @@ const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): Chat
   key,
   answerable: true,
   scores: {
-    first_text: 0,
     total_time: 1,
     citations: 1,
     evidence_scorable: 1,
@@ -16,8 +15,8 @@ const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): Chat
 });
 
 describe("checkChatGates", () => {
-  it("passes a run that meets every gate, and never gates first text", () => {
-    expect(checkChatGates([good("a"), good("b", { first_text: 0 })])).toEqual([]);
+  it("passes a run that meets every gate, and never gates first_signal", () => {
+    expect(checkChatGates([good("a"), good("b", { first_signal: 0 })])).toEqual([]);
   });
 
   it("never gates the mentions score", () => {

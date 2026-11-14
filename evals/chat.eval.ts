@@ -1,7 +1,7 @@
 import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_CHAT, MODEL_JUDGE } from "@/lib/ai/const";
-import { FIRST_TEXT_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
+import { FIRST_SIGNAL_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { chatReporter } from "@/lib/evals/chatReporter";
@@ -143,19 +143,15 @@ Eval(
       return turn;
     },
     scores: [
-      ({ output }) =>
-        output.error
-          ? null
-          : scoreWithinBudget("first_text", output.firstTextMs, FIRST_TEXT_BUDGET_MS),
       // What the artist page shows first is a progress line from the first tool step; this is
-      // the time to that, reported beside first_text and not gated either.
+      // the time to that, reported and not gated.
       ({ output }) =>
         output.error
           ? null
           : scoreWithinBudget(
               "first_signal",
               output.firstSignalMs ?? output.firstTextMs,
-              FIRST_TEXT_BUDGET_MS,
+              FIRST_SIGNAL_BUDGET_MS,
             ),
       ({ output }) =>
         output.error ? null : scoreWithinBudget("total_time", output.totalMs, TOTAL_BUDGET_MS),

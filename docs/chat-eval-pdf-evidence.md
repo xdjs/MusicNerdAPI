@@ -59,7 +59,8 @@ Before this change the suite recorded six scores per case and nothing could fail
 | citations, evidence_scorable | 1 on every answerable row                                 |
 | total_time                   | 1 on every row                                            |
 | errors                       | no row may end in an error                                |
-| first_text                   | reported, not gated                                       |
+
+The `first_text` score (text within five seconds) was removed on 2026-11-14: Pete decided it is not a requirement, since answers that read or research take longer. The time to first text is still printed per row; `first_signal` is reported and `total_time` is gated.
 
 The `mentions` score (`lib/evals/scoreMentions.ts`) is reported, not gated: for cases that list `mentions` in `chatCases.ts`, it is the share of those terms (taken from the public reference answers) that the answer names as whole words after normalising case, accents and punctuation, and the log prints one `mentions=<matched>/<total> missing=[...]` line per case with our own terms, never answer text.
 

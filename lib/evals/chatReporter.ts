@@ -4,7 +4,6 @@ import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
 const SCORE_COLUMNS = [
   "first_signal",
-  "first_text",
   "total_time",
   "citations",
   "evidence_scorable",
