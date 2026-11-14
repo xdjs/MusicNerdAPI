@@ -17,6 +17,18 @@ export type ChatTurn = {
   evidence?: ChatEvidence[];
   /** The tools the model called, in order, with their inputs; absent on historical turns. */
   tools?: { name: string; input: unknown; toolCallId?: string }[];
+  /**
+   * A text-free trace of each tool call in call order: `atMs` is when its input was available
+   * and `doneMs` when its output arrived (both since the turn started); `summary` holds counts
+   * and flags only. Absent on historical turns.
+   */
+  trace?: { name: string; atMs: number; doneMs?: number; summary: string }[];
+  /** How many `text-delta` chunks the answer arrived in; one or a few means it came in a burst. Absent on historical turns. */
+  textDeltas?: number;
+  /** From the question being sent to the last `text-delta`; absent when no text arrived and on historical turns. */
+  lastTextMs?: number;
+  /** Model steps in the turn, counted from the stream's `start-step` parts. */
+  steps?: number;
   /** This answer as a client sends it back in a follow-up: completed PDF reads and the text. */
   assistantParts?: unknown[];
   /** From the question being sent to the finished answer. */

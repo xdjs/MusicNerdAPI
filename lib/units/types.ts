@@ -80,6 +80,37 @@ export const SEARCH_CANDIDATES = 20;
 export const SEARCH_LIMIT = 8;
 export const MAX_UNITS_PER_DOCUMENT = 3;
 export const RRF_K = 60;
-export const PASSAGE_CHARS = 1200;
-export const READ_UNITS_TOKEN_BUDGET = 12000;
+// Staging 2026-11-14: text-section units average 3,963 chars (32 of 41 over 2,400, longest 5,994) and
+// 17 of 72 PDF pages exceed 2,400; at 2,400 one eval question's answering sentence (char 2,890 of
+// 5,957) never reached the model. A search result is now the whole unit (at most MAX_UNIT_CHARS);
+// only a denser PDF page is windowed.
+export const PASSAGE_CHARS = MAX_UNIT_CHARS;
+// Staging 2026-11-14: whole units make an 8-result search cost up to ~12,000 tokens, and an "every
+// item" answer then reads a 13-unit document (~6,500 tokens) on top.
+export const READ_UNITS_TOKEN_BUDGET = 24000;
 export const WEAK_COSINE_DISTANCE = 0.6;
+// Staging 2026-11-14: answers that read the whole 13-unit timeline PDF held 7 of 7 and 6 of 7
+// required items, answers from three of its pages 5 of 7 and 2 of 3, and the model chose the whole
+// read in about half of the runs. A search with several hits in a document this short returns it
+// whole instead of leaving the read to the model.
+export const SHORT_DOCUMENT_UNITS = 15;
+// The most characters of not-yet-shown units a search adds when it returns a short document whole.
+export const SHORT_DOCUMENT_CHARS = 32_000;
+
+/**
+ * Postgres's `english` stopword list (the Snowball list in `tsearch_data/english.stop`). A query
+ * made only of these words gives an empty `websearch_to_tsquery('english', …)`, so
+ * `searchUnitsByText` answers it with `[]` without a round trip; `trimToPassage` skips them when
+ * it scores windows. The list must never hold a word Postgres keeps, or a real query would be
+ * dropped; a word missing from it only costs a query that the SQL guard then empties.
+ */
+export const ENGLISH_STOPWORDS = new Set(
+  (
+    "i me my myself we our ours ourselves you your yours yourself yourselves he him his himself she her hers herself " +
+    "it its itself they them their theirs themselves what which who whom this that these those am is are was were be " +
+    "been being have has had having do does did doing a an the and but if or because as until while of at by for with " +
+    "about against between into through during before after above below to from up down in out on off over under " +
+    "again further then once here there when where why how all any both each few more most other some such no nor " +
+    "not only own same so than too very s t can will just don should now"
+  ).split(" "),
+);

@@ -17,13 +17,13 @@ Chat:
 Eval:
 
 - `readPdfChatEvidence` refetches the cited public PDF, verifies its bytes hash to what the tool reported, and extracts text with `[page N]` markers so `[n, p.N]` citations can be checked.
-- The judge is the chat model at default sampling (the current Sonnet rejects a non-default temperature). Rubric `cited-evidence-v2`; the judge model is recorded in experiment metadata.
+- The judge is the chat model at default sampling (the current Sonnet rejects a non-default temperature). Rubric `cited-evidence-v3`; the judge model is recorded in experiment metadata.
 - `chatCases.ts` carries the 2026-11-06 audited references for Willie Colón / Blades and the Dutchyyy aliases, plus a twelfth case, the #1424 acceptance question, with page numbers checked against the original PDF on 2026-11-12.
 - `ChatTurn.tools` records tool calls and inputs for review.
 
 ## Local results
 
-Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only. "Final" is the committed branch (`cc3a257`), run across three allowance windows on 2026-11-12 because the staging visitor allowance is 30 questions per rolling hour.
+Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only. "Final" is the committed branch (`cc3a257`), run across three allowance windows on 2026-11-12 because the staging visitor allowance is 30 questions per rolling hour. Both columns were judged under rubric `cited-evidence-v2`; the current rubric, `cited-evidence-v3`, came later and adds unit locators, so these scores are not directly comparable with v3 runs.
 
 | Case | Before | Final | Final evidence |
 | --- | --- | --- | --- |
@@ -57,11 +57,31 @@ Before this change the suite recorded six scores per case and nothing could fail
 | answer_relevance             | mean over questions at least 0.80; no question below 0.60 |
 | source_groundedness          | mean over questions at least 0.80; no question below 0.60 |
 | citations, evidence_scorable | 1 on every answerable row                                 |
-| total_time                   | 1 on every row                                            |
+| first_signal                 | 1 on every row (the status signal within 5 s)             |
+| mean answer time             | at most 8 s, mean over questions of `totalMs`             |
+| total_time                   | 1 on every row (each answer within 20 s)                  |
 | errors                       | no row may end in an error                                |
-| first_text                   | reported, not gated                                       |
 
-A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same. First text is not gated because the chat reads sources before it writes; the five-second target waits on a product change, a status line streamed while reading, tracked separately.
+The judge also reports `issues` from a closed list, `unsupportedCitations` and `missingRequired`; the suite prints them per row as `[chat] <key> judge: issues=[...] unsupported=[...] missing=<n>` (enum values and integers only, never the judge's reason) and keeps them in the Braintrust score metadata.
+
+The `first_text` score (text within five seconds) was removed on 2026-11-14: Pete decided it is not a requirement, since answers that read or research take longer. The time to first text is still printed per row. Instead there must be activity while the chat reads and the average answer time must be known and acceptable (Pete, 2026-11-14): `first_signal`, the status line within five seconds, is gated on every row that did not end in an error, and the mean answer time over questions is gated at 8 s (`MEAN_TOTAL_BUDGET_MS`; measured mean 5.5 s over 75 rows on 2026-11-14), with rows that ended in an error left out since they already fail. The reporter prints `answer time: mean, median, slowest` over the same per-question times after the means line.
+
+The `mentions` score (`lib/evals/scoreMentions.ts`) is reported, not gated: for cases that list `mentions` in `chatCases.ts`, it is the share of those terms (taken from the public reference answers) that the answer names as whole words after normalising case, accents and punctuation, and the log prints one `mentions=<matched>/<total> missing=[...]` line per case with our own terms, never answer text.
+
+A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same.
+
+### Known-hard questions (2026-11-14)
+
+Two questions have a single-trial score that ranges too widely for a 0.6 floor to mean anything. Staging, judge `openai/gpt-5.4`, 2026-11-14, three trials each:
+
+| Question | Legacy path | Passages path |
+| --- | --- | --- |
+| willie-colon-blades, relevance | 0.26 (three-trial mean; earlier single trials 0.22, 0.25, 0.30; never names the second album) | means 0.52, 0.63 and 0.37 over three sets of three on the same day (single trials 0.35 to 0.78) |
+| dutchyyy-aliases, relevance | scorable in one of three trials (0.55); the others had a citation that did not resolve | means 0.57, 0.65 and 0.55 over three sets of three (single trials 0.45 to 0.82) |
+
+Any fixed floor between those numbers is a coin flip, for one trial or for the mean of three. Both cases carry `knownHard` and run three trials. A known-hard question has no floor on `answer_relevance` or `source_groundedness`. Everything else still applies to it: citations and evidence scorable on every row, total time, first signal, no error rows, and it still counts in the 0.8 means and in the mean answer time. The `dutchyyy-aliases` follow-up row is not known-hard. The reporter prints one `known-hard <key>: answer_relevance X.XX, source_groundedness X.XX over N trials (reported, not gated on score, since <since>)` line per such question after the means.
+
+These two are open quality gaps, shown on every run with the judge's issue categories. They do not fail a run on score alone because their scores swing more between identical runs than between the two paths.
 
 The judge is `MODEL_JUDGE` (`openai/gpt-5.4`), a different model family from the chat model, so an answer is never graded by its own author. Scores from the earlier Sonnet judge (the tables above) and from `MODEL_JUDGE` are not directly comparable; the experiment metadata records `judgeModel`.
 
@@ -91,11 +111,34 @@ Staging admits 30 chat questions per rolling hour per visitor key and 200 per da
 
 ## Running locally
 
-`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
+`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar. To run only some cases, set `CHAT_CASES` to a comma-separated list of case keys (hosted: the `cases` input of the Evals workflow); a case's follow-up row runs with it and an unknown key fails before any model call.
 
 ## Follow-up turns (2026-11-13)
 
 Before this change the body validator dropped every earlier answer that had read a PDF, because the document's access can change between turns and the old answer would replay it. The guard stays, narrowed: `keepCurrentPdfTurns` keeps such an answer only while every document it read is still published for the artist at the revision it read (the read tool now returns `revision`); otherwise the answer is dropped as before. The chat suite's `dutchyyy-aliases` case gained a follow-up row, asked with the first answer in the conversation and scored like any other row.
+
+## Passages run
+
+With `CHAT_RETRIEVAL=units` the chat answers from `searchPassages` and `readUnits` instead of the whole-source and PDF tools, and the suite judges what those tools returned. The workflow input `retrieval` (`legacy` or `units`, default `legacy`) sets `CHAT_RETRIEVAL` for the run, and the experiment metadata records it as `retrieval`.
+
+- **Evidence is the tool output.** Each search result and each unit read becomes one evidence row with its text exactly as the model saw it; nothing is refetched (the PDF refetch applies only to the legacy PDF tools).
+- **Locator markers.** Each row's text starts with `[<locator>]` on its own line (for example `[p.3]`), so a `[n, p.N]` citation can be checked against the pages the model was shown, the way `[page N]` markers are checked today.
+- **Follow-ups.** The turn's replayed parts include the `tool-searchPassages` and `tool-readUnits` parts, so the follow-up row sends `documents` and the handler checks them as it does for a client.
+- **Output.** As before, only numbers are printed; no passage text reaches the log.
+
+Run: `gh workflow run evals.yml -f suite=chat -f retrieval=units`, then once with `-f retrieval=legacy` on the same commit.
+
+| Measure                  | legacy | units | Delta |
+| ------------------------ | ------ | ----- | ----- |
+| Gate result              |        |       |       |
+| Mean answer_relevance    |        |       |       |
+| Mean source_groundedness |        |       |       |
+| Mean first signal (ms)   |        |       |       |
+| Mean first text (ms)     |        |       |       |
+| Mean total time (ms)     |        |       |       |
+| Per-question deltas      |        |       |       |
+
+To be filled from the hosted runs.
 
 ## What the numbers do not show
 
@@ -107,3 +150,112 @@ Before this change the body validator dropped every earlier answer that had read
 ## Vision pass proof (2026-11-13, part 1 of the grounded chat plan)
 
 The page-level index reads scanned pages with a vision model instead of the native whole-PDF read. Before wiring that path, the `vision-page` suite transcribes a committed image-only fixture (`lib/units/__tests__/fixtures/scanned-page.pdf`, one page, no text layer, the sentence "Music Nerd vision fixture, November 2026") through the gateway with `MODEL_OCR` (`google/gemini-3.8-flash`) as a one-page PDF file part. Hosted run [43501462312](https://github.com/xdjs/MusicNerdAPI/actions/runs/43501462312) on `e6c0213`: `contains_phrase` 100%, no errors. Two harness defects were fixed on the way: the suite resolved the fixture with `import.meta.url`, which the Braintrust bundle leaves empty, and the spend guard refused `file` parts in user messages before the request left. The suite logs only the score and, on failure, the provider error, never the transcription.
+
+## Retrieval eval
+
+The `retrieval` suite (`evals/retrieval.eval.ts`) measures the page-level text index before any model reads it. For each of the twelve chat questions plus the `dutchyyy-aliases` follow-up (`lib/evals/retrievalCases.ts`) it calls `searchUnits(artistId, question, { names: [artistName] })` on the staging database and scores the top eight hits against labelled facts (`lib/evals/retrievalLabels.ts`). Each fact lists alternative `{ sourceKind, sourceId, locator }` units and is found when any one of them is retrieved (locator compared without whitespace). `recall_at_8` is facts found over facts (the unanswerable case has no facts and scores 1 when the search is weak); `reciprocal_rank` is 1 over the rank of the first hit that satisfies any fact, 0 when none does. The task output lists each fact with `found` and `rank`, and the reporter prints a `facts` column (`found/total`) and one `missed: <case>: <fact>` line per missed fact. The task's only model call is the query embedding, behind the spend guard, which prices gateway `/embedding-model` requests at the embedding model's rate and refuses any other unpriced gateway model path. The output holds source ids, locators, titles, public URLs and scores, never unit text.
+
+**Tuning.** Ranking variants are compared without code edits through three workflow inputs, passed to the suite as environment variables and read by `lib/units/getSearchTuning.ts` (empty or invalid values keep the default): `units_max_per_document` (`UNITS_MAX_PER_DOCUMENT`, 1-8, default 3), `units_text_mode` (`UNITS_TEXT_MODE`: `and`, every word must match via `websearch_to_tsquery`, or `or`, any of up to 24 distinct non-stopword terms, ranked with `ts_rank_cd(..., 32)`; default `or`, which found 15 of 16 labelled facts against 13 for `and` on staging, 2026-11-14) and `units_candidates` (`UNITS_CANDIDATES`, 10-60, default 20, both candidate lists). The run logs `[retrieval] tuning: ...` and records the tuning in the experiment metadata.
+
+**Gates** (`lib/evals/retrievalGates.ts`): mean `recall_at_8` over labelled cases at least 0.8, and no labelled case with `reciprocal_rank` 0. Cases with no labels are reported but never gate, so runs can pass while labels are written; a run with no labelled case at all fails ("no labelled cases"). The run must pass before the chat flag for the index is turned on anywhere.
+
+**One-time backfill.** On a fresh staging database, after Web migration 0066 is applied there and before the first `retrieval` run, run the `units-backfill` suite once (`gh workflow run evals.yml -f suite=units-backfill`). For each artist in the cases it ingests every source whose indexed revision is not its current revision, with OCR, and reports counts only (`sources`, `ingested`, `failed`, `unitsWritten`); the `indexed` score is 1 when units were written or the artist has no sources.
+
+**Labelling.** Run `gh workflow run evals.yml -f suite=retrieval -f label=true`. The hosted log then lists one line per hit on stderr: `label <case> #<rank> <sourceKind> <sourceId> <locator> <title> <url>`, without text, and one `signals <case> textMatched=<bool> anyTextMatched=<bool> bestVector=<score|none> weak=<bool>` line per case: `textMatched` is the strict (`and`) match and the best vector score, the two inputs of the `weak` flag, and `anyTextMatched` whether the ranking text lists matched at all. `weak` is a hint for obviously empty retrievals; it does not detect unanswerable questions (measured 2026-11-14), so the chat decides from the passages. The labeller opens each public document at the listed page, decides which units answer the question, and writes the facts into `retrievalLabels.ts` (the known Dutchyyy PDF pages are in those cases' `note`). The labels of 2026-11-14 were located by keyword from the audited reference answers in `chatCases.ts`, independently of the ranking under test. Only public documents are opened; nothing from a private source is copied into the repository. Pete confirms the labels in the pull request. A case that cannot pass is reported, not relabelled; ranking (`RRF_K`, candidate counts, alias expansion) is tuned until the gates pass.
+
+The spend guard's embedding path suffix (`/embedding-model`) is read from the installed AI SDK gateway provider; the first hosted run confirms it, and a different suffix is fixed in the same pull request.
+
+## First staging record of chat on passages (2026-11-14)
+
+Everything here ran in the hosted Evals workflow against staging. Staging holds 680 units for the three eval artists, all embedded (`units-backfill`, Actions run 43562930795). No answer or passage text appears in any log; the per-question observations below come from scores, the tool trace and the `mentions` check.
+
+### Retrieval
+
+Labels were located by keyword from the audited references in `chatCases.ts`, independently of the ranking: sixteen facts over twelve answerable questions, each fact satisfied by any one of its units (`lib/evals/retrievalLabels.ts`). They were confirmed by the controller under Pete's delegation and await his own read.
+
+| Variant | Facts in the top 8 | Missed |
+| --- | --- | --- |
+| 3 units per document, strict text match, 20 candidates | 13 of 16 | Glide account (Blades); The Chill Factor (both alias questions) |
+| 5 per document, strict | 13 of 16 | the same three |
+| 3 per document, any-term text match (adopted) | 15 of 16 | The Chill Factor (aliases) |
+| 5 per document, any-term | 14 of 16 | The Chill Factor (aliases); the 2012 example |
+| 5 per document, any-term, 40 candidates | 15 of 16 | The Chill Factor (aliases) |
+
+Both gates pass on every variant (mean recall at least 0.8; every question has an answering unit in the top 8). The adopted default scores mean recall 0.96 (run 43565093604). The `weak` flag does not detect unanswerable questions: the control's best vector score (0.480) sits inside the range of the answerable ones (0.445 to 0.689). It is now documented as a hint for empty retrievals only, and the model decides from the passages; it abstained correctly on the control in every run.
+
+### Chat, paired on one commit (9d81e20, judge `openai/gpt-5.4`)
+
+|                               | Legacy (run 43570209842) | Passages (run 43568739679) |
+| ----------------------------- | ------------------------ | -------------------------- |
+| Gate failures                 | 4                        | 1                          |
+| Answer relevance, mean        | 0.88                     | 0.86                       |
+| Source groundedness, mean     | 0.95                     | 0.89                       |
+| Citations / evidence scorable | 0.98 / 0.93              | 1 / 1                      |
+| First text within 5 s         | 0                        | 0.53                       |
+| Total time                    | 6.9 to 12.7 s            | 3.6 to 7.9 s               |
+
+Legacy failed `bio-ritmo-30th` (0.35), `willie-colon-blades` (0.34) and `dutchyyy-aliases` (a dangling citation, so unscorable). Passages failed `willie-colon-blades` (0.28). Legacy was stronger on `dutchyyy-alias-years` (relevance 0.93 against 0.79, groundedness 0.89 against 0.66): it always reads all 13 pages of the timeline, and the passages path read the whole document in none of that run's three trials.
+
+The last run of the night (1edf353, run 43573446295), after the units-mode prompt regained the legacy sentence about one-time and parenthetical items: relevance 0.89, groundedness 0.90, citations 1, first text 0.67, one gate failure (`willie-colon-blades`, 0.25).
+
+### What the `mentions` check and the trace show
+
+- `willie-colon-blades` fails on both paths in every run (five passages runs: 0.25 to 0.38). The answer names Metiendo Mano and omits The Good, the Bad, the Ugly; the reference requires both accounts and the uncertainty. Groundedness stays between 0.78 and 1, so the answer is mostly supported but one-sided. Retrieval finds both accounts for the literal question; the model's own single search and its choice to commit are the gap.
+- The Chill Factor appears when the model reads the whole timeline (`readUnits` without locators, 13 units) and is usually missing when it answers from three pages of it: in the last run, trials that read the whole document scored 7 of 7 and 6 of 7 required terms, the trial that did not scored 5 of 7, and `dutchyyy-aliases` (no whole read) omitted it.
+- An ordinary answer is two model steps: one `searchPassages` call of about 0.8 s, then the answer. The first tool call lands 1.5 to 2.6 s in, which is model latency.
+
+### Not done, and why
+
+- The default is still `legacy`. The passages path is faster and fails fewer gates, and it is not yet as complete as the whole-PDF read on questions that need every page of one document. The next step with evidence behind it is deterministic: when a search stops at the per-document cap for a short document, return that whole document instead of leaving the read to the model.
+- Answers and judge reasons were not read by anyone: they live in the private Braintrust experiments named after each run's commit.
+- Query cost of the any-term match on production-sized data is unmeasured.
+
+## Second staging record: whole units, replay fixes and the switch decision (2026-11-14, daytime)
+
+All runs are hosted, on staging, judged by `openai/gpt-5.4`. No answer, passage or judge reason was printed or read; per-question observations come from scores, the tool trace, the `mentions` check and the judge's issue categories.
+
+### A defect in what the model was shown
+
+`searchPassages` cut each hit to a window around the first match of any query word. Text-section units average 3,963 characters and 32 of 41 were longer than the window, so the model usually saw the start of an article. In `willie-colon-blades` the sentence carrying the second account sits at character 2,890 of a 5,957-character unit while common words first match at character 115; the model never saw it, on any earlier run. A search result is now the whole unit (up to 6,000 characters; a longer page gets the window covering the most distinct query terms), and a short document with at least two hits is returned whole.
+
+Effect, measured: the required names and albums appear in answers (`mentions` 0.79 before, 0.94 to 1 after); mean answer time fell from 5.5 s to between 3.8 s and 5.9 s.
+
+### Follow-up conversations
+
+Reading the Web client against this API found that the second follow-up of a passage conversation was rejected (the 64-part limit counted `source-url` parts the API itself re-sends), and that an answer re-citing an earlier document from memory was dropped from the history although the prompt allows it. Both are fixed here; the client change is xdjs/MusicNerdWeb#1686.
+
+### The two questions that fail on both paths
+
+Three trials each, same judge, same day:
+
+| Question | Legacy | Passages |
+| --- | --- | --- |
+| `willie-colon-blades`, relevance | 0.22, 0.25, 0.30; never names the second album | three-trial means 0.52, 0.63, 0.37, 0.44; names both albums every time |
+| `dutchyyy-aliases`, relevance | two of three trials unscorable (a citation did not resolve); the third 0.55 | three-trial means 0.57, 0.65, 0.55, 0.58; always scorable |
+| Mean answer time on these | 9.6 s | 5.6 to 5.9 s |
+
+The judge's categories are stable: on the first, `invented_distinction`, `unsupported_claim` and the missing statement that the accounts disagree; on the second, `miscategorised_item` and `extra_unrequested_facts`. Three prompt rules aimed at exactly those categories and a higher reasoning effort (`medium`, three trials) did not move the scores beyond their run-to-run spread, which is 0.35 to 0.78 for one question at one setting. Both are marked known-hard (see "Pass and fail").
+
+### Full run at the final head (`ada57dc`, run 43626347460): gates passed
+
+|  | Result |
+| --- | --- |
+| Nine ordinary questions | relevance 0.82 to 1, groundedness 0.70 to 1 |
+| `dutchyyy-alias-years`, three trials | relevance 0.72, 0.84, 0.89; groundedness 0.56, 0.62, 0.78 |
+| Follow-up | 0.72 / 0.94 |
+| Known-hard: `willie-colon-blades` | 0.44 / 0.55 over three trials |
+| Known-hard: `dutchyyy-aliases` | 0.58 / 0.59 over three trials |
+| Citations, evidence scorable, status signal, total time | 1 on every row |
+| Answer time | mean 4.9 s, median 4.8 s, slowest 7.4 s |
+| Spend guard | 76 requests, 11.32 dollars reserved |
+
+Means by question are about 0.87 for relevance and 0.86 for groundedness; the `means:` line the reporter prints averages rows, where the six known-hard trials weigh more (0.79 and 0.78).
+
+### What is still open
+
+- The two known-hard questions are real gaps, not solved.
+- The Chill Factor was missing from two of three `dutchyyy-alias-years` answers in the final run although the whole timeline was in view.
+- The judge ticks `extra_unrequested_facts` on many answers since the model sees more text.
+- Answer text reaches the eval in one burst at the end of the answer (15 to 117 text deltas within 13 ms). Where that buffering happens is not known and it has not been checked in a browser; the status line covers the wait.
+- The any-term text query is unmeasured on production-sized data.
+- The default is still `legacy`. Production switches by setting `CHAT_RETRIEVAL=units` after the index exists there; the legacy path is removed in a later change.

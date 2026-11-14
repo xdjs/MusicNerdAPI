@@ -16,11 +16,48 @@ on:
           - pdf106-pete-smoke
           - pdf106-four-paired
           - vision-page
+          - retrieval
+          - units-backfill
         default: chat
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
         default: "5"
+      case_trials:
+        description: "chat only, with cases: ask each selected case this many times, 2 to 5"
+        type: string
+        default: ""
+      effort:
+        description: "chat only, passage tools only: model reasoning effort low or medium; empty is low"
+        type: string
+        default: ""
+      label:
+        description: "retrieval only: print each hit's source id, page locator, title and public URL (never text) so the cases can be labelled"
+        type: boolean
+        default: false
+      retrieval:
+        description: "chat only: the chat's retrieval (CHAT_RETRIEVAL): legacy (whole sources and PDF tools) or units (page-level passages)"
+        type: choice
+        options:
+          - legacy
+          - units
+        default: legacy
+      cases:
+        description: "chat only: comma-separated case keys to run; empty runs all"
+        type: string
+        default: ""
+      units_max_per_document:
+        description: "retrieval/chat units: the most units of one document among the hits (UNITS_MAX_PER_DOCUMENT, 1-8); empty keeps 3"
+        type: string
+        default: ""
+      units_text_mode:
+        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps or"
+        type: string
+        default: ""
+      units_candidates:
+        description: "retrieval/chat units: candidates per text and vector list (UNITS_CANDIDATES, 10-60); empty keeps 20"
+        type: string
+        default: ""
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -30,7 +67,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.
@@ -49,8 +86,16 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      # The chat-pdf-text suite's trial count (evals/chat-pdf-text.eval.ts).
+      # The trial count of chat-pdf-text (evals/chat-pdf-text.eval.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
+      # The chat suite's trials per selected case, with cases set (lib/evals/selectChatCases.ts); empty keeps each case's own.
+      CHAT_CASE_TRIALS: ${{ inputs.case_trials }}
+      # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
+      RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
+      # The chat's retrieval for the run (lib/chat/getChatRetrievalMode.ts).
+      CHAT_RETRIEVAL: ${{ inputs.retrieval }}
+      # The chat's reasoning effort in units mode (lib/chat/getChatEffort.ts).
+      CHAT_EFFORT: ${{ inputs.effort }}
 
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +126,14 @@ jobs:
           }
           JS
       - name: Run suite
+        # Search tuning overrides for comparing ranking variants (lib/units/getSearchTuning.ts);
+        # empty or invalid values keep the defaults.
+        env:
+          UNITS_MAX_PER_DOCUMENT: ${{ inputs.units_max_per_document }}
+          UNITS_TEXT_MODE: ${{ inputs.units_text_mode }}
+          UNITS_CANDIDATES: ${{ inputs.units_candidates }}
+          # The chat suite's case selection (lib/evals/selectChatCases.ts); empty runs all.
+          CHAT_CASES: ${{ inputs.cases }}
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
 
   pdf106-paired:

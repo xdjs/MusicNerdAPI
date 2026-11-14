@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_GATES, checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 
 const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): ChatGateRow => ({
   key,
   answerable: true,
+  totalMs: 5000,
   scores: {
-    first_text: 0,
+    first_signal: 1,
     total_time: 1,
     citations: 1,
     evidence_scorable: 1,
@@ -16,8 +18,43 @@ const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): Chat
 });
 
 describe("checkChatGates", () => {
-  it("passes a run that meets every gate, and never gates first text", () => {
-    expect(checkChatGates([good("a"), good("b", { first_text: 0 })])).toEqual([]);
+  it("passes a run that meets every gate", () => {
+    expect(checkChatGates([good("a"), good("b")])).toEqual([]);
+  });
+
+  it("requires the status signal within 5 s on every row that did not error", () => {
+    const failures = checkChatGates([
+      good("a", { first_signal: 0 }),
+      good("t"),
+      good("t", { first_signal: null }),
+      { ...good("e", { first_signal: null }), error: "429 limit" },
+    ]);
+    expect(failures).toContain("a: no status signal within 5 s.");
+    expect(failures).toContain("t trial 2: no status signal within 5 s.");
+    expect(failures.filter(f => f.includes("status signal"))).toHaveLength(2);
+  });
+
+  it(`fails when the mean answer time over questions is above ${MEAN_TOTAL_BUDGET_MS} ms`, () => {
+    // Question t averages its trials (6 s and 12 s: 9 s); with u at 7.4 s the mean is 8.2 s.
+    expect(
+      checkChatGates([
+        { ...good("t"), totalMs: 6000 },
+        { ...good("t"), totalMs: 12000 },
+        { ...good("u"), totalMs: 7400 },
+      ]),
+    ).toEqual(["mean answer time 8.2 s is above 8.0 s."]);
+    // At exactly the budget it passes, and a row that errored does not count toward the mean.
+    expect(
+      checkChatGates([
+        { ...good("t"), totalMs: 8000 },
+        { ...good("u"), totalMs: 8000 },
+        { ...good("v"), totalMs: 60000, error: "timeout" },
+      ]),
+    ).toEqual(["v: ended in an error (timeout)."]);
+  });
+
+  it("never gates the mentions score", () => {
+    expect(checkChatGates([good("a", { mentions: 0 }), good("b", { mentions: null })])).toEqual([]);
   });
 
   it("fails an empty run", () => {
@@ -94,5 +131,57 @@ describe("checkChatGates", () => {
     ]);
     expect(failures).toContain("No question received an answer_relevance score.");
     expect(failures).toContain("No question received a source_groundedness score.");
+  });
+
+  describe("known-hard questions", () => {
+    const hard = { since: "2026-11-14", reason: "tracked" };
+    const hardTrials = (relevance: number[], overrides: Partial<ChatGateRow["scores"]> = {}) =>
+      relevance.map(r => ({
+        ...good("h", { answer_relevance: r, source_groundedness: 0.9, ...overrides }),
+        knownHard: hard,
+      }));
+
+    it("does not fail a known-hard question on score, even at 0.2", () => {
+      // Seven questions at 0.9 and the known-hard one at 0.2 keep the run mean at 0.8125.
+      const rows = ["a", "b", "c", "d", "e", "f", "g"].map(k => good(k));
+      const failures = checkChatGates([
+        ...rows,
+        ...hardTrials([0.2, 0.2, 0.2], { source_groundedness: 0.2 }),
+      ]);
+      expect(failures).toEqual([]);
+    });
+
+    it("still fails a dangling citation or unscorable evidence", () => {
+      const failures = checkChatGates([
+        good("a"),
+        ...hardTrials([0.8, 0.8], { citations: 0 }),
+        { ...hardTrials([0.8])[0], scores: { ...good("h").scores, evidence_scorable: 0 } },
+      ]);
+      expect(failures).toContain("h trial 1: a citation did not resolve to a returned source.");
+      expect(failures).toContain("h trial 3: the judge could not score the captured evidence.");
+    });
+
+    it("still fails a known-hard question on an error row or on time", () => {
+      const failures = checkChatGates([
+        good("a"),
+        { ...hardTrials([0.9])[0], error: "boom" },
+        { ...hardTrials([0.9])[0], scores: { ...good("h").scores, total_time: 0 } },
+      ]);
+      expect(failures).toContain("h trial 1: ended in an error (boom).");
+      expect(failures).toContain("h trial 2: did not finish within the total time budget.");
+    });
+
+    it("still holds a normal question at 0.55 to 0.6", () => {
+      expect(checkChatGates([good("a"), good("n", { answer_relevance: 0.55 })])).toContain(
+        "n: answer_relevance 0.55 is below 0.6.",
+      );
+    });
+
+    it("counts a known-hard question in the run means", () => {
+      // Means: (0.9 + 0.5) / 2 = 0.7, below 0.8, although the question itself is not gated on score.
+      const failures = checkChatGates([good("a"), ...hardTrials([0.5])]);
+      expect(failures).toContain("Mean answer_relevance 0.7 is below 0.8.");
+      expect(failures).not.toContain(expect.stringContaining("known-hard"));
+    });
   });
 });

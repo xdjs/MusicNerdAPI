@@ -1,5 +1,10 @@
-/** Reservation ceiling in micro-dollars: the 12-case suite at its conservative rates fits under ten dollars; actual spend is about a dollar. */
-const CEILING_MICROS = 10000000;
+/**
+ * Reservation ceiling in micro-dollars (sixteen dollars of RESERVED spend; a reservation prices
+ * every request at its maximum output). The 19-row chat suite reserves about 12.5 dollars, and
+ * actual spend is roughly a fifth of what is reserved. The request cap (`MAX_PAID_REQUESTS`) is
+ * unchanged.
+ */
+const CEILING_MICROS = 16_000_000;
 
 /**
  * Micro-dollars reserved per input byte, per output token and per base64 PDF character, by
@@ -13,6 +18,8 @@ const PRICED_MODELS: Record<string, { input: number; output: number; file: numbe
   "google/gemini-3.8-flash": { input: 1, output: 6, file: 0.125 },
   "google/gemini-4-hydrogen": { input: 2, output: 10, file: 0.25 },
   "openai/gpt-5.4": { input: 4, output: 20, file: 0.5 },
+  // Embedding model (MODEL_EMBEDDING): $0.02 per million input tokens, charged per estimated token.
+  "openai/text-embedding-3-small": { input: 0.02, output: 0, file: 0 },
 };
 const MAX_PAID_REQUESTS = 150;
 
@@ -47,6 +54,12 @@ function collectFileParts(value: unknown, into: string[]): void {
  * never refund failed calls, and latch closed at the approved ten-dollar envelope.
  * Rates include headroom over the October 29 Gateway catalog and Tavily PAYG rates.
  * Native PDF input is priced per base64 character, far above its page-based billing.
+ * Destination rule: only a violation on a paid provider (ai-gateway.vercel.sh, api.tavily.com)
+ * latches the run closed, including a non-HTTPS request to one of them. Any other destination is
+ * refused for that request alone and does not stop the run, so tooling that talks to its own
+ * hosts cannot starve later priced calls; that covers a non-HTTPS request to any other host
+ * (even an otherwise allowed one such as api.braintrust.dev), which is refused before anything is
+ * sent. Nothing is ever sent for a refused or latched request.
  * This is a reservation ledger, not a provider invoice. No shared settings change.
  */
 export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 0) {
@@ -60,16 +73,47 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   let paidRequests = 0;
   let blocked = false;
   let stopReason: string | undefined;
+  let blockedBy: string | undefined;
+  // Short fixed label of the request being judged; never a URL query, body or header value.
+  let kind = "unknown";
+  const refusedHosts = new Set<string>();
+  const isPaidHost = (hostname: string) =>
+    hostname === "ai-gateway.vercel.sh" || hostname === "api.tavily.com";
+  /** Refuses this request only: logged once per host, the run keeps going. */
+  const refuseDestination = (hostname: string): never => {
+    if (!refusedHosts.has(hostname)) {
+      refusedHosts.add(hostname);
+      console.error(`[eval-budget] refused: unapproved network destination (${kind})`);
+    }
+    throw new Error("Eval budget guard: unapproved network destination");
+  };
   const fail = (reason: string): never => {
     blocked = true;
-    stopReason ??= reason;
+    if (stopReason === undefined) {
+      stopReason = reason;
+      blockedBy = kind;
+      console.error(`[eval-budget] blocked: ${reason} (${kind})`);
+    }
     throw new Error(`Eval budget guard: ${reason}`);
   };
   const guarded: typeof fetch = async (input, init) => {
     const url = new URL(
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
     );
-    if (url.protocol !== "https:") return fail("HTTPS required");
+    kind =
+      url.hostname === "ai-gateway.vercel.sh"
+        ? url.pathname.endsWith("/language-model")
+          ? "language-model"
+          : url.pathname.endsWith("/embedding-model")
+            ? "embedding-model"
+            : "other-gateway"
+        : url.hostname === "api.tavily.com"
+          ? "tavily"
+          : `host:${url.hostname}`;
+    if (url.protocol !== "https:") {
+      if (isPaidHost(url.hostname)) return fail("HTTPS required");
+      return refuseDestination(url.hostname);
+    }
     // Logging is not model execution. Other Braintrust endpoints are not allowed here.
     if (
       (url.hostname === "api.braintrust.dev" || url.hostname === "www.braintrust.dev") &&
@@ -83,6 +127,9 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       url.pathname.startsWith("/storage/v1/object/public/")
     )
       return send(input, init);
+    // Not a paid provider: refuse this request only. It must not stop the run, because
+    // tooling (the Braintrust CLI's S3 bundle upload) legitimately talks to other hosts.
+    if (!isPaidHost(url.hostname)) return refuseDestination(url.hostname);
     if (blocked) return fail("run already stopped");
     if (typeof init?.body !== "string" || init.method !== "POST")
       return fail("unexpected request shape");
@@ -148,11 +195,23 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
       const fileMicros = Math.ceil(fileCharacters * price.file);
       reservation =
         (bytes + 8192) * price.input + Number(body.maxOutputTokens) * price.output + fileMicros;
+    } else if (
+      url.hostname === "ai-gateway.vercel.sh" &&
+      url.pathname.endsWith("/embedding-model")
+    ) {
+      // The gateway embedding call posts { values: string[] } with the model id in `ai-model-id`.
+      const model = new Headers(init.headers).get("ai-model-id");
+      const price = model ? PRICED_MODELS[model] : undefined;
+      if (!price) return fail("unpriced model");
+      if (!Array.isArray(body.values)) return fail("missing values");
+      reservation = Math.ceil(Math.ceil(JSON.stringify(body.values).length / 4) * price.input);
+    } else if (url.hostname === "ai-gateway.vercel.sh" && url.pathname.endsWith("-model")) {
+      return fail("unpriced gateway path");
     } else if (url.hostname === "api.tavily.com" && url.pathname === "/search") {
       if (Object.keys(body).some(key => !["query", "include_domains", "max_results"].includes(key)))
         return fail("unpriced search options");
       reservation = 16000; // two credits at $0.008; current request defaults to one.
-    } else return fail("unapproved network destination");
+    } else return fail("unapproved network destination"); // a paid host with an unapproved path
     if (paidRequests >= MAX_PAID_REQUESTS || reservedMicros + reservation > CEILING_MICROS)
       return fail("approved request/spend envelope exhausted");
     reservedMicros += reservation;
@@ -164,6 +223,13 @@ export function createEvalBudgetFetch(send: typeof fetch, priorReservedMicros = 
   };
   return {
     fetch: guarded,
-    snapshot: () => ({ reservedUsd: reservedMicros / 1000000, paidRequests, blocked, stopReason }),
+    snapshot: () => ({
+      reservedUsd: reservedMicros / 1000000,
+      paidRequests,
+      blocked,
+      stopReason,
+      blockedBy,
+      refusedHosts: [...refusedHosts],
+    }),
   };
 }

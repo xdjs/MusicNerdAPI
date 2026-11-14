@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { MAX_VAULT_FILE_BYTES } from "@/lib/vaultUpload/const";
+import { publicSocialPostSql } from "@/lib/sourcePublication/publicSocialPostSql";
+import { socialPostTextSql } from "@/lib/sourcePublication/socialPostTextSql";
 import { socialPostRevisionSql } from "@/lib/sourcePublication/socialPostRevisionSql";
 import { vaultSourceRevisionSql } from "@/lib/sourcePublication/vaultSourceRevisionSql";
 import type { UnitBody, UnitSourceInput, UnitSourceKind } from "@/lib/units/types";
@@ -78,7 +80,7 @@ export async function loadUnitSource(
       text: string;
       revision: string;
     }>(
-      sql`select s.artist_id, s.url, case when t.speech is not null then coalesce(nullif(s.caption, '') || E'\n\n', '') || t.speech else coalesce(s.caption, '') end as text, ${socialPostRevisionSql()} as revision from artist_social_posts s left join lateral (select case when s.platform = 'instagram' and s.raw->'_musicnerdTranscript'->'version' = '1'::jsonb and s.raw->'_musicnerdTranscript'->>'actor' = 'apify/instagram-reel-scraper' and jsonb_typeof(s.raw->'_musicnerdTranscript'->'text') = 'string' and btrim(s.raw->'_musicnerdTranscript'->>'text') <> '' then s.raw->'_musicnerdTranscript'->>'text' end as speech) t on true where s.id = ${sourceId}::uuid and s.is_own_post = true and s.raw->'isRepost' is distinct from 'true'::jsonb and s.raw->'isRetweet' is distinct from 'true'::jsonb`,
+      sql`select s.artist_id, s.url, ${socialPostTextSql()} as text, ${socialPostRevisionSql()} as revision from artist_social_posts s where s.id = ${sourceId}::uuid and ${publicSocialPostSql()}`,
     );
     if (!row) return null;
     return {
