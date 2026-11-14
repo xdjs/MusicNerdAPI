@@ -1,10 +1,11 @@
 import { embedMany } from "ai";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
+import { isEmbeddingInputError } from "@/lib/units/isEmbeddingInputError";
 import { truncateForEmbedding } from "@/lib/units/truncateForEmbedding";
 import { EMBED_BATCH, EMBED_BATCH_CHARS, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
 
-/** Embeds `inputs[from, to)`; a failing batch of several inputs is split in halves, a failing single input throws an `EmbeddingInputError`. */
+/** Embeds `inputs[from, to)`; a batch of several inputs that fails with an input error (see `isEmbeddingInputError`) is split in halves, any other failure is rethrown unchanged, a failing single input throws an `EmbeddingInputError`. */
 async function embedRange(
   inputs: string[],
   from: number,
@@ -20,7 +21,7 @@ async function embedRange(
       abortSignal: signal,
     }));
   } catch (error) {
-    if (signal?.aborted) throw error;
+    if (signal?.aborted || !isEmbeddingInputError(error)) throw error;
     if (batch.length === 1) throw new EmbeddingInputError(from, inputs.length, error);
     const mid = from + Math.ceil(batch.length / 2);
     return [
@@ -49,7 +50,7 @@ async function embedRange(
  * @param texts - The texts to embed.
  * @param opts - An abort signal forwarded to every model call.
  * @returns One vector per text, in the same order as `texts`.
- * @throws An `EmbeddingInputError` when a single input still fails after its batch was split; otherwise if the model returns a different number of vectors than texts, or a vector that is not `EMBEDDING_DIMENSIONS` long.
+ * @throws An `EmbeddingInputError` when a single input still fails with an input error after its batch was split; any other provider failure unchanged, without splitting; otherwise if the model returns a different number of vectors than texts, or a vector that is not `EMBEDDING_DIMENSIONS` long.
  */
 export async function embedUnits(
   texts: string[],
