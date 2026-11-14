@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import {
   EMBED_BATCH,
@@ -101,5 +102,42 @@ describe("embedUnits", () => {
     embedManyMock.mockResolvedValue({ embeddings: [vec(1)] });
     await embedUnits(["a".repeat(100) + " " + "b".repeat(EMBED_INPUT_CHARS)]);
     expect(embedManyMock.mock.calls[0][0].values[0]).toHaveLength(EMBED_INPUT_CHARS);
+  });
+
+  test("splits a failing batch of 16 in halves and keeps order", async () => {
+    const texts = Array.from({ length: 16 }, (_, i) => `t${i}`);
+    embedManyMock.mockRejectedValueOnce(new Error("boom"));
+    embedManyMock.mockImplementation(async (args: { values: string[] }) => ({
+      embeddings: args.values.map(t => vec(Number(t.slice(1)))),
+    }));
+
+    const out = await embedUnits(texts);
+
+    expect(embedManyMock).toHaveBeenCalledTimes(3);
+    expect(out.map(v => v[0])).toEqual(texts.map((_, i) => i));
+  });
+
+  test("isolates one bad input and names its position without its text", async () => {
+    const texts = ["a0", "a1", "secret2", "a3", "a4"];
+    embedManyMock.mockImplementation(async (args: { values: string[] }) => {
+      if (args.values.includes("secret2")) throw new Error("provider down");
+      return { embeddings: args.values.map(() => vec(1)) };
+    });
+
+    const error = await embedUnits(texts).catch(e => e);
+
+    expect(error).toBeInstanceOf(EmbeddingInputError);
+    expect(error).toMatchObject({ index: 2, total: 5 });
+    expect(error.message).not.toContain("secret2");
+    expect(error.cause).toEqual(new Error("provider down"));
+    expect(embedManyMock.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  test("does not split when the signal is aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    embedManyMock.mockRejectedValue(new Error("aborted"));
+    await expect(embedUnits(["a", "b"], { signal: controller.signal })).rejects.toThrow("aborted");
+    expect(embedManyMock).toHaveBeenCalledTimes(1);
   });
 });

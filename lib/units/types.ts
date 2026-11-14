@@ -59,7 +59,7 @@ export type IngestOutcome = {
 
 export const UNIT_INGEST_VERSION = 1;
 export const EMBEDDING_DIMENSIONS = 1536;
-export const EMBED_BATCH = 64;
+export const EMBED_BATCH = 16;
 // The most characters sent in one embedding request.
 export const EMBED_BATCH_CHARS = 100_000;
 // The most characters of one unit sent for embedding; the stored unit text is not changed.

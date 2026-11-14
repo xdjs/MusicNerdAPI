@@ -1,4 +1,5 @@
 import { RetryError } from "ai";
+import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
 
 const NAME = /^[A-Za-z_]{1,60}$/;
 const KIND = /^[a-z_]{1,40}$/;
@@ -27,6 +28,8 @@ function fields(value: unknown): string {
  * @returns For a `RetryError`: `<name> <reason> attempts=<n>` plus ` last=<name>`, ` status=` and ` type=` of its last error; for any other error: its name plus ` status=` and ` type=`. Never the message, URL or response body.
  */
 export function describeEmbeddingError(error: unknown): string {
+  if (error instanceof EmbeddingInputError)
+    return `${error.name} input=${error.index}/${error.total} ${describeEmbeddingError(error.cause)}`;
   const name = error instanceof Error ? error.name : "unknown";
   if (RetryError.isInstance(error)) {
     let out = `${name} ${error.reason} attempts=${error.errors.length}`;

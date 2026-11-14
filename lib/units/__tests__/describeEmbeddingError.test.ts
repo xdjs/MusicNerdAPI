@@ -1,5 +1,6 @@
 import { APICallError, RetryError } from "ai";
 import { describe, expect, test } from "vitest";
+import { EmbeddingInputError } from "@/lib/units/EmbeddingInputError";
 import { describeEmbeddingError } from "@/lib/units/describeEmbeddingError";
 
 const apiError = (statusCode?: number) =>
@@ -78,6 +79,18 @@ describe("describeEmbeddingError", () => {
     });
     expect(describeEmbeddingError(error)).toBe(
       "GatewayInternalServerError status=500 type=internal_server_error",
+    );
+  });
+
+  test("renders an input error with its position and its cause", () => {
+    const cause = new RetryError({
+      message: "m",
+      reason: "maxRetriesExceeded",
+      errors: [{ name: "GatewayResponseError", statusCode: 500, type: "response_error" }],
+    });
+    const out = describeEmbeddingError(new EmbeddingInputError(17, 40, cause));
+    expect(out).toBe(
+      "EmbeddingInputError input=17/40 AI_RetryError maxRetriesExceeded attempts=1 last=GatewayResponseError status=500 type=response_error",
     );
   });
 });
