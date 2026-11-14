@@ -1,6 +1,7 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
 import { readChatEvidence } from "@/lib/evals/readChatEvidence";
 import { readPdfChatEvidence } from "@/lib/evals/readPdfChatEvidence";
+import { summarizeToolCall } from "@/lib/evals/summarizeToolCall";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { postArtistChatHandler } from "@/lib/chat/postArtistChatHandler";
 
@@ -81,6 +82,9 @@ export async function chatStreamTurn(
   const evidence: NonNullable<ChatTurn["evidence"]> = [];
   const toolNames = new Map<string, string>();
   const tools: NonNullable<ChatTurn["tools"]> = [];
+  const trace: NonNullable<ChatTurn["trace"]> = [];
+  const traced = new Map<string, { entry: (typeof trace)[number]; input: unknown }>();
+  let steps = 0;
   // PDF tool outputs carry only metadata; the original is refetched after timing ends.
   const pdfReads: { tool: string; toolCallId: string; output: unknown }[] = [];
   // Passage tool outputs are the evidence itself; they are also replayed so a follow-up carries `documents`.
@@ -98,11 +102,24 @@ export async function chatStreamTurn(
     }
     const chunk = value.value;
     if (chunk.type === "tool-input-available" || chunk.type === "tool-input-start") {
-      firstSignal ??= clock.now();
+      const at = clock.now();
+      firstSignal ??= at;
       toolNames.set(chunk.toolCallId, chunk.toolName);
-      if (chunk.type === "tool-input-available")
+      if (chunk.type === "tool-input-available") {
         tools.push({ name: chunk.toolName, input: chunk.input, toolCallId: chunk.toolCallId });
+        const entry = { name: chunk.toolName, atMs: Math.round(at - started), summary: "" };
+        trace.push(entry);
+        traced.set(chunk.toolCallId, { entry, input: chunk.input });
+      }
+    } else if (chunk.type === "start-step") {
+      steps += 1;
     } else if (chunk.type === "tool-output-available") {
+      const done = clock.now();
+      const call = traced.get(chunk.toolCallId);
+      if (call) {
+        call.entry.doneMs = Math.round(done - started);
+        call.entry.summary = summarizeToolCall(call.entry.name, call.input, chunk.output);
+      }
       const tool = toolNames.get(chunk.toolCallId) ?? "";
       if (tool === "readPdfSource" || tool === "readNamedPdf")
         pdfReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
@@ -149,6 +166,8 @@ export async function chatStreamTurn(
     sources,
     evidence,
     tools,
+    trace,
+    steps,
     assistantParts,
     firstTextMs: firstText === undefined ? totalMs : Math.round(firstText - started),
     firstSignalMs: firstSignal === undefined ? totalMs : Math.round(firstSignal - started),

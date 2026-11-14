@@ -116,6 +116,12 @@ Eval(
       console.log(
         `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
       );
+      // Tool names, counts and timings only: no query, title, url or passage text.
+      console.log(
+        `[chat] ${input.key} trace: steps=${turn.steps ?? 0}${(turn.trace ?? [])
+          .map(t => ` | ${t.name}@${t.atMs}-${t.doneMs ?? ""} ${t.summary || "pending"}`)
+          .join("")}`,
+      );
       // A citation with no returned source is the one defect the log cannot otherwise show
       // (answers are not printed: the repository is public). Numbers only.
       const citations = scoreCitations(

@@ -78,6 +78,74 @@ describe("chatStreamTurn", () => {
     expect(turn.error).toBeUndefined();
   });
 
+  it("records a text-free trace of the tool calls in order and counts steps", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "start-step" },
+        {
+          type: "tool-input-available",
+          toolCallId: "a",
+          toolName: "searchPassages",
+          input: { query: "secret query" },
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "a",
+          output: {
+            results: [{ n: 1, locator: "p.1", title: "Secret Title", passage: "Secret passage" }],
+            weak: false,
+            truncated: false,
+            documents: [{ n: 1, shown: 1, units: 5, title: "Secret Title" }],
+          },
+        },
+        { type: "finish-step" },
+        { type: "start-step" },
+        {
+          type: "tool-input-available",
+          toolCallId: "b",
+          toolName: "readUnits",
+          input: { n: 1, locators: ["p.2"] },
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "b",
+          output: {
+            n: 1,
+            title: "Secret Title",
+            units: [{ locator: "p.2", text: "Secret" }],
+            truncated: false,
+            missing: [],
+          },
+        },
+        { type: "finish-step" },
+        { type: "start-step" },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "Answer [1, p.2]." },
+        { type: "text-end", id: "x" },
+        { type: "finish-step" },
+      ]),
+    );
+
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q" }, fakeClock());
+
+    expect(turn.steps).toBe(3);
+    expect(turn.trace).toEqual([
+      {
+        name: "searchPassages",
+        atMs: 100,
+        doneMs: 200,
+        summary: "results=1 docs=1 shown/units=1/5 weak=false truncated=false",
+      },
+      {
+        name: "readUnits",
+        atMs: 300,
+        doneMs: 400,
+        summary: "n=1 locators=1 units=1 truncated=false missing=0",
+      },
+    ]);
+    expect(JSON.stringify(turn.trace)).not.toMatch(/secret/i);
+  });
+
   it("returns the error response's status and message", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
       NextResponse.json({ status: "error", error: "Artist not found" }, { status: 404 }),
