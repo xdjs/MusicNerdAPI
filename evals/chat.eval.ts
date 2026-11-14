@@ -10,6 +10,7 @@ import { formatJudgeIssues } from "@/lib/evals/formatJudgeIssues";
 import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
 import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
+import { mergeParentEvidence } from "@/lib/evals/mergeParentEvidence";
 import { scoreMentions } from "@/lib/evals/scoreMentions";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
@@ -104,18 +105,23 @@ Eval(
           error: `Not attempted: ${budget.snapshot().stopReason}`,
         };
       let history: HistoryMessage[] = [];
+      let parent: ChatTurn | undefined;
       if (input.followUpOf) {
         const first = CHAT_CASES.find(c => c.key === input.followUpOf)!;
         const earlier =
           firstTurns.get(first.key) ?? (await withAllowanceWait(() => chatStreamTurn(first)));
         if (earlier.error) return { ...earlier, error: `First turn failed: ${earlier.error}` };
+        parent = earlier;
         history = [
           { id: "eval-1", role: "user", parts: [{ type: "text", text: first.question }] },
           { id: "eval-2", role: "assistant", parts: earlier.assistantParts ?? [] },
         ];
       }
-      const turn = await withAllowanceWait(() => chatStreamTurn(input, undefined, history));
-      if (!input.followUpOf && !turn.error) firstTurns.set(input.key, turn);
+      const asked = await withAllowanceWait(() => chatStreamTurn(input, undefined, history));
+      if (!input.followUpOf && !asked.error) firstTurns.set(input.key, asked);
+      // A follow-up may cite a document number from the first answer, which this turn has no
+      // evidence rows for; the judge then reads the parent's.
+      const turn = parent && !asked.error ? mergeParentEvidence(asked, parent) : asked;
       console.log(
         `[chat] ${input.key} first=${turn.firstTextMs}ms total=${turn.totalMs}ms sources=${turn.sources.length}${turn.error ? ` error=${turn.error}` : ""}`,
       );
