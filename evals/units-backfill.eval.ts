@@ -44,8 +44,10 @@ Eval("music-nerd", {
         );
       return result;
     } catch (error) {
-      console.error(`[units-backfill] ${input.artistId}: ${describeEvalError(error)}`);
-      throw error;
+      const diagnostic = describeEvalError(error);
+      console.error(`[units-backfill] ${input.artistId}: ${diagnostic}`);
+      // Rethrown as the diagnostic: the original message can hold SQL and bound parameters.
+      throw new Error(diagnostic);
     }
   },
   scores: [

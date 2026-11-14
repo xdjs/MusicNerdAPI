@@ -2,7 +2,7 @@ import { createEvalBudgetFetch } from "@/lib/evals/createEvalBudgetFetch";
 import { Eval } from "braintrust";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
 import { RETRIEVAL_CASES, type RetrievalFact } from "@/lib/evals/retrievalCases";
-import { describeEvalError } from "@/lib/evals/describeEvalError";
+import { toRetrievalFailure } from "@/lib/evals/toRetrievalFailure";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { formatSearchSignals } from "@/lib/evals/formatSearchSignals";
@@ -130,9 +130,9 @@ Eval(
           facts: scoreRetrievalFacts({ hits: units, weak }, input).facts,
         };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[retrieval] ${input.key}: ${describeEvalError(error)}`);
-        return failed(input, message);
+        const row = toRetrievalFailure(input, error);
+        console.error(`[retrieval] ${input.key}: ${row.error}`);
+        return row;
       }
     },
     scores: [
