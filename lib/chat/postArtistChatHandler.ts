@@ -18,6 +18,7 @@ import { createChatDocuments } from "@/lib/chat/createChatDocuments";
 import { createListDocumentsTool } from "@/lib/chat/createListDocumentsTool";
 import { createReadUnitsTool } from "@/lib/chat/createReadUnitsTool";
 import { createSearchPassagesTool } from "@/lib/chat/createSearchPassagesTool";
+import { getChatEffort } from "@/lib/chat/getChatEffort";
 import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
 import { keepCurrentCitedTurns } from "@/lib/chat/keepCurrentCitedTurns";
 import { seedCitationsFromPrior } from "@/lib/chat/seedCitationsFromPrior";
@@ -92,7 +93,7 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
           const budget = { remainingTokens: READ_UNITS_TOKEN_BUDGET };
           await streamText({
             model: MODEL_CHAT,
-            anthropicEffort: "low",
+            anthropicEffort: getChatEffort("units"),
             instructions: buildArtistChatInstructions(name, new Date(), "units"),
             prompt,
             maxOutputTokens: 1500,

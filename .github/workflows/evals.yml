@@ -23,6 +23,10 @@ on:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
         default: "5"
+      effort:
+        description: "chat only, passage tools only: model reasoning effort low, medium or high; empty is low"
+        type: string
+        default: ""
       label:
         description: "retrieval only: print each hit's source id, page locator, title and public URL (never text) so the cases can be labelled"
         type: boolean
@@ -84,6 +88,8 @@ jobs:
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
       # The chat's retrieval for the run (lib/chat/getChatRetrievalMode.ts).
       CHAT_RETRIEVAL: ${{ inputs.retrieval }}
+      # The chat's reasoning effort in units mode (lib/chat/getChatEffort.ts).
+      CHAT_EFFORT: ${{ inputs.effort }}
 
     steps:
       - uses: actions/checkout@v4
