@@ -182,7 +182,7 @@ The last run of the night (1edf353, run 43573446295), after the units-mode promp
 
 ### What the `mentions` check and the trace show
 
-- `willie-colon-blades` fails on both paths in every run (five passages runs: 0.25 to 0.38). The answer names Metiendo Mano and omits The Good, the Bad, the Ugly; the reference requires both accounts and the uncertainty. Groundedness is high (0.95 to 1), so the answer is supported but one-sided. Retrieval finds both accounts for the literal question; the model's own single search and its choice to commit are the gap.
+- `willie-colon-blades` fails on both paths in every run (five passages runs: 0.25 to 0.38). The answer names Metiendo Mano and omits The Good, the Bad, the Ugly; the reference requires both accounts and the uncertainty. Groundedness stays between 0.78 and 1, so the answer is mostly supported but one-sided. Retrieval finds both accounts for the literal question; the model's own single search and its choice to commit are the gap.
 - The Chill Factor appears when the model reads the whole timeline (`readUnits` without locators, 13 units) and is usually missing when it answers from three pages of it: in the last run, trials that read the whole document scored 7 of 7 and 6 of 7 required terms, the trial that did not scored 5 of 7, and `dutchyyy-aliases` (no whole read) omitted it.
 - An ordinary answer is two model steps: one `searchPassages` call of about 0.8 s, then the answer. The first tool call lands 1.5 to 2.6 s in, which is model latency.
 
