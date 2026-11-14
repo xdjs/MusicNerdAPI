@@ -98,7 +98,7 @@ Staging admits 30 chat questions per rolling hour per visitor key and 200 per da
 
 ## Running locally
 
-`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar.
+`pnpm eval:local evals/chat.eval.ts` runs the suite from `.env.local` through the Vercel AI Gateway with `--no-send-logs`: the same handler, judge and reporter as the hosted workflow, nothing sent to Braintrust, no Braintrust key needed. The hosted workflow holds the gateway credential as a secret, so experiments run there by preference; no secret needs to leave Vercel or GitHub. `.env.local` needs `AI_GATEWAY_API_KEY`, the staging `SUPABASE_DB_CONNECTION` and `SUPABASE_URL`, `TAVILY_API_KEY` and a `MUSICNERD_RESEARCH_API_KEY` (any 32+ character string; it keys the local visitor allowance separately from the hosted runs). One 14-question run is about a dollar. To run only some cases, set `CHAT_CASES` to a comma-separated list of case keys (hosted: the `cases` input of the Evals workflow); a case's follow-up row runs with it and an unknown key fails before any model call.
 
 ## Follow-up turns (2026-11-13)
 

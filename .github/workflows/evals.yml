@@ -34,6 +34,10 @@ on:
           - legacy
           - units
         default: legacy
+      cases:
+        description: "chat only: comma-separated case keys to run; empty runs all"
+        type: string
+        default: ""
       units_max_per_document:
         description: "retrieval/chat units: the most units of one document among the hits (UNITS_MAX_PER_DOCUMENT, 1-8); empty keeps 3"
         type: string
@@ -116,6 +120,8 @@ jobs:
           UNITS_MAX_PER_DOCUMENT: ${{ inputs.units_max_per_document }}
           UNITS_TEXT_MODE: ${{ inputs.units_text_mode }}
           UNITS_CANDIDATES: ${{ inputs.units_candidates }}
+          # The chat suite's case selection (lib/evals/selectChatCases.ts); empty runs all.
+          CHAT_CASES: ${{ inputs.cases }}
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
 
   pdf106-paired:

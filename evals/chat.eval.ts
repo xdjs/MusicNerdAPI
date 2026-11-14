@@ -11,6 +11,7 @@ import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
 import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { mergeParentEvidence } from "@/lib/evals/mergeParentEvidence";
+import { selectChatCases } from "@/lib/evals/selectChatCases";
 import { scoreMentions } from "@/lib/evals/scoreMentions";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
@@ -41,6 +42,10 @@ const SHA = process.env.GITHUB_SHA ?? "local";
 /** A row of the suite: a case, or a case's follow-up asked with the first answer in the conversation. */
 type ChatRow = ChatCase & { followUpOf?: string };
 
+// CHAT_CASES (comma-separated case keys) runs only those cases and their follow-ups; an unknown
+// key throws here, before any model call.
+const SELECTED_CASES = selectChatCases(CHAT_CASES, process.env.CHAT_CASES);
+
 // Follow-up rows reuse the first answer of their case (rows run in order, one at a time), so
 // a follow-up costs one question, not two. A first turn that errored is asked again.
 const firstTurns = new Map<string, ChatTurn>();
@@ -63,7 +68,7 @@ Eval(
     // One question at a time, so the timings are not measuring each other.
     maxConcurrency: 1,
     data: () =>
-      CHAT_CASES.flatMap(c => [
+      SELECTED_CASES.flatMap(c => [
         ...Array.from({ length: c.trials ?? 1 }, (_, i) => ({
           input: c as ChatRow,
           expected: { answerable: c.answerable, reference: c.reference },
