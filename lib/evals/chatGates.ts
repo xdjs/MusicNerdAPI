@@ -1,9 +1,14 @@
+import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
+import { MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
+
 /** One scored chat row as the gates read it: a case, or one trial of a case. */
 export type ChatGateRow = {
   key: string;
   answerable: boolean;
   /** Set when the turn ended in an error instead of an answer. */
   error?: string;
+  /** From the question being sent to the finished answer; absent when the row has no output. */
+  totalMs?: number;
   scores: Record<string, number | null>;
 };
 
@@ -28,10 +33,12 @@ const mean = (values: number[]) =>
  * Why a chat run fails, one sentence each; empty when it passes. A question with trials
  * contributes the mean of its trials, so every question weighs the same in the run means.
  * The first_text score was removed on 2026-11-14: text within five seconds is not a
- * requirement, since answers that read or research take longer. first_signal is reported
- * and never gates.
+ * requirement, since answers that read or research take longer. Instead (Pete, 2026-11-14)
+ * the status signal must show within five seconds and the mean answer time must hold.
  *
- * Gates: no row ends in an error; total_time is 1 on every row; citations and
+ * Gates: no row ends in an error; first_signal is 1 on every row that did not error; the
+ * mean answer time over questions (rows that errored left out) is at most
+ * `MEAN_TOTAL_BUDGET_MS`; total_time is 1 on every row; citations and
  * evidence_scorable are 1 on every answerable row; relevance and groundedness means over
  * questions are at least 0.8, and no question falls below 0.6 on either.
  *
@@ -49,6 +56,8 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
     const label = (i: number) => (trials.length > 1 ? `${key} trial ${i + 1}` : key);
     trials.forEach((row, i) => {
       if (row.error) failures.push(`${label(i)}: ended in an error (${row.error}).`);
+      else if (row.scores.first_signal !== 1)
+        failures.push(`${label(i)}: no status signal within 5 s.`);
       if (row.scores.total_time !== 1)
         failures.push(`${label(i)}: did not finish within the total time budget.`);
       if (row.answerable) {
@@ -83,6 +92,11 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
         );
     }
   }
+  const meanTime = mean(answerTimesByQuestion(rows));
+  if (meanTime !== null && meanTime > MEAN_TOTAL_BUDGET_MS)
+    failures.push(
+      `mean answer time ${(meanTime / 1000).toFixed(1)} s is above ${(MEAN_TOTAL_BUDGET_MS / 1000).toFixed(1)} s.`,
+    );
   const meanRelevance = mean(relevanceByQuestion);
   const meanGroundedness = mean(groundednessByQuestion);
   if (meanRelevance === null) failures.push("No question received an answer_relevance score.");

@@ -22,7 +22,8 @@ import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
  * Calls the streaming chat endpoint in process. Runs against the staging database; reads
  * only, apart from the allowance rows a real question writes. A case with `trials` is asked
  * that many times. The run passes or fails by `lib/evals/chatGates.ts`, applied by the
- * reporter; first text is reported, not gated.
+ * reporter; first text is reported, not gated, while the status signal within five seconds
+ * and the mean answer time are gated.
  *
  *   pnpm eval evals/chat.eval.ts          # hosted: records to Braintrust
  *   pnpm eval:local evals/chat.eval.ts    # from .env.local, nothing sent to Braintrust
@@ -144,7 +145,7 @@ Eval(
     },
     scores: [
       // What the artist page shows first is a progress line from the first tool step; this is
-      // the time to that, reported and not gated.
+      // the time to that, gated on every row that did not error (chatGates).
       ({ output }) =>
         output.error
           ? null

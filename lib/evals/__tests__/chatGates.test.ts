@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { CHAT_GATES, checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 
 const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): ChatGateRow => ({
   key,
   answerable: true,
+  totalMs: 5000,
   scores: {
+    first_signal: 1,
     total_time: 1,
     citations: 1,
     evidence_scorable: 1,
@@ -15,8 +18,39 @@ const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): Chat
 });
 
 describe("checkChatGates", () => {
-  it("passes a run that meets every gate, and never gates first_signal", () => {
-    expect(checkChatGates([good("a"), good("b", { first_signal: 0 })])).toEqual([]);
+  it("passes a run that meets every gate", () => {
+    expect(checkChatGates([good("a"), good("b")])).toEqual([]);
+  });
+
+  it("requires the status signal within 5 s on every row that did not error", () => {
+    const failures = checkChatGates([
+      good("a", { first_signal: 0 }),
+      good("t"),
+      good("t", { first_signal: null }),
+      { ...good("e", { first_signal: null }), error: "429 limit" },
+    ]);
+    expect(failures).toContain("a: no status signal within 5 s.");
+    expect(failures).toContain("t trial 2: no status signal within 5 s.");
+    expect(failures.filter(f => f.includes("status signal"))).toHaveLength(2);
+  });
+
+  it(`fails when the mean answer time over questions is above ${MEAN_TOTAL_BUDGET_MS} ms`, () => {
+    // Question t averages its trials (6 s and 12 s: 9 s); with u at 7.4 s the mean is 8.2 s.
+    expect(
+      checkChatGates([
+        { ...good("t"), totalMs: 6000 },
+        { ...good("t"), totalMs: 12000 },
+        { ...good("u"), totalMs: 7400 },
+      ]),
+    ).toEqual(["mean answer time 8.2 s is above 8.0 s."]);
+    // At exactly the budget it passes, and a row that errored does not count toward the mean.
+    expect(
+      checkChatGates([
+        { ...good("t"), totalMs: 8000 },
+        { ...good("u"), totalMs: 8000 },
+        { ...good("v"), totalMs: 60000, error: "timeout" },
+      ]),
+    ).toEqual(["v: ended in an error (timeout)."]);
   });
 
   it("never gates the mentions score", () => {

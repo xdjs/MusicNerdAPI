@@ -1,4 +1,5 @@
 import { Reporter } from "braintrust";
+import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
 import { checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
@@ -11,6 +12,18 @@ const SCORE_COLUMNS = [
   "source_groundedness",
   "mentions",
 ] as const;
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
+/** Mean, median and slowest of per-question answer times; null when there are none. */
+const answerTimeLine = (times: number[]) => {
+  if (times.length === 0) return null;
+  const sorted = [...times].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const mean = sorted.reduce((sum, t) => sum + t, 0) / sorted.length;
+  return `answer time: mean ${seconds(mean)}, median ${seconds(median)}, slowest ${seconds(sorted[sorted.length - 1])}`;
+};
 
 const cell = (value: number | null | undefined) =>
   value === null || value === undefined ? "-" : String(Math.round(value * 100) / 100);
@@ -25,8 +38,8 @@ type ResultRow = {
 };
 
 /**
- * The chat suite's reporter: prints every row's scores and timings, the run means and the
- * Braintrust experiment link, then applies `checkChatGates`. Returning false makes
+ * The chat suite's reporter: prints every row's scores and timings, the run means, the answer
+ * time over questions (mean, median, slowest) and the Braintrust experiment link, then applies `checkChatGates`. Returning false makes
  * `braintrust eval` exit non-zero, which is what fails the hosted run.
  */
 export const chatReporter = Reporter<boolean>("chat-gates", {
@@ -52,6 +65,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         key,
         answerable: Boolean((r.expected as { answerable?: unknown } | undefined)?.answerable),
         ...(error ? { error } : {}),
+        ...(typeof output.totalMs === "number" ? { totalMs: output.totalMs } : {}),
         scores: r.scores ?? {},
       });
       console.log(
@@ -68,6 +82,8 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       .map(s => `${s.name} ${cell(s.score)}`)
       .join(", ");
     if (means) console.log(`means: ${means}`);
+    const times = answerTimeLine(answerTimesByQuestion(rows));
+    if (times) console.log(times);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkChatGates(rows);
     if (failures.length) {
