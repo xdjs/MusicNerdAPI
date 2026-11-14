@@ -15,14 +15,23 @@ import { SEARCH_LIMIT, WEAK_COSINE_DISTANCE, type UnitHit } from "@/lib/units/ty
  * The vector list joins the fusion once per expanded query, as if searched per query; the
  * embedding is the same, so it is fetched once. If embedding fails the search is text-only.
  *
+ * `weak` is a hint for obviously empty retrievals; it does not detect unanswerable questions
+ * (measured 2026-11-14), and the model must decide from the passages. On that day the unanswerable
+ * control's best vector score, 0.480, sat inside the range of answerable questions, and in `or`
+ * mode the artist's name alone always matches. Because an `or` match proves little, `weak` reads the strict (`and`)
+ * text signal even when ranking uses `or`: one extra `and` query of one row per expanded query, run
+ * alongside the ranking queries. It is not derived from the `or` lists, which cannot tell whether
+ * every word matched.
+ *
  * @param artistId - The artist.
  * @param question - The user's question.
  * @param opts.names - The artist's names, display name first (see `expandSearchQueries`).
  * @param opts.signal - Aborts the embedding call; an aborted search throws instead of degrading.
  * @param opts.deps - Replaces the collaborators (and the environment's tuning) in tests.
- * @returns The hits; `weak`: no text match anywhere and no vector closer than `WEAK_COSINE_DISTANCE`;
- * and `signals`, the two inputs of `weak`: whether any text list matched, and the best vector score
- * (`1 - cosine distance`, null when no vector hit came back).
+ * @returns The hits; `weak`: no hits at all, or no strict text match and no vector closer than
+ * `WEAK_COSINE_DISTANCE`; and `signals`: `textMatched`, whether any expanded query matched in strict
+ * (`and`) terms; `anyTextMatched`, whether any ranking text list (in the tuning's mode) matched; and
+ * the best vector score (`1 - cosine distance`, null when no vector hit came back).
  */
 export async function searchUnits(
   artistId: string,
@@ -40,7 +49,7 @@ export async function searchUnits(
 ): Promise<{
   hits: UnitHit[];
   weak: boolean;
-  signals: { textMatched: boolean; bestVectorScore: number | null };
+  signals: { textMatched: boolean; anyTextMatched: boolean; bestVectorScore: number | null };
 }> {
   const byText = opts.deps?.byText ?? searchUnitsByText;
   const byVector = opts.deps?.byVector ?? searchUnitsByVector;
@@ -59,9 +68,13 @@ export async function searchUnits(
     });
   }
 
-  const [textLists, vectorList] = await Promise.all([
+  const [textLists, vectorList, strictLists] = await Promise.all([
     Promise.all(queries.map(query => byText(artistId, query, tuning.candidates, tuning.textMode))),
     embedding ? byVector(artistId, embedding, tuning.candidates) : Promise.resolve([]),
+    // The strict signal for `weak`; in `and` mode the ranking lists already are it.
+    tuning.textMode === "and"
+      ? null
+      : Promise.all(queries.map(query => byText(artistId, query, 1, "and"))),
   ]);
   const lists = queries.flatMap((_, i) =>
     embedding ? [textLists[i], vectorList] : [textLists[i]],
@@ -78,9 +91,11 @@ export async function searchUnits(
     hits.push(hit);
   }
 
-  const textMatched = textLists.some(list => list.length > 0);
+  const anyTextMatched = textLists.some(list => list.length > 0);
+  const textMatched = (strictLists ?? textLists).some(list => list.length > 0);
   const bestVectorScore = vectorList.length ? Math.max(...vectorList.map(hit => hit.score)) : null;
   const weak =
-    !textMatched && !(bestVectorScore !== null && bestVectorScore >= 1 - WEAK_COSINE_DISTANCE);
-  return { hits, weak, signals: { textMatched, bestVectorScore } };
+    hits.length === 0 ||
+    (!textMatched && !(bestVectorScore !== null && bestVectorScore >= 1 - WEAK_COSINE_DISTANCE));
+  return { hits, weak, signals: { textMatched, anyTextMatched, bestVectorScore } };
 }

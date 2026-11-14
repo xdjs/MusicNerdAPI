@@ -81,7 +81,7 @@ describe("units mode", () => {
     expect(text).not.toMatch(/searchPdfSources|readPdfSource|readNamedPdf/);
   });
 
-  it("states the tool rules in order: search, read, list, cite, firsts, weak, latest", () => {
+  it("states the tool rules in order: search, read, list, cite, firsts, weak, abstain, latest", () => {
     const rules = [
       /start every question with searchPassages/i,
       /readUnits only when a claim needs more than the passage/i,
@@ -92,6 +92,7 @@ describe("units mode", () => {
       /\[n, §Heading\] or \[n, ¶N\]/,
       /first, earliest or when/i,
       /weak/,
+      /read the passages: if they do not contain the answer/i,
       /retrieval: "latest"/,
     ].map(rule => text.search(rule));
     expect(rules.every(at => at >= 0)).toBe(true);
@@ -119,10 +120,12 @@ describe("units mode", () => {
     expect(text).toMatch(/report the disagreement instead of picking one/i);
   });
 
-  it("says the sources do not cover a question when results are weak and the web cannot answer", () => {
+  it("abstains from what the passages say, not from weak alone", () => {
     expect(text).toMatch(
-      /when searchPassages returns weak: true and webSearch cannot answer either, say plainly that the sources do not cover it/i,
+      /read the passages: if they do not contain the answer and webSearch does not either, say plainly that the saved sources do not cover it/i,
     );
+    expect(text).toMatch(/treat weak: true only as an early sign of that/i);
+    expect(text).not.toMatch(/weak: true and webSearch cannot answer either/i);
   });
 
   it("keeps searchSources with retrieval latest for current releases only", () => {

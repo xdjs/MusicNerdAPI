@@ -55,7 +55,7 @@ export function createSearchPassagesTool(
   let searches = 0;
   return tool({
     description:
-      "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a passage from document n at a locator such as `p.3`; cite it as [n, locator]. When `weak` is true nothing matched well: say what the documents don't cover rather than guessing.",
+      "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a passage from document n at a locator such as `p.3`; cite it as [n, locator]. `weak: true` is only an early sign that nothing matched well; decide from the passages whether they answer.",
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       // Counted before the await, so parallel calls in one step cannot slip past the cap.
