@@ -28,10 +28,10 @@ describe("createEvalBudgetFetch", () => {
       body: JSON.stringify({ query: "artist" }),
     });
     expect(guard.snapshot().reservedUsd).toBe(0.120224);
-    await expect(createEvalBudgetFetch(send, 9999999).fetch(gateway, request())).rejects.toThrow(
+    await expect(createEvalBudgetFetch(send, 15999999).fetch(gateway, request())).rejects.toThrow(
       "exhausted",
     );
-    for (const invalid of [-1, NaN, 0.1, 10000001])
+    for (const invalid of [-1, NaN, 0.1, 16000001])
       expect(() => createEvalBudgetFetch(send, invalid)).toThrow();
   });
   it("allows the SDK's Anthropic message-start metadata on later tool steps", async () => {
@@ -98,11 +98,11 @@ describe("createEvalBudgetFetch", () => {
     expect(guard.snapshot().paidRequests).toBe(1);
     expect(guard.snapshot().reservedUsd).toBeGreaterThan(0);
   });
-  it("never sends a request whose reservation exceeds ten dollars", async () => {
+  it("never sends a request whose reservation exceeds sixteen dollars", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);
     for (let i = 0; i < 160; i++) await guard.fetch(gateway, request()).catch(() => {});
-    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(10);
+    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(16);
     expect(guard.snapshot().blocked).toBe(true);
     expect(send.mock.calls.length).toBeLessThanOrEqual(150);
   });
@@ -278,7 +278,7 @@ describe("createEvalBudgetFetch", () => {
   });
   it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
     const send = vi.fn().mockResolvedValue(new Response("%PDF"));
-    const guard = createEvalBudgetFetch(send, 9999999);
+    const guard = createEvalBudgetFetch(send, 15999999);
     const pdf = "https://project.supabase.co/storage/v1/object/public/vault-files/a/timeline.pdf";
     await guard.fetch(pdf, { redirect: "error", cache: "no-store" });
     await expect(guard.fetch(gateway, request())).rejects.toThrow("exhausted");

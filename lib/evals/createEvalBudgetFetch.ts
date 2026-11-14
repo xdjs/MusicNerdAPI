@@ -1,5 +1,10 @@
-/** Reservation ceiling in micro-dollars: the 12-case suite at its conservative rates fits under ten dollars; actual spend is about a dollar. */
-const CEILING_MICROS = 10000000;
+/**
+ * Reservation ceiling in micro-dollars (sixteen dollars of RESERVED spend; a reservation prices
+ * every request at its maximum output). The 19-row chat suite reserves about 12.5 dollars, and
+ * actual spend is roughly a fifth of what is reserved. The request cap (`MAX_PAID_REQUESTS`) is
+ * unchanged.
+ */
+const CEILING_MICROS = 16_000_000;
 
 /**
  * Micro-dollars reserved per input byte, per output token and per base64 PDF character, by
