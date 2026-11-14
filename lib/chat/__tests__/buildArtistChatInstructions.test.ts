@@ -149,4 +149,21 @@ describe("units mode", () => {
   it("states the exact locator forms readUnits matches", () => {
     expect(text).toMatch(/locators exactly as searchPassages gave them.*p\.4.*§Heading.*¶3/i);
   });
+
+  it("attributes conflicts, keeps categories as documents label them, and cites the stating passage", () => {
+    const legacy = buildArtistChatInstructions(
+      "Dutchyyy",
+      new Date("2026-10-27T12:00:00Z"),
+      "legacy",
+    );
+    const sentences = [
+      "When documents disagree, give each account with its own citation and say plainly that the documents disagree. Do not reconcile them, and do not explain the difference with a distinction no document states.",
+      "Count something as one of the items asked for only when a document itself labels it that way; anything a document labels differently (a group, a collaborator, a guest credit) is left out, or named as what the document calls it.",
+      "Cite the locator of the passage that states the claim, not another page of the same document; if you cannot point to the passage that states something, leave it out.",
+    ];
+    for (const sentence of sentences) {
+      expect(text).toContain(sentence);
+      expect(legacy).not.toContain(sentence);
+    }
+  });
 });
