@@ -593,3 +593,16 @@ Recorded here so the plan stays the argument for what was built; the full ruling
 - Citation numbers carried from earlier turns are seeded into the numberer and never renumbered (R18); a read-only turn carries its document so the currency rule applies to it.
 - Published interview answers are already public under the follow-up/onboarding-publish rule and stay on the "latest" path in this version; indexing them as units is a follow-up.
 - The vector query runs with `hnsw.iterative_scan` so a small artist's filtered search cannot come back empty (Task 21).
+
+## Audit, 2026-11-13: design items with no task yet
+
+A check of the approved design against this plan and the branches found four items the design promises that no task covers. None blocks the chat switch; each needs a task or an explicit deferral from Pete before part 1 is called done.
+
+| Design item | Where the design says it | State today | Proposal |
+| --- | --- | --- | --- |
+| Grounding check on the streamed chat, recorded for the eval and surfaced as a marker | Section 4, "Grounding check" | Not built. The eval's judge scores groundedness after the fact; nothing runs in the product. | Build with the partner answer endpoint (where it is enforced), and record it on the chat in the same change. |
+| OCR and a one-line description for image uploads | Section 1, "OCR, the vision pass" (Pete: OCR in v1) | Images are skipped at upload and never indexed. | A small task on the ingest branch's successor: an image upload becomes one unit through the same vision call. |
+| Markdown with headings for newly fetched web pages, so they get `§Heading` locators | Section 1, "Units" | New pages still get paragraph locators (`¶N`) from the stored block text. | A task in the extraction job (`lib/sourceExtraction`), after the switch. |
+| Document header fields: author or account, published date, language, byte hash of the original | Section 1, "Document header" | Units carry title, URL and revision only. | Add when the partner endpoint needs provenance beyond source, locator and revision. |
+
+Sequencing rule adopted after the audit: nothing further is built on the retrieval or chat branches until Web migration 0066 is applied to staging and the `units-backfill`, labelling and gated `retrieval` runs have executed there. Everything so far rests on unit tests, one real-Postgres test and one hosted vision check; retrieval quality on real documents is still unmeasured.
