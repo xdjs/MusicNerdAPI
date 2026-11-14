@@ -64,7 +64,7 @@ The `first_text` score (text within five seconds) was removed on 2026-11-14: Pet
 
 The `mentions` score (`lib/evals/scoreMentions.ts`) is reported, not gated: for cases that list `mentions` in `chatCases.ts`, it is the share of those terms (taken from the public reference answers) that the answer names as whole words after normalising case, accents and punctuation, and the log prints one `mentions=<matched>/<total> missing=[...]` line per case with our own terms, never answer text.
 
-A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same. First text is not gated because the chat reads sources before it writes; the five-second target waits on a product change, a status line streamed while reading, tracked separately.
+A question with `trials` (the acceptance question runs three times) contributes the mean of its trials, so every question weighs the same.
 
 The judge is `MODEL_JUDGE` (`openai/gpt-5.4`), a different model family from the chat model, so an answer is never graded by its own author. Scores from the earlier Sonnet judge (the tables above) and from `MODEL_JUDGE` are not directly comparable; the experiment metadata records `judgeModel`.
 
