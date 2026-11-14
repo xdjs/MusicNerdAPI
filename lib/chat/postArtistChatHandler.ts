@@ -104,7 +104,8 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               ),
             tools: {
               searchPassages: createSearchPassagesTool(artistId, documents, {
-                names: [name],
+                // The real name only: the "This artist" fallback is not a name to match in passages.
+                names: artist.name ? [artist.name] : [],
                 signal: request.signal,
                 budget,
               }),

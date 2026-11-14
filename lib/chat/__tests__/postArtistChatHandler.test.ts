@@ -769,4 +769,16 @@ describe("with CHAT_RETRIEVAL=units", () => {
     expect(read).toMatchObject({ n: 6 });
     expect(chunks.filter(c => c.type === "source-url").map(c => c.sourceId)).toEqual(["6"]);
   });
+
+  it("searches with no names, never the fallback, when the artist has no name", async () => {
+    m.artist.mockResolvedValue({ id: artistId, name: null });
+    m.model = new MockLanguageModelV4({
+      doStream: [toolStep("searchPassages", { query: "alias" }), textStep("No.")],
+    });
+    await chunksOf(await post(ask("Any alias?")));
+    expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
+      names: [],
+      signal: expect.any(AbortSignal),
+    });
+  });
 });
