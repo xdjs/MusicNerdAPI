@@ -2,6 +2,8 @@
 -- (the table, its artist foreign key and its three indexes), byte for byte, for
 -- searchUnitsByVector.postgres.test.ts. It must track drizzle/0066_source_units.sql: when a
 -- migration changes source_units, copy the changed statements here.
+-- pgvector is installed in public (CREATE EXTENSION vector WITH SCHEMA public), so the column and
+-- operator class are public.vector and public.vector_cosine_ops; the app role has no USAGE on extensions.
 --> statement-breakpoint
 CREATE TABLE "source_units" (
 	"id" uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4() NOT NULL,
@@ -19,7 +21,7 @@ CREATE TABLE "source_units" (
 	"ocr" boolean DEFAULT false NOT NULL,
 	"ingest_version" integer NOT NULL,
 	"search" tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce("title", '') || ' ' || "text")) STORED NOT NULL,
-	"embedding" extensions.vector(1536),
+	"embedding" public.vector(1536),
 	"created_at" timestamp with time zone DEFAULT (now() at time zone 'utc') NOT NULL,
 	CONSTRAINT "source_units_source_unit" UNIQUE("source_kind","source_id","unit_index"),
 	CONSTRAINT "source_units_source_kind" CHECK ("source_units"."source_kind" IN ('vault','social','evidence'))
@@ -31,4 +33,4 @@ CREATE INDEX "source_units_artist" ON "source_units" USING btree ("artist_id","s
 --> statement-breakpoint
 CREATE INDEX "source_units_search" ON "source_units" USING gin ("search");
 --> statement-breakpoint
-CREATE INDEX "source_units_embedding" ON "source_units" USING hnsw ("embedding" extensions.vector_cosine_ops);
+CREATE INDEX "source_units_embedding" ON "source_units" USING hnsw ("embedding" public.vector_cosine_ops);

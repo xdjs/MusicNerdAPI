@@ -51,7 +51,7 @@ function sourceUnitsDdl(): string[] {
 const SCHEMA = `
   create schema extensions;
   create extension "uuid-ossp" with schema extensions;
-  create extension vector with schema extensions;
+  create extension vector with schema public;
   create table artists(id uuid primary key, instagram text);
   create table artist_claims(artist_id uuid, status text);
   create table artist_activity_events(id uuid, artist_id uuid, source_id uuid, actor_kind text, actor_user_id text, trigger text, action text);
@@ -143,13 +143,37 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
     expect(sourceUnitsDdl()).toHaveLength(5);
     const [ext] =
       await client`select n.nspname from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname = 'vector'`;
-    expect(ext.nspname).toBe("extensions");
+    expect(ext.nspname).toBe("public");
     const [index] =
       await client`select indexdef from pg_indexes where indexname = 'source_units_embedding'`;
-    expect(index.indexdef).toMatch(/USING hnsw \(embedding extensions\.vector_cosine_ops\)/);
+    expect(index.indexdef).toMatch(/USING hnsw \(embedding (public\.)?vector_cosine_ops\)/);
     const [column] =
       await client`select format_type(atttypid, atttypmod) as type from pg_attribute where attrelid = 'source_units'::regclass and attname = 'embedding'`;
-    expect(column.type).toBe("extensions.vector(1536)");
+    expect(column.type).toBe("vector(1536)");
+  });
+
+  it("casts and searches as a role with no USAGE on the extensions schema", async () => {
+    const role = `units_nousage_${process.pid}`;
+    const id = randomUUID();
+    await client`insert into artists(id) values (${id})`;
+    await client.unsafe(`
+      create role ${role} nologin;
+      revoke all on schema extensions from ${role};
+      grant usage on schema public to ${role};
+      grant select, insert on source_units to ${role};
+    `);
+    try {
+      const rows = await client.begin(async tx => {
+        await tx.unsafe(`set local role ${role}`);
+        // The id is given so the extensions.uuid_generate_v4() default is never evaluated.
+        await tx`insert into source_units(id, source_kind, source_id, artist_id, source_revision, unit_index, locator, text, text_hash, tokens, ingest_version, embedding)
+          values (${randomUUID()}, 'vault', ${randomUUID()}, ${id}, 'rev', 0, 'p.1', 't', 'h', 1, 1, ${JSON.stringify(vec(0))}::public.vector)`;
+        return tx`select 1 - (embedding operator(public.<=>) ${JSON.stringify(vec(0))}::public.vector) as score from source_units order by embedding operator(public.<=>) ${JSON.stringify(vec(0))}::public.vector`;
+      });
+      expect(Number(rows[0].score)).toBeCloseTo(1, 5);
+    } finally {
+      await client.unsafe(`drop owned by ${role}; drop role ${role};`);
+    }
   });
 
   it("writes a 1536-dim embedding through the vector cast and key-share locks all three kinds", async () => {
@@ -173,7 +197,7 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
       expect(written).toBe(1);
     }
     const rows =
-      await client`select source_kind, extensions.vector_dims(embedding) as dims from source_units order by source_kind`;
+      await client`select source_kind, public.vector_dims(embedding) as dims from source_units order by source_kind`;
     expect(rows.map(r => [r.source_kind, Number(r.dims)])).toEqual([
       ["evidence", EMBEDDING_DIMENSIONS],
       ["social", EMBEDDING_DIMENSIONS],
@@ -245,7 +269,7 @@ describe.skipIf(!url)("searchUnitsByVector on real Postgres with pgvector", () =
     await client`set enable_sort = off`;
     try {
       const plan =
-        await client`explain select id from source_units where artist_id = ${artist} order by embedding operator(extensions.<=>) ${JSON.stringify(vec(1))}::extensions.vector limit 20`;
+        await client`explain select id from source_units where artist_id = ${artist} order by embedding operator(public.<=>) ${JSON.stringify(vec(1))}::public.vector limit 20`;
       expect(plan.map(r => r["QUERY PLAN"]).join("\n")).toContain("source_units_embedding");
       const hits = await searchUnitsByVector(artist, vec(1));
       expect(hits.map(h => h.sourceId).sort()).toEqual([...own].sort());

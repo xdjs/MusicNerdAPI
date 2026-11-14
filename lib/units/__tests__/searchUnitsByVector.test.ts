@@ -20,14 +20,12 @@ describe("searchUnitsByVector", () => {
     execute.mockResolvedValue([]);
     await searchUnitsByVector(artist, [0.25, -1], 5);
     const q = rendered();
-    const distance = /u\.embedding operator\(extensions\.<=>\) \$(\d+)::extensions\.vector/g;
+    const distance = /u\.embedding operator\(public\.<=>\) \$(\d+)::public\.vector/g;
     const uses = [...q.sql.matchAll(distance)];
     expect(uses).toHaveLength(2);
     expect(q.sql).toContain("u.embedding is not null");
-    expect(q.sql).toMatch(
-      /order by u\.embedding operator\(extensions\.<=>\) \$\d+::extensions\.vector/,
-    );
-    expect(q.sql).toMatch(/1 - \(u\.embedding operator\(extensions\.<=>\)/);
+    expect(q.sql).toMatch(/order by u\.embedding operator\(public\.<=>\) \$\d+::public\.vector/);
+    expect(q.sql).toMatch(/1 - \(u\.embedding operator\(public\.<=>\)/);
     for (const [, n] of uses) expect(q.params[Number(n) - 1]).toBe("[0.25,-1]");
     expect(q.params).toContain(artist);
     expect(q.sql).toMatch(/limit \$(\d+)$/);

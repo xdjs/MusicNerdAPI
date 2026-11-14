@@ -23,7 +23,8 @@ export async function searchUnitsByVector(
   embedding: number[],
   limit = SEARCH_CANDIDATES,
 ): Promise<UnitHit[]> {
-  const distance = sql`u.embedding operator(extensions.<=>) ${JSON.stringify(embedding)}::extensions.vector`;
+  // pgvector lives in public: the app role has no USAGE on the extensions schema.
+  const distance = sql`u.embedding operator(public.<=>) ${JSON.stringify(embedding)}::public.vector`;
   const rows = await db.transaction(async tx => {
     await tx.execute(sql`select set_config('hnsw.ef_search', '100', true)`);
     // The setting does not exist before pgvector 0.8; the failed set is rolled back to the block's start.

@@ -1,12 +1,11 @@
 /**
  * The tables the unit eligibility predicate and the unit readers use, reduced to the columns they
- * reference, for PGlite. PGlite has no pgvector, so `extensions.vector` is a text domain and `embedding` is text;
+ * reference, for PGlite. PGlite has no pgvector, so `public.vector` is a text domain and `embedding` is text;
  * `search` is the real generated column of migration 0066. The two knowledge functions are stubs
  * that still change when the post changes, which is all the revision check needs.
  */
 export const UNIT_SEARCH_SCHEMA = `
-  create schema extensions;
-  create domain extensions.vector as text;
+  create domain public.vector as text;
   create table artists(id uuid primary key, instagram text);
   create table artist_claims(artist_id uuid, status text);
   create table artist_activity_events(id uuid, artist_id uuid, source_id uuid, actor_kind text, actor_user_id text, trigger text, action text);
