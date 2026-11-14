@@ -1,21 +1,42 @@
-import { APICallError, RetryError } from "ai";
+import { RetryError } from "ai";
+
+const NAME = /^[A-Za-z_]{1,60}$/;
+const KIND = /^[a-z_]{1,40}$/;
+
+/** ` status=` and ` type=` fields read from an error-like object, each only when it has a safe shape. */
+function fields(value: unknown): string {
+  if (typeof value !== "object" || value === null) return "";
+  const { statusCode, type } = value as { statusCode?: unknown; type?: unknown };
+  let out = "";
+  if (
+    Number.isInteger(statusCode) &&
+    (statusCode as number) >= 100 &&
+    (statusCode as number) <= 599
+  )
+    out += ` status=${statusCode}`;
+  if (typeof type === "string" && KIND.test(type)) out += ` type=${type}`;
+  return out;
+}
 
 /**
  * Names why an embedding call failed without echoing anything the provider sent back.
  *
+ * Reads only `name`, `statusCode` and `type`, the properties the AI Gateway errors expose (`GatewayError`: abstract `name`, abstract `type` such as `rate_limit_exceeded`, `statusCode`) and `APICallError` shares in part (`statusCode`). Each is printed only when it has a safe shape.
+ *
  * @param error - The thrown value.
- * @returns The error name, plus the retry reason and provider status code when the AI SDK reports them; never the message, URL or response body.
+ * @returns For a `RetryError`: `<name> <reason> attempts=<n>` plus ` last=<name>`, ` status=` and ` type=` of its last error; for any other error: its name plus ` status=` and ` type=`. Never the message, URL or response body.
  */
 export function describeEmbeddingError(error: unknown): string {
   const name = error instanceof Error ? error.name : "unknown";
-  const parts = [name];
-  let call: unknown = error;
   if (RetryError.isInstance(error)) {
-    parts.push(error.reason);
-    call = error.lastError;
+    let out = `${name} ${error.reason} attempts=${error.errors.length}`;
+    const last: unknown = error.lastError;
+    if (typeof last === "object" && last !== null) {
+      const lastName = (last as { name?: unknown }).name;
+      if (typeof lastName === "string" && NAME.test(lastName)) out += ` last=${lastName}`;
+      out += fields(last);
+    }
+    return out;
   }
-  if (APICallError.isInstance(call) && call.statusCode !== undefined) {
-    parts.push(String(call.statusCode));
-  }
-  return parts.join(" ");
+  return name + fields(error);
 }
