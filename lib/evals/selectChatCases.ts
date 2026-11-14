@@ -2,7 +2,7 @@
  * The cases to run, from the comma-separated `CHAT_CASES` value. An empty value runs all; a
  * case's follow-up row runs with its case, so selecting by case key is enough.
  *
- * With a case list, a `trials` of 2 to 5 (the `CHAT_TRIALS` value) sets how many times each
+ * With a case list, a `trials` of 2 to 5 (the `CHAT_CASE_TRIALS` value) sets how many times each
  * selected case is asked, replacing the case's own count; any other value, or no case list,
  * leaves the cases as they are. A case's follow-up still runs once.
  *

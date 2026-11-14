@@ -20,11 +20,15 @@ on:
           - units-backfill
         default: chat
       trials:
-        description: "chat-pdf-text: how many times the acceptance question is asked (1-10). chat with cases set: how many times each selected case is asked (2-5, else ignored)"
+        description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
         default: "5"
+      case_trials:
+        description: "chat only, with cases: ask each selected case this many times, 2 to 5"
+        type: string
+        default: ""
       effort:
-        description: "chat only, passage tools only: model reasoning effort low, medium or high; empty is low"
+        description: "chat only, passage tools only: model reasoning effort low or medium; empty is low"
         type: string
         default: ""
       label:
@@ -82,8 +86,10 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      # The trial count: chat-pdf-text (evals/chat-pdf-text.eval.ts), and chat with cases set (lib/evals/selectChatCases.ts).
+      # The trial count of chat-pdf-text (evals/chat-pdf-text.eval.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
+      # The chat suite's trials per selected case, with cases set (lib/evals/selectChatCases.ts); empty keeps each case's own.
+      CHAT_CASE_TRIALS: ${{ inputs.case_trials }}
       # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
       # The chat's retrieval for the run (lib/chat/getChatRetrievalMode.ts).
