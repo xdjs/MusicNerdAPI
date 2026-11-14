@@ -86,4 +86,34 @@ describe("searchUnitsByText", () => {
     const hits = await searchUnitsByText(artist, "barn", 2);
     expect(hits.map(h => h.unitIndex)).toEqual([0, 1]);
   });
+
+  test("or mode returns a page holding most but not all of the question's words", async () => {
+    await addUnits(id(1), [
+      "The band recorded their second album in a barn near Richmond.",
+      "Nothing relevant on this page.",
+    ]);
+    const question = "Where did the band record their second album in Lisbon?";
+    expect(await searchUnitsByText(artist, question)).toEqual([]);
+    const hits = await searchUnitsByText(artist, question, undefined, "or");
+    expect(hits.map(h => h.unitIndex)).toEqual([0]);
+    expect(hits[0].score).toBeGreaterThan(0);
+    expect(hits[0].score).toBeLessThan(1);
+  });
+
+  test("or mode binds an OR of distinct non-stopword terms, at most 24", async () => {
+    const words = Array.from({ length: 30 }, (_, i) => `word${i}`);
+    await searchUnitsByText(artist, `The Barn's barn: "what" & | ! ${words.join(" ")}`, 5, "or");
+    const q = new PgDialect().sqlToQuery(execute.mock.calls[0][0] as never);
+    expect(q.sql).toContain("to_tsquery('english',");
+    expect(q.sql).toContain("ts_rank_cd(u.search, q, 32)");
+    expect(q.sql).toContain("numnode(q) > 0");
+    const terms = q.params.find(p => typeof p === "string" && p.includes(" | ")) as string;
+    expect(terms.split(" | ")).toEqual(["barn", ...words].slice(0, 24));
+    expect(terms).toMatch(/^[\p{L}\p{N}]+( \| [\p{L}\p{N}]+)*$/u);
+  });
+
+  test("or mode returns [] for stopwords without querying", async () => {
+    expect(await searchUnitsByText(artist, "what is the", undefined, "or")).toEqual([]);
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

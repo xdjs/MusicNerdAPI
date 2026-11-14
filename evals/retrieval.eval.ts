@@ -6,6 +6,7 @@ import { describeEvalError } from "@/lib/evals/describeEvalError";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { scoreRetrievalFacts, type FactResult } from "@/lib/evals/scoreRetrievalFacts";
+import { getSearchTuning } from "@/lib/units/getSearchTuning";
 import { searchUnits } from "@/lib/units/searchUnits";
 import type { UnitSourceKind } from "@/lib/units/types";
 
@@ -21,6 +22,10 @@ import type { UnitSourceKind } from "@/lib/units/types";
  * stderr as one line, so the labeller can open the public document and write the facts into
  * `lib/evals/retrievalLabels.ts`.
  *
+ * Ranking variants are compared without code edits through `UNITS_MAX_PER_DOCUMENT`,
+ * `UNITS_TEXT_MODE` and `UNITS_CANDIDATES` (workflow inputs `units_*`, see
+ * `lib/units/getSearchTuning.ts`); the effective tuning is logged and kept in the metadata.
+ *
  *   pnpm eval evals/retrieval.eval.ts          # hosted: records to Braintrust
  *   pnpm eval:local evals/retrieval.eval.ts    # from .env.local, nothing sent to Braintrust
  */
@@ -30,6 +35,10 @@ globalThis.fetch = budget.fetch;
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 const LABEL = process.env.RETRIEVAL_LABEL === "1";
+const TUNING = getSearchTuning();
+console.log(
+  `[retrieval] tuning: maxUnitsPerDocument=${TUNING.maxUnitsPerDocument} textMode=${TUNING.textMode} candidates=${TUNING.candidates}`,
+);
 
 type Row = {
   key: string;
@@ -86,7 +95,7 @@ Eval(
   "music-nerd",
   {
     experimentName: experimentName("retrieval", MODEL_EMBEDDING, SHA),
-    metadata: { suite: "retrieval", embeddingModel: MODEL_EMBEDDING, sha: SHA },
+    metadata: { suite: "retrieval", embeddingModel: MODEL_EMBEDDING, sha: SHA, tuning: TUNING },
     maxConcurrency: 1,
     data: () => rows,
     task: async (input: Row): Promise<Output> => {

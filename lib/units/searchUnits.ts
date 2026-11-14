@@ -1,19 +1,16 @@
 import { embedQuery } from "@/lib/units/embedQuery";
 import { expandSearchQueries } from "@/lib/units/expandSearchQueries";
 import { fuseRanks } from "@/lib/units/fuseRanks";
+import { getSearchTuning, type SearchTuning } from "@/lib/units/getSearchTuning";
 import { searchUnitsByText } from "@/lib/units/searchUnitsByText";
 import { searchUnitsByVector } from "@/lib/units/searchUnitsByVector";
-import {
-  MAX_UNITS_PER_DOCUMENT,
-  SEARCH_LIMIT,
-  WEAK_COSINE_DISTANCE,
-  type UnitHit,
-} from "@/lib/units/types";
+import { SEARCH_LIMIT, WEAK_COSINE_DISTANCE, type UnitHit } from "@/lib/units/types";
 
 /**
  * Hybrid search over one artist's eligible units: full-text candidates for each expanded query and
  * vector candidates for one embedding of the raw question, fused by reciprocal rank, at most
- * `MAX_UNITS_PER_DOCUMENT` per source, `SEARCH_LIMIT` in all.
+ * `MAX_UNITS_PER_DOCUMENT` per source, `SEARCH_LIMIT` in all. The per-source cap, the text mode
+ * and the candidate count can be overridden from the environment (`getSearchTuning`).
  *
  * The vector list joins the fusion once per expanded query, as if searched per query; the
  * embedding is the same, so it is fetched once. If embedding fails the search is text-only.
@@ -22,7 +19,7 @@ import {
  * @param question - The user's question.
  * @param opts.names - The artist's names, display name first (see `expandSearchQueries`).
  * @param opts.signal - Aborts the embedding call; an aborted search throws instead of degrading.
- * @param opts.deps - Replaces the collaborators in tests.
+ * @param opts.deps - Replaces the collaborators (and the environment's tuning) in tests.
  * @returns The hits and `weak`: no text match anywhere and no vector closer than `WEAK_COSINE_DISTANCE`.
  */
 export async function searchUnits(
@@ -35,12 +32,14 @@ export async function searchUnits(
       byText?: typeof searchUnitsByText;
       byVector?: typeof searchUnitsByVector;
       embed?: typeof embedQuery;
+      tuning?: SearchTuning;
     };
   },
 ): Promise<{ hits: UnitHit[]; weak: boolean }> {
   const byText = opts.deps?.byText ?? searchUnitsByText;
   const byVector = opts.deps?.byVector ?? searchUnitsByVector;
   const embed = opts.deps?.embed ?? embedQuery;
+  const tuning = opts.deps?.tuning ?? getSearchTuning();
   const queries = expandSearchQueries(question, opts.names);
 
   let embedding: number[] | null = null;
@@ -55,8 +54,8 @@ export async function searchUnits(
   }
 
   const [textLists, vectorList] = await Promise.all([
-    Promise.all(queries.map(query => byText(artistId, query))),
-    embedding ? byVector(artistId, embedding) : Promise.resolve([]),
+    Promise.all(queries.map(query => byText(artistId, query, tuning.candidates, tuning.textMode))),
+    embedding ? byVector(artistId, embedding, tuning.candidates) : Promise.resolve([]),
   ]);
   const lists = queries.flatMap((_, i) =>
     embedding ? [textLists[i], vectorList] : [textLists[i]],
@@ -68,7 +67,7 @@ export async function searchUnits(
     if (hits.length === SEARCH_LIMIT) break;
     const document = `${hit.sourceKind}\u0000${hit.sourceId}`;
     const count = perDocument.get(document) ?? 0;
-    if (count === MAX_UNITS_PER_DOCUMENT) continue;
+    if (count === tuning.maxUnitsPerDocument) continue;
     perDocument.set(document, count + 1);
     hits.push(hit);
   }

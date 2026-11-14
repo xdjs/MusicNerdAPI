@@ -34,6 +34,18 @@ on:
           - legacy
           - units
         default: legacy
+      units_max_per_document:
+        description: "retrieval/chat units: the most units of one document among the hits (UNITS_MAX_PER_DOCUMENT, 1-8); empty keeps 3"
+        type: string
+        default: ""
+      units_text_mode:
+        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps and"
+        type: string
+        default: ""
+      units_candidates:
+        description: "retrieval/chat units: candidates per text and vector list (UNITS_CANDIDATES, 10-60); empty keeps 20"
+        type: string
+        default: ""
 
 # One run at a time: the chat suite's timings would measure each other, and every
 # question writes allowance rows on the staging database.
@@ -98,6 +110,12 @@ jobs:
           }
           JS
       - name: Run suite
+        # Search tuning overrides for comparing ranking variants (lib/units/getSearchTuning.ts);
+        # empty or invalid values keep the defaults.
+        env:
+          UNITS_MAX_PER_DOCUMENT: ${{ inputs.units_max_per_document }}
+          UNITS_TEXT_MODE: ${{ inputs.units_text_mode }}
+          UNITS_CANDIDATES: ${{ inputs.units_candidates }}
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
 
   pdf106-paired:
