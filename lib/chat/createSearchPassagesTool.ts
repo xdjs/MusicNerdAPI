@@ -1,36 +1,17 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { ChatDocumentRef, ChatDocuments } from "@/lib/chat/createChatDocuments";
+import { trimToPassage } from "@/lib/chat/trimToPassage";
 import { countDocumentUnits } from "@/lib/units/countDocumentUnits";
 import { searchUnits } from "@/lib/units/searchUnits";
-import { PASSAGE_CHARS } from "@/lib/units/types";
 
 /** Searches one answer may run; the fifth is refused. */
 const MAX_SEARCHES = 4;
 
-/** Context kept before the first matching term. */
-const PASSAGE_LEAD = Math.floor(PASSAGE_CHARS / 4);
-
-/** `PASSAGE_CHARS` of `text` around the first case-insensitive match of any query word, else from the start. */
-function trimToPassage(text: string, query: string): string {
-  if (text.length <= PASSAGE_CHARS) return text;
-  const lower = text.toLowerCase();
-  const terms = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  const first = Math.min(
-    Infinity,
-    ...terms.map(term => lower.indexOf(term)).filter(at => at !== -1),
-  );
-  const start =
-    first === Infinity
-      ? 0
-      : Math.max(0, Math.min(first - PASSAGE_LEAD, text.length - PASSAGE_CHARS));
-  return text.slice(start, start + PASSAGE_CHARS);
-}
-
 /**
  * The chat's `searchPassages` tool: hybrid search over the artist's eligible units, each hit's
- * document numbered for citation (`documents.register`), each passage trimmed to `PASSAGE_CHARS`
- * around the first query word it contains. At most four calls per answer; each returned passage is
+ * document numbered for citation (`documents.register`), each passage the whole unit, or for a
+ * page longer than `PASSAGE_CHARS` the window holding the most query terms (`trimToPassage`). At most four calls per answer; each returned passage is
  * charged to the answer's shared read budget (`Math.ceil(length / 4)` tokens), and results that no
  * longer fit are dropped, unnumbered, with `truncated: true`. Each listed document carries `units`,
  * how many units it has in the index now (one `countDocumentUnits` query per call), and `shown`, how
@@ -61,7 +42,7 @@ export function createSearchPassagesTool(
   let searches = 0;
   return tool({
     description:
-      "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a passage from document n at a locator such as `p.3`; cite it as [n, locator]. Each document lists how many of its units were shown (`shown`) out of its total (`units`). `weak: true` is only an early sign that nothing matched well; decide from the passages whether they answer.",
+      "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a whole unit (a page or section; a very long page is cut to its best-matching part) of document n at a locator such as `p.3`; cite it as [n, locator]. Each document lists how many of its units were shown (`shown`) out of its total (`units`). `weak: true` is only an early sign that nothing matched well; decide from the passages whether they answer.",
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       // Counted before the await, so parallel calls in one step cannot slip past the cap.

@@ -160,8 +160,8 @@ describe("createSearchPassagesTool", () => {
     });
   });
 
-  test("windows a long passage around the first query term match", async () => {
-    const text = `${"a".repeat(3000)} Night Label ${"b".repeat(3000)}`;
+  test("windows a page longer than PASSAGE_CHARS around the query terms", async () => {
+    const text = `${"a".repeat(4500)} Night Label ${"b".repeat(4500)}`;
     const { run } = setup([{ ...unitHit("a", 0), text }]);
     const [{ passage }] = (await run("night label")).results;
     expect(passage).toHaveLength(PASSAGE_CHARS);
@@ -170,8 +170,8 @@ describe("createSearchPassagesTool", () => {
   });
 
   test("keeps the window inside the text at either edge", async () => {
-    const start = `Night ${"x".repeat(3000)}`;
-    const end = `${"x".repeat(3000)} night`;
+    const start = `Night ${"x".repeat(9000)}`;
+    const end = `${"x".repeat(9000)} night`;
     const { run } = setup([
       { ...unitHit("a", 0), text: start },
       { ...unitHit("b", 0), text: end },
@@ -181,16 +181,16 @@ describe("createSearchPassagesTool", () => {
     expect(last.passage).toBe(end.slice(-PASSAGE_CHARS));
   });
 
-  test("returns a 2,000-character unit whole, whatever the query matches", async () => {
-    const page = `${"a".repeat(900)} Night Label ${"b".repeat(1087)}`;
-    expect(page).toHaveLength(2000);
+  test("returns a 5,957-character unit whole, whatever the query matches", async () => {
+    const page = `${"a".repeat(2890)} Night Label ${"b".repeat(3054)}`;
+    expect(page).toHaveLength(5957);
     const { run } = setup([{ ...unitHit("a", 0), text: page }]);
     const [{ passage }] = (await run("night label")).results;
     expect(passage).toBe(page);
   });
 
   test("starts at the beginning when no query term appears, and keeps short text whole", async () => {
-    const long = "y".repeat(5000);
+    const long = "y".repeat(9000);
     const { run } = setup([
       { ...unitHit("a", 0), text: long },
       { ...unitHit("b", 0), text: "short page" },
