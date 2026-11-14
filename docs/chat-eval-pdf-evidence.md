@@ -23,7 +23,7 @@ Eval:
 
 ## Local results
 
-Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only. "Final" is the committed branch (`cc3a257`), run across three allowance windows on 2026-11-12 because the staging visitor allowance is 30 questions per rolling hour.
+Scores are the judge's relevance / groundedness (0 to 1). Times are first text / total in seconds. "Before" is main plus PDF reachability and the completeness instruction only. "Final" is the committed branch (`cc3a257`), run across three allowance windows on 2026-11-12 because the staging visitor allowance is 30 questions per rolling hour. Both columns were judged under rubric `cited-evidence-v2`; the current rubric, `cited-evidence-v3`, came later and adds unit locators, so these scores are not directly comparable with v3 runs.
 
 | Case | Before | Final | Final evidence |
 | --- | --- | --- | --- |
