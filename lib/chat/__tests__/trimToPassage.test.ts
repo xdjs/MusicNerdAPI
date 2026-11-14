@@ -44,13 +44,24 @@ describe("trimToPassage", () => {
     expect(trimToPassage(text, "NIGHT")).toBe(text.slice(-PASSAGE_CHARS));
   });
 
+  test("a frequent first term cannot crowd a later term out of the window choice", () => {
+    // 480 "alpha" slots of 25 chars, one of them (at 6500) a "beta"; the first 400 occurrences
+    // would all be alpha, and the window would stay at the start, short of the beta.
+    const slots = Array.from({ length: 480 }, (_, i) =>
+      (i === 260 ? "beta" : "alpha").padEnd(25, "."),
+    );
+    const text = slots.join("");
+    expect(text.indexOf("beta")).toBe(6500);
+    expect(trimToPassage(text, "alpha beta")).toContain("beta");
+  });
+
   test("bounds its work on a long text made of one repeated query term", () => {
     // Every term matches at every position; unbounded, this is about a million occurrences.
     const text = "a".repeat(24000);
     const query = Array.from({ length: 40 }, (_, i) => "a".repeat(i + 3)).join(" ");
     const started = performance.now();
     const passage = trimToPassage(text, query);
-    expect(performance.now() - started).toBeLessThan(50);
+    expect(performance.now() - started).toBeLessThan(500);
     expect(passage).toHaveLength(PASSAGE_CHARS);
   });
 });

@@ -6,9 +6,9 @@ describe("getChatEffort", () => {
     expect(getChatEffort("legacy", { CHAT_EFFORT: "high" })).toBe("low");
   });
 
-  it("reads low, medium or high in units, trimmed and case-insensitive", () => {
+  it("reads low or medium in units, trimmed and case-insensitive", () => {
     expect(getChatEffort("units", { CHAT_EFFORT: "medium" })).toBe("medium");
-    expect(getChatEffort("units", { CHAT_EFFORT: " HIGH " })).toBe("high");
+    expect(getChatEffort("units", { CHAT_EFFORT: " MEDIUM " })).toBe("medium");
     expect(getChatEffort("units", { CHAT_EFFORT: "Low" })).toBe("low");
   });
 
@@ -16,6 +16,7 @@ describe("getChatEffort", () => {
     expect(getChatEffort("units", {})).toBe("low");
     expect(getChatEffort("units", { CHAT_EFFORT: "" })).toBe("low");
     expect(getChatEffort("units", { CHAT_EFFORT: "max" })).toBe("low");
+    expect(getChatEffort("units", { CHAT_EFFORT: "high" })).toBe("low");
     expect(getChatEffort("units", { CHAT_EFFORT: "high,low" })).toBe("low");
   });
 });

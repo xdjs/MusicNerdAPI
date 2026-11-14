@@ -6,7 +6,7 @@ const PASSAGE_LEAD = Math.floor(PASSAGE_CHARS / 4);
 /** The most distinct query terms considered; the query comes from the model. */
 const MAX_TERMS = 16;
 
-/** The most term occurrences collected from one unit, over all terms. */
+/** The most term occurrences collected from one unit, over all terms; each term gets an equal share. */
 const MAX_OCCURRENCES = 400;
 
 /** The most candidate windows scored for one unit. */
@@ -20,7 +20,8 @@ type Occurrence = { at: number; end: number; term: number };
  * holding the most distinct query terms, ties going to the earliest window. Terms are the first 16
  * distinct letter and digit tokens of three or more characters in the query that are not English
  * stopwords, matched case-insensitively and without overlap anywhere in the text; at most 400
- * occurrences are collected. Each candidate window starts `PASSAGE_LEAD` before an occurrence, kept
+ * occurrences are collected, no term contributing more than its share of them (400 divided by
+ * the number of terms, rounded up). Each candidate window starts `PASSAGE_LEAD` before an occurrence, kept
  * inside the text; when there are more than 200 candidates, 200 evenly spaced ones are scored, in
  * one sweep over the occurrences. With no term in the text the window starts at 0.
  *
@@ -37,11 +38,16 @@ export function trimToPassage(text: string, query: string): string {
     MAX_TERMS,
   );
   const occurrences: Occurrence[] = [];
-  collect: for (const [i, term] of terms.entries())
+  // Each term has its own cap, so one frequent term cannot crowd out the rest.
+  const perTerm = Math.ceil(MAX_OCCURRENCES / Math.max(1, terms.length));
+  for (const [i, term] of terms.entries()) {
+    let taken = 0;
     for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, at + term.length)) {
-      if (occurrences.length === MAX_OCCURRENCES) break collect;
+      if (taken === perTerm || occurrences.length === MAX_OCCURRENCES) break;
       occurrences.push({ at, end: at + term.length, term: i });
+      taken++;
     }
+  }
   if (occurrences.length === 0) return text.slice(0, PASSAGE_CHARS);
   const last = text.length - PASSAGE_CHARS;
   const starts = [
