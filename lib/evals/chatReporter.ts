@@ -10,6 +10,7 @@ const SCORE_COLUMNS = [
   "evidence_scorable",
   "answer_relevance",
   "source_groundedness",
+  "mentions",
 ] as const;
 
 const cell = (value: number | null | undefined) =>

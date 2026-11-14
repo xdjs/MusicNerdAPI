@@ -9,6 +9,7 @@ import { experimentName } from "@/lib/evals/experimentName";
 import { judgeCitedAnswer } from "@/lib/evals/judgeCitedAnswer";
 import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
+import { scoreMentions } from "@/lib/evals/scoreMentions";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
@@ -132,6 +133,13 @@ Eval(
         console.log(
           `[chat] ${input.key} dangling citations: cited=${JSON.stringify(citations.metadata.cited)} sources=${JSON.stringify(turn.sources.map(s => s.n))}`,
         );
+      // Our own terms from chatCases.ts, never text from the answer. A follow-up row has its own question.
+      if (input.mentions?.length && !input.followUpOf && !turn.error) {
+        const { missing } = scoreMentions(turn.answer, input.mentions);
+        console.log(
+          `[chat] ${input.key} mentions=${input.mentions.length - missing.length}/${input.mentions.length} missing=[${missing.join("; ")}]`,
+        );
+      }
       return turn;
     },
     scores: [
@@ -159,6 +167,11 @@ Eval(
               output.sources.map(s => s.n),
             )
           : null,
+      // Reported, not gated: which required names the answer left out (null where no terms).
+      ({ input, output }) =>
+        output.error || input.followUpOf || !input.mentions?.length
+          ? null
+          : { name: "mentions", score: scoreMentions(output.answer, input.mentions).score },
       async ({ input, output, expected }) => {
         const result = await judgeCitedAnswer({
           question: input.question,

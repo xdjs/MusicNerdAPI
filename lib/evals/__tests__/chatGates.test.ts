@@ -20,6 +20,10 @@ describe("checkChatGates", () => {
     expect(checkChatGates([good("a"), good("b", { first_text: 0 })])).toEqual([]);
   });
 
+  it("never gates the mentions score", () => {
+    expect(checkChatGates([good("a", { mentions: 0 }), good("b", { mentions: null })])).toEqual([]);
+  });
+
   it("fails an empty run", () => {
     expect(checkChatGates([])).toEqual(["No cases ran."]);
   });
