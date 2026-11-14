@@ -20,8 +20,11 @@ const revisionKey = (ref: { sourceKind: string; sourceId: string; revision: stri
  *   re-cite an earlier number from memory, so a withdrawal drops every later answer: conservative by
  *   design.
  * - An answer whose text cites a document form (`[n, p.N]`, `[n, §…]`, `[n, ¶N]`) but carries no
- *   documents at all cannot be checked, and is dropped. A plain `[n]` answer (web, readSource, or a
- *   client that sends text only) stays under the running union.
+ *   documents of its own is checked through the running union: it stays when every document-form
+ *   number it cites was numbered by an earlier answer's documents (kept or not) and the union is
+ *   current, since the prompt lets the model re-cite such a number from memory. It is dropped when
+ *   it cites a document-form number no earlier answer numbered. A plain `[n]` answer (web,
+ *   readSource, or a client that sends text only) stays under the running union.
  * - An answer that read a PDF goes through `keepCurrentPdfTurns` first, as before.
  *
  * Every distinct document in the history is looked up in one query (`findCurrentDocuments`), none
@@ -70,16 +73,23 @@ export async function keepCurrentCitedTurns(
   const kept: ArtistChatBody["messages"] = [];
   // False from the first answer that numbered a document no longer current: every later answer goes.
   let unionCurrent = true;
+  // The numbers earlier answers' documents carried, whether or not those answers were kept.
+  const numberedBefore = new Set<number>();
+  const keepsAnswer = (message: ArtistChatBody["messages"][number], own: unknown[]) => {
+    if (message.role !== "assistant") return true;
+    if (!unionCurrent) return false;
+    if (own.length > 0) return true;
+    // No documents of its own: every document-form number must be one an earlier answer numbered.
+    return findCitationNumbers(textOf(message)).every(
+      c => c.locator === null || numberedBefore.has(c.n),
+    );
+  };
   for (const [index, message] of messages.entries()) {
     const own = cites(message);
     if (own.some(ref => !current.has(revisionKey(ref)))) unionCurrent = false;
-    if (!pdfKeptIndexes.has(index)) continue;
-    if (message.role === "assistant") {
-      if (!unionCurrent) continue;
-      const documentForm = findCitationNumbers(textOf(message)).some(c => c.locator !== null);
-      if (documentForm && own.length === 0) continue;
-    }
-    kept.push(message);
+    const keep = pdfKeptIndexes.has(index) && keepsAnswer(message, own);
+    for (const { n } of own) numberedBefore.add(n);
+    if (keep) kept.push(message);
   }
   // A loop, not Math.max(...): a long answer can hold more markers than a call has arguments.
   let highestCitedNumber = 0;

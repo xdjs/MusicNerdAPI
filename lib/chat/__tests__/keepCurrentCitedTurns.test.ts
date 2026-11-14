@@ -341,3 +341,58 @@ it("finds the highest number in an answer with 200,000 markers without overflowi
   const { highestCitedNumber } = await keepCurrentCitedTurns(history, "artist");
   expect(highestCitedNumber).toBe(7);
 });
+
+const reciteHistory = (cite: string) => [
+  { id: "1", role: "user" as const, parts: text("q1") },
+  {
+    id: "2",
+    role: "assistant" as const,
+    parts: text("Dutchy [1, p.1][2, p.2]."),
+    documents: [doc(1), doc(2)],
+  },
+  { id: "3", role: "user" as const, parts: text("q2") },
+  // No documents of its own: it cites from memory.
+  { id: "4", role: "assistant" as const, parts: text(cite) },
+  { id: "5", role: "user" as const, parts: text("q3") },
+];
+
+it("keeps an answer without documents that re-cites a document-form number an earlier answer numbered", async () => {
+  findCurrentDocuments.mockImplementation(
+    async (_a: string, refs: Parameters<typeof key>[0][]) => new Set(refs.map(key)),
+  );
+  const {
+    messages: kept,
+    prior,
+    highestCitedNumber,
+  } = await keepCurrentCitedTurns(reciteHistory("Again, the second [2, p.3]."), "artist");
+  expect(kept.map(m => m.id)).toEqual(["1", "2", "3", "4", "5"]);
+  expect(prior).toEqual([
+    { n: 1, ref: ref(doc(1)) },
+    { n: 2, ref: ref(doc(2)) },
+  ]);
+  expect(highestCitedNumber).toBe(2);
+});
+
+it("drops an answer without documents that cites a document-form number nobody numbered", async () => {
+  findCurrentDocuments.mockImplementation(
+    async (_a: string, refs: Parameters<typeof key>[0][]) => new Set(refs.map(key)),
+  );
+  const { messages: kept, highestCitedNumber } = await keepCurrentCitedTurns(
+    reciteHistory("Fifth [2, p.3][5, p.1]."),
+    "artist",
+  );
+  expect(kept.map(m => m.id)).toEqual(["1", "2", "3", "5"]);
+  expect(highestCitedNumber).toBe(2);
+});
+
+it("drops a from-memory re-citation when a document of the union is no longer current", async () => {
+  findCurrentDocuments.mockImplementation(
+    async (_a: string, refs: Parameters<typeof key>[0][]) =>
+      new Set(refs.filter(r => r.sourceId !== uuid(1)).map(key)),
+  );
+  const { messages: kept } = await keepCurrentCitedTurns(
+    reciteHistory("Again, the second [2, p.3]."),
+    "artist",
+  );
+  expect(kept.map(m => m.id)).toEqual(["1", "3", "5"]);
+});
