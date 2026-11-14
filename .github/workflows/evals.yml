@@ -20,7 +20,7 @@ on:
           - units-backfill
         default: chat
       trials:
-        description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
+        description: "chat-pdf-text: how many times the acceptance question is asked (1-10). chat with cases set: how many times each selected case is asked (2-5, else ignored)"
         type: string
         default: "5"
       effort:
@@ -82,7 +82,7 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      # The chat-pdf-text suite's trial count (evals/chat-pdf-text.eval.ts).
+      # The trial count: chat-pdf-text (evals/chat-pdf-text.eval.ts), and chat with cases set (lib/evals/selectChatCases.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
       # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}

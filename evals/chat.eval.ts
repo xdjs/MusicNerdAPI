@@ -48,8 +48,9 @@ console.log(`[chat] effort=${EFFORT} retrieval=${RETRIEVAL}`);
 type ChatRow = ChatCase & { followUpOf?: string };
 
 // CHAT_CASES (comma-separated case keys) runs only those cases and their follow-ups; an unknown
-// key throws here, before any model call.
-const SELECTED_CASES = selectChatCases(CHAT_CASES, process.env.CHAT_CASES);
+// key throws here, before any model call. With CHAT_CASES set, CHAT_TRIALS of 2 to 5 asks each
+// selected case that many times (the follow-up row still runs once).
+const SELECTED_CASES = selectChatCases(CHAT_CASES, process.env.CHAT_CASES, process.env.CHAT_TRIALS);
 
 // Follow-up rows reuse the first answer of their case (rows run in order, one at a time), so
 // a follow-up costs one question, not two. A first turn that errored is asked again.
