@@ -89,6 +89,13 @@ export const PASSAGE_CHARS = MAX_UNIT_CHARS;
 // item" answer then reads a 13-unit document (~6,500 tokens) on top.
 export const READ_UNITS_TOKEN_BUDGET = 24000;
 export const WEAK_COSINE_DISTANCE = 0.6;
+// Staging 2026-11-14: answers that read the whole 13-unit timeline PDF held 7 of 7 and 6 of 7
+// required items, answers from three of its pages 5 of 7 and 2 of 3, and the model chose the whole
+// read in about half of the runs. A search with several hits in a document this short returns it
+// whole instead of leaving the read to the model.
+export const SHORT_DOCUMENT_UNITS = 15;
+// The most characters of not-yet-shown units a search adds when it returns a short document whole.
+export const SHORT_DOCUMENT_CHARS = 32_000;
 
 /**
  * Postgres's `english` stopword list (the Snowball list in `tsearch_data/english.stop`). A query

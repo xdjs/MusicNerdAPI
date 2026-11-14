@@ -307,6 +307,30 @@ it("accepts searched documents with or without unit counts, and replays them wit
   expect(JSON.stringify(result)).not.toMatch(/"units"|"shown"/);
 });
 
+it("accepts a replayed search output with or without expanded", async () => {
+  const withExpanded = search([doc(1)]);
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("Every alias?", "1"),
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            { ...withExpanded, output: { ...withExpanded.output, expanded: 1 } },
+            search([doc(2)]),
+            { type: "text", text: "Dutchy [1, p.1]." },
+          ],
+        },
+        user("And labels?", "3"),
+      ],
+    }),
+  );
+  expect(result).toMatchObject({
+    messages: [{ id: "1" }, { id: "2", documents: [doc(1), doc(2)] }, { id: "3" }],
+  });
+});
+
 it("keeps documents a readUnits output carries", async () => {
   const result = await validateArtistChatBody(
     post({

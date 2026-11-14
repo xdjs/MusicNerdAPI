@@ -13,7 +13,10 @@ describe("summarizeToolCall", () => {
       ],
     };
     expect(summarizeToolCall("searchPassages", { query: "q" }, output)).toBe(
-      "results=3 docs=2 shown/units=2/10,1/4 weak=false truncated=true",
+      "results=3 docs=2 shown/units=2/10,1/4 weak=false truncated=true expanded=none",
+    );
+    expect(summarizeToolCall("searchPassages", { query: "q" }, { ...output, expanded: 2 })).toBe(
+      "results=3 docs=2 shown/units=2/10,1/4 weak=false truncated=true expanded=2",
     );
   });
 

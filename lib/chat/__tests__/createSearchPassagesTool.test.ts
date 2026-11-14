@@ -1,12 +1,19 @@
 import { describe, expect, test, vi } from "vitest";
 import { createChatDocuments } from "@/lib/chat/createChatDocuments";
 import { createSearchPassagesTool } from "@/lib/chat/createSearchPassagesTool";
-import { PASSAGE_CHARS, type UnitHit } from "@/lib/units/types";
+import {
+  PASSAGE_CHARS,
+  SHORT_DOCUMENT_CHARS,
+  SHORT_DOCUMENT_UNITS,
+  type UnitHit,
+} from "@/lib/units/types";
 import { unitHit } from "@/lib/units/__tests__/fixtures/unitHit";
 
 type Output = {
   results: { n: number; locator: string; title: string; passage: string }[];
   weak: boolean;
+  truncated: boolean;
+  expanded: number | null;
   documents: {
     n: number;
     sourceKind: string;
@@ -18,6 +25,19 @@ type Output = {
 };
 
 const call = { toolCallId: "c", messages: [] } as never;
+
+type ReadUnits = typeof import("@/lib/units/readUnits").readUnits;
+
+/** Every unit of document `doc` at revision `rev`, as `readUnits` returns them, each `chars` long. */
+const wholeDocument = (doc: string, units: number, chars = 10) => ({
+  revision: "rev",
+  units: Array.from({ length: units }, (_, i) => ({
+    locator: `p.${i + 1}`,
+    text: `${doc}${i}`.padEnd(chars, "."),
+    tokens: Math.ceil(chars / 4),
+  })),
+  missing: [],
+});
 
 const setup = (
   hits: UnitHit[],
@@ -39,6 +59,8 @@ const setup = (
         }),
       ),
   );
+  // A whole-document read finds nothing unless the test says otherwise, so nothing is expanded.
+  const read = vi.fn<ReadUnits>().mockResolvedValue(null);
   const signal = new AbortController().signal;
   const budget = { remainingTokens };
   const tool = createSearchPassagesTool("artist-1", documents, {
@@ -46,10 +68,11 @@ const setup = (
     signal,
     search,
     count,
+    read,
     budget,
   });
   const run = async (query: string) => (await tool.execute!({ query }, call)) as Output;
-  return { cite, documents, search, count, signal, run, budget };
+  return { cite, documents, search, count, read, signal, run, budget };
 };
 
 describe("createSearchPassagesTool", () => {
@@ -74,6 +97,7 @@ describe("createSearchPassagesTool", () => {
       ],
       weak: false,
       truncated: false,
+      expanded: null,
       documents: [
         {
           n: 1,
@@ -156,6 +180,7 @@ describe("createSearchPassagesTool", () => {
       results: [],
       weak: true,
       truncated: false,
+      expanded: null,
       documents: [],
     });
   });
@@ -241,8 +266,158 @@ describe("createSearchPassagesTool", () => {
     const out = await run("q");
     expect(out.results.map(r => r.n)).toEqual([1]);
     expect(out.documents.map(d => [d.n, d.shown])).toEqual([[1, 1]]);
-    expect((out as Output & { truncated: boolean }).truncated).toBe(true);
+    expect(out.truncated).toBe(true);
     expect(budget.remainingTokens).toBe(50);
     expect(cite).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a short document with several hits", () => {
+    const thirteen = { "vault:a": 13, "vault:b": 13 };
+
+    test("is returned whole after the ranked results, each unit once, in document order", async () => {
+      const { run, read } = setup(
+        [unitHit("a", 4), unitHit("b", 0), unitHit("a", 7)],
+        false,
+        100_000,
+        thirteen,
+      );
+      read.mockResolvedValue(wholeDocument("a", 13));
+      const out = await run("every alias");
+      expect(read).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledWith("artist-1", { sourceKind: "vault", sourceId: "a" }, []);
+      expect(out.expanded).toBe(1);
+      expect(out.results.slice(0, 3).map(r => [r.n, r.locator])).toEqual([
+        [1, "p.5"],
+        [2, "p.1"],
+        [1, "p.8"],
+      ]);
+      const added = out.results.slice(3);
+      expect(added.map(r => r.locator)).toEqual(
+        [1, 2, 3, 4, 6, 7, 9, 10, 11, 12, 13].map(i => `p.${i}`),
+      );
+      expect(added.every(r => r.n === 1 && r.title === "Doc a")).toBe(true);
+      expect(added[0].passage).toBe("a0".padEnd(10, "."));
+      const locators = out.results.filter(r => r.n === 1).map(r => r.locator);
+      expect(new Set(locators).size).toBe(13);
+      expect(locators).toHaveLength(13);
+      expect(out.documents.map(d => [d.n, d.units, d.shown])).toEqual([
+        [1, 13, 13],
+        [2, 13, 1],
+      ]);
+    });
+
+    test("is charged to the shared read budget", async () => {
+      const { run, read, budget } = setup(
+        [unitHit("a", 0), unitHit("a", 1)],
+        false,
+        100_000,
+        thirteen,
+      );
+      read.mockResolvedValue(wholeDocument("a", 13, 40));
+      const out = await run("q");
+      expect(out.expanded).toBe(1);
+      // Two ranked hits of 8 characters (2 tokens each), then 11 units of 40 (10 tokens each).
+      expect(budget.remainingTokens).toBe(100_000 - 2 * 2 - 11 * 10);
+    });
+
+    test("is not expanded on a single hit", async () => {
+      const { run, read } = setup([unitHit("a", 0), unitHit("b", 0)], false, 100_000, thirteen);
+      read.mockResolvedValue(wholeDocument("a", 13));
+      const out = await run("q");
+      expect(read).not.toHaveBeenCalled();
+      expect(out.expanded).toBeNull();
+      expect(out.results).toHaveLength(2);
+    });
+
+    test(`is not expanded past ${SHORT_DOCUMENT_UNITS} units`, async () => {
+      const { run, read } = setup([unitHit("a", 0), unitHit("a", 1)], false, 100_000, {
+        "vault:a": SHORT_DOCUMENT_UNITS + 1,
+      });
+      read.mockResolvedValue(wholeDocument("a", SHORT_DOCUMENT_UNITS + 1));
+      const out = await run("q");
+      expect(read).not.toHaveBeenCalled();
+      expect(out.expanded).toBeNull();
+    });
+
+    test("is not expanded when every unit was already shown", async () => {
+      const { run, read } = setup([unitHit("a", 0), unitHit("a", 1)], false, 100_000, {
+        "vault:a": 2,
+      });
+      const out = await run("q");
+      expect(read).not.toHaveBeenCalled();
+      expect(out.expanded).toBeNull();
+    });
+
+    test("adds nothing when the rest of the document is over the character limit", async () => {
+      const { run, read, budget } = setup(
+        [unitHit("a", 0), unitHit("a", 1)],
+        false,
+        100_000,
+        thirteen,
+      );
+      // 11 units not yet shown, together just over the limit.
+      read.mockResolvedValue(wholeDocument("a", 13, Math.floor(SHORT_DOCUMENT_CHARS / 11) + 1));
+      const out = await run("q");
+      expect(out.expanded).toBeNull();
+      expect(out.results).toHaveLength(2);
+      expect(out.documents.map(d => [d.units, d.shown])).toEqual([[13, 2]]);
+      expect(budget.remainingTokens).toBe(100_000 - 4);
+    });
+
+    test("adds nothing when the rest of the document does not fit the remaining budget", async () => {
+      // 4 tokens for the two hits, then 11 units of 10 tokens need 110; 113 are left.
+      const { run, read, budget } = setup([unitHit("a", 0), unitHit("a", 1)], false, 117, thirteen);
+      read.mockResolvedValue(wholeDocument("a", 13, 40));
+      const out = await run("q");
+      expect(out.expanded).toBe(1);
+      expect(budget.remainingTokens).toBe(3);
+
+      const tight = setup([unitHit("a", 0), unitHit("a", 1)], false, 113, thirteen);
+      tight.read.mockResolvedValue(wholeDocument("a", 13, 40));
+      const refused = await tight.run("q");
+      expect(refused.expanded).toBeNull();
+      expect(refused.results).toHaveLength(2);
+      expect(tight.budget.remainingTokens).toBe(109);
+    });
+
+    test("expands only the highest-ranked qualifying document", async () => {
+      const { run, read } = setup(
+        [unitHit("b", 0), unitHit("a", 0), unitHit("a", 1), unitHit("b", 1)],
+        false,
+        100_000,
+        thirteen,
+      );
+      read.mockImplementation(async (_artist, ref) => wholeDocument(ref.sourceId, 13));
+      const out = await run("q");
+      expect(read).toHaveBeenCalledOnce();
+      expect(read.mock.calls[0][1]).toEqual({ sourceKind: "vault", sourceId: "b" });
+      expect(out.expanded).toBe(1);
+      expect(out.documents.map(d => [d.sourceId, d.shown])).toEqual([
+        ["b", 13],
+        ["a", 2],
+      ]);
+    });
+
+    test("skips a document that changed or left the index since the search", async () => {
+      const changed = setup([unitHit("a", 0), unitHit("a", 1)], false, 100_000, thirteen);
+      changed.read.mockResolvedValue({ ...wholeDocument("a", 13), revision: "later" });
+      const out = await changed.run("q");
+      expect(out.expanded).toBeNull();
+      expect(out.results).toHaveLength(2);
+      expect(changed.budget.remainingTokens).toBe(100_000 - 4);
+
+      const gone = setup([unitHit("a", 0), unitHit("a", 1)], false, 100_000, thirteen);
+      expect((await gone.run("q")).expanded).toBeNull();
+    });
+
+    test("tells the model a short document with several hits comes back whole", () => {
+      const { description } = createSearchPassagesTool("artist-1", createChatDocuments(vi.fn()), {
+        names: [],
+        budget: { remainingTokens: 1 },
+      });
+      expect(description).toMatch(
+        /when a short document has several hits, the whole document is included and `expanded` names it/i,
+      );
+    });
   });
 });

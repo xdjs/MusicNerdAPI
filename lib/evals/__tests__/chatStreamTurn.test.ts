@@ -134,7 +134,7 @@ describe("chatStreamTurn", () => {
         name: "searchPassages",
         atMs: 100,
         doneMs: 200,
-        summary: "results=1 docs=1 shown/units=1/5 weak=false truncated=false",
+        summary: "results=1 docs=1 shown/units=1/5 weak=false truncated=false expanded=none",
       },
       {
         name: "readUnits",

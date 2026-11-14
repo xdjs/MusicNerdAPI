@@ -31,7 +31,7 @@ export function summarizeToolCall(name: string, input: unknown, output: unknown)
     const docs = Array.isArray(out?.documents) ? out.documents : undefined;
     if (results === undefined || docs === undefined) return "ok";
     const shownUnits = docs.map(d => `${record(d)?.shown ?? "?"}/${record(d)?.units ?? "?"}`);
-    return `results=${results} docs=${docs.length} shown/units=${shownUnits.join(",")} weak=${out?.weak === true} truncated=${out?.truncated === true}`;
+    return `results=${results} docs=${docs.length} shown/units=${shownUnits.join(",")} weak=${out?.weak === true} truncated=${out?.truncated === true} expanded=${typeof out?.expanded === "number" ? out.expanded : "none"}`;
   }
   if (name === "readUnits") {
     const n = typeof inp?.n === "number" ? inp.n : "?";
