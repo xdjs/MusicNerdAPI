@@ -27,6 +27,13 @@ Recorded 2026-11-13. Part 1 was executed task by task by subagents, each task re
 - **R22 (Task 11b).** the Web hook also fires when a vault source is created already approved (source-backed UGC approval; trusted `insertVaultSource`), not only on status/publication changes — the purpose is that any newly eligible source gets indexed — cost if wrong: an extra idempotent upsert per approved insert.
 - **R23.** one small residual round for those three (same reasoning as R17: a known replay bug must not ship) — cost if wrong: one more short review.
 
+- **R24 (eval harness).** the eval spend guard refuses a request to a host that is not a paid provider without stopping the run; a violation on a paid provider still stops it — the Braintrust CLI uploads its code bundle to S3 mid-run, and the old rule stopped the run there, so one document never embedded on staging — cost if wrong: an unexpected destination is refused repeatedly instead of ending the run; nothing is ever sent to it.
+- **R25 (Pete's delegation, 2026-11-14).** Pete went to bed with "I need you to do this": the controller confirmed the retrieval labels and the any-one-unit-per-fact policy itself and ran the hosted steps overnight, on staging and in draft PRs only — cost if wrong: Pete re-labels and the gate is re-run.
+- **R26.** full text ranks with an any-term match by default (three units per document and twenty candidates kept); `weak` is a hint for empty retrievals only; `searchPassages` tells the model how many of each document's units it was shown, and the prompt asks for a whole read of a short document on every-item questions — measured on staging: 13 to 15 of 16 labelled facts in the top 8, and `weak` cannot separate the unanswerable control — cost if wrong: more tokens on every-item answers.
+- **R27.** a search passage is up to 2,400 characters and one answer may read 16,000 tokens — PDF pages average about 2,000 characters, so the old 1,200 showed the model about 60% of a page — cost if wrong: about a quarter of a cent more per search.
+- **R28 (parked from the third review).** a very long question can lose the appended artist name to the 24-term cap; the any-term query is unmeasured on production-sized data; the night's changes add up to about eight small queries and 4,000 to 20,000 input tokens per answer — none changes a result; the second needs production data, which is not authorized — cost if wrong: slower search under load, measured before any production switch.
+- **R29.** the units-mode prompt regains the legacy sentence about one-time and parenthetical items, and the chat eval reports a deterministic `mentions` score (terms from the public references) without gating on it — the sentence was audited on the legacy path and lost in the port; the check is the only way to see what an answer omitted without printing it — cost if wrong: one more hosted run.
+
 ## Calls worth Pete's attention first
 
 - R13: inline indexing at upload is text-layer only; scanned pages wait for the queue (about a minute).
@@ -35,3 +42,4 @@ Recorded 2026-11-13. Part 1 was executed task by task by subagents, each task re
 - R15 and R22: the index catches up after uploads, after text-producing research jobs, and after Web approvals or approved inserts.
 - R16: staging is indexed by a hosted eval suite, because staging has no API worker.
 - Published interview answers stay on the existing "latest" path in this version (design correction of 2026-11-13).
+- R25, R26 and R29 (night of 2026-11-14): labels confirmed by the controller, the any-term text match, and the prompt changes all rest on staging runs recorded in `docs/chat-eval-pdf-evidence.md` on `claude/units-retrieval`. The default is still the legacy path.
