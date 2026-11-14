@@ -14,8 +14,8 @@ export type ChatCase = {
   /** Times the question is asked per run, for a behaviour that varies between runs; default 1. */
   trials?: number;
   /**
-   * A real quality gap the suite tracks instead of holding to the per-question floor: the
-   * question is gated on the mean of its trials at `KNOWN_HARD_FLOOR`, and every run reports it.
+   * A real quality gap the suite reports instead of gating on score: the question has no
+   * floor on answer_relevance or source_groundedness, every other gate applies, and every run reports it.
    */
   knownHard?: { since: string; reason: string };
   /** Terms a correct answer names, taken from the public reference; scored by `scoreMentions`, not gated. */
@@ -108,7 +108,7 @@ export const CHAT_CASES: ChatCase[] = [
     knownHard: {
       since: "2026-11-14",
       reason:
-        "Two saved accounts conflict and no source explains the difference; the model tends to reconcile them with a distinction no source states. Three-trial relevance means: legacy 0.26, passages 0.52 to 0.63.",
+        "Two saved accounts conflict and no source explains the difference; the model tends to reconcile them with a distinction no source states. Three-trial relevance means on 2026-11-14: legacy 0.26; passages 0.52, 0.63 and 0.37.",
     },
     trials: 3,
   },
@@ -135,7 +135,7 @@ export const CHAT_CASES: ChatCase[] = [
     knownHard: {
       since: "2026-11-14",
       reason:
-        "Needs category precision across several documents; the model adds unrequested facts and files some items under the wrong category. Legacy was scorable in one of three trials (0.55); passages three-trial relevance means 0.57 to 0.65.",
+        "Needs category precision across several documents; the model adds unrequested facts and files some items under the wrong category. On 2026-11-14 legacy was scorable in one of three trials (0.55); passages three-trial relevance means 0.57, 0.65 and 0.55.",
     },
     trials: 3,
     // The follow-up only makes sense with the first answer in the conversation: before

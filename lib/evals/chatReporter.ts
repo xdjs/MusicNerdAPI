@@ -42,7 +42,7 @@ const knownHardLines = (rows: ChatGateRow[]) => {
   };
   return [...byKey].map(
     ([key, trials]) =>
-      `known-hard ${key}: answer_relevance ${meanOf(trials, "answer_relevance")}, source_groundedness ${meanOf(trials, "source_groundedness")} over ${trials.length} trials (not held to the 0.6 floor since ${trials[0].knownHard!.since})`,
+      `known-hard ${key}: answer_relevance ${meanOf(trials, "answer_relevance")}, source_groundedness ${meanOf(trials, "source_groundedness")} over ${trials.length} trials (reported, not gated on score, since ${trials[0].knownHard!.since})`,
   );
 };
 

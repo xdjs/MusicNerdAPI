@@ -68,7 +68,7 @@ describe("chatReporter", () => {
     const lines = log.mock.calls.map(([line]) => String(line));
     const means = lines.findIndex(line => line.startsWith("means:"));
     expect(lines.slice(means + 1)).toContain(
-      "known-hard h: answer_relevance 0.50, source_groundedness 0.80 over 2 trials (not held to the 0.6 floor since 2026-11-14)",
+      "known-hard h: answer_relevance 0.50, source_groundedness 0.80 over 2 trials (reported, not gated on score, since 2026-11-14)",
     );
     expect(lines.filter(line => line.startsWith("known-hard"))).toHaveLength(1);
   });

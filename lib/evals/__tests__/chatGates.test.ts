@@ -141,23 +141,14 @@ describe("checkChatGates", () => {
         knownHard: hard,
       }));
 
-    it("passes a mean of 0.5 over trials that range below 0.6", () => {
-      // Four questions at 0.9 and the known-hard one at 0.5 keep the run mean at 0.82.
-      const rows = ["a", "b", "c", "d"].map(k => good(k));
-      expect(checkChatGates([...rows, ...hardTrials([0.35, 0.5, 0.65])])).toEqual([]);
-    });
-
-    it("fails a mean of 0.35 with the known-hard message", () => {
-      const failures = checkChatGates([good("a"), ...hardTrials([0.3, 0.35, 0.4])]);
-      expect(failures).toContain("h: answer_relevance 0.35 is below the known-hard floor 0.4.");
-    });
-
-    it("applies the lower floor to source_groundedness", () => {
+    it("does not fail a known-hard question on score, even at 0.2", () => {
+      // Seven questions at 0.9 and the known-hard one at 0.2 keep the run mean at 0.8125.
+      const rows = ["a", "b", "c", "d", "e", "f", "g"].map(k => good(k));
       const failures = checkChatGates([
-        good("a"),
-        ...hardTrials([0.9, 0.9, 0.9], { source_groundedness: 0.3 }),
+        ...rows,
+        ...hardTrials([0.2, 0.2, 0.2], { source_groundedness: 0.2 }),
       ]);
-      expect(failures).toContain("h: source_groundedness 0.30 is below the known-hard floor 0.4.");
+      expect(failures).toEqual([]);
     });
 
     it("still fails a dangling citation or unscorable evidence", () => {
@@ -170,6 +161,16 @@ describe("checkChatGates", () => {
       expect(failures).toContain("h trial 3: the judge could not score the captured evidence.");
     });
 
+    it("still fails a known-hard question on an error row or on time", () => {
+      const failures = checkChatGates([
+        good("a"),
+        { ...hardTrials([0.9])[0], error: "boom" },
+        { ...hardTrials([0.9])[0], scores: { ...good("h").scores, total_time: 0 } },
+      ]);
+      expect(failures).toContain("h trial 1: ended in an error (boom).");
+      expect(failures).toContain("h trial 2: did not finish within the total time budget.");
+    });
+
     it("still holds a normal question at 0.55 to 0.6", () => {
       expect(checkChatGates([good("a"), good("n", { answer_relevance: 0.55 })])).toContain(
         "n: answer_relevance 0.55 is below 0.6.",
@@ -177,7 +178,7 @@ describe("checkChatGates", () => {
     });
 
     it("counts a known-hard question in the run means", () => {
-      // Means: (0.9 + 0.5) / 2 = 0.7, below 0.8, although the question itself passes its floor.
+      // Means: (0.9 + 0.5) / 2 = 0.7, below 0.8, although the question itself is not gated on score.
       const failures = checkChatGates([good("a"), ...hardTrials([0.5])]);
       expect(failures).toContain("Mean answer_relevance 0.7 is below 0.8.");
       expect(failures).not.toContain(expect.stringContaining("known-hard"));

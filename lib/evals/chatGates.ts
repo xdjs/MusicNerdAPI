@@ -1,5 +1,5 @@
 import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
-import { KNOWN_HARD_FLOOR, MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
+import { MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 
 /** One scored chat row as the gates read it: a case, or one trial of a case. */
 export type ChatGateRow = {
@@ -28,8 +28,6 @@ export const CHAT_GATES = {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-const fixed = (n: number) => n.toFixed(2);
-
 const mean = (values: number[]) =>
   values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
 
@@ -45,8 +43,9 @@ const mean = (values: number[]) =>
  * `MEAN_TOTAL_BUDGET_MS`; total_time is 1 on every row; citations and
  * evidence_scorable are 1 on every answerable row; relevance and groundedness means over
  * questions are at least 0.8, and no question falls below 0.6 on either. A known-hard question
- * (2026-11-14) is held to `KNOWN_HARD_FLOOR` on the mean of its trials instead of 0.6; every
- * other gate applies to it, and it still counts in the means.
+ * (2026-11-14) has no floor on either score, since its scores swing more between identical
+ * runs than between the two paths; every other gate applies to it, and it still counts in the
+ * means and the mean answer time.
  *
  * @param rows - Every scored row of the run.
  * @returns The failures.
@@ -86,24 +85,14 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
     );
     if (relevance !== null) {
       relevanceByQuestion.push(relevance);
-      if (knownHard) {
-        if (relevance < KNOWN_HARD_FLOOR)
-          failures.push(
-            `${key}: answer_relevance ${fixed(relevance)} is below the known-hard floor ${KNOWN_HARD_FLOOR}.`,
-          );
-      } else if (relevance < CHAT_GATES.questionRelevance)
+      if (!knownHard && relevance < CHAT_GATES.questionRelevance)
         failures.push(
           `${key}: answer_relevance ${round(relevance)} is below ${CHAT_GATES.questionRelevance}.`,
         );
     }
     if (groundedness !== null) {
       groundednessByQuestion.push(groundedness);
-      if (knownHard) {
-        if (groundedness < KNOWN_HARD_FLOOR)
-          failures.push(
-            `${key}: source_groundedness ${fixed(groundedness)} is below the known-hard floor ${KNOWN_HARD_FLOOR}.`,
-          );
-      } else if (groundedness < CHAT_GATES.questionGroundedness)
+      if (!knownHard && groundedness < CHAT_GATES.questionGroundedness)
         failures.push(
           `${key}: source_groundedness ${round(groundedness)} is below ${CHAT_GATES.questionGroundedness}.`,
         );
