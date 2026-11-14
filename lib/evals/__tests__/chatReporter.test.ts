@@ -52,4 +52,24 @@ describe("chatReporter", () => {
       "  - mean answer time 9.0 s is above 8.0 s.",
     );
   });
+
+  it("prints one line per known-hard question after the means", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const hard = (trial: number, relevance: number) => ({
+      ...row("h", 4000, trial),
+      metadata: {
+        key: "h",
+        trial,
+        knownHard: { since: "2026-11-14", reason: "tracked" },
+      },
+      scores: { ...row("h", 4000).scores, answer_relevance: relevance, source_groundedness: 0.8 },
+    });
+    await report([hard(1, 0.4), hard(2, 0.6), row("b", 3000)]);
+    const lines = log.mock.calls.map(([line]) => String(line));
+    const means = lines.findIndex(line => line.startsWith("means:"));
+    expect(lines.slice(means + 1)).toContain(
+      "known-hard h: answer_relevance 0.50, source_groundedness 0.80 over 2 trials (not held to the 0.6 floor since 2026-11-14)",
+    );
+    expect(lines.filter(line => line.startsWith("known-hard"))).toHaveLength(1);
+  });
 });

@@ -1,5 +1,5 @@
 import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
-import { MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
+import { KNOWN_HARD_FLOOR, MEAN_TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 
 /** One scored chat row as the gates read it: a case, or one trial of a case. */
 export type ChatGateRow = {
@@ -10,6 +10,8 @@ export type ChatGateRow = {
   /** From the question being sent to the finished answer; absent when the row has no output. */
   totalMs?: number;
   scores: Record<string, number | null>;
+  /** Set on the rows of a known-hard question (see `ChatCase.knownHard`). */
+  knownHard?: { since: string; reason: string };
 };
 
 /** The thresholds a chat run must meet (xdjs/MusicNerdWeb#1424, decided 2026-11-12). */
@@ -26,6 +28,8 @@ export const CHAT_GATES = {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+const fixed = (n: number) => n.toFixed(2);
+
 const mean = (values: number[]) =>
   values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
 
@@ -40,7 +44,9 @@ const mean = (values: number[]) =>
  * mean answer time over questions (rows that errored left out) is at most
  * `MEAN_TOTAL_BUDGET_MS`; total_time is 1 on every row; citations and
  * evidence_scorable are 1 on every answerable row; relevance and groundedness means over
- * questions are at least 0.8, and no question falls below 0.6 on either.
+ * questions are at least 0.8, and no question falls below 0.6 on either. A known-hard question
+ * (2026-11-14) is held to `KNOWN_HARD_FLOOR` on the mean of its trials instead of 0.6; every
+ * other gate applies to it, and it still counts in the means.
  *
  * @param rows - Every scored row of the run.
  * @returns The failures.
@@ -67,6 +73,7 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
           failures.push(`${label(i)}: the judge could not score the captured evidence.`);
       }
     });
+    const knownHard = trials.some(r => r.knownHard);
     const relevance = mean(
       trials.flatMap(r =>
         (r.scores.answer_relevance ?? null) === null ? [] : [r.scores.answer_relevance!],
@@ -79,14 +86,24 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
     );
     if (relevance !== null) {
       relevanceByQuestion.push(relevance);
-      if (relevance < CHAT_GATES.questionRelevance)
+      if (knownHard) {
+        if (relevance < KNOWN_HARD_FLOOR)
+          failures.push(
+            `${key}: answer_relevance ${fixed(relevance)} is below the known-hard floor ${KNOWN_HARD_FLOOR}.`,
+          );
+      } else if (relevance < CHAT_GATES.questionRelevance)
         failures.push(
           `${key}: answer_relevance ${round(relevance)} is below ${CHAT_GATES.questionRelevance}.`,
         );
     }
     if (groundedness !== null) {
       groundednessByQuestion.push(groundedness);
-      if (groundedness < CHAT_GATES.questionGroundedness)
+      if (knownHard) {
+        if (groundedness < KNOWN_HARD_FLOOR)
+          failures.push(
+            `${key}: source_groundedness ${fixed(groundedness)} is below the known-hard floor ${KNOWN_HARD_FLOOR}.`,
+          );
+      } else if (groundedness < CHAT_GATES.questionGroundedness)
         failures.push(
           `${key}: source_groundedness ${round(groundedness)} is below ${CHAT_GATES.questionGroundedness}.`,
         );

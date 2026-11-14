@@ -28,6 +28,24 @@ const answerTimeLine = (times: number[]) => {
 const cell = (value: number | null | undefined) =>
   value === null || value === undefined ? "-" : String(Math.round(value * 100) / 100);
 
+/** One line per known-hard question: its trial means, reported on every run whatever the gates say. */
+const knownHardLines = (rows: ChatGateRow[]) => {
+  const byKey = new Map<string, ChatGateRow[]>();
+  for (const row of rows)
+    if (row.knownHard) byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
+  const meanOf = (trials: ChatGateRow[], score: string) => {
+    const values = trials.flatMap(r => {
+      const v = r.scores[score];
+      return typeof v === "number" ? [v] : [];
+    });
+    return values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2) : "-";
+  };
+  return [...byKey].map(
+    ([key, trials]) =>
+      `known-hard ${key}: answer_relevance ${meanOf(trials, "answer_relevance")}, source_groundedness ${meanOf(trials, "source_groundedness")} over ${trials.length} trials (not held to the 0.6 floor since ${trials[0].knownHard!.since})`,
+  );
+};
+
 /** The parts of a Braintrust result row the reporter reads; the SDK types them as a union. */
 type ResultRow = {
   output?: unknown;
@@ -56,7 +74,11 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       ].join(" "),
     );
     for (const r of result.results as unknown as ResultRow[]) {
-      const metadata = (r.metadata ?? {}) as { key?: unknown; trial?: unknown };
+      const metadata = (r.metadata ?? {}) as {
+        key?: unknown;
+        trial?: unknown;
+        knownHard?: { since: string; reason: string };
+      };
       const output = (r.output ?? {}) as Partial<ChatTurn>;
       const key = String(metadata.key ?? "");
       const label = metadata.trial === undefined ? key : `${key} #${String(metadata.trial)}`;
@@ -67,6 +89,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         ...(error ? { error } : {}),
         ...(typeof output.totalMs === "number" ? { totalMs: output.totalMs } : {}),
         scores: r.scores ?? {},
+        ...(metadata.knownHard ? { knownHard: metadata.knownHard } : {}),
       });
       console.log(
         [
@@ -84,6 +107,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
     if (means) console.log(`means: ${means}`);
     const times = answerTimeLine(answerTimesByQuestion(rows));
     if (times) console.log(times);
+    for (const line of knownHardLines(rows)) console.log(line);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkChatGates(rows);
     if (failures.length) {

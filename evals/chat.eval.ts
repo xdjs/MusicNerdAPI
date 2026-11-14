@@ -84,6 +84,7 @@ Eval(
             artist: c.artistName,
             note: c.note,
             ...(c.trials ? { trial: i + 1, trials: c.trials } : {}),
+            ...(c.knownHard ? { knownHard: c.knownHard } : {}),
           },
         })),
         ...(c.followUp
