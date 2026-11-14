@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MODEL_EMBEDDING } from "@/lib/ai/const";
-import { EMBED_BATCH, EMBEDDING_DIMENSIONS } from "@/lib/units/types";
+import {
+  EMBED_BATCH,
+  EMBED_BATCH_CHARS,
+  EMBED_INPUT_CHARS,
+  EMBEDDING_DIMENSIONS,
+} from "@/lib/units/types";
 
 vi.mock("ai", () => ({ embedMany: vi.fn() }));
 const { embedMany } = await import("ai");
@@ -55,5 +60,46 @@ describe("embedUnits", () => {
     const signal = new AbortController().signal;
     await embedUnits(["a"], { signal });
     expect(embedManyMock.mock.calls[0][0].abortSignal).toBe(signal);
+  });
+
+  test("splits 40 page-sized inputs into several requests within both limits, in order", async () => {
+    const texts = Array.from({ length: 40 }, (_, i) =>
+      String.fromCharCode(65 + (i % 26)).repeat(24_000),
+    );
+    embedManyMock.mockImplementation(async (args: { values: string[] }) => ({
+      embeddings: args.values.map(t => vec(t.charCodeAt(0))),
+    }));
+
+    const out = await embedUnits(texts);
+
+    expect(embedManyMock.mock.calls.length).toBeGreaterThan(1);
+    let sent = 0;
+    for (const [args] of embedManyMock.mock.calls) {
+      const values = args.values as string[];
+      expect(values.length).toBeLessThanOrEqual(EMBED_BATCH);
+      expect(values.reduce((n, v) => n + v.length, 0)).toBeLessThanOrEqual(EMBED_BATCH_CHARS);
+      sent += values.length;
+    }
+    expect(sent).toBe(40);
+    expect(out.map(v => v[0])).toEqual(texts.map(t => t.charCodeAt(0)));
+  });
+
+  test("sends one oversized input cut to EMBED_INPUT_CHARS", async () => {
+    embedManyMock.mockResolvedValue({ embeddings: [vec(1)] });
+    await embedUnits(["x".repeat(30_000)]);
+    expect(embedManyMock.mock.calls[0][0].values[0].length).toBeLessThanOrEqual(EMBED_INPUT_CHARS);
+  });
+
+  test("cuts at the last whitespace when one is in the final 200 characters", async () => {
+    const text = "a".repeat(EMBED_INPUT_CHARS - 50) + " " + "b".repeat(100);
+    embedManyMock.mockResolvedValue({ embeddings: [vec(1)] });
+    await embedUnits([text]);
+    expect(embedManyMock.mock.calls[0][0].values[0]).toBe("a".repeat(EMBED_INPUT_CHARS - 50));
+  });
+
+  test("hard-cuts when there is no whitespace near the limit", async () => {
+    embedManyMock.mockResolvedValue({ embeddings: [vec(1)] });
+    await embedUnits(["a".repeat(100) + " " + "b".repeat(EMBED_INPUT_CHARS)]);
+    expect(embedManyMock.mock.calls[0][0].values[0]).toHaveLength(EMBED_INPUT_CHARS);
   });
 });
