@@ -43,4 +43,14 @@ describe("trimToPassage", () => {
     const text = `${"x".repeat(9000)} night`;
     expect(trimToPassage(text, "NIGHT")).toBe(text.slice(-PASSAGE_CHARS));
   });
+
+  test("bounds its work on a long text made of one repeated query term", () => {
+    // Every term matches at every position; unbounded, this is about a million occurrences.
+    const text = "a".repeat(24000);
+    const query = Array.from({ length: 40 }, (_, i) => "a".repeat(i + 3)).join(" ");
+    const started = performance.now();
+    const passage = trimToPassage(text, query);
+    expect(performance.now() - started).toBeLessThan(50);
+    expect(passage).toHaveLength(PASSAGE_CHARS);
+  });
 });
