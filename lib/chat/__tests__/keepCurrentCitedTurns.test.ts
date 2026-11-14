@@ -396,3 +396,27 @@ it("drops a from-memory re-citation when a document of the union is no longer cu
   );
   expect(kept.map(m => m.id)).toEqual(["1", "3", "5"]);
 });
+
+it("drops a from-memory re-citation of a number only a dropped answer carried", async () => {
+  const pdf = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const history = [
+    { id: "1", role: "user" as const, parts: text("q1") },
+    {
+      id: "2",
+      role: "assistant" as const,
+      parts: text("Dutchy [1, p.1]."),
+      documents: [doc(1)],
+      pdfReads: [{ sourceId: pdf, revision: "a1" }],
+    },
+    { id: "3", role: "user" as const, parts: text("q2") },
+    { id: "4", role: "assistant" as const, parts: text("Again [1, p.2].") },
+    { id: "5", role: "user" as const, parts: text("q3") },
+  ];
+  loadChatPdfs.mockResolvedValue([{ id: pdf, revision: "a2" }]);
+  findCurrentDocuments.mockImplementation(
+    async (_a: string, refs: Parameters<typeof key>[0][]) => new Set(refs.map(key)),
+  );
+  const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
+  expect(kept.map(m => m.id)).toEqual(["1", "3", "5"]);
+  expect(prior).toEqual([]);
+});
