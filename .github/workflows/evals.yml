@@ -52,7 +52,7 @@ on:
         type: string
         default: ""
       units_text_mode:
-        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps or"
+        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word), or (any term) or idf (any term, ranked by rarity); empty keeps the default"
         type: string
         default: ""
       units_candidates:

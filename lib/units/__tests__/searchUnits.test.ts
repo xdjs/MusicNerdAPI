@@ -22,7 +22,7 @@ const deps = (o: { vector?: Hits; embedError?: Error; or?: Hits; and?: Hits }) =
   // Each text mode answers with its own list, so ranking (`or`) and the strict signal (`and`)
   // can disagree, as they do on real questions.
   byText: vi.fn(
-    async (_artist: string, _query: string, _limit?: number, mode?: "and" | "or") =>
+    async (_artist: string, _query: string, _limit?: number, mode?: "and" | "or" | "idf") =>
       (mode === "and" ? o.and : o.or) ?? ([] as Hits),
   ),
   byVector: vi.fn(async () => o.vector ?? []),

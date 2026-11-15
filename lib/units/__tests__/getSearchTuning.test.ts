@@ -30,6 +30,8 @@ describe("getSearchTuning", () => {
     expect(getSearchTuning({ UNITS_TEXT_MODE: "and" }).textMode).toBe("and");
     expect(getSearchTuning({ UNITS_TEXT_MODE: " AND " }).textMode).toBe("and");
     expect(getSearchTuning({ UNITS_TEXT_MODE: "or" }).textMode).toBe("or");
+    expect(getSearchTuning({ UNITS_TEXT_MODE: "idf" }).textMode).toBe("idf");
+    expect(getSearchTuning({ UNITS_TEXT_MODE: " IDF " }).textMode).toBe("idf");
     expect(getSearchTuning({ UNITS_CANDIDATES: "10" }).candidates).toBe(10);
     expect(getSearchTuning({ UNITS_CANDIDATES: "60" }).candidates).toBe(60);
   });

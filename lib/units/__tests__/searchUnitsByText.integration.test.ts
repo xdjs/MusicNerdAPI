@@ -116,4 +116,27 @@ describe("searchUnitsByText", () => {
     expect(await searchUnitsByText(artist, "what is the", undefined, "or")).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  test("idf mode ranks by how rare the matched terms are, not by how often a common one repeats", async () => {
+    await addUnits(id(1), [
+      "Rango played. Rango toured. Rango spoke about Rango and the Rango band for the Rango fans.",
+      "Rango says the song landed on a television show called Insecure after years of demos.",
+      "Rango and the band. Rango again. A song. Another song by Rango.",
+      "Rango wrote a newsletter.",
+    ]);
+    await addUnits(id(2), ["Rango's private draft says the song landed on Insecure."]);
+    const question = "Which Rango song landed on Insecure?";
+    const or = await searchUnitsByText(artist, question, 20, "or");
+    const idf = await searchUnitsByText(artist, question, 20, "idf");
+    // The private source never appears, and every public unit matches on the name alone.
+    expect(idf.map(h => h.sourceId)).toEqual([id(1), id(1), id(1), id(1)]);
+    // Cover density is taken by the unit that repeats the name; rarity finds the unit that answers.
+    expect(or[0].unitIndex).not.toBe(1);
+    expect(idf[0].unitIndex).toBe(1);
+    expect(idf[1].unitIndex).toBe(2);
+    expect(idf[0].score).toBeGreaterThan(idf[1].score);
+    expect((await searchUnitsByText(artist, question, 2, "idf")).length).toBe(2);
+    expect(await searchUnitsByText(artist, "the of and", 20, "idf")).toEqual([]);
+    expect(await searchUnitsByText(artist, "zebra", 20, "idf")).toEqual([]);
+  });
 });

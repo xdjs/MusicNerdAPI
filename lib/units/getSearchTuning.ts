@@ -9,8 +9,11 @@ import { MAX_UNITS_PER_DOCUMENT, SEARCH_CANDIDATES } from "@/lib/units/types";
 export type SearchTuning = {
   /** The most units of one document among the hits. */
   maxUnitsPerDocument: number;
-  /** `and`: every word must match (`websearch_to_tsquery`); `or`: any non-stopword term may. */
-  textMode: "and" | "or";
+  /**
+   * `and`: every word must match (`websearch_to_tsquery`); `or`: any non-stopword term may, ranked
+   * by cover density; `idf`: any term may, ranked by how rare the matched terms are.
+   */
+  textMode: "and" | "or" | "idf";
   /** The length of each candidate list, text and vector, before fusion. */
   candidates: number;
 };
@@ -27,7 +30,7 @@ const integerIn = (value: string | undefined, min: number, max: number, fallback
  * without code edits. Unset or invalid values keep the default.
  *
  * @param env - The environment: `UNITS_MAX_PER_DOCUMENT` (integer 1..8, default
- * `MAX_UNITS_PER_DOCUMENT`), `UNITS_TEXT_MODE` (`and` or `or`, default `or`; `and` selects the strict mode) and
+ * `MAX_UNITS_PER_DOCUMENT`), `UNITS_TEXT_MODE` (`and`, `or` or `idf`, default `or`; `and` selects the strict mode) and
  * `UNITS_CANDIDATES` (integer 10..60, default `SEARCH_CANDIDATES`).
  * @returns The effective tuning.
  */
@@ -37,7 +40,7 @@ export function getSearchTuning(
   const mode = env.UNITS_TEXT_MODE?.trim().toLowerCase();
   return {
     maxUnitsPerDocument: integerIn(env.UNITS_MAX_PER_DOCUMENT, 1, 8, MAX_UNITS_PER_DOCUMENT),
-    textMode: mode === "and" ? "and" : "or",
+    textMode: mode === "and" ? "and" : mode === "idf" ? "idf" : "or",
     candidates: integerIn(env.UNITS_CANDIDATES, 10, 60, SEARCH_CANDIDATES),
   };
 }
