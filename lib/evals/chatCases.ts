@@ -1,3 +1,5 @@
+import { BIO_RITMO, DUTCHYYY, WILLIE_COLON } from "@/lib/evals/evalArtists";
+
 /** One chat-suite question, hand-checked against the artist's stored approved sources. */
 export type ChatCase = {
   key: string;
@@ -23,11 +25,6 @@ export type ChatCase = {
   /** A second question asked with this answer in the conversation, scored as its own row. */
   followUp?: { question: string; reference: string };
 };
-
-/** Staging (Music Nerd Dev) fixture ids; previews and the eval use the staging database. */
-const BIO_RITMO = "aab92f80-f9e1-4299-aa33-7dd85c8de5d3";
-const WILLIE_COLON = "ddba2de8-117e-4e90-8d56-ef61b4b858ae";
-const DUTCHYYY = "6cb3d81a-3d02-4c57-a711-bb7902a9af1b";
 
 /**
  * The chat suite's dataset: staging fixture artists with approved sources whose stored text
