@@ -18,6 +18,7 @@ on:
           - vision-page
           - retrieval
           - units-backfill
+          - source-text-backfill
         default: chat
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
@@ -67,7 +68,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill' || inputs.suite == 'source-text-backfill'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.
