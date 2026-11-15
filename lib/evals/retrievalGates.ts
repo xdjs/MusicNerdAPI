@@ -1,3 +1,5 @@
+import { SEARCH_LIMIT } from "@/lib/units/types";
+
 /** One scored retrieval row as the gates read it. */
 export type RetrievalGateRow = {
   key: string;
@@ -9,7 +11,7 @@ export type RetrievalGateRow = {
 };
 
 /** The thresholds a retrieval run must meet: mean recall, and a hit within the top `maxRank`. */
-export const RETRIEVAL_GATES = { meanRecall: 0.8, maxRank: 8 } as const;
+export const RETRIEVAL_GATES = { meanRecall: 0.8, maxRank: SEARCH_LIMIT } as const;
 
 const round = (n: number) => Math.round(n * 100) / 100;
 

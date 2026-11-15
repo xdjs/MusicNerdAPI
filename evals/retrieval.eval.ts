@@ -14,7 +14,7 @@ import type { UnitSourceKind } from "@/lib/units/types";
 
 /**
  * Retrieval suite: for each chat question, does the page-level text index return a unit for each
- * labelled fact in its top eight? A fact is found when any one of its units is retrieved
+ * labelled fact in its top `SEARCH_LIMIT` (twelve) results? A fact is found when any one of its units is retrieved
  * (`lib/evals/retrievalLabels.ts`). Calls `searchUnits` directly against the staging database; no model
  * reads the results. Pass or fail by `lib/evals/retrievalGates.ts`, applied by the reporter.
  * Run `units-backfill` first on a database whose index is empty.

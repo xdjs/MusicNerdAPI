@@ -10,7 +10,7 @@ const MAX_PARTS = 64;
 const MAX_RAW_PARTS = 512;
 /** The API only reads text and tool parts; every other part is dropped before any limit applies. */
 const isReadPart = ({ type }: { type: string }) => type === "text" || type.startsWith("tool-");
-/** Documents one answer may carry: six steps of eight search hits, each document once. */
+/** Documents one answer may carry: four searches (the tool's cap) of `SEARCH_LIMIT` hits each, each document once. */
 const MAX_DOCUMENTS = 48;
 /** The highest document number a long conversation can reach. */
 const MAX_DOCUMENT_N = 256;

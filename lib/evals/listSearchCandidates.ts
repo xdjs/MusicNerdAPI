@@ -13,7 +13,7 @@ const keyOf = (hit: Pick<UnitHit, "sourceKind" | "sourceId" | "locator">) =>
 /**
  * The candidate lists behind one search, before fusion, for the retrieval suite's labelling mode:
  * the full-text list in `or` and in `idf` ranking for each expanded query, and the vector list.
- * `searchUnits` returns only the fused top eight, which cannot show why a unit was left out; with
+ * `searchUnits` returns only the fused top `SEARCH_LIMIT`, which cannot show why a unit was left out; with
  * these lists a fusion rule can be replayed offline against the labels without another run. Keys
  * hold a source kind, the first eight characters of the source id and the locator: no text.
  *

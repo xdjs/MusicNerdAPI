@@ -77,7 +77,9 @@ export const MIN_SOURCE_START_MS = 20_000;
 // A unit_sync slice starts no source after this long, so a backfill does not hold every tick.
 export const UNIT_SYNC_SLICE_MS = 20_000;
 export const SEARCH_CANDIDATES = 20;
-export const SEARCH_LIMIT = 8;
+// Staging 2026-11-15, 33 questions with 59 labelled facts: the top 8 held 54 facts, the top 12 hold 57
+// (with either text ranking).
+export const SEARCH_LIMIT = 12;
 export const MAX_UNITS_PER_DOCUMENT = 3;
 export const RRF_K = 60;
 // Staging 2026-11-14: text-section units average 3,963 chars (32 of 41 over 2,400, longest 5,994) and
@@ -85,9 +87,11 @@ export const RRF_K = 60;
 // 5,957) never reached the model. A search result is now the whole unit (at most MAX_UNIT_CHARS);
 // only a denser PDF page is windowed.
 export const PASSAGE_CHARS = MAX_UNIT_CHARS;
-// Staging 2026-11-14: whole units make an 8-result search cost up to ~12,000 tokens, and an "every
-// item" answer then reads a 13-unit document (~6,500 tokens) on top.
-export const READ_UNITS_TOKEN_BUDGET = 24000;
+// Staging 2026-11-14: whole units make a search cost up to ~1,500 tokens a result, and an "every
+// item" answer then reads a 13-unit document (~6,500 tokens) on top. At SEARCH_LIMIT 12 a search is
+// up to ~18,000 tokens (twelve units of up to 6,000 characters), so 36,000 still leaves room for a
+// second search or a read.
+export const READ_UNITS_TOKEN_BUDGET = 36000;
 export const WEAK_COSINE_DISTANCE = 0.6;
 // Staging 2026-11-14: answers that read the whole 13-unit timeline PDF held 7 of 7 and 6 of 7
 // required items, answers from three of its pages 5 of 7 and 2 of 3, and the model chose the whole

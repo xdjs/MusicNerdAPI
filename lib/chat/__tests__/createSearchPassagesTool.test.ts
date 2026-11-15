@@ -44,6 +44,7 @@ const setup = (
   weak = false,
   remainingTokens = 100_000,
   totals: Record<string, number> = {},
+  question?: string,
 ) => {
   let next = 0;
   const cite = vi.fn(() => ++next);
@@ -65,6 +66,7 @@ const setup = (
   const budget = { remainingTokens };
   const tool = createSearchPassagesTool("artist-1", documents, {
     names: ["Dutchyyy"],
+    question,
     signal,
     search,
     count,
@@ -464,5 +466,26 @@ describe("createSearchPassagesTool", () => {
         /when a short document has several hits, the whole document is included and `expanded` names it/i,
       );
     });
+  });
+
+  test("the first search also asks the user's question, later searches do not", async () => {
+    const { search, run } = setup([unitHit("a", 0)], false, 100_000, {}, "What did Dutchy say?");
+    await run("alias");
+    await run("refined");
+    expect(search.mock.calls[0][2]).toEqual({
+      names: ["Dutchyyy"],
+      also: ["What did Dutchy say?"],
+      signal: expect.any(AbortSignal),
+    });
+    expect(search.mock.calls[1][2]).not.toHaveProperty("also");
+    expect(search.mock.calls[1][1]).toBe("refined");
+  });
+
+  test("passes no also when the question is blank or absent", async () => {
+    for (const question of ["   ", undefined]) {
+      const { search, run } = setup([unitHit("a", 0)], false, 100_000, {}, question);
+      await run("alias");
+      expect(search.mock.calls[0][2]).not.toHaveProperty("also");
+    }
   });
 });

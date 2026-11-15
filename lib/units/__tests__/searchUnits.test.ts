@@ -40,15 +40,25 @@ describe("searchUnits", () => {
         ...Array.from({ length: 5 }, (_, i) => hit("a", i, weakScore)),
         ...Array.from({ length: 4 }, (_, i) => hit("b", i, weakScore)),
         ...Array.from({ length: 4 }, (_, i) => hit("c", i, weakScore)),
+        ...Array.from({ length: 4 }, (_, i) => hit("d", i, weakScore)),
       ],
     });
-    const result = await searchUnits(artist, "first tour", { names: ["Mike Dean"], deps: d });
+    const tuning = {
+      maxUnitsPerDocument: 3,
+      textMode: "or" as const,
+      candidates: SEARCH_CANDIDATES,
+    };
+    const result = await searchUnits(artist, "first tour", {
+      names: ["Mike Dean"],
+      deps: { ...d, tuning },
+    });
     expect(result.weak).toBe(true);
     expect(result.hits).toHaveLength(SEARCH_LIMIT);
     const perDoc = Object.groupBy(result.hits, h => h.sourceId);
     expect(perDoc.a!.map(h => h.unitIndex)).toEqual([0, 1, 2]);
     expect(perDoc.b).toHaveLength(MAX_UNITS_PER_DOCUMENT);
-    expect(perDoc.c!.map(h => h.unitIndex)).toEqual([0, 1]);
+    expect(perDoc.c).toHaveLength(MAX_UNITS_PER_DOCUMENT);
+    expect(perDoc.d).toHaveLength(MAX_UNITS_PER_DOCUMENT);
     // One embedding of the raw question; text search per expanded query.
     expect(d.embed).toHaveBeenCalledOnce();
     expect(d.embed.mock.calls[0]).toEqual(["first tour", { signal: undefined }]);
@@ -131,6 +141,15 @@ describe("searchUnits", () => {
     expect(d.byVector).toHaveBeenCalledWith(artist, vector, 40);
   });
 
+  test("ranks by idf and still runs the strict probe by default", async () => {
+    const d = deps({});
+    await searchUnits(artist, "q", { names: [], deps: d });
+    expect(d.byText.mock.calls).toEqual([
+      [artist, "q", SEARCH_CANDIDATES, "idf"],
+      [artist, "q", 1, "and"],
+    ]);
+  });
+
   test("reads the tuning from the environment by default", async () => {
     vi.stubEnv("UNITS_MAX_PER_DOCUMENT", "1");
     vi.stubEnv("UNITS_TEXT_MODE", "or");
@@ -206,6 +225,77 @@ describe("searchUnits", () => {
     expect(result).toMatchObject({
       weak: false,
       signals: { textMatched: true, anyTextMatched: true },
+    });
+  });
+
+  describe("also", () => {
+    const tuning = { maxUnitsPerDocument: 3, textMode: "or" as const, candidates: 20 };
+    // Each asked string embeds to its own vector and finds its own vector hits.
+    const twoAsked = (o: { failSecond?: boolean } = {}) => {
+      const byText = vi.fn(
+        async (_a: string, query: string, _l?: number, mode?: "and" | "or" | "idf") =>
+          mode === "and" ? (query.startsWith("b") ? [hit("sb", 0)] : []) : [hit(`t:${query}`, 0)],
+      );
+      const embed = vi.fn(async (text: string) => {
+        if (o.failSecond && text === "b") throw new Error("down");
+        return [text === "a" ? 1 : 2];
+      });
+      const byVector = vi.fn(async (_a: string, v: number[]) => [
+        hit(`v${v[0]}`, 0, v[0] === 1 ? 0.3 : 0.6),
+      ]);
+      return { byText, embed, byVector, tuning };
+    };
+
+    test("fuses text then vector per asked string, in order", async () => {
+      const d = twoAsked();
+      const result = await searchUnits(artist, "a", { names: [], also: ["b"], deps: d });
+      expect(d.embed).toHaveBeenCalledTimes(2);
+      expect(d.byVector.mock.calls.map(c => c[1])).toEqual([[1], [2]]);
+      expect(result.hits.map(h => h.sourceId)).toEqual(["t:a", "v1", "t:b", "v2"]);
+    });
+
+    test("ignores blank and duplicate entries, leaving today's calls", async () => {
+      const plain = twoAsked();
+      await searchUnits(artist, "Q", { names: [], deps: plain });
+      const d = twoAsked();
+      await searchUnits(artist, "Q", { names: [], also: ["  ", "q", " Q "], deps: d });
+      expect(d.byText.mock.calls).toEqual(plain.byText.mock.calls);
+      expect(d.embed.mock.calls).toEqual(plain.embed.mock.calls);
+      expect(d.byVector.mock.calls).toEqual(plain.byVector.mock.calls);
+    });
+
+    test("a string whose embedding fails contributes text lists only", async () => {
+      const d = twoAsked({ failSecond: true });
+      const result = await searchUnits(artist, "a", { names: [], also: ["b"], deps: d });
+      expect(d.byVector).toHaveBeenCalledOnce();
+      expect(result.hits.map(h => h.sourceId)).toEqual(["t:a", "v1", "t:b"]);
+      expect(warn).toHaveBeenCalledWith(
+        "searchUnits: query embedding failed, searching text only",
+        {
+          error: "Error",
+        },
+      );
+    });
+
+    test("rethrows an abort from any asked string", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const d = twoAsked();
+      d.embed.mockRejectedValue(new DOMException("aborted", "AbortError"));
+      await expect(
+        searchUnits(artist, "a", { names: [], also: ["b"], signal: controller.signal, deps: d }),
+      ).rejects.toThrow();
+    });
+
+    test("combines the signals over every asked string", async () => {
+      const d = twoAsked();
+      const result = await searchUnits(artist, "a", { names: [], also: ["b"], deps: d });
+      // Only the second string matched in strict terms; the best vector score is the second's.
+      expect(result.signals).toEqual({
+        textMatched: true,
+        anyTextMatched: true,
+        bestVectorScore: 0.6,
+      });
     });
   });
 });

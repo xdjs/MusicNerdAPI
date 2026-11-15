@@ -27,9 +27,15 @@ const MAX_SEARCHES = 4;
  * added. A ranked hit of that document shown windowed is replaced by its whole unit, and that
  * extra text counts toward the characters and the budget. At most one document per call; `expanded` names it, and its `shown` equals its `units`.
  *
+ * The first search of an answer also searches the user's own question (`searchUnits` `also`), because
+ * the model's wording of a query can miss a document that the user's wording finds (measured
+ * 2026-11-15). Later searches use the model's query alone, so a refined query is not pulled back to
+ * the first results.
+ *
  * @param artistId - The artist.
  * @param documents - The chat's document registry.
  * @param opts.names - The artist's names, display name first.
+ * @param opts.question - The user's question for this answer; the first search also asks it.
  * @param opts.signal - Aborts the search.
  * @param opts.search - Replaces `searchUnits` in tests.
  * @param opts.count - Replaces `countDocumentUnits` in tests.
@@ -42,6 +48,7 @@ export function createSearchPassagesTool(
   documents: ChatDocuments,
   opts: {
     names: string[];
+    question?: string;
     signal?: AbortSignal;
     search?: typeof searchUnits;
     count?: typeof countDocumentUnits;
@@ -53,16 +60,19 @@ export function createSearchPassagesTool(
   const count = opts.count ?? countDocumentUnits;
   const read = opts.read ?? readUnits;
   let searches = 0;
+  const asksQuestion = !!opts.question?.trim();
   return tool({
     description:
       "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a whole unit (a page or section; a very long page is cut to its best-matching part) of document n at a locator such as `p.3`; cite it as [n, locator]. Each document lists how many of its units were shown (`shown`) out of its total (`units`). When a short document has several hits, the whole document is included and `expanded` names it. `weak: true` is only an early sign that nothing matched well; decide from the passages whether they answer.",
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       // Counted before the await, so parallel calls in one step cannot slip past the cap.
+      const first = searches === 0;
       if (++searches > MAX_SEARCHES)
         return { error: "Search limit reached for this answer", results: [], documents: [] };
       const { hits, weak } = await search(artistId, query, {
         names: opts.names,
+        ...(first && asksQuestion ? { also: [opts.question!] } : {}),
         signal: opts.signal,
       });
       const registered = new Map<number, ChatDocumentRef>();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SEARCH_LIMIT } from "@/lib/units/types";
 import {
   RETRIEVAL_GATES,
   checkRetrievalGates,
@@ -47,6 +48,6 @@ describe("checkRetrievalGates", () => {
   it("counts an unscored labelled case as a miss", () => {
     const failures = checkRetrievalGates([{ ...row("a", null, null), error: "boom" }]);
     expect(failures).toContain("a: ended in an error (boom).");
-    expect(failures).toContain("a: no labelled fact in the top 8 results.");
+    expect(failures).toContain(`a: no labelled fact in the top ${SEARCH_LIMIT} results.`);
   });
 });

@@ -675,6 +675,7 @@ describe("with CHAT_RETRIEVAL=units", () => {
     ]);
     expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
       names: ["Dutchyyy"],
+      also: ["Which alias first?"],
       signal: expect.any(AbortSignal),
     });
     // One check before each of the two model steps, each with every document numbered so far.
@@ -706,12 +707,12 @@ describe("with CHAT_RETRIEVAL=units", () => {
     expect(chunks.some(c => c.type === "text-delta")).toBe(false);
   });
 
-  it("shares one 24,000-token read budget across the answer's reads", async () => {
+  it("shares one 36,000-token read budget across the answer's reads", async () => {
     const d = doc(1, "https://a.example/doc");
     u.search.mockResolvedValue({ hits: [hit(d, "p.1", "Text")], weak: false });
     u.read.mockResolvedValue({
       revision: d.revision,
-      units: [{ locator: "p.1", text: "Page one.", tokens: 13000 }],
+      units: [{ locator: "p.1", text: "Page one.", tokens: 20000 }],
       missing: [],
     });
     m.model = new MockLanguageModelV4({
@@ -803,6 +804,7 @@ describe("with CHAT_RETRIEVAL=units", () => {
     await chunksOf(await post(ask("Any alias?")));
     expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
       names: [],
+      also: ["Any alias?"],
       signal: expect.any(AbortSignal),
     });
   });
