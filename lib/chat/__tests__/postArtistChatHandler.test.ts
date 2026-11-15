@@ -673,11 +673,13 @@ describe("with CHAT_RETRIEVAL=units", () => {
       { sourceKind: "vault", sourceId: uuid(2) },
       { sourceKind: "vault", sourceId: uuid(3) },
     ]);
-    expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
-      names: ["Dutchyyy"],
-      also: ["Which alias first?"],
-      signal: expect.any(AbortSignal),
-    });
+    // The first search runs the user's question and the model's query as two separate searches.
+    for (const asked of ["Which alias first?", "alias"])
+      expect(u.search).toHaveBeenCalledWith(artistId, asked, {
+        names: ["Dutchyyy"],
+        signal: expect.any(AbortSignal),
+      });
+    expect(u.search).toHaveBeenCalledTimes(2);
     // One check before each of the two model steps, each with every document numbered so far.
     expect(model.doStreamCalls).toHaveLength(2);
     expect(u.assertDocs).toHaveBeenCalledTimes(2);
@@ -802,10 +804,57 @@ describe("with CHAT_RETRIEVAL=units", () => {
       doStream: [toolStep("searchPassages", { query: "alias" }), textStep("No.")],
     });
     await chunksOf(await post(ask("Any alias?")));
-    expect(u.search).toHaveBeenCalledWith(artistId, "alias", {
-      names: [],
-      also: ["Any alias?"],
-      signal: expect.any(AbortSignal),
+    for (const asked of ["Any alias?", "alias"])
+      expect(u.search).toHaveBeenCalledWith(artistId, asked, {
+        names: [],
+        signal: expect.any(AbortSignal),
+      });
+  });
+
+  describe("followUp", () => {
+    // The question's search and the query's search find different documents.
+    const searchByAsked = () => {
+      const q = doc(1, "https://q.example/doc");
+      const k = doc(2, "https://k.example/doc");
+      u.count.mockResolvedValue(new Map());
+      u.search.mockImplementation(async (_artist: string, asked: string) => ({
+        hits: [
+          asked === "alias"
+            ? hit(k, "p.1", "From the query.")
+            : hit(q, "p.1", "From the question."),
+        ],
+        weak: false,
+      }));
+    };
+    const firstResult = async (body: unknown) => {
+      m.model = new MockLanguageModelV4({
+        doStream: [toolStep("searchPassages", { query: "alias" }), textStep("Ok.")],
+      });
+      const chunks = await chunksOf(await post(body));
+      return chunks
+        .find(c => c.type === "tool-output-available")
+        .output.results.map((r: { passage: string }) => r.passage);
+    };
+
+    it("leads with the question's hits on a first question", async () => {
+      searchByAsked();
+      expect(await firstResult(ask("Any alias?"))).toEqual([
+        "From the question.",
+        "From the query.",
+      ]);
+    });
+
+    it("leads with the model's query when an earlier user message exists", async () => {
+      searchByAsked();
+      expect(
+        await firstResult({
+          messages: [
+            { id: "1", role: "user", parts: [{ type: "text", text: "Who is this?" }] },
+            { id: "2", role: "assistant", parts: [{ type: "text", text: "An artist." }] },
+            { id: "3", role: "user", parts: [{ type: "text", text: "Any alias?" }] },
+          ],
+        }),
+      ).toEqual(["From the query.", "From the question."]);
     });
   });
 });

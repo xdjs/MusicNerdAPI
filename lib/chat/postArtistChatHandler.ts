@@ -109,6 +109,8 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
                 // The real name only: the "This artist" fallback is not a name to match in passages.
                 names: artist.name ? [artist.name] : [],
                 question: getLatestUserText(body.messages),
+                // An earlier user message means the latest one may lean on context the query spells out.
+                followUp: body.messages.filter(message => message.role === "user").length > 1,
                 signal: request.signal,
                 budget,
               }),

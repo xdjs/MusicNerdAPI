@@ -468,24 +468,85 @@ describe("createSearchPassagesTool", () => {
     });
   });
 
-  test("the first search also asks the user's question, later searches do not", async () => {
-    const { search, run } = setup([unitHit("a", 0)], false, 100_000, {}, "What did Dutchy say?");
-    await run("alias");
-    await run("refined");
-    expect(search.mock.calls[0][2]).toEqual({
-      names: ["Dutchyyy"],
-      also: ["What did Dutchy say?"],
-      signal: expect.any(AbortSignal),
-    });
-    expect(search.mock.calls[1][2]).not.toHaveProperty("also");
-    expect(search.mock.calls[1][1]).toBe("refined");
-  });
+  describe("the first search of an answer", () => {
+    const twoSearches = (opts: { question?: string; followUp?: boolean; weaks?: boolean[] }) => {
+      const base = setup([], false, 100_000, {}, opts.question);
+      // Rebuilt with followUp, since `setup` does not take it.
+      const search = vi.fn(async (_artist: string, text: string, _opts?: unknown) => ({
+        hits:
+          text === "alias"
+            ? Array.from({ length: 8 }, (_, i) => unitHit("q", i))
+            : [unitHit("a", 0), unitHit("q", 0), unitHit("a", 1)],
+        weak: (opts.weaks ?? [false, false])[text === "alias" ? 1 : 0],
+      }));
+      const tool = createSearchPassagesTool("artist-1", base.documents, {
+        names: ["Dutchyyy"],
+        question: opts.question,
+        followUp: opts.followUp,
+        signal: base.signal,
+        search: search as never,
+        count: base.count,
+        read: base.read,
+        budget: base.budget,
+      });
+      const run = async (query: string) => (await tool.execute!({ query }, call)) as Output;
+      return { search, run, signal: base.signal };
+    };
+    const locators = (out: Output) => out.results.map(r => `${r.title}:${r.locator}`);
 
-  test("passes no also when the question is blank or absent", async () => {
-    for (const question of ["   ", undefined]) {
-      const { search, run } = setup([unitHit("a", 0)], false, 100_000, {}, question);
+    test("runs the question and the query as two searches, the question's hits first, then up to six new ones", async () => {
+      const { search, run, signal } = twoSearches({ question: "What did Dutchy say?" });
+      const out = await run("alias");
+      expect(search.mock.calls.map(c => [c[1], c[2]])).toEqual([
+        ["What did Dutchy say?", { names: ["Dutchyyy"], signal }],
+        ["alias", { names: ["Dutchyyy"], signal }],
+      ]);
+      // The question's three hits, then the query's first six not among them (q0 is a repeat).
+      expect(locators(out)).toEqual([
+        "Doc a:p.1",
+        "Doc q:p.1",
+        "Doc a:p.2",
+        ...[1, 2, 3, 4, 5, 6].map(i => `Doc q:p.${i + 1}`),
+      ]);
+    });
+
+    test("on a follow-up the model's query leads", async () => {
+      const { run } = twoSearches({ question: "And then?", followUp: true });
+      const out = await run("alias");
+      expect(locators(out).slice(0, 8)).toEqual(
+        Array.from({ length: 8 }, (_, i) => `Doc q:p.${i + 1}`),
+      );
+      expect(locators(out).slice(8)).toEqual(["Doc a:p.1", "Doc a:p.2"]);
+    });
+
+    test("later searches run one search on the query alone", async () => {
+      const { search, run, signal } = twoSearches({ question: "What did Dutchy say?" });
       await run("alias");
-      expect(search.mock.calls[0][2]).not.toHaveProperty("also");
-    }
+      search.mockClear();
+      await run("refined");
+      expect(search.mock.calls.map(c => [c[1], c[2]])).toEqual([
+        ["refined", { names: ["Dutchyyy"], signal }],
+      ]);
+    });
+
+    test("a question equal to the query, ignoring case and spaces, or blank, runs one search", async () => {
+      for (const question of ["  ALIAS ", "   ", undefined]) {
+        const { search, run } = twoSearches({ question });
+        await run("alias");
+        expect(search).toHaveBeenCalledOnce();
+        expect(search.mock.calls[0][1]).toBe("alias");
+      }
+    });
+
+    test("weak only when both searches are weak", async () => {
+      for (const [weaks, expected] of [
+        [[true, true], true],
+        [[true, false], false],
+        [[false, true], false],
+      ] as const) {
+        const { run } = twoSearches({ question: "What did Dutchy say?", weaks: [...weaks] });
+        expect((await run("alias")).weak).toBe(expected);
+      }
+    });
   });
 });
