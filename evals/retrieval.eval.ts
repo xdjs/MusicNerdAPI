@@ -6,6 +6,7 @@ import { toRetrievalFailure } from "@/lib/evals/toRetrievalFailure";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { formatSearchSignals } from "@/lib/evals/formatSearchSignals";
+import { listSearchCandidates } from "@/lib/evals/listSearchCandidates";
 import { scoreRetrievalFacts, type FactResult } from "@/lib/evals/scoreRetrievalFacts";
 import { getSearchTuning } from "@/lib/units/getSearchTuning";
 import { searchUnits } from "@/lib/units/searchUnits";
@@ -114,6 +115,11 @@ Eval(
             ),
           );
           console.error(formatSearchSignals(input.key, { weak, signals }));
+          // The lists behind the fused hits, so a fusion rule can be replayed offline.
+          for (const list of await listSearchCandidates(input.artistId, input.question, [
+            input.artistName,
+          ]))
+            console.error(`candidates ${input.key} ${list.name} ${list.units.join(" ")}`);
         }
         console.log(`[retrieval] ${input.key} hits=${hits.length} weak=${weak}`);
         const units = hits.map(h => ({
