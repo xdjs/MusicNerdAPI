@@ -282,7 +282,7 @@ The 8 s mean-time gate and the known-hard exemption are removed. `facts` (`lib/e
 
 ### Questions and documents
 
-Thirty-three questions over eight artists (Bio Ritmo 7, Willie Colón 6, Dutchyyy 4 and a follow-up, Pete Rango 5, LATASHÁ 4, Celia Cruz 3, Jordan Rein 3, Sound of Fractures 1), written from approved documents of several kinds: articles, interviews, a review, a profile, a podcast transcript, an artist's own site and PDFs. Thirty carry a checklist (the follow-up included); four do not (two that the documents cannot answer, one about on-chain work, one about a detail no document gives). Staging received a read-only copy of production's approved public documents for these artists (31 documents) so the test reads what production holds. The `source-text-backfill` suite then ran the `source_extract` fetcher over approved links with no saved text: 21 of 72 recovered; most of the rest refuse the fetcher with 403.
+Thirty-three questions over eight artists (Bio Ritmo 7, Willie Colón 6, Dutchyyy 4 and a follow-up, Pete Rango 5, LATASHÁ 4, Celia Cruz 3, Jordan Rein 3, Sound of Fractures 1), written from approved documents of several kinds: articles, interviews, a review, a profile, a podcast transcript, an artist's own site and PDFs. Thirty carry a checklist (the follow-up included); four do not (three that no document answers and one why-question answered in the artist's own words). Staging received a read-only copy of production's approved public documents for these artists (31 documents) so the test reads what production holds. The `source-text-backfill` suite then ran the `source_extract` fetcher over approved links with no saved text: 21 of 72 recovered; most of the rest refuse the fetcher with 403.
 
 ### First pass and the search fixes
 
