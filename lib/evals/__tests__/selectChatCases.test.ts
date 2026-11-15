@@ -29,14 +29,25 @@ describe("selectChatCases", () => {
       expect(selectChatCases(withTrials, "b", " 2 ")).toEqual([{ key: "b", trials: 2 }]);
     });
 
-    it("ignores the count when no case list is set", () => {
-      expect(selectChatCases(withTrials, "", "4")).toEqual(withTrials);
-      expect(selectChatCases(withTrials, undefined, "4")).toEqual(withTrials);
+    it("applies to every case when no case list is set", () => {
+      const all = [
+        { key: "a", trials: 4 },
+        { key: "b", trials: 4 },
+      ];
+      expect(selectChatCases(withTrials, "", "4")).toEqual(all);
+      expect(selectChatCases(withTrials, undefined, "4")).toEqual(all);
+      expect(selectChatCases(cases, undefined, "5")).toEqual(cases.map(c => ({ ...c, trials: 5 })));
     });
 
-    it("ignores a count that is not an integer from 2 to 5", () => {
-      for (const bad of [undefined, "", "1", "6", "0", "-3", "2.5", "abc", "3x"])
+    it("accepts 1, which removes repeats", () => {
+      expect(selectChatCases(withTrials, "a", "1")).toEqual([{ key: "a", trials: 1 }]);
+    });
+
+    it("ignores a count that is not an integer from 1 to 5", () => {
+      for (const bad of [undefined, "", "6", "0", "-3", "2.5", "abc", "3x"]) {
         expect(selectChatCases(withTrials, "a,b", bad)).toEqual(withTrials);
+        expect(selectChatCases(withTrials, undefined, bad)).toEqual(withTrials);
+      }
     });
   });
 });

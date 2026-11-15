@@ -13,7 +13,7 @@ import { chatStreamTurn, type HistoryMessage } from "@/lib/evals/chatStreamTurn"
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { mergeParentEvidence } from "@/lib/evals/mergeParentEvidence";
 import { selectChatCases } from "@/lib/evals/selectChatCases";
-import { scoreMentions } from "@/lib/evals/scoreMentions";
+import { scoreFacts } from "@/lib/evals/scoreFacts";
 import { scoreCitations } from "@/lib/evals/scorers/scoreCitations";
 import { scoreWithinBudget } from "@/lib/evals/scorers/scoreWithinBudget";
 import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
@@ -26,8 +26,8 @@ import { withAllowanceWait } from "@/lib/evals/withAllowanceWait";
  * Calls the streaming chat endpoint in process. Runs against the staging database; reads
  * only, apart from the allowance rows a real question writes. A case with `trials` is asked
  * that many times. The run passes or fails by `lib/evals/chatGates.ts`, applied by the
- * reporter; first text is reported, not gated, while the status signal within five seconds
- * and the mean answer time are gated.
+ * reporter: fact checklists (every fact in at least 4 of 5 answers), the judge means, the
+ * status signal within five seconds and 20 s per answer. First text is reported, not gated.
  *
  *   pnpm eval evals/chat.eval.ts          # hosted: records to Braintrust
  *   pnpm eval:local evals/chat.eval.ts    # from .env.local, nothing sent to Braintrust
@@ -48,8 +48,8 @@ console.log(`[chat] effort=${EFFORT} retrieval=${RETRIEVAL}`);
 type ChatRow = ChatCase & { followUpOf?: string };
 
 // CHAT_CASES (comma-separated case keys) runs only those cases and their follow-ups; an unknown
-// key throws here, before any model call. With CHAT_CASES set, CHAT_CASE_TRIALS of 2 to 5 asks each
-// selected case that many times (the follow-up row still runs once).
+// key throws here, before any model call. CHAT_CASE_TRIALS of 1 to 5 asks each case (each selected
+// case, with CHAT_CASES) that many times (the follow-up row still runs once).
 const SELECTED_CASES = selectChatCases(
   CHAT_CASES,
   process.env.CHAT_CASES,
@@ -88,7 +88,8 @@ Eval(
             artist: c.artistName,
             note: c.note,
             ...(c.trials ? { trial: i + 1, trials: c.trials } : {}),
-            ...(c.knownHard ? { knownHard: c.knownHard } : {}),
+            ...(c.shape ? { shape: c.shape } : {}),
+            ...(c.kinds ? { kinds: c.kinds } : {}),
           },
         })),
         ...(c.followUp
@@ -99,6 +100,7 @@ Eval(
                   key: `${c.key}/follow-up`,
                   question: c.followUp.question,
                   followUpOf: c.key,
+                  facts: c.followUp.facts,
                 } as ChatRow,
                 expected: { answerable: true, reference: c.followUp.reference },
                 metadata: {
@@ -161,11 +163,11 @@ Eval(
         console.log(
           `[chat] ${input.key} dangling citations: cited=${JSON.stringify(citations.metadata.cited)} sources=${JSON.stringify(turn.sources.map(s => s.n))}`,
         );
-      // Our own terms from chatCases.ts, never text from the answer. A follow-up row has its own question.
-      if (input.mentions?.length && !input.followUpOf && !turn.error) {
-        const { missing } = scoreMentions(turn.answer, input.mentions);
+      // Our own terms from chatCases.ts, never text from the answer. A follow-up row has its own checklist.
+      if (input.facts?.length && !turn.error) {
+        const { missing } = scoreFacts(turn.answer, input.facts);
         console.log(
-          `[chat] ${input.key} mentions=${input.mentions.length - missing.length}/${input.mentions.length} missing=[${missing.join("; ")}]`,
+          `[chat] ${input.key} facts=${input.facts.length - missing.length}/${input.facts.length} missing=[${missing.join("; ")}]`,
         );
       }
       return turn;
@@ -191,11 +193,11 @@ Eval(
               output.sources.map(s => s.n),
             )
           : null,
-      // Reported, not gated: which required names the answer left out (null where no terms).
+      // The fact checklist, gated per question by chatGates (null where the row has no facts).
       ({ input, output }) =>
-        output.error || input.followUpOf || !input.mentions?.length
+        output.error || !input.facts?.length
           ? null
-          : { name: "mentions", score: scoreMentions(output.answer, input.mentions).score },
+          : { name: "facts", score: scoreFacts(output.answer, input.facts).score },
       async ({ input, output, expected }) => {
         const result = await judgeCitedAnswer({
           question: input.question,
