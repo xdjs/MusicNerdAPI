@@ -52,12 +52,14 @@ Migration W1 is applied to staging before A1 is exercised there, and to producti
 ### Task 1: Migration `0066_source_units` (Web)
 
 **Files:**
+
 - Create: `drizzle/0066_source_units.sql`
 - Modify: `drizzle/meta/_journal.json` (append idx 66, tag `0066_source_units`, version `"7"`, `breakpoints: true`)
 - Modify: `src/server/db/schema.ts` (add `sourceUnits`; widen nothing else)
 - Test: `npx drizzle-kit check`, `npm test`
 
 **Interfaces:**
+
 - Produces: table `public.source_units` with columns `id uuid pk default extensions.uuid_generate_v4()`, `source_kind text check in ('vault','social','evidence')`, `source_id uuid`, `artist_id uuid references artists(id) on delete cascade`, `source_revision text`, `unit_index integer`, `locator text`, `title text null`, `url text null`, `text text`, `text_hash text`, `tokens integer`, `ocr boolean default false`, `ingest_version integer`, `search tsvector generated always as (to_tsvector('english', coalesce(title,'') || ' ' || text)) stored`, `embedding extensions.vector(1536) null`, `created_at timestamptz default (now() at time zone 'utc')`; unique `(source_kind, source_id, unit_index)`; indexes `source_units_artist btree (artist_id, source_kind, source_id)`, `source_units_search gin (search)`, `source_units_embedding hnsw (embedding extensions.vector_cosine_ops)`. Job kind `unit_sync` allowed by `artist_research_jobs_kind_check`.
 
 - [ ] **Step 0: Fetch and branch from `origin/main`**; confirm `drizzle/0065_about_writer_fence.sql` is the highest file before numbering.
@@ -68,17 +70,15 @@ Header comment: "Page-level source units for grounded chat; additive. Apply befo
 
 - [ ] **Step 2: Mirror the table in `src/server/db/schema.ts`**
 
-`export const sourceUnits = pgTable("source_units", {...})` with `vector("embedding", { dimensions: 1536 })` from `drizzle-orm/pg-core`, a `customType` for `tsvector` with `.generatedAlwaysAs(sql\`...\`)`, the unique index, the three indexes, `pgPolicy` entries for `mnweb`, and `.enableRLS()`, following `artistResearchCandidates` in the same file.
+`export const sourceUnits = pgTable("source_units", {...})` with `vector("embedding", { dimensions: 1536 })` from `drizzle-orm/pg-core`, a `customType` for `tsvector` with `.generatedAlwaysAs(sql\`...\`)`, the unique index, the three indexes, `pgPolicy`entries for`mnweb`, and `.enableRLS()`, following `artistResearchCandidates` in the same file.
 
 - [ ] **Step 3: Append the journal entry and check**
 
-Run: `npx drizzle-kit check`
-Expected: no error. (If `check` reports snapshot drift that predates this change, note it in the PR and do not regenerate older snapshots.)
+Run: `npx drizzle-kit check` Expected: no error. (If `check` reports snapshot drift that predates this change, note it in the PR and do not regenerate older snapshots.)
 
 - [ ] **Step 4: Run the Web suite**
 
-Run: `npm test`
-Expected: PASS (the schema is mocked; this guards the TypeScript of the new table).
+Run: `npm test` Expected: PASS (the schema is mocked; this guards the TypeScript of the new table).
 
 - [ ] **Step 5: Commit and open the PR as draft**
 
@@ -94,11 +94,13 @@ PR body states: applied to nowhere yet; apply to staging by hand per the migrati
 ### Task 2: API schema mirror and unit constants
 
 **Files:**
+
 - Modify: `lib/db/schema.ts` (add `sourceUnits`, columns the API uses; no policies, per the file header)
 - Create: `lib/units/types.ts`
 - Modify: `lib/ai/const.ts` (add `MODEL_EMBEDDING`, `MODEL_OCR`)
 
 **Interfaces:**
+
 - Produces (`lib/units/types.ts`):
   - `export type UnitSourceKind = "vault" | "social" | "evidence";`
   - `export type UnitBody = { kind: "pdf"; bytes: Uint8Array } | { kind: "markdown" | "plain"; text: string } | { kind: "none" };`
@@ -112,8 +114,7 @@ PR body states: applied to nowhere yet; apply to staging by hand per the migrati
 - [ ] **Step 1: Add the schema mirror, types and constants** (a constants or types module is exempt from the one-function rule)
 - [ ] **Step 2: Type-check**
 
-Run: `pnpm type-check`
-Expected: PASS
+Run: `pnpm type-check` Expected: PASS
 
 - [ ] **Step 3: Commit**
 
@@ -127,11 +128,13 @@ git commit -m "feat(units): schema mirror, unit types and model constants"
 ### Task 3: `extractPdfPages`
 
 **Files:**
+
 - Create: `lib/units/extractPdfPages.ts`, `lib/units/__tests__/extractPdfPages.test.ts`
 - Modify: `lib/evals/readPdfChatEvidence.ts:14-26` (import the shared renderer instead of its private copy)
 - Modify: `package.json` (add `pdf-lib`, used by the tests here and by Task 5)
 
 **Interfaces:**
+
 - Produces: `export async function extractPdfPages(bytes: Uint8Array, opts?: { timeoutMs?: number; maxPages?: number }): Promise<{ pages: string[]; truncated: boolean }>` — `pages[i]` is the text of physical page `i + 1`, trimmed, newline on y-change exactly as `readPdfChatEvidence.renderPage` does today; `truncated` is true when the document has more than `maxPages` (default `MAX_INGEST_PAGES`); the parse is raced against `timeoutMs` (default `PDF_PARSE_TIMEOUT_MS` from `lib/vaultUpload/const.ts`) and rejects on timeout.
 
 - [ ] **Step 1: Write the failing tests**
@@ -152,20 +155,20 @@ test("stops at maxPages and reports truncation", async () => {
   expect(result.truncated).toBe(true);
 });
 test("rejects when the parse exceeds the timeout", async () => {
-  await expect(extractPdfPages(await twoPagePdf(["A"]), { timeoutMs: 0 })).rejects.toThrow(/timed out/i);
+  await expect(extractPdfPages(await twoPagePdf(["A"]), { timeoutMs: 0 })).rejects.toThrow(
+    /timed out/i,
+  );
 });
 ```
 
 - [ ] **Step 2: Run them**
 
-Run: `pnpm vitest run lib/units/__tests__/extractPdfPages.test.ts`
-Expected: FAIL (module not found)
+Run: `pnpm vitest run lib/units/__tests__/extractPdfPages.test.ts` Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement** with `pdf-parse/lib/pdf-parse.js` and a `pagerender` that returns the page text; collect per page by index (`max: maxPages`); do not join pages into one string.
 - [ ] **Step 4: Run the tests and the existing `readPdfChatEvidence` tests**
 
-Run: `pnpm vitest run lib/units lib/evals/__tests__/readPdfChatEvidence.test.ts`
-Expected: PASS
+Run: `pnpm vitest run lib/units lib/evals/__tests__/readPdfChatEvidence.test.ts` Expected: PASS
 
 - [ ] **Step 5: Commit**
 
@@ -179,10 +182,12 @@ git commit -m "feat(units): per-page PDF text extraction shared with the eval"
 ### Task 4: `splitTextUnits` and `isBrokenExtraction`
 
 **Files:**
+
 - Create: `lib/units/splitTextUnits.ts`, `lib/units/__tests__/splitTextUnits.test.ts`
 - Create: `lib/units/isBrokenExtraction.ts`, `lib/units/__tests__/isBrokenExtraction.test.ts`
 
 **Interfaces:**
+
 - Produces: `export function splitTextUnits(text: string, kind: "markdown" | "plain", maxChars = MAX_UNIT_CHARS): { locator: string; text: string }[]`. Markdown: split at `#`-headings; locator is `§` + heading text (the nearest heading above; `§Top` before the first heading); a section longer than `maxChars` splits at paragraph breaks and its later parts get ` (2)`, ` (3)` appended. Plain: paragraphs grouped up to `maxChars`; locator `¶N` where N is the 1-based index of the first paragraph in the group. Empty input returns `[]`.
 - Produces: `export function isBrokenExtraction(text: string): boolean` — true when fewer than 40 word characters, or the mean token length over whitespace-separated tokens exceeds 20, or more than 30% of non-space characters are outside letters, digits and common punctuation.
 
@@ -190,7 +195,10 @@ git commit -m "feat(units): per-page PDF text extraction shared with the eval"
 
 ```ts
 test("markdown splits at headings with § locators", () => {
-  const units = splitTextUnits("Intro\n\n## Early years\nBorn in 1970.\n\n## Career\nSigned in 1990.", "markdown");
+  const units = splitTextUnits(
+    "Intro\n\n## Early years\nBorn in 1970.\n\n## Career\nSigned in 1990.",
+    "markdown",
+  );
   expect(units.map(u => u.locator)).toEqual(["§Top", "§Early years", "§Career"]);
 });
 test("long sections split at paragraphs and number their parts", () => {
@@ -200,13 +208,27 @@ test("long sections split at paragraphs and number their parts", () => {
   expect(units.every(u => u.text.length <= 100)).toBe(true);
 });
 test("plain text uses paragraph locators", () => {
-  expect(splitTextUnits("one\n\ntwo\n\nthree", "plain", 8).map(u => u.locator)).toEqual(["¶1", "¶2", "¶3"]);
+  expect(splitTextUnits("one\n\ntwo\n\nthree", "plain", 8).map(u => u.locator)).toEqual([
+    "¶1",
+    "¶2",
+    "¶3",
+  ]);
 });
-test("empty input yields no units", () => { expect(splitTextUnits("   ", "plain")).toEqual([]); });
+test("empty input yields no units", () => {
+  expect(splitTextUnits("   ", "plain")).toEqual([]);
+});
 
-test("near-empty text is broken", () => { expect(isBrokenExtraction("p. 3")).toBe(true); });
-test("fused words are broken", () => { expect(isBrokenExtraction("thequickbrownfoxjumpsoverthelazydogagainandagain ".repeat(5))).toBe(true); });
-test("ordinary prose is not broken", () => { expect(isBrokenExtraction("The quick brown fox jumps over the lazy dog. ".repeat(5))).toBe(false); });
+test("near-empty text is broken", () => {
+  expect(isBrokenExtraction("p. 3")).toBe(true);
+});
+test("fused words are broken", () => {
+  expect(isBrokenExtraction("thequickbrownfoxjumpsoverthelazydogagainandagain ".repeat(5))).toBe(
+    true,
+  );
+});
+test("ordinary prose is not broken", () => {
+  expect(isBrokenExtraction("The quick brown fox jumps over the lazy dog. ".repeat(5))).toBe(false);
+});
 ```
 
 - [ ] **Step 2: Run, see them fail. Step 3: Implement. Step 4: Run, see them pass.**
@@ -220,11 +242,13 @@ Run: `pnpm vitest run lib/units`
 ### Task 5: `slicePdfPage` and `readPageWithVision`
 
 **Files:**
+
 - Create: `lib/units/slicePdfPage.ts`, `lib/units/__tests__/slicePdfPage.test.ts`
 - Create: `lib/units/readPageWithVision.ts`, `lib/units/__tests__/readPageWithVision.test.ts`
 - Modify: `lib/ai/generateText.ts:7-25` (`prompt: string | ModelMessage[]`, the way `lib/ai/streamText.ts:14-27` already allows) and its test
 
 **Interfaces:**
+
 - Produces: `export async function slicePdfPage(bytes: Uint8Array, pageIndex: number): Promise<Uint8Array>` — a new one-page PDF containing page `pageIndex` (0-based), via `pdf-lib` `PDFDocument.copyPages`.
 - Produces: `export async function readPageWithVision(pageBytes: Uint8Array, opts?: { signal?: AbortSignal; model?: string }): Promise<string>` — one `generateText` call to `MODEL_OCR` with a user message of one `file` part (`mediaType: "application/pdf"`) and the text "Transcribe every word on this page as markdown. Keep headings, lists and tables. Return only the transcription." Returns the trimmed text; throws on an empty result.
 
@@ -237,10 +261,16 @@ test("slicePdfPage returns a one-page PDF with that page's text", async () => {
 });
 test("readPageWithVision sends the page as a file part and returns the text", async () => {
   generateTextMock.mockResolvedValue({ text: "## Title\nBody" });
-  await expect(readPageWithVision(new Uint8Array([37, 80, 68, 70]))).resolves.toBe("## Title\nBody");
+  await expect(readPageWithVision(new Uint8Array([37, 80, 68, 70]))).resolves.toBe(
+    "## Title\nBody",
+  );
   const call = generateTextMock.mock.calls[0][0];
   expect(call.model).toBe(MODEL_OCR);
-  expect(call.prompt[0].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "file", mediaType: "application/pdf" })]));
+  expect(call.prompt[0].content).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: "file", mediaType: "application/pdf" }),
+    ]),
+  );
 });
 test("readPageWithVision rejects an empty transcription", async () => {
   generateTextMock.mockResolvedValue({ text: "  " });
@@ -257,9 +287,11 @@ test("readPageWithVision rejects an empty transcription", async () => {
 ### Task 6: `embedUnits`
 
 **Files:**
+
 - Create: `lib/units/embedUnits.ts`, `lib/units/__tests__/embedUnits.test.ts`
 
 **Interfaces:**
+
 - Produces: `export async function embedUnits(texts: string[], opts?: { signal?: AbortSignal }): Promise<number[][]>` — `embedMany({ model: MODEL_EMBEDDING, values })` from `ai`, in batches of `EMBED_BATCH`, preserving order; throws if any returned vector is not `EMBEDDING_DIMENSIONS` long; returns `[]` for `[]` without calling the model.
 
 - [ ] **Step 1: Failing tests** (mock `ai`'s `embedMany`): order preserved across two batches of 64 + 1; dimension mismatch throws; empty input makes no call.
@@ -271,9 +303,11 @@ test("readPageWithVision rejects an empty transcription", async () => {
 ### Task 7: `buildSourceUnits`
 
 **Files:**
+
 - Create: `lib/units/buildSourceUnits.ts`, `lib/units/__tests__/buildSourceUnits.test.ts`
 
 **Interfaces:**
+
 - Consumes: `extractPdfPages`, `splitTextUnits`, `isBrokenExtraction`, `slicePdfPage`, `readPageWithVision`.
 - Produces: `export async function buildSourceUnits(input: UnitSourceInput, deps?: { readPage?: (pageBytes: Uint8Array) => Promise<string>; signal?: AbortSignal }): Promise<{ units: UnitDraft[]; ocrPages: number; failed?: "vision" | "extract"; truncated: boolean }>`. PDF: one unit per page, locator `p.N`; a page whose text `isBrokenExtraction` goes through `slicePdfPage` + `readPage` (default `readPageWithVision`) and gets `ocr: true`; if the vision call throws for a page, that page is skipped and `failed: "vision"` is set; a page over `MAX_PAGE_CHARS` is cut there. Markdown/plain: `splitTextUnits`. `none`: `units: []`. `textHash` is sha256 hex of the unit text; `tokens` is `Math.ceil(text.length / 4)`.
 
@@ -294,10 +328,12 @@ test("hash and token count are set", ...)           // sha256 of the text, ceil(
 ### Task 8: `vaultSourceRevisionSql` and `writeSourceUnits`
 
 **Files:**
+
 - Create: `lib/sourcePublication/vaultSourceRevisionSql.ts` + test; Modify: `lib/chatPdf/loadChatPdfs.ts:38` to use it
 - Create: `lib/units/writeSourceUnits.ts`, `lib/units/__tests__/writeSourceUnits.integration.test.ts` (PGlite, pattern of `lib/questionResearch/__tests__/preClaimOriginals.integration.test.ts`)
 
 **Interfaces:**
+
 - Produces: `export function vaultSourceRevisionSql(alias = "v")` returning the drizzle `sql` fragment `coalesce(v.updated_at, v.created_at)::text || ':' || md5(coalesce(v.extracted_text, '')) || ':' || v.publication` (exactly the #118 formula, now in one place).
 - Produces: `export async function writeSourceUnits(tx: WriteDb, input: { sourceKind: UnitSourceKind; sourceId: string; artistId: string; sourceRevision: string; title: string | null; url: string | null; units: UnitDraft[]; embeddings: number[][] | null }): Promise<number>` — deletes every row for `(sourceKind, sourceId)` and inserts the new rows in the same transaction; `embeddings[i]` is written as `'[...]'::extensions.vector` when present, else null; returns the number of rows written.
 
@@ -317,10 +353,12 @@ test("stores embeddings as vector literals", ...)                      // embedd
 ### Task 9: `loadUnitSource`
 
 **Files:**
+
 - Create: `lib/units/loadUnitSource.ts`, `lib/units/__tests__/loadUnitSource.integration.test.ts`
 - Create: `lib/sourcePublication/socialPostRevisionSql.ts` + test (`public.knowledge_source_fingerprint(public.knowledge_social_post_snapshot(s))`, the 0039 fingerprint; PGlite tests stub both functions as `preClaimOriginals.integration.test.ts` does)
 
 **Interfaces:**
+
 - Produces: `export async function loadUnitSource(ref: { sourceKind: UnitSourceKind; sourceId: string }, opts?: { bytes?: Uint8Array; signal?: AbortSignal }): Promise<UnitSourceInput | null>`.
   - `vault`: row by id (any status; eligibility is a query-time concern). `content_type = 'application/pdf'` → body `pdf` from `opts.bytes` or a fetch of `url` (`AbortSignal.timeout(10_000)`, reject bodies over `MAX_VAULT_FILE_BYTES` or not starting with `%PDF-`, reusing the checks in `lib/chatPdf/readChatPdf.ts`); `text/markdown` → `markdown`; other text types and web pages (`file_path is null`) → `plain` from `extracted_text`; null text and not a PDF → `none`. `sourceRevision` from `vaultSourceRevisionSql`; `extractedTextIsNull` from the row.
   - `social`: own post only (`is_own_post = true`, not a repost); text = caption + "\n\n" + transcript when present; body `plain`; locator handled by `buildSourceUnits` as `¶1`; revision from `socialPostRevisionSql`.
@@ -335,9 +373,11 @@ test("stores embeddings as vector literals", ...)                      // embedd
 ### Task 10: `ingestSource`
 
 **Files:**
+
 - Create: `lib/units/ingestSource.ts`, `lib/units/__tests__/ingestSource.test.ts`
 
 **Interfaces:**
+
 - Consumes: `loadUnitSource`, `buildSourceUnits`, `embedUnits`, `writeSourceUnits`, `db.transaction`.
 - Produces: `export async function ingestSource(ref: { sourceKind: UnitSourceKind; sourceId: string }, opts?: { bytes?: Uint8Array; signal?: AbortSignal; embed?: boolean }): Promise<IngestOutcome>`. Order: load (null → `skipped: "not-found"`), build (`none` or zero units → `skipped: "no-text"`, writes nothing and deletes stale rows for the source), embed (`embed !== false`; an embedding failure is caught: `embedded: false`, units still written with null embeddings), write in one transaction. When the source is a vault row with `extractedTextIsNull` and the build produced OCR text, update `artist_vault_sources.extracted_text` to the joined page texts in the same transaction, once (the one allowed write to that column). Never throws for a vision or embedding failure; throws for database errors.
 
@@ -358,11 +398,13 @@ test("a missing source is reported as skipped", ...)
 ### Task 11: Ingest at upload
 
 **Files:**
+
 - Modify: `lib/vaultUpload/postCompleteUploadHandler.ts:101-132`, `lib/vaultUpload/completeIndependentLoreUpload.ts:46-51`, `lib/vaultUpload/postUploadHandler.ts:138-170` and their tests
 - Create: `lib/units/queueUnitSync.ts` + test (pattern of `lib/research/queueLoreRefresh.ts`)
 - Create: `lib/units/ingestUploadInline.ts` + test
 
 **Interfaces:**
+
 - Produces: `export async function queueUnitSync(artistId: string, writer?: TransactionDb): Promise<boolean>` — inserts a pending `unit_sync` job for the artist, `on conflict do nothing` against `artist_research_jobs_one_live`.
 - Produces: `export async function ingestUploadInline(input: { sourceId: string; artistId: string; bytes: Buffer; contentType: string }): Promise<void>` — PDFs with `numpages <= INLINE_INGEST_MAX_PAGES` (count via `lib/chatPdf/inspectChatPdf.ts` until Task 20 removes it; afterwards `extractPdfPages` with `maxPages`) and text uploads call `ingestSource` with the bytes; anything larger, and any thrown error, falls back to `queueUnitSync`. Never rejects.
 
@@ -376,6 +418,7 @@ test("a missing source is reported as skipped", ...)
 **Why:** the Web approves and publishes vault sources by direct database writes (`approvePendingLoreSource.ts`, `queries/updateVaultSourceStatus.ts`, `reviewArtistLinkSuggestion.ts`, `setSourcePublication.ts`), which bump `updated_at` and so change the source's revision; nothing on the API side sees those writes. The API queues `unit_sync` after uploads and when a text-producing research job finishes (ruling R15), but a Web approval alone would leave the units hidden until the next sync.
 
 **Files (Web):**
+
 - Create: `src/server/utils/units/queueUnitSync.ts` + test (the same insert as the API's: `artist_research_jobs`, kind `unit_sync`, status `pending`, `on conflict (artist_id, kind) where status in ('pending','running') do update set state = coalesce(state,'{}'::jsonb) || '{"rescan":true}'::jsonb`)
 - Modify: the four write sites above, calling it after their commit; tests for each.
 
@@ -386,12 +429,14 @@ test("a missing source is reported as skipped", ...)
 ### Task 12: `unit_sync` job and backfill
 
 **Files:**
+
 - Modify: `lib/research/types.ts:1-11` (`JobKind` gains `"unit_sync"`), `lib/research/const.ts:9-20` (`PORTED_JOB_KINDS`), `lib/research/runResearchJob.ts:21-42` (case)
 - Create: `lib/units/runUnitSync.ts`, `lib/units/__tests__/runUnitSync.test.ts`
 - Create: `lib/units/listArtistUnitSources.ts`, `lib/units/__tests__/listArtistUnitSources.integration.test.ts`
 - Modify: `README.md` (one line: Web migration 0066 must be applied before this job runs; the backfill is one manual SQL insert, text given in the PR body, no secrets)
 
 **Interfaces:**
+
 - Produces: `export async function listArtistUnitSources(artistId: string): Promise<{ sourceKind: UnitSourceKind; sourceId: string; sourceRevision: string; indexedRevision: string | null; needsEmbedding: boolean }[]>` — every vault source with text or PDF bytes, own non-repost social post and confirmed evidence row of the artist, left-joined to `source_units` (distinct source revision, and whether any unit has a null embedding); plus orphan units whose source row is gone (`sourceRevision` null for those).
 - Produces: `export async function runUnitSync(job: ResearchJob, deadline: number): Promise<SliceOutcome>` — orders the list by kind then id, resumes at `job.cursor`, for each entry until `deadline - 8_000 ms`: orphan → delete its units; `indexedRevision !== sourceRevision` → `ingestSource`; `needsEmbedding` only → embed and update those rows; persists `cursor`/`total` through the existing job state path; `done` when the list is exhausted; failures per source are counted in `state.failures` and never stop the slice.
 
@@ -404,6 +449,7 @@ test("a missing source is reported as skipped", ...)
 ### Task 13: Hybrid search
 
 **Files:**
+
 - Create: `lib/units/eligibleUnitsSql.ts` + PGlite test
 - Create: `lib/units/searchUnitsByText.ts` + PGlite test
 - Create: `lib/units/searchUnitsByVector.ts` + test (real Postgres, opt-in, Task 21)
@@ -413,6 +459,7 @@ test("a missing source is reported as skipped", ...)
 - Create: `lib/units/embedQuery.ts` + test
 
 **Interfaces:**
+
 - `export function eligibleUnitsSql(artistId: string, alias = "u")` — the predicate from the spec: `u.artist_id = $artistId` and, by kind, the source row exists, is public (`publicVaultSourceSql()` for vault; own non-repost for social; the confirmed-candidate conditions copied from `lib/questionResearch/loadPublicResearchOriginals.ts:84` for evidence) **and its current revision equals `u.source_revision`**. Stale units are therefore invisible without a reindex.
 - `export async function searchUnitsByText(artistId: string, query: string, limit = SEARCH_CANDIDATES): Promise<UnitHit[]>` — `websearch_to_tsquery('english', $query)`, `ts_rank_cd(u.search, q)` as score, `where ... and u.search @@ q`; an empty or stopword-only query returns `[]` before touching the database.
 - `export async function searchUnitsByVector(artistId: string, embedding: number[], limit = SEARCH_CANDIDATES): Promise<UnitHit[]>` — `order by u.embedding OPERATOR(extensions.<=>) $vec::extensions.vector`, score = `1 - distance`, `u.embedding is not null`.
@@ -441,10 +488,12 @@ test("searchUnits falls back to text when embedding fails", ...)
 ### Task 14: Retrieval eval
 
 **Files:**
+
 - Create: `lib/evals/retrievalCases.ts`, `lib/evals/retrievalGates.ts` + test, `lib/evals/retrievalReporter.ts`, `evals/retrieval.eval.ts`
 - Modify: `lib/evals/createEvalBudgetFetch.ts:99-147` + test; `.github/workflows/evals.yml:9-17` (suite option `retrieval`); `docs/chat-eval-pdf-evidence.md` (new section "Retrieval eval")
 
 **Interfaces:**
+
 - `export type RetrievalCase = { key: string; artistId: string; artistName: string; question: string; expected: { sourceKind: UnitSourceKind; sourceId: string; locator: string }[]; note: string };` `export const RETRIEVAL_CASES: RetrievalCase[]` — the twelve chat questions plus the #118 follow-up. Labelling procedure: with `RETRIEVAL_LABEL=1` (workflow input `label`), the suite runs the searches and prints, per question, the top 20 candidates as `sourceKind`, `sourceId`, title, public URL and locator, never text; the labeller opens each public document (the Dutchyyy PDF page numbers are already in `chatCases.ts`) and writes the expected pairs into `retrievalCases.ts`; Pete confirms the labels in the PR. Source ids are UUIDs, not secrets.
 - Scorers in `evals/retrieval.eval.ts`: `recall_at_8` (share of expected pairs present in `hits`, matched on `sourceId` and `locator`), `reciprocal_rank` (1 / rank of the first expected hit, 0 when absent). Task: `searchUnits(artistId, question, { names: [artistName] })` behind `createEvalBudgetFetch`. No unit text is logged or scored by a model.
 - `export const RETRIEVAL_GATES = { meanRecall: 0.8, maxRank: 8 }`; `checkRetrievalGates(rows): string[]` fails when the mean recall is below 0.8 or any case has `reciprocal_rank === 0`.
@@ -459,11 +508,13 @@ test("searchUnits falls back to text when embedding fails", ...)
 ### Task 15: `createChatDocuments`
 
 **Files:**
+
 - Create: `lib/chat/createChatDocuments.ts`, `lib/chat/__tests__/createChatDocuments.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CiteSource` from `lib/chat/createChatCitations.ts:3`.
-- Produces: `export type ChatDocumentRef = { sourceKind: UnitSourceKind; sourceId: string; revision: string; title: string; url: string | null };` `export type ChatDocuments = { register(ref: ChatDocumentRef): number; get(n: number): ChatDocumentRef | undefined; all(): { n: number; ref: ChatDocumentRef }[] };` `export function createChatDocuments(cite: CiteSource, prior: { n: number; ref: ChatDocumentRef }[] = []): ChatDocuments` — numbers are per `(sourceKind, sourceId)`, assigned on first registration by calling `cite({ url: url ?? \`musicnerd://\${sourceKind}/\${sourceId}\`, title })` so the `source-url` part is written; `prior` entries are registered first, in ascending `n`, so a follow-up keeps the earlier numbering; registering a document already numbered returns its number without a new part.
+- Produces: `export type ChatDocumentRef = { sourceKind: UnitSourceKind; sourceId: string; revision: string; title: string; url: string | null };` `export type ChatDocuments = { register(ref: ChatDocumentRef): number; get(n: number): ChatDocumentRef | undefined; all(): { n: number; ref: ChatDocumentRef }[] };` `export function createChatDocuments(cite: CiteSource, prior: { n: number; ref: ChatDocumentRef }[] = []): ChatDocuments` — numbers are per `(sourceKind, sourceId)`, assigned on first registration by calling `cite({ url: url ?? \`musicnerd://\${sourceKind}/\${sourceId}\`, title })`so the`source-url`part is written;`prior`entries are registered first, in ascending`n`, so a follow-up keeps the earlier numbering; registering a document already numbered returns its number without a new part.
 
 - [ ] **Step 1: Failing tests:** first registration cites and returns 1; same document again returns 1 with one part written; prior documents are re-registered in order at construction and keep their numbers; `all()` lists them.
 - [ ] **Step 2: Run, fail. Step 3: Implement. Step 4: Run, pass. Step 5: Commit** — `feat(chat): document registry that carries citation numbers across turns`
@@ -473,11 +524,13 @@ test("searchUnits falls back to text when embedding fails", ...)
 ### Task 16: Passage tools
 
 **Files:**
+
 - Create: `lib/chat/createSearchPassagesTool.ts`, `lib/chat/createReadUnitsTool.ts`, `lib/chat/createListDocumentsTool.ts`, tests beside each
 - Create: `lib/units/readUnits.ts` + PGlite test; `lib/units/listArtistDocuments.ts` + PGlite test
 - Modify: `lib/chat/createWebSearchTool.ts:13` (`createWebSearchTool(cite, opts?: { maxCalls?: number })`, default 2; the third call returns `{ error: "Web search limit reached for this answer" }`) + test
 
 **Interfaces:**
+
 - `export async function readUnits(artistId: string, ref: { sourceKind; sourceId }, locators: string[]): Promise<{ revision: string; units: { locator: string; text: string; tokens: number }[] } | null>` — eligible and current units only (`eligibleUnitsSql`); `null` when none qualify.
 - `export async function listArtistDocuments(artistId: string): Promise<{ sourceKind; sourceId; title: string; url: string | null; units: number; indexing: boolean }[]>` — eligible sources with their current unit counts; `indexing` when a source is eligible but has no current units.
 - `createSearchPassagesTool(artistId: string, documents: ChatDocuments, opts: { names: string[]; signal?: AbortSignal; search?: typeof searchUnits })` — input `{ query: string }`; output `{ results: { n: number; locator: string; title: string; passage: string }[]; weak: boolean; documents: { n: number; sourceKind; sourceId; revision: string; title: string; url: string | null }[] }`; `passage` is the unit text trimmed to `PASSAGE_CHARS` around the first query term match (whole text when shorter). The `documents` array is what Task 17 replays from history.
@@ -503,11 +556,13 @@ test("webSearch refuses a third call", ...)
 ### Task 17: Conversation currency
 
 **Files:**
+
 - Create: `lib/units/assertDocumentsCurrent.ts` + PGlite test
 - Create: `lib/chat/keepCurrentCitedTurns.ts` + test (replaces `keepCurrentPdfTurns.ts` in Task 20; both exist until then)
 - Modify: `lib/chat/validateArtistChatBody.ts` + test
 
 **Interfaces:**
+
 - `export async function assertDocumentsCurrent(artistId: string, refs: { sourceKind; sourceId; revision }[]): Promise<void>` — one query returning the current revision of every ref (same per-kind predicates as `eligibleUnitsSql`, on the source tables); throws `Error("Source changed or is no longer public")` naming no text when any ref is missing or differs. Empty input returns without a query.
 - `validateArtistChatBody`: an assistant message keeps its text parts plus `documents: ChatDocumentRef & { n }[]` collected from `tool-searchPassages` and `tool-readUnits` parts in state `output-available` (zod: `n` 1..64, `sourceKind` enum, `sourceId` uuid, `revision` 1..300 chars, `title` 1..300, `url` string | null), at most 16 documents per message; otherwise `parts = []` as today. `MAX_PARTS` stays 64. `pdfReads` handling is untouched until Task 20.
 - `export async function keepCurrentCitedTurns(messages: HistoryMessage[], artistId: string): Promise<{ messages: HistoryMessage[]; prior: { n: number; ref: ChatDocumentRef }[] }>` — one `assertDocumentsCurrent`-style lookup for all distinct refs; an assistant message is kept only when every document it cites is current; `prior` is the union of documents from kept messages, by `n`, for `createChatDocuments`.
@@ -520,10 +575,12 @@ test("webSearch refuses a third call", ...)
 ### Task 18: Handler switch behind `CHAT_RETRIEVAL`
 
 **Files:**
+
 - Modify: `lib/chat/postArtistChatHandler.ts:56-95` + test, `lib/chat/buildArtistChatInstructions.ts:8` + test, `.env.example`
 - Create: `lib/chat/getChatRetrievalMode.ts` + test
 
 **Interfaces:**
+
 - `export function getChatRetrievalMode(env = process.env): "units" | "legacy"` — `CHAT_RETRIEVAL=units` selects units; anything else is legacy (the default until Task 20).
 - `buildArtistChatInstructions(artistName: string, now = new Date(), mode: "units" | "legacy" = "legacy")`. Units mode text states, in this order: search first with `searchPassages`; read with `readUnits` only when a claim needs more than the passage; use `listDocuments` for "every"/"all" questions and before saying something is absent; cite as `[n, p.N]` for pages and `[n, §Heading]` or `[n, ¶N]` otherwise, numbers from the tools only, including numbers carried from earlier turns; for first/earliest/when questions read two documents and report disagreement; when `weak` is true and `webSearch` cannot answer, say the sources do not cover it; `searchSources` with `retrieval: "latest"` is for current releases only.
 - Handler in units mode: no `loadPublicResearchOriginals`; `originals` = `loadPublicLatestOriginals` (`lib/questionResearch/loadPublicLatestOriginals.ts:12`) + stored latest providers only, so `searchSources`/`readSource` serve the "latest" path; `keepCurrentCitedTurns` provides history and `prior`; `documents = createChatDocuments(cite, prior)`; tools `{ searchPassages, readUnits, listDocuments, searchSources, readSource, webSearch }`; `beforeStep` runs one `assertDocumentsCurrent(artistId, documents.all())`; `maxOutputTokens: 1500`; `stopWhen: isStepCount(6)` unchanged; `gateStepText` unchanged. Legacy mode is byte-for-byte today's path.
@@ -536,6 +593,7 @@ test("webSearch refuses a third call", ...)
 ### Task 19: Answer eval on passages
 
 **Files:**
+
 - Modify: `lib/evals/readChatEvidence.ts` + test (`tool: "readSource" | "webSearch" | "searchPassages" | "readUnits"`; evidence text is the tool output's passages/units, no refetch), `evals/chat.eval.ts` (metadata `retrieval: getChatRetrievalMode()`), `.github/workflows/evals.yml` (input `retrieval` choice `legacy|units`, passed as `CHAT_RETRIEVAL`), `docs/chat-eval-pdf-evidence.md` (section "Passages run")
 - Modify: `lib/evals/chatStreamTurn.ts` (`assistantParts` carries `documents` from the new tools, so the follow-up case replays)
 
@@ -549,6 +607,7 @@ test("webSearch refuses a third call", ...)
 ### Task 20: Flip the default, remove the native read, update labels and docs
 
 **Files (API, PR A4):**
+
 - Modify: `lib/chat/getChatRetrievalMode.ts` (default `units`; `CHAT_RETRIEVAL=legacy` opts out for one release, then the env var is removed in a follow-up), `lib/chat/postArtistChatHandler.ts` (legacy branch removed), `lib/chat/validateArtistChatBody.ts` (`pdfReads` removed), `lib/units/ingestUploadInline.ts` (page count via `extractPdfPages`)
 - Delete: `lib/chatPdf/` (all files and tests), `lib/chat/keepCurrentPdfTurns.ts` + test, `lib/evals/readPdfChatEvidence.ts` + test, `evals/chat-pdf-text.eval.ts` and its workflow option, `lib/chat/createReadSourceTool.ts`'s 12,000-character cap stays (latest items only)
 - Modify: `docs/chat-eval-pdf-evidence.md` (what changed), `README.md`
@@ -567,6 +626,7 @@ test("webSearch refuses a third call", ...)
 ### Task 21: Real-Postgres tests for the vector path
 
 **Files:**
+
 - Create: `lib/units/__tests__/searchUnitsByVector.postgres.test.ts` (pattern of `lib/spotifyMatch/__tests__/spotifyMatch.integration.test.ts:36-37`: `describe.skipIf(!process.env.MUSICNERD_UNITS_TEST_URL)`; the URL must be localhost; the test creates the extension, the table from the 0044 SQL text and three rows, then asserts the nearest unit is first and a stale one is hidden; the table SQL is the 0066 text)
 - Modify: `.github/workflows/ci.yml` (a `postgres` service from the `pgvector/pgvector:pg17` image, `MUSICNERD_UNITS_TEST_URL` pointing at it, so CI runs the test; the Vitest job otherwise unchanged)
 
@@ -585,6 +645,7 @@ test("webSearch refuses a third call", ...)
 ## Amendments made during execution (2026-11-13)
 
 Recorded here so the plan stays the argument for what was built; the full rulings with costs are in the execution ledger.
+
 - Inline ingest at upload never runs the vision pass and is bounded (5 s inspect, 10 s parse, 20 s overall); anything else, including scanned pages, is queued (R13). The vision pass caps at 60 pages per document, reads four pages at a time from one parsed document, and a read cut short by a slice deadline is never stamped as current (R11, R14).
 - `unit_sync` resumes by source key, rescans once when a source was queued during a live job, caps a slice at 20 s, starts no source with under 20 s left, keeps the last 20 failures per job, and is queued when a text-producing research job finishes (R15); orphans are missing rows only; units of present-but-ineligible rows are neither ingested nor deleted.
 - The one-time `extracted_text` fill for a scanned document runs before its units are stamped and only on a complete read (R12).
