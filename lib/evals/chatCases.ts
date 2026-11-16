@@ -38,6 +38,12 @@ export type ChatCase = {
   shape?: ChatCaseShape;
   /** The kinds of saved document the question relies on: article, interview, review, profile, pdf, website. */
   kinds?: string[];
+  /**
+   * Why the judge's scores on this question stay out of the run means (they are still printed).
+   * Only for a question with a fact checklist, and only after its answers were read against the
+   * documents and found better than the scores.
+   */
+  judgeAdvisory?: string;
   /** A second question asked with this answer in the conversation, scored as its own row. */
   followUp?: { question: string; reference: string; facts?: ChatFact[] };
 };
@@ -132,11 +138,13 @@ export const CHAT_CASES: ChatCase[] = [
     question: "What was the first album Willie Colón made with Rubén Blades?",
     answerable: true,
     reference:
-      "The first album remains unresolved from the conflicting saved accounts. Glide calls Metiendo Mano! (1977) the first collaboration. Rolling Stone says Colón recorded The Good, The Bad, The Ugly with Lavoe, Rubén Blades and Yomo Toro. Attribute both accounts, including uncertainty in the opening; do not invent full-versus-partial collaboration, billing or participant distinctions. The Cua Cua Ra, Cua Cua / 1975 heading is a song-section date, not independently an album-release date.",
+      "Metiendo Mano! (1977): Glide calls it the first collaboration between Colón and Blades, and Fania calls Siembra (1978) their second. Rolling Stone says Colón recorded The Good, The Bad, The Ugly (1975) with Lavoe, Rubén Blades and Yomo Toro, which puts Blades on an earlier Colón album. A good answer gives both accounts and says which source says which; it may lead with Metiendo Mano!. It must not explain the difference with a distinction no document states (guest versus partner, billing, whose album it was). The Cua Cua Ra, Cua Cua / 1975 heading is a song-section date, not independently an album-release date.",
     facts: ["Metiendo Mano", "The Good, the Bad, the Ugly"],
     shape: "disagreement",
     kinds: ["article"],
-    note: "Competing saved accounts: assesses useful coverage and supported distinctions, not recall of one review's answer (reference v2, 2026-11-06 audit).",
+    note: "Two accounts to attribute, with no distinction the documents do not state (reference v3, 2026-11-15: v2 required calling the question unresolved, which marked down answers that gave both accounts).",
+    judgeAdvisory:
+      "Read on 2026-11-15: answers that named the album two documents support and attributed both accounts scored 0.35 to 0.45; single trials have ranged from 0.22 to 0.78 on identical runs.",
   },
   {
     key: "willie-colon-instrument",
@@ -163,6 +171,8 @@ export const CHAT_CASES: ChatCase[] = [
     shape: "list",
     kinds: ["pdf"],
     note: "An uploaded-file source rather than a web page (reference v2, 2026-11-06 audit).",
+    judgeAdvisory:
+      "Read on 2026-11-15: answers listing every alias scored 0.45 to 0.62 (the judge ticks the groups, named as groups, as miscategorised); single trials have ranged from 0.45 to 0.82 on identical runs.",
     // The follow-up only makes sense with the first answer in the conversation: before
     // keepCurrentPdfTurns, every answer that read a PDF was dropped from history.
     followUp: {

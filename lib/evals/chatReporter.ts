@@ -83,6 +83,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         key?: unknown;
         trial?: unknown;
         shape?: unknown;
+        judgeAdvisory?: unknown;
       };
       const output = (r.output ?? {}) as Partial<ChatTurn>;
       const key = String(metadata.key ?? "");
@@ -95,6 +96,7 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         ...(typeof output.totalMs === "number" ? { totalMs: output.totalMs } : {}),
         scores: r.scores ?? {},
         ...(typeof metadata.shape === "string" ? { shape: metadata.shape } : {}),
+        ...(metadata.judgeAdvisory === true ? { judgeAdvisory: true } : {}),
       });
       console.log(
         [
@@ -113,6 +115,9 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
     const times = answerTimeLine(answerTimesByQuestion(rows));
     if (times) console.log(times);
     for (const line of factsLines(rows)) console.log(line);
+    const advisory = [...new Set(rows.filter(r => r.judgeAdvisory).map(r => r.key))];
+    if (advisory.length)
+      console.log(`judge advisory (not in the gated means): ${advisory.join(", ")}`);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkChatGates(rows);
     if (failures.length) {

@@ -165,5 +165,27 @@ describe("checkChatGates", () => {
         "Mean source_groundedness 0.6 is below 0.8.",
       ]);
     });
+
+    it("leaves a judge-advisory question out of the run means but still checks its facts", () => {
+      const advisory = {
+        ...good("a", { facts: 1, answer_relevance: 0.3, source_groundedness: 0.3 }),
+        judgeAdvisory: true,
+      };
+      expect(checkChatGates([advisory, good("b", { facts: 1 })])).toEqual([]);
+      expect(
+        checkChatGates([
+          { ...advisory, scores: { ...advisory.scores, facts: 0 } },
+          good("b", { facts: 1 }),
+        ]),
+      ).toEqual(["a: every required fact in 0 of 1 answers; needs 1."]);
+    });
+
+    it("still needs a judged question when every other one is judge-advisory", () => {
+      const advisory = { ...good("a", { facts: 1 }), judgeAdvisory: true };
+      expect(checkChatGates([advisory])).toEqual([
+        "No question received an answer_relevance score.",
+        "No question received a source_groundedness score.",
+      ]);
+    });
   });
 });

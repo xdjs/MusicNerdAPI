@@ -15,4 +15,13 @@ describe("CHAT_CASES", () => {
       expect(alternatives.some(a => typeof a === "string" && a.trim() !== "")).toBe(true);
     }
   });
+
+  it("marks a question judge-advisory only with a reason and a fact checklist", () => {
+    const advisory = CHAT_CASES.filter(c => c.judgeAdvisory !== undefined);
+    expect(advisory.map(c => c.key)).toEqual(["willie-colon-blades", "dutchyyy-aliases"]);
+    for (const c of advisory) {
+      expect(c.judgeAdvisory!.trim().length).toBeGreaterThan(20);
+      expect(c.facts?.length ?? 0).toBeGreaterThan(0);
+    }
+  });
 });

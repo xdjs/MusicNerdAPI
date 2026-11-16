@@ -308,9 +308,36 @@ One trial each (runs 43742337273 and 43742647960): 25 of 30 checklists complete.
 
 Judge categories over the 91 judged answers of the first five runs: none on 18; `extra_unrequested_facts` 60, `unsupported_claim` 33, `wrong_locator` 12, `missing_required_fact` 7, `uncited_claim` 4, `miscategorised_item` 4, `overstated_certainty` 3, `invented_distinction` 3 (all three `willie-colon-blades` answers), `conflict_not_attributed` 2. These are the judge's ticks, not findings: no person has read these answers yet, so this record makes no claim about unsupported statements either way.
 
+### The answers read against the documents (2026-11-15)
+
+The 91 answers of the first five runs were exported from Braintrust (each row carries the answer and the text the chat was shown) and read claim by claim against that text: seven model checkers, with the material flags then confirmed by hand against the document text. A checker's "supported" is not exhaustive; one miss was found by hand.
+
+| Verdict                                       | Claims |
+| --------------------------------------------- | ------ |
+| Supported by the cited document               | 609    |
+| Unsupported: nothing shown says it            | 17     |
+| Stated by a document other than the one cited | 5      |
+| Contradicted by a document                    | 3      |
+| The model's own reading, labelled as such     | 2      |
+
+- 22 of the 91 answers carry a flag. In about 7 the flagged sentence would mislead a reader: `bio-ritmo-colombia` (1 of 3 answers ends on a conclusion a document contradicts), `willie-colon-blades` (2 of 3 add a description of the earlier album that no document gives), the two Dutchyyy alias questions (2 answers understate how often one alias appears; 1 says the timeline does not call it an alias, which it does), `latasha-nft-sales-2021` (1 of 3 names a source of income the post does not name), `pete-rango-insecure-song` (1 of 3 states a performer the post only credits by handle).
+- The pattern is one: a closing sentence of the model's own, not marked as its own. The instructions already forbid it (cite the passage or leave it out; no distinction no document states), so wording is unlikely to be the lever. Untested: a higher reasoning setting.
+- The judge and these two references were stricter than the bar. `willie-colon-blades` answers that named the album two documents support and attributed both accounts scored 0.35 to 0.45, because reference v2 required calling the question unresolved. `dutchyyy-aliases` answers that listed every alias scored 0.45 to 0.62, with the groups, named as groups, ticked as miscategorised. Both questions are now `judgeAdvisory` in `chatCases.ts`: their judge scores are printed and stay out of the gated means, while the checklist and every other gate still apply. The Blades reference is v3: both accounts attributed, leading with the supported album allowed, no distinction the documents do not state.
+
+### What the eval is for (2026-11-15)
+
+Issue #1424 is done when the eval shows useful, source-supported answers or Pete accepts each remaining limit, and he signs off. A score is not acceptance. The decision the eval serves is whether production chat switches to the passages path, and that needs:
+
+1. The same questions on both paths, scored by the fact checklists: the passages path complete on at least as many, and nothing lost without a recorded reason.
+2. The claim read above on both paths. "No unsupported statement" as an absolute is not reachable by any model; the share of answers with a contradicted or misleading unsupported statement is reported for each path and the passages path must not be worse. One in twenty is the proposed target for later work, not a condition of the switch.
+3. Pete reads a sample of answers from each path.
+4. The switch is one setting (`CHAT_RETRIEVAL`), so it can be reversed.
+
+The current path has not been run on the thirty-three questions yet; that side-by-side is the one run still needed. What remains after the switch is written down and accepted or tracked separately, first of all the approved documents with no saved text, which no question here measures because every question was written from a document that has text.
+
 ### What is still open
 
-- The human read of the answers, and with it the judge's `unsupported_claim` and `invented_distinction` ticks.
+- The side-by-side with the current path, and Pete's read of a sample.
 - The list omission on `dutchyyy-alias-years` (about one answer in three over two runs).
 - Celia Cruz, three questions, and the five-trial run the bar is written for: both wait on the Evals key's spending limit.
 - About a third of production's approved documents have no saved text (approved before the `source_extract` job existed); the chat cannot answer from those until text is saved for them.

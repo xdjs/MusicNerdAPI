@@ -11,6 +11,8 @@ export type ChatGateRow = {
   scores: Record<string, number | null>;
   /** What the question tests (see `ChatCase.shape`); reported, never gated. */
   shape?: string;
+  /** True when the judge's scores on this question stay out of the run means (`ChatCase.judgeAdvisory`). */
+  judgeAdvisory?: boolean;
 };
 
 /** The thresholds a chat run must meet (xdjs/MusicNerdWeb#1424; bar reset 2026-11-15). */
@@ -41,7 +43,8 @@ const mean = (values: number[]) =>
  * with no facts score on any row (a why-question, one the documents cannot answer) must have a
  * mean answer_relevance of at least `uncheckedRelevance`; the means over questions of
  * answer_relevance and source_groundedness are at least 0.8. A low judge score on a question
- * with a checklist is not a failure by itself, only through those means.
+ * with a checklist is not a failure by itself, only through those means, and a question marked
+ * `judgeAdvisory` stays out of them (its checklist and every other gate still apply).
  *
  * @param rows - Every scored row of the run.
  * @returns The failures.
@@ -84,14 +87,15 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
         (r.scores.source_groundedness ?? null) === null ? [] : [r.scores.source_groundedness!],
       ),
     );
+    const advisory = trials.some(r => r.judgeAdvisory);
     if (relevance !== null) {
-      relevanceByQuestion.push(relevance);
+      if (!advisory) relevanceByQuestion.push(relevance);
       if (!checklist && relevance < CHAT_GATES.uncheckedRelevance)
         failures.push(
           `${key}: answer_relevance ${round(relevance)} is below ${CHAT_GATES.uncheckedRelevance} (no fact checklist).`,
         );
     }
-    if (groundedness !== null) groundednessByQuestion.push(groundedness);
+    if (groundedness !== null && !advisory) groundednessByQuestion.push(groundedness);
   }
   const meanRelevance = mean(relevanceByQuestion);
   const meanGroundedness = mean(groundednessByQuestion);

@@ -89,6 +89,7 @@ Eval(
             note: c.note,
             ...(c.trials ? { trial: i + 1, trials: c.trials } : {}),
             ...(c.shape ? { shape: c.shape } : {}),
+            ...(c.judgeAdvisory ? { judgeAdvisory: true } : {}),
             ...(c.kinds ? { kinds: c.kinds } : {}),
           },
         })),
