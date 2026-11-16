@@ -162,7 +162,7 @@ describe("units mode", () => {
       "Cite the locator of the passage that states the claim, not another page of the same document; if you cannot point to the passage that states something, leave it out.",
       "Write an ordinary fact a document gives (where someone is from or calls home, their family and background, dates, names, releases, who played on what) as a plain statement followed by its citation. That includes what the artist says about their own life in an interview or a post, even as the answer to a question like where is home: write 'He is from Cali, specifically Siloé [2, ¶3]', not 'He says he is from Siloé' and not 'according to' the outlet; the citation already shows where it comes from.",
       "Name who says something only when documents disagree, or when it is an opinion, a figure the person reports about themselves (money, sales, audience numbers) or a claim about someone else.",
-      "When you do pass on the artist's own words, quote them or write 'in her words' or 'in his words'; a bare 'she says she is' reads as doubt, so do not write it.",
+      "Facts about the artist's life (home, family, upbringing, dates) stay plain statements even when the artist is the only source. Quote the artist, or write 'in her words' or 'in his words', only for an opinion, a feeling, a reason or a figure they report. Never write a bare 'she says she is' or 'he says he is': it reads as doubt.",
     ];
     for (const sentence of sentences) {
       expect(text).toContain(sentence);
