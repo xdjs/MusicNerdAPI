@@ -335,9 +335,26 @@ Issue #1424 is done when the eval shows useful, source-supported answers or Pete
 
 The current path has not been run on the thirty-three questions yet; that side-by-side is the one run still needed. What remains after the switch is written down and accepted or tracked separately, first of all the approved documents with no saved text, which no question here measures because every question was written from a document that has text.
 
+### Side by side with the current path (2026-11-16)
+
+The Evals key's AI Gateway budget stayed exhausted, so the current path was asked through staging's deployed chat (API `main`, legacy tools, the same staging documents): the thirty-three questions once each over the public endpoint, scored with the suite's `scoreFacts`. Before the run, every approved production document of the six artists that exist in production was confirmed present on staging; staging holds more documents and text than production.
+
+|  | Current path (1 answer each) | Passages path (3 answers each) |
+| --- | --- | --- |
+| Questions measured on both | 26 | 26 |
+| Checklist complete | 22 | 25 in all three answers |
+| Claims read | 177 (17 more from PDFs could not be checked: the stream carries no PDF text) | 636 |
+| Supported by a document | 167 | 609 |
+| Unsupported / wrong document cited / contradicted | 4 / 4 / 0 | 17 / 5 / 3 |
+
+- The current path missed checklist facts on `willie-colon-blades`, `pete-rango-founded`, `latasha-opened-for` and `jordan-rein-flying-lawnmower` (where it said the documents do not have the answer), and on two of the three Celia Cruz questions. The passages path was complete on the first four in every answer; its Celia Cruz three-trial run is still blocked by the budget (earlier single answers were complete).
+- The passages path's one miss, `dutchyyy-alias-years`, was complete in the current path's single answer.
+- Both paths are about 95% supported claim by claim. The passages path adds an unmarked closing conclusion more often (about 1 answer in 13 against 1 or 2 in 32; the second sample is small).
+- Pete read ten pairs on 2026-11-16 and approved moving toward production, with one request: ordinary facts from the artist's own interview were written as "she says she is from…", which reads as doubt. The instructions now ask for plain statements with the citation, attribution in words only for disagreements, opinions, self-reported figures and claims about others, and a quote when the artist's own words are passed on. Checked on a preview build of this branch with `CHAT_RETRIEVAL=units` set for that branch only: the phrase was in three of three answers before and in none of three after; six other questions asked once each kept their checklist facts and their attribution of disagreements.
+
 ### What is still open
 
-- The side-by-side with the current path, and Pete's read of a sample.
+- Review and merge; the staging switch; then production.
 - The list omission on `dutchyyy-alias-years` (about one answer in three over two runs).
 - Celia Cruz, three questions, and the five-trial run the bar is written for: both wait on the Evals key's spending limit.
 - About a third of production's approved documents have no saved text (approved before the `source_extract` job existed); the chat cannot answer from those until text is saved for them.
