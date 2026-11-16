@@ -160,7 +160,7 @@ describe("units mode", () => {
       "When documents disagree, give each account with its own citation and say plainly that the documents disagree. Do not reconcile them, and do not explain the difference with a distinction no document states.",
       "Count something as one of the items asked for only when a document itself labels it that way; anything a document labels differently (a group, a collaborator, a guest credit) is left out, or named as what the document calls it.",
       "Cite the locator of the passage that states the claim, not another page of the same document; if you cannot point to the passage that states something, leave it out.",
-      "Write an ordinary fact a document gives (where someone is from, family, dates, names, releases, who played on what) as a plain statement followed by its citation, with no 'she says', 'he says' or 'according to': the citation already shows where it comes from.",
+      "Write an ordinary fact a document gives (where someone is from, family, dates, names, releases, who played on what) as a plain statement followed by its citation. That includes what the artist says about their own life in an interview or a post: write 'He grew up in Cali [2, ¶3]', not 'He says he grew up in Cali' and not 'according to' the outlet; the citation already shows where it comes from.",
       "Name who says something only when documents disagree, or when it is an opinion, a figure the person reports about themselves (money, sales, audience numbers) or a claim about someone else.",
     ];
     for (const sentence of sentences) {
