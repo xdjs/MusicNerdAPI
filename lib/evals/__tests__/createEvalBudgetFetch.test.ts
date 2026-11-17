@@ -206,6 +206,34 @@ describe("createEvalBudgetFetch", () => {
         createEvalBudgetFetch(send).fetch(gateway, { ...request(), body: toolResult(file) }),
       ).rejects.toThrow("unpriced");
   });
+  it("prices a PDF file part in a user message (the vision page read) and refuses other media there", async () => {
+    const send = vi.fn().mockResolvedValue(new Response("ok"));
+    const userFile = (file: unknown) =>
+      JSON.stringify({
+        prompt: [{ role: "user", content: [{ type: "text", text: "Transcribe." }, file] }],
+      });
+    const guard = createEvalBudgetFetch(send);
+    await guard.fetch(gateway, {
+      ...request("google/gemini-3.8-flash"),
+      body: userFile({
+        type: "file",
+        mediaType: "application/pdf",
+        data: { type: "data", data: "A".repeat(20000) },
+      }),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(guard.snapshot().reservedUsd).toBeGreaterThan(0.01);
+    for (const file of [
+      { type: "file", mediaType: "image/png", data: { type: "data", data: "A" } },
+      { type: "file", mediaType: "application/pdf", data: { type: "url", url: "https://x" } },
+    ])
+      await expect(
+        createEvalBudgetFetch(send).fetch(gateway, {
+          ...request("google/gemini-3.8-flash"),
+          body: userFile(file),
+        }),
+      ).rejects.toThrow("unpriced");
+  });
   it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
     const send = vi.fn().mockResolvedValue(new Response("%PDF"));
     const guard = createEvalBudgetFetch(send, 9999999);

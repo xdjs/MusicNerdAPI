@@ -9,6 +9,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { LORE_UPLOAD_BUCKET, VAULT_BUCKET } from "@/lib/storage/const";
 import { downloadObject } from "@/lib/storage/downloadObject";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
+import { ingestUploadInline } from "@/lib/units/ingestUploadInline";
 import { publishImmutableUpload } from "@/lib/vaultUpload/publishImmutableUpload";
 import { getAuthorizedVaultUpload } from "@/lib/vaultUpload/getAuthorizedVaultUpload";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -131,6 +132,13 @@ export async function postCompleteUploadHandler(request: Request): Promise<NextR
     unpublishedPath = undefined;
     const refreshWarning = await refreshAfterUpload(ticket.artistId, expectedClaimId, userId);
     await cleanupSavedUpload(ticket.path);
+    // Last step, after the row, the refresh and the cleanup; bounded and never rejects.
+    await ingestUploadInline({
+      sourceId: source.id,
+      artistId: ticket.artistId,
+      bytes: buffer,
+      contentType: ticket.type,
+    });
     const warning =
       [
         refreshWarning,

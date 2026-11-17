@@ -1,0 +1,85 @@
+export type UnitSourceKind = "vault" | "social" | "evidence";
+
+export type UnitBody =
+  | { kind: "pdf"; bytes: Uint8Array }
+  | { kind: "markdown" | "plain"; text: string }
+  | { kind: "none" };
+
+export type UnitSourceInput = {
+  sourceKind: UnitSourceKind;
+  sourceId: string;
+  artistId: string;
+  title: string | null;
+  url: string | null;
+  sourceRevision: string;
+  extractedTextIsNull: boolean;
+  body: UnitBody;
+};
+
+export type UnitDraft = {
+  unitIndex: number;
+  locator: string;
+  text: string;
+  textHash: string;
+  tokens: number;
+  ocr: boolean;
+};
+
+export type UnitHit = {
+  sourceKind: UnitSourceKind;
+  sourceId: string;
+  sourceRevision: string;
+  unitIndex: number;
+  locator: string;
+  title: string | null;
+  url: string | null;
+  text: string;
+  score: number;
+};
+
+/** One row of `listArtistUnitSources`: a source next to what the text index holds for it. */
+export type UnitSyncEntry = {
+  sourceKind: UnitSourceKind;
+  sourceId: string;
+  /** The source's current revision; null for an orphan, whose units must go. */
+  sourceRevision: string | null;
+  /** The revision the source's units carry, when they all carry one from the current ingest version; null when unindexed, mixed or older. */
+  indexedRevision: string | null;
+  /** Some unit of the source has no embedding. */
+  needsEmbedding: boolean;
+};
+
+export type IngestOutcome = {
+  units: number;
+  ocrPages: number;
+  embedded: boolean;
+  skipped?: "not-found" | "no-text" | "too-large" | "needs-ocr" | "aborted";
+  failed?: "vision" | "extract";
+};
+
+export const UNIT_INGEST_VERSION = 1;
+export const EMBEDDING_DIMENSIONS = 1536;
+export const EMBED_BATCH = 16;
+// The most characters sent in one embedding request.
+export const EMBED_BATCH_CHARS = 100_000;
+// The most characters of one unit sent for embedding; the stored unit text is not changed.
+export const EMBED_INPUT_CHARS = 16_000;
+export const MAX_INGEST_PAGES = 300;
+export const INLINE_INGEST_MAX_PAGES = 40;
+export const MAX_UNIT_CHARS = 6000;
+// The most pages of one document sent to the vision model.
+export const MAX_OCR_PAGES = 60;
+// Vision reads of one document in flight at once.
+export const OCR_CONCURRENCY = 4;
+export const MAX_PAGE_CHARS = 24000;
+// A unit_sync slice starts no source with less than this left before its deadline.
+export const MIN_SOURCE_START_MS = 20_000;
+// A unit_sync slice starts no source after this long, so a backfill does not hold every tick.
+export const UNIT_SYNC_SLICE_MS = 20_000;
+export const SEARCH_CANDIDATES = 20;
+export const SEARCH_LIMIT = 8;
+export const MAX_UNITS_PER_DOCUMENT = 3;
+export const RRF_K = 60;
+export const PASSAGE_CHARS = 1200;
+export const READ_UNITS_TOKEN_BUDGET = 12000;
+export const WEAK_COSINE_DISTANCE = 0.6;

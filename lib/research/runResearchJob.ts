@@ -9,15 +9,25 @@ import { runIngest } from "@/lib/research/runIngest";
 import { runLoreRefresh } from "@/lib/research/runLoreRefresh";
 import { runSourceSearchJob } from "@/lib/research/runSourceSearchJob";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
+import { queueUnitSyncAfterJob } from "@/lib/units/queueUnitSyncAfterJob";
+import { runUnitSync } from "@/lib/units/runUnitSync";
 
 /**
- * Runs one slice of a claimed job with the runner for its kind.
+ * Runs one slice of a claimed job with the runner for its kind. When a text-producing job finishes,
+ * a `unit_sync` is queued for its artist (`queueUnitSyncAfterJob`, which never rejects).
  *
  * @param job - The claimed job.
  * @param deadline - When the slice must stop, in epoch milliseconds.
  * @returns What the slice did.
  */
 export async function runResearchJob(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
+  const outcome = await runKind(job, deadline);
+  // After the runner returned: outside any of its transactions.
+  await queueUnitSyncAfterJob(job, outcome);
+  return outcome;
+}
+
+function runKind(job: ResearchJob, deadline: number): Promise<SliceOutcome> {
   switch (job.kind) {
     case "catalog_match":
       return runCatalogMatch(job, deadline);
@@ -39,5 +49,7 @@ export async function runResearchJob(job: ResearchJob, deadline: number): Promis
       return runSourceSearchJob(job, deadline);
     case "latest_refresh":
       return runLatestRefresh(job, deadline);
+    case "unit_sync":
+      return runUnitSync(job, deadline);
   }
 }

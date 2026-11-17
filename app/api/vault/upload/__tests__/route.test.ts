@@ -7,6 +7,8 @@ const route = await import("@/app/api/vault/upload/route");
 describe("/api/vault/upload", () => {
   it("is dynamic and answers the CORS preflight", async () => {
     expect(route.dynamic).toBe("force-dynamic");
+    // The upload runs the bounded inline index after saving: give it the full allowance.
+    expect(route.maxDuration).toBe(60);
     const res = await route.OPTIONS();
     expect(res.status).toBe(200);
     expect(res.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");

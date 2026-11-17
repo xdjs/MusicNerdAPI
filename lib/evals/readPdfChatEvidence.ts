@@ -2,27 +2,11 @@ import { createHash } from "node:crypto";
 import parse from "pdf-parse/lib/pdf-parse.js";
 import type { ChatEvidence } from "@/lib/evals/ChatEvidence";
 import { MAX_CHAT_PDF_BYTES } from "@/lib/chatPdf/types";
+import { renderPdfPageText, type PdfPageData } from "@/lib/units/renderPdfPageText";
 
-type PageData = {
-  pageNumber?: number;
-  getTextContent: (options?: unknown) => Promise<{
-    items: { str: string; transform: number[] }[];
-  }>;
-};
-
-/** pdf-parse's default page renderer, with a physical page marker so `[n, p.N]` citations can be checked. */
-async function renderPage(pageData: PageData): Promise<string> {
-  const content = await pageData.getTextContent({
-    normalizeWhitespace: false,
-    disableCombineTextItems: false,
-  });
-  let lastY: number | undefined;
-  let text = "";
-  for (const item of content.items) {
-    text += lastY === item.transform[5] || lastY === undefined ? item.str : `\n${item.str}`;
-    lastY = item.transform[5];
-  }
-  return `\n[page ${pageData.pageNumber ?? "?"}]\n${text}`;
+/** The shared page renderer, with a physical page marker so `[n, p.N]` citations can be checked. */
+async function renderPage(pageData: PdfPageData): Promise<string> {
+  return `\n[page ${pageData.pageNumber ?? "?"}]\n${await renderPdfPageText(pageData)}`;
 }
 
 /**

@@ -15,6 +15,7 @@ on:
           - pdf106-paired
           - pdf106-pete-smoke
           - pdf106-four-paired
+          - vision-page
         default: chat
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
@@ -29,7 +30,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.

@@ -8,6 +8,7 @@ import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import { queueLoreRefresh } from "@/lib/research/queueLoreRefresh";
 import { VAULT_BUCKET } from "@/lib/storage/const";
 import { getPublicUrl } from "@/lib/storage/getPublicUrl";
+import { ingestUploadInline } from "@/lib/units/ingestUploadInline";
 import { isSupabaseStorageConfigured } from "@/lib/storage/isSupabaseStorageConfigured";
 import { uploadStorageObject } from "@/lib/storage/uploadStorageObject";
 import { insertVaultSource } from "@/lib/vault/insertVaultSource";
@@ -180,6 +181,14 @@ export async function postUploadHandler(request: Request): Promise<NextResponse>
       console.error("[vault/upload] Saved upload; Lore enqueue failed", queueError);
       refreshWarning = "File saved. Use Look again to retry the Lore refresh; do not upload again.";
     }
+    // Last step, after the row and the refresh; bounded and never rejects.
+    if (source)
+      await ingestUploadInline({
+        sourceId: source.id,
+        artistId,
+        bytes: buffer,
+        contentType: resolvedType,
+      });
     const warning =
       [
         refreshWarning,

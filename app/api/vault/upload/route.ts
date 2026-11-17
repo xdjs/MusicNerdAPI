@@ -3,6 +3,7 @@ import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 import { postUploadHandler } from "@/lib/vaultUpload/postUploadHandler";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * CORS preflight.
