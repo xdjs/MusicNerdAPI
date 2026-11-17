@@ -48,7 +48,7 @@ Eval("music-nerd", {
     sha: SHA,
     trials: TRIALS,
     judges: JUDGES,
-    rubric: "cited-evidence-v2",
+    rubric: "cited-evidence-v3",
   },
   maxConcurrency: 1,
   data: () =>

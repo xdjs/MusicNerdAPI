@@ -12,3 +12,44 @@ it("numbers sources from 1 in order of first citation and writes one source-url 
     [{ type: "source-url", sourceId: "2", url: "https://b.example/2", title: "B" }],
   ]);
 });
+
+it("seeds carried numbers, writes their parts, and continues after the highest, leaving gaps", () => {
+  const writer = { write: vi.fn(), merge: vi.fn(), onError: undefined };
+  const cite = createChatCitations(writer, [
+    { n: 1, url: "https://a.example/1", title: "A" },
+    { n: 3, url: "https://c.example/3", title: "C" },
+    { n: 3, url: "https://c.example/3", title: "C" },
+  ]);
+  expect(writer.write.mock.calls.map(([p]) => p.sourceId)).toEqual(["1", "3"]);
+  expect(cite({ url: "https://c.example/3", title: "C" })).toBe(3);
+  expect(cite({ url: "https://d.example/4", title: "D" })).toBe(4);
+  expect(writer.write).toHaveBeenCalledTimes(3);
+});
+
+it("starts new numbers above a higher number earlier answers cited, never reusing one", () => {
+  const writer = { write: vi.fn(), merge: vi.fn(), onError: undefined };
+  const cite = createChatCitations(writer, [{ n: 1, url: "https://a.example/1", title: "A" }], 5);
+  expect(cite({ url: "https://web.example/", title: "Web" })).toBe(6);
+  const low = createChatCitations(
+    { write: vi.fn(), merge: vi.fn(), onError: undefined },
+    [{ n: 4, url: "https://a.example/1", title: "A" }],
+    2,
+  );
+  expect(low({ url: "https://web.example/", title: "Web" })).toBe(5);
+});
+
+it("throws on a seed that gives one URL two numbers or one number two URLs", () => {
+  const writer = () => ({ write: vi.fn(), merge: vi.fn(), onError: undefined });
+  expect(() =>
+    createChatCitations(writer(), [
+      { n: 1, url: "https://a.example/1", title: "A" },
+      { n: 2, url: "https://a.example/1", title: "A" },
+    ]),
+  ).toThrow("seed gives one URL both 1 and 2");
+  expect(() =>
+    createChatCitations(writer(), [
+      { n: 1, url: "https://a.example/1", title: "A" },
+      { n: 1, url: "https://b.example/2", title: "B" },
+    ]),
+  ).toThrow("seed gives 1 to two sources");
+});

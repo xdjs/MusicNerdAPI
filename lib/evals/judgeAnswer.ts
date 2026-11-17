@@ -25,7 +25,14 @@ export async function judgeAnswer(input: {
   answer: string;
 }): Promise<AnswerVerdict> {
   if (!input.answer.trim())
-    return { relevance: 0, groundedness: 0, reason: "The answer is empty." };
+    return {
+      relevance: 0,
+      groundedness: 0,
+      reason: "The answer is empty.",
+      issues: [],
+      unsupportedCitations: [],
+      missingRequired: 0,
+    };
   const result = await generateObject({
     instructions: INSTRUCTIONS,
     schema: answerVerdictSchema,
