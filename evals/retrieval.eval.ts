@@ -6,6 +6,7 @@ import { toRetrievalFailure } from "@/lib/evals/toRetrievalFailure";
 import { retrievalReporter } from "@/lib/evals/retrievalReporter";
 import { experimentName } from "@/lib/evals/experimentName";
 import { formatSearchSignals } from "@/lib/evals/formatSearchSignals";
+import { listSearchCandidates } from "@/lib/evals/listSearchCandidates";
 import { scoreRetrievalFacts, type FactResult } from "@/lib/evals/scoreRetrievalFacts";
 import { getSearchTuning } from "@/lib/units/getSearchTuning";
 import { searchUnits } from "@/lib/units/searchUnits";
@@ -13,7 +14,7 @@ import type { UnitSourceKind } from "@/lib/units/types";
 
 /**
  * Retrieval suite: for each chat question, does the page-level text index return a unit for each
- * labelled fact in its top eight? A fact is found when any one of its units is retrieved
+ * labelled fact in its top `SEARCH_LIMIT` (twelve) results? A fact is found when any one of its units is retrieved
  * (`lib/evals/retrievalLabels.ts`). Calls `searchUnits` directly against the staging database; no model
  * reads the results. Pass or fail by `lib/evals/retrievalGates.ts`, applied by the reporter.
  * Run `units-backfill` first on a database whose index is empty.
@@ -114,6 +115,11 @@ Eval(
             ),
           );
           console.error(formatSearchSignals(input.key, { weak, signals }));
+          // The lists behind the fused hits, so a fusion rule can be replayed offline.
+          for (const list of await listSearchCandidates(input.artistId, input.question, [
+            input.artistName,
+          ]))
+            console.error(`candidates ${input.key} ${list.name} ${list.units.join(" ")}`);
         }
         console.log(`[retrieval] ${input.key} hits=${hits.length} weak=${weak}`);
         const units = hits.map(h => ({

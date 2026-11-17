@@ -22,7 +22,7 @@ const deps = (o: { vector?: Hits; embedError?: Error; or?: Hits; and?: Hits }) =
   // Each text mode answers with its own list, so ranking (`or`) and the strict signal (`and`)
   // can disagree, as they do on real questions.
   byText: vi.fn(
-    async (_artist: string, _query: string, _limit?: number, mode?: "and" | "or") =>
+    async (_artist: string, _query: string, _limit?: number, mode?: "and" | "or" | "idf") =>
       (mode === "and" ? o.and : o.or) ?? ([] as Hits),
   ),
   byVector: vi.fn(async () => o.vector ?? []),
@@ -40,15 +40,25 @@ describe("searchUnits", () => {
         ...Array.from({ length: 5 }, (_, i) => hit("a", i, weakScore)),
         ...Array.from({ length: 4 }, (_, i) => hit("b", i, weakScore)),
         ...Array.from({ length: 4 }, (_, i) => hit("c", i, weakScore)),
+        ...Array.from({ length: 4 }, (_, i) => hit("d", i, weakScore)),
       ],
     });
-    const result = await searchUnits(artist, "first tour", { names: ["Mike Dean"], deps: d });
+    const tuning = {
+      maxUnitsPerDocument: 3,
+      textMode: "or" as const,
+      candidates: SEARCH_CANDIDATES,
+    };
+    const result = await searchUnits(artist, "first tour", {
+      names: ["Mike Dean"],
+      deps: { ...d, tuning },
+    });
     expect(result.weak).toBe(true);
     expect(result.hits).toHaveLength(SEARCH_LIMIT);
     const perDoc = Object.groupBy(result.hits, h => h.sourceId);
     expect(perDoc.a!.map(h => h.unitIndex)).toEqual([0, 1, 2]);
     expect(perDoc.b).toHaveLength(MAX_UNITS_PER_DOCUMENT);
-    expect(perDoc.c!.map(h => h.unitIndex)).toEqual([0, 1]);
+    expect(perDoc.c).toHaveLength(MAX_UNITS_PER_DOCUMENT);
+    expect(perDoc.d).toHaveLength(MAX_UNITS_PER_DOCUMENT);
     // One embedding of the raw question; text search per expanded query.
     expect(d.embed).toHaveBeenCalledOnce();
     expect(d.embed.mock.calls[0]).toEqual(["first tour", { signal: undefined }]);
@@ -129,6 +139,15 @@ describe("searchUnits", () => {
     expect(d.byText).toHaveBeenCalledWith(artist, "q", 40, "or");
     expect(d.byText).toHaveBeenCalledWith(artist, "q", 1, "and");
     expect(d.byVector).toHaveBeenCalledWith(artist, vector, 40);
+  });
+
+  test("ranks by idf and still runs the strict probe by default", async () => {
+    const d = deps({});
+    await searchUnits(artist, "q", { names: [], deps: d });
+    expect(d.byText.mock.calls).toEqual([
+      [artist, "q", SEARCH_CANDIDATES, "idf"],
+      [artist, "q", 1, "and"],
+    ]);
   });
 
   test("reads the tuning from the environment by default", async () => {

@@ -50,6 +50,8 @@ The Evals workflow (`suite=chat`) on this branch records the same suite through 
 
 ## Pass and fail (added 2026-11-12, decided with Pete)
 
+These gates were replaced on 2026-11-15; the current ones are under "Third staging record" at the end of this note. What follows is the record of the earlier ones.
+
 Before this change the suite recorded six scores per case and nothing could fail a run. `lib/evals/chatGates.ts` now defines the gates and `lib/evals/chatReporter.ts` applies them, printing every row and making `braintrust eval` exit non-zero when a gate is missed:
 
 | Gate                         | Threshold                                                 |
@@ -259,3 +261,101 @@ Means by question are about 0.87 for relevance and 0.86 for groundedness; the `m
 - Answer text reaches the eval in one burst at the end of the answer (15 to 117 text deltas within 13 ms). Where that buffering happens is not known and it has not been checked in a browser; the status line covers the wait.
 - The any-term text query is unmeasured on production-sized data.
 - The default is still `legacy`. Production switches by setting `CHAT_RETRIEVAL=units` after the index exists there; the legacy path is removed in a later change.
+
+## Third staging record: the accuracy bar (2026-11-15)
+
+Pete reset the bar for #1424 on 2026-11-15: when an approved document holds the fact, the answer must give it; answer time is a limit, not the goal. Scores from the judge are too unstable per question to carry that (single trials swing 0.35 to 0.78 on identical runs), so the pass is decided by fact checklists and a human read.
+
+### Gates now
+
+| Gate | Threshold |
+| --- | --- |
+| facts | for each question with a checklist, every fact in at least 4 of 5 answers (rounded up for fewer trials, so 3 of 3) |
+| questions without a checklist | mean `answer_relevance` at least 0.60 |
+| run means | `answer_relevance` and `source_groundedness` at least 0.80 |
+| citations, evidence_scorable | 1 on every answerable row |
+| first_signal | 1 on every row |
+| total_time | 1 on every row (each answer within 20 s) |
+| errors | no row may end in an error |
+
+The 8 s mean-time gate and the known-hard exemption are removed. `facts` (`lib/evals/scoreFacts.ts`, lists in `chatCases.ts`) replaces `mentions`: an item is a term or a list of accepted spellings, matched as whole words after normalising case, accents and punctuation. The reporter prints `facts <key>: <passes>/<answers>` per question and a count by question shape. The gates do not cover unsupported statements or how a disagreement between documents is told; that needs a person reading the answers, and the bar requires Pete's read before sign-off.
+
+### Questions and documents
+
+Thirty-three questions over eight artists (Bio Ritmo 7, Willie Colón 6, Dutchyyy 4 and a follow-up, Pete Rango 5, LATASHÁ 4, Celia Cruz 3, Jordan Rein 3, Sound of Fractures 1), written from approved documents of several kinds: articles, interviews, a review, a profile, a podcast transcript, an artist's own site and PDFs. Thirty carry a checklist (the follow-up included); four do not (three that no document answers and one why-question answered in the artist's own words). Staging received a read-only copy of production's approved public documents for these artists (31 documents) so the test reads what production holds. The `source-text-backfill` suite then ran the `source_extract` fetcher over approved links with no saved text: 21 of 72 recovered; most of the rest refuse the fetcher with 403.
+
+### First pass and the search fixes
+
+One trial each (runs 43742337273 and 43742647960): 25 of 30 checklists complete. All five misses were search misses. Retrieval on the 59 labelled facts: 54 in the hits before (run 43748316367), 57 after the three changes on this branch (run 43749578601): ranking text matches by the rarity of the matched terms (`idf`), twelve results instead of eight, and a first search that also asks the user's own question, keeping that search's hits whole. The two labelled facts still outside the hits are one alias on the two Dutchyyy alias questions; chat reaches it because the short document it sits in is shown whole.
+
+### Full pass, three answers per question (`2cc331b`)
+
+| Run | Questions | Checklists complete in all three answers |
+| --- | --- | --- |
+| 43750748621 | Bio Ritmo, 7 | 7 of 7 |
+| 43755752717 | Willie Colón, 6 | 6 of 6 |
+| 43761186686 | Dutchyyy 4 and follow-up, Sound of Fractures 1 | 3 of 4; `dutchyyy-alias-years` 2 of 3 |
+| 43761522580 | Pete Rango, 5 | 4 of 4 |
+| 43766889597 | Jordan Rein 3, LATASHÁ 4 | 6 of 6 |
+| 43767716910 | Celia Cruz, 3 | not measured: 8 of 9 answers ended in an error |
+
+- 26 of the 27 checklists that got three answers were complete in all three. The follow-up is asked once per run and was complete.
+- `dutchyyy-alias-years` left out The Chill Factor and its year in one of three answers. The search returned the same units in all three (the whole short document was shown), so this is an omission in writing, not in search. The same question did the same in the run before (43749782470).
+- `latasha-opened-for`, which missed one name in every answer before the last fix, was complete in six of six (runs 43750621067 and 43766889597).
+- The Celia Cruz run stopped at the AI Gateway: the key the Evals workflow uses reached its spending limit after the first answer. That one answer was complete. These three questions have no three-trial result yet.
+- The four questions without a checklist scored 0.80 to 1 on relevance in every answer.
+- Answer time over the completed answers: mean 6.8 s, slowest 11.6 s. Status signal and total time were 1 on every completed row.
+
+Judge categories over the 91 judged answers of the first five runs: none on 18; `extra_unrequested_facts` 60, `unsupported_claim` 33, `wrong_locator` 12, `missing_required_fact` 7, `uncited_claim` 4, `miscategorised_item` 4, `overstated_certainty` 3, `invented_distinction` 3 (all three `willie-colon-blades` answers), `conflict_not_attributed` 2. These are the judge's ticks, not findings: no person has read these answers yet, so this record makes no claim about unsupported statements either way.
+
+### The answers read against the documents (2026-11-15)
+
+The 91 answers of the first five runs were exported from Braintrust (each row carries the answer and the text the chat was shown) and read claim by claim against that text: seven model checkers, with the material flags then confirmed by hand against the document text. A checker's "supported" is not exhaustive; one miss was found by hand.
+
+| Verdict                                       | Claims |
+| --------------------------------------------- | ------ |
+| Supported by the cited document               | 609    |
+| Unsupported: nothing shown says it            | 17     |
+| Stated by a document other than the one cited | 5      |
+| Contradicted by a document                    | 3      |
+| The model's own reading, labelled as such     | 2      |
+
+- 22 of the 91 answers carry a flag. In about 7 the flagged sentence would mislead a reader: `bio-ritmo-colombia` (1 of 3 answers ends on a conclusion a document contradicts), `willie-colon-blades` (2 of 3 add a description of the earlier album that no document gives), the two Dutchyyy alias questions (2 answers understate how often one alias appears; 1 says the timeline does not call it an alias, which it does), `latasha-nft-sales-2021` (1 of 3 names a source of income the post does not name), `pete-rango-insecure-song` (1 of 3 states a performer the post only credits by handle).
+- The pattern is one: a closing sentence of the model's own, not marked as its own. The instructions already forbid it (cite the passage or leave it out; no distinction no document states), so wording is unlikely to be the lever. Untested: a higher reasoning setting.
+- The judge and these two references were stricter than the bar. `willie-colon-blades` answers that named the album two documents support and attributed both accounts scored 0.35 to 0.45, because reference v2 required calling the question unresolved. `dutchyyy-aliases` answers that listed every alias scored 0.45 to 0.62, with the groups, named as groups, ticked as miscategorised. Both questions are now `judgeAdvisory` in `chatCases.ts`: their judge scores are printed and stay out of the gated means, while the checklist and every other gate still apply. The Blades reference is v3: both accounts attributed, leading with the supported album allowed, no distinction the documents do not state.
+
+### What the eval is for (2026-11-15)
+
+Issue #1424 is done when the eval shows useful, source-supported answers or Pete accepts each remaining limit, and he signs off. A score is not acceptance. The decision the eval serves is whether production chat switches to the passages path, and that needs:
+
+1. The same questions on both paths, scored by the fact checklists: the passages path complete on at least as many, and nothing lost without a recorded reason.
+2. The claim read above on both paths. "No unsupported statement" as an absolute is not reachable by any model; the share of answers with a contradicted or misleading unsupported statement is reported for each path and the passages path must not be worse. One in twenty is the proposed target for later work, not a condition of the switch.
+3. Pete reads a sample of answers from each path.
+4. The switch is one setting (`CHAT_RETRIEVAL`), so it can be reversed.
+
+The current path has not been run on the thirty-three questions yet; that side-by-side is the one run still needed. What remains after the switch is written down and accepted or tracked separately, first of all the approved documents with no saved text, which no question here measures because every question was written from a document that has text.
+
+### Side by side with the current path (2026-11-16)
+
+The Evals key's AI Gateway budget stayed exhausted, so the current path was asked through staging's deployed chat (API `main`, legacy tools, the same staging documents): the thirty-three questions once each over the public endpoint, scored with the suite's `scoreFacts`. Before the run, every approved production document of the six artists that exist in production was confirmed present on staging; staging holds more documents and text than production.
+
+|  | Current path (1 answer each) | Passages path (3 answers each) |
+| --- | --- | --- |
+| Questions measured on both | 26 | 26 |
+| Checklist complete | 22 | 25 in all three answers |
+| Claims read | 177 (17 more from PDFs could not be checked: the stream carries no PDF text) | 636 |
+| Supported by a document | 167 | 609 |
+| Unsupported / wrong document cited / contradicted | 4 / 4 / 0 | 17 / 5 / 3 |
+
+- The current path missed checklist facts on `willie-colon-blades`, `pete-rango-founded`, `latasha-opened-for` and `jordan-rein-flying-lawnmower` (where it said the documents do not have the answer), and on two of the three Celia Cruz questions. The passages path was complete on the first four in every answer; its Celia Cruz three-trial run is still blocked by the budget (earlier single answers were complete).
+- The passages path's one miss, `dutchyyy-alias-years`, was complete in the current path's single answer.
+- Both paths are about 95% supported claim by claim. The passages path adds an unmarked closing conclusion more often (about 1 answer in 13 against 1 or 2 in 32; the second sample is small).
+- Pete read ten pairs on 2026-11-16 and approved moving toward production, with one request: ordinary facts from the artist's own interview were written as "she says she is from…", which reads as doubt. The instructions now ask for plain statements with the citation, attribution in words only for disagreements, opinions, self-reported figures and claims about others, and a quote when the artist's own words are passed on. Checked on a preview build of this branch with `CHAT_RETRIEVAL=units` set for that branch only: the phrase was in three of three answers before and in none of three after; six other questions asked once each kept their checklist facts and their attribution of disagreements.
+
+### What is still open
+
+- Review and merge; the staging switch; then production.
+- The list omission on `dutchyyy-alias-years` (about one answer in three over two runs).
+- Celia Cruz, three questions, and the five-trial run the bar is written for: both wait on the Evals key's spending limit.
+- About a third of production's approved documents have no saved text (approved before the `source_extract` job existed); the chat cannot answer from those until text is saved for them.
+- The default is still `legacy`.

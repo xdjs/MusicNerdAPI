@@ -32,10 +32,13 @@ const PDF_PAGES: Record<string, string> = {
 };
 
 /**
- * The twelve chat questions plus the #118 follow-up, for measuring what the text index returns
- * before any model reads it, with the facts each should surface (`retrievalLabels.ts`).
+ * The chat questions that have retrieval labels (the first twelve, plus the #118 follow-up), for
+ * measuring what the text index returns before any model reads it, with the facts each should
+ * surface (`retrievalLabels.ts`). Chat questions added later are not labelled here yet.
  */
-export const RETRIEVAL_CASES: RetrievalCase[] = CHAT_CASES.map(c => ({
+export const RETRIEVAL_CASES: RetrievalCase[] = CHAT_CASES.filter(
+  c => c.key in RETRIEVAL_LABELS,
+).map(c => ({
   key: c.key,
   artistId: c.artistId,
   artistName: c.artistName,

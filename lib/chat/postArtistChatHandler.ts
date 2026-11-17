@@ -17,6 +17,7 @@ import { createChatCitations } from "@/lib/chat/createChatCitations";
 import { createChatDocuments } from "@/lib/chat/createChatDocuments";
 import { createListDocumentsTool } from "@/lib/chat/createListDocumentsTool";
 import { createReadUnitsTool } from "@/lib/chat/createReadUnitsTool";
+import { getLatestUserText } from "@/lib/chat/getLatestUserText";
 import { createSearchPassagesTool } from "@/lib/chat/createSearchPassagesTool";
 import { getChatEffort } from "@/lib/chat/getChatEffort";
 import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
@@ -107,6 +108,9 @@ export async function postArtistChatHandler(request: Request, artistId: string) 
               searchPassages: createSearchPassagesTool(artistId, documents, {
                 // The real name only: the "This artist" fallback is not a name to match in passages.
                 names: artist.name ? [artist.name] : [],
+                question: getLatestUserText(body.messages),
+                // An earlier user message means the latest one may lean on context the query spells out.
+                followUp: body.messages.filter(message => message.role === "user").length > 1,
                 signal: request.signal,
                 budget,
               }),

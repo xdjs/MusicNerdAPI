@@ -4,13 +4,13 @@ import { MAX_UNITS_PER_DOCUMENT, SEARCH_CANDIDATES } from "@/lib/units/types";
 
 const defaults = {
   maxUnitsPerDocument: MAX_UNITS_PER_DOCUMENT,
-  textMode: "or",
+  textMode: "idf",
   candidates: SEARCH_CANDIDATES,
 };
 
 describe("getSearchTuning", () => {
-  it("defaults to the measured ranking when nothing is set: cap 3, or, 20 candidates", () => {
-    expect(defaults).toEqual({ maxUnitsPerDocument: 3, textMode: "or", candidates: 20 });
+  it("defaults to the measured ranking when nothing is set: cap 3, idf, 20 candidates", () => {
+    expect(defaults).toEqual({ maxUnitsPerDocument: 3, textMode: "idf", candidates: 20 });
     expect(getSearchTuning({})).toEqual(defaults);
     expect(
       getSearchTuning({ UNITS_MAX_PER_DOCUMENT: "", UNITS_TEXT_MODE: "", UNITS_CANDIDATES: "" }),
@@ -30,6 +30,8 @@ describe("getSearchTuning", () => {
     expect(getSearchTuning({ UNITS_TEXT_MODE: "and" }).textMode).toBe("and");
     expect(getSearchTuning({ UNITS_TEXT_MODE: " AND " }).textMode).toBe("and");
     expect(getSearchTuning({ UNITS_TEXT_MODE: "or" }).textMode).toBe("or");
+    expect(getSearchTuning({ UNITS_TEXT_MODE: "idf" }).textMode).toBe("idf");
+    expect(getSearchTuning({ UNITS_TEXT_MODE: " IDF " }).textMode).toBe("idf");
     expect(getSearchTuning({ UNITS_CANDIDATES: "10" }).candidates).toBe(10);
     expect(getSearchTuning({ UNITS_CANDIDATES: "60" }).candidates).toBe(60);
   });
@@ -44,7 +46,7 @@ describe("getSearchTuning", () => {
         SEARCH_CANDIDATES,
       );
     for (const value of ["xor", "any", "OR AND"])
-      expect(getSearchTuning({ UNITS_TEXT_MODE: value }).textMode, value).toBe("or");
+      expect(getSearchTuning({ UNITS_TEXT_MODE: value }).textMode, value).toBe("idf");
   });
 
   it("reads process.env by default", () => {

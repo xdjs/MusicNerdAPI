@@ -18,13 +18,14 @@ on:
           - vision-page
           - retrieval
           - units-backfill
+          - source-text-backfill
         default: chat
       trials:
         description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
         type: string
         default: "5"
       case_trials:
-        description: "chat only, with cases: ask each selected case this many times, 2 to 5"
+        description: "chat only: ask each case (each selected case, with cases) this many times, 1 to 5; empty asks each once"
         type: string
         default: ""
       effort:
@@ -51,7 +52,7 @@ on:
         type: string
         default: ""
       units_text_mode:
-        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word) or or (any term); empty keeps or"
+        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word), or (any term) or idf (any term, ranked by rarity); the default is idf"
         type: string
         default: ""
       units_candidates:
@@ -67,7 +68,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill'
+    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill' || inputs.suite == 'source-text-backfill'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.
@@ -88,7 +89,7 @@ jobs:
       VERCEL: "1"
       # The trial count of chat-pdf-text (evals/chat-pdf-text.eval.ts).
       CHAT_TRIALS: ${{ inputs.trials }}
-      # The chat suite's trials per selected case, with cases set (lib/evals/selectChatCases.ts); empty keeps each case's own.
+      # The chat suite's trials per case (each selected case, with cases), 1 to 5 (lib/evals/selectChatCases.ts); empty asks each once.
       CHAT_CASE_TRIALS: ${{ inputs.case_trials }}
       # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}

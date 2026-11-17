@@ -18,9 +18,9 @@ import { SEARCH_LIMIT, WEAK_COSINE_DISTANCE, type UnitHit } from "@/lib/units/ty
  * `weak` is a hint for obviously empty retrievals; it does not detect unanswerable questions
  * (measured 2026-11-14), and the model must decide from the passages. On that day the unanswerable
  * control's best vector score, 0.480, sat inside the range of answerable questions, and in `or`
- * mode the artist's name alone always matches. Because an `or` match proves little, `weak` reads the strict (`and`)
- * text signal even when ranking uses `or`: one extra `and` query of one row per expanded query, run
- * alongside the ranking queries. It is not derived from the `or` lists, which cannot tell whether
+ * mode the artist's name alone always matches. Because an `or` (or `idf`) match proves little, `weak` reads the strict (`and`)
+ * text signal whenever ranking does not use `and` (the default ranking is `idf`): one extra `and` query of one row per expanded query, run
+ * alongside the ranking queries. It is not derived from the ranking lists, which cannot tell whether
  * every word matched.
  *
  * @param artistId - The artist.

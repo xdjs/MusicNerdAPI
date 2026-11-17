@@ -1,14 +1,18 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { ChatDocumentRef, ChatDocuments } from "@/lib/chat/createChatDocuments";
+import { mergeSearchHits } from "@/lib/chat/mergeSearchHits";
 import { trimToPassage } from "@/lib/chat/trimToPassage";
 import { countDocumentUnits } from "@/lib/units/countDocumentUnits";
 import { readUnits } from "@/lib/units/readUnits";
 import { searchUnits } from "@/lib/units/searchUnits";
-import { SHORT_DOCUMENT_CHARS, SHORT_DOCUMENT_UNITS } from "@/lib/units/types";
+import { SHORT_DOCUMENT_CHARS, SHORT_DOCUMENT_UNITS, type UnitHit } from "@/lib/units/types";
 
 /** Searches one answer may run; the fifth is refused. */
 const MAX_SEARCHES = 4;
+
+/** The most hits the secondary search may add on the first call of an answer. */
+const EXTRA_HITS = 6;
 
 /**
  * The chat's `searchPassages` tool: hybrid search over the artist's eligible units, each hit's
@@ -27,9 +31,25 @@ const MAX_SEARCHES = 4;
  * added. A ranked hit of that document shown windowed is replaced by its whole unit, and that
  * extra text counts toward the characters and the budget. At most one document per call; `expanded` names it, and its `shown` equals its `units`.
  *
+ * The first search of an answer runs two searches, not one, when the user's own question has text
+ * and differs from the model's `query` (trimmed, ignoring case): one on the question and one on the
+ * query, concurrently, with the same names and signal. The question's hits lead, up to twelve, and
+ * the query's hits that are not among them add at most `EXTRA_HITS` more after them
+ * (`mergeSearchHits`); `weak` is true only when both searches are weak. When `opts.followUp` is
+ * true (the conversation already had an earlier user message, so the user's latest message may lean
+ * on context that the model's query spells out), the query's hits lead and the question's add.
+ * They are run separately and appended, not fused into one ranking, because the staging run of
+ * 2026-11-15 found that the question's own top twelve held a required passage (57 of 59 labelled
+ * facts), and that fusing the two searches pushed it out of the results in three of three answers:
+ * reciprocal-rank fusion rewards units found by every list. Later searches, and a first search
+ * with no question or a question equal to the query, use the model's query alone, so a refined
+ * query is not pulled back to the first results.
+ *
  * @param artistId - The artist.
  * @param documents - The chat's document registry.
  * @param opts.names - The artist's names, display name first.
+ * @param opts.question - The user's question for this answer; the first search also asks it.
+ * @param opts.followUp - Whether the conversation already had an earlier user message; the model's query then leads the first search.
  * @param opts.signal - Aborts the search.
  * @param opts.search - Replaces `searchUnits` in tests.
  * @param opts.count - Replaces `countDocumentUnits` in tests.
@@ -42,6 +62,8 @@ export function createSearchPassagesTool(
   documents: ChatDocuments,
   opts: {
     names: string[];
+    question?: string;
+    followUp?: boolean;
     signal?: AbortSignal;
     search?: typeof searchUnits;
     count?: typeof countDocumentUnits;
@@ -53,18 +75,28 @@ export function createSearchPassagesTool(
   const count = opts.count ?? countDocumentUnits;
   const read = opts.read ?? readUnits;
   let searches = 0;
+  const question = opts.question?.trim() ?? "";
   return tool({
     description:
       "Search the artist's saved documents (vault files, their own posts, confirmed research) for passages that answer the question. Always search first. Each result is a whole unit (a page or section; a very long page is cut to its best-matching part) of document n at a locator such as `p.3`; cite it as [n, locator]. Each document lists how many of its units were shown (`shown`) out of its total (`units`). When a short document has several hits, the whole document is included and `expanded` names it. `weak: true` is only an early sign that nothing matched well; decide from the passages whether they answer.",
     inputSchema: z.object({ query: z.string().min(1).max(300) }),
     execute: async ({ query }) => {
       // Counted before the await, so parallel calls in one step cannot slip past the cap.
+      const first = searches === 0;
       if (++searches > MAX_SEARCHES)
         return { error: "Search limit reached for this answer", results: [], documents: [] };
-      const { hits, weak } = await search(artistId, query, {
-        names: opts.names,
-        signal: opts.signal,
-      });
+      const searchOne = (text: string) =>
+        search(artistId, text, { names: opts.names, signal: opts.signal });
+      let hits: UnitHit[];
+      let weak: boolean;
+      if (first && question !== "" && question.toLowerCase() !== query.trim().toLowerCase()) {
+        const [asked, queried] = await Promise.all([searchOne(question), searchOne(query)]);
+        const [primary, secondary] = opts.followUp ? [queried, asked] : [asked, queried];
+        hits = mergeSearchHits(primary.hits, secondary.hits, EXTRA_HITS);
+        weak = primary.weak && secondary.weak;
+      } else {
+        ({ hits, weak } = await searchOne(query));
+      }
       const registered = new Map<number, ChatDocumentRef>();
       const shown = new Map<number, number>();
       const results: { n: number; locator: string; title: string; passage: string }[] = [];

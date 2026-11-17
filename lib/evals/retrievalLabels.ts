@@ -206,4 +206,344 @@ export const RETRIEVAL_LABELS: Record<string, RetrievalFact[]> = {
     },
   ],
   "dutchyyy-unanswerable": [],
+  // Added 2026-11-15 for the questions written that day: located by keyword over the staging
+  // index (every unit whose text holds the fact), independently of the ranking under test.
+  "bio-ritmo-major-label": [
+    {
+      fact: "Triloka, a Mercury subsidiary",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "635a4493-d845-43da-bfdf-b30bf7af1298", locator: "¶114" },
+        { sourceKind: "vault", sourceId: "a01d5e06-36b5-4b1f-9f17-2a68d5687ed9", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "ea02ebcd-4112-4aad-b7cc-07041fe23149", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "$50,000 advance",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "635a4493-d845-43da-bfdf-b30bf7af1298", locator: "¶114" },
+      ],
+    },
+  ],
+  "bio-ritmo-salsa-system-year": [
+    {
+      fact: "2005 (Richmond Magazine timeline)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "635a4493-d845-43da-bfdf-b30bf7af1298", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "2006 (other documents)",
+      anyOf: [
+        { sourceKind: "social", sourceId: "f08c1e1f-17d8-4843-b960-eff280bbb761", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "0f469ab6-2ef2-435e-b562-4f4a399ca5c5", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "47bc5003-0802-4d18-933a-7a1fc04cf077", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "635a4493-d845-43da-bfdf-b30bf7af1298", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "ea02ebcd-4112-4aad-b7cc-07041fe23149", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "f6392f7a-52f9-44a6-a270-fda932df6405", locator: "¶1" },
+      ],
+    },
+  ],
+  "celia-cruz-album-count": [
+    {
+      fact: "over 50 albums (official site)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "25d7ffd8-50f2-4fdb-9c4d-5411dce1f6fc", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "37 studio albums (Wikipedia)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "088a17e8-263f-45e3-81f1-a85909a104b4", locator: "¶102" },
+      ],
+    },
+    {
+      fact: "more than 70 albums (Foundation)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶1" },
+      ],
+    },
+  ],
+  "celia-cruz-honorary-doctorates": [
+    {
+      fact: "Yale",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶46" },
+      ],
+    },
+    {
+      fact: "Florida International University",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶46" },
+      ],
+    },
+    {
+      fact: "University of Miami",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "ccb569ba-f1de-4a6e-adb0-6437b7bb6f8c", locator: "¶46" },
+      ],
+    },
+  ],
+  "celia-cruz-last-show": [
+    {
+      fact: "Hipódromo de las Américas, Mexico City",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "088a17e8-263f-45e3-81f1-a85909a104b4", locator: "¶146" },
+      ],
+    },
+  ],
+  "jordan-rein-earlier-bands": [
+    {
+      fact: "Yesterday and Tomorrow",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "11ea4b9f-050f-4f9f-b06f-3eeff615a78d", locator: "¶104" },
+        { sourceKind: "vault", sourceId: "2e90688e-b2fc-4a3f-8eb6-68492605bff2", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "d5b90fd9-e1dc-4b01-87a7-6a0206284b5e", locator: "¶241" },
+      ],
+    },
+    {
+      fact: "Five Second Rule",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "2e90688e-b2fc-4a3f-8eb6-68492605bff2", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Hollywood Cemetery",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "2e90688e-b2fc-4a3f-8eb6-68492605bff2", locator: "¶1" },
+      ],
+    },
+  ],
+  "jordan-rein-flying-lawnmower": [
+    {
+      fact: "21 years old, kit from Germany",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "11ea4b9f-050f-4f9f-b06f-3eeff615a78d", locator: "¶302" },
+        { sourceKind: "vault", sourceId: "d5b90fd9-e1dc-4b01-87a7-6a0206284b5e", locator: "¶1043" },
+      ],
+    },
+  ],
+  "jordan-rein-partscaster-pickups": [],
+  "latasha-nft-sales-2021": [
+    {
+      fact: "more than $100,000 in 2021",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "badd6785-9f92-4f1e-8a9b-8cb6df86dc4e", locator: "¶34" },
+      ],
+    },
+  ],
+  "latasha-opened-for": [
+    {
+      fact: "Princess Nokia",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "969b1f7b-5498-42d6-8b5f-f4b70facba0a", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "f0be2975-67cf-4959-aced-69aecf15e3d9", locator: "¶30" },
+      ],
+    },
+    {
+      fact: "Ghostface Killah",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "969b1f7b-5498-42d6-8b5f-f4b70facba0a", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Kanye West",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1aefd131-b83e-48e4-8c91-39a38d0f3502", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "969b1f7b-5498-42d6-8b5f-f4b70facba0a", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "badd6785-9f92-4f1e-8a9b-8cb6df86dc4e", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "badd6785-9f92-4f1e-8a9b-8cb6df86dc4e", locator: "¶34" },
+      ],
+    },
+    {
+      fact: "Q-Tip",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1aefd131-b83e-48e4-8c91-39a38d0f3502", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "969b1f7b-5498-42d6-8b5f-f4b70facba0a", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "badd6785-9f92-4f1e-8a9b-8cb6df86dc4e", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "f0be2975-67cf-4959-aced-69aecf15e3d9", locator: "¶30" },
+      ],
+    },
+    {
+      fact: "Big Sean",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1aefd131-b83e-48e4-8c91-39a38d0f3502", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "969b1f7b-5498-42d6-8b5f-f4b70facba0a", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "badd6785-9f92-4f1e-8a9b-8cb6df86dc4e", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "f0be2975-67cf-4959-aced-69aecf15e3d9", locator: "¶30" },
+      ],
+    },
+  ],
+  "latasha-roots": [
+    {
+      fact: "Flatbush, Brooklyn",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "59bb0406-1128-42e7-9e5f-982e8d2cbf97", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Puerto Rican and Haitian mother",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "33933dae-f2d0-40a6-82d9-860ecffa49b5", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Jamaican and Panamanian father",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "33933dae-f2d0-40a6-82d9-860ecffa49b5", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+      ],
+    },
+  ],
+  "latasha-who-i-am-netflix": [
+    {
+      fact: "Self Made",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "797d7395-fd22-437b-ac9f-64cee8993373", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "9362457d-0995-4e04-b3a3-06566ef5a354", locator: "¶1" },
+      ],
+    },
+  ],
+  "pete-rango-founded": [
+    {
+      fact: "XUE Records",
+      anyOf: [
+        { sourceKind: "social", sourceId: "213638ca-85c6-4a9b-bb46-1d33ee9ec6df", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "e3227d98-ad65-4259-97a7-5c13d6fcd8ac", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "L.I.V.",
+      anyOf: [
+        { sourceKind: "social", sourceId: "feb83c5c-452b-4f37-8809-cf1ddc83c6cb", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "e3227d98-ad65-4259-97a7-5c13d6fcd8ac", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Dead Set FC",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+  ],
+  "pete-rango-insecure-song": [
+    {
+      fact: "Vi$ions with Cherele on Insecure",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "5877b614-7319-4be2-9dad-a7dfb87fe18b", locator: "¶1" },
+      ],
+    },
+  ],
+  "pete-rango-origin": [
+    {
+      fact: "born in Bogotá",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "5877b614-7319-4be2-9dad-a7dfb87fe18b", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "moved to Fairfax",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "5877b614-7319-4be2-9dad-a7dfb87fe18b", locator: "¶1" },
+      ],
+    },
+  ],
+  "pete-rango-tv-placements": [
+    {
+      fact: "DTF St. Louis",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Rap Sh!t",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Sistas",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "My Celebrity Dream Wedding",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "Insecure",
+      anyOf: [
+        { sourceKind: "social", sourceId: "89d28e8b-f4f1-4028-96ff-edb0933c944c", locator: "¶1" },
+        { sourceKind: "social", sourceId: "9519ff59-d09b-4c1f-b438-1316992086b8", locator: "¶1" },
+        { sourceKind: "social", sourceId: "a752687c-9e58-425f-a583-174e376f8b63", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "5877b614-7319-4be2-9dad-a7dfb87fe18b", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "6177a5d3-d062-45c4-88d1-3f5c2eb2f851", locator: "¶1" },
+      ],
+    },
+  ],
+  "pete-rango-vcu-graduation": [],
+  "sound-of-fractures-mother": [
+    {
+      fact: "Head of International at Island Records",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "3a00eb49-7a20-4447-890c-1607d78edf00", locator: "¶1" },
+      ],
+    },
+  ],
+  "willie-colon-celia-cruz-albums": [
+    {
+      fact: "Only They Could Have Made This Album",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "0430ffae-9e50-4f3d-82e3-4260b4627f48", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶21" },
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶23" },
+        { sourceKind: "vault", sourceId: "dc9183b2-a4d5-4bcc-9bdb-0776b66c6774", locator: "¶1" },
+      ],
+    },
+    {
+      fact: "The Winners",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶23" },
+      ],
+    },
+    {
+      fact: "Celia & Willie",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "85224932-a2db-4706-86b5-b45440d99534", locator: "¶249" },
+      ],
+    },
+  ],
+  "willie-colon-last-fight-year": [
+    {
+      fact: "1982 (Fania liner notes)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶23" },
+      ],
+    },
+    {
+      fact: "1983 (LA Phil)",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "0a56a8b7-20b3-4bfa-8443-c6c0f95d8973", locator: "¶1" },
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶23" },
+      ],
+    },
+  ],
+  "willie-colon-toma-mis-manos": [
+    {
+      fact: "sister Cindy's death",
+      anyOf: [
+        { sourceKind: "vault", sourceId: "1f85560d-934f-4852-82f6-8e0373241602", locator: "¶23" },
+      ],
+    },
+  ],
 };

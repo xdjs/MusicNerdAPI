@@ -1,5 +1,6 @@
 import { Reporter } from "braintrust";
 import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
+import { factsByQuestion } from "@/lib/evals/factsByQuestion";
 import { checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
@@ -10,7 +11,7 @@ const SCORE_COLUMNS = [
   "evidence_scorable",
   "answer_relevance",
   "source_groundedness",
-  "mentions",
+  "facts",
 ] as const;
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
@@ -28,22 +29,26 @@ const answerTimeLine = (times: number[]) => {
 const cell = (value: number | null | undefined) =>
   value === null || value === undefined ? "-" : String(Math.round(value * 100) / 100);
 
-/** One line per known-hard question: its trial means, reported on every run whatever the gates say. */
-const knownHardLines = (rows: ChatGateRow[]) => {
-  const byKey = new Map<string, ChatGateRow[]>();
-  for (const row of rows)
-    if (row.knownHard) byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
-  const meanOf = (trials: ChatGateRow[], score: string) => {
-    const values = trials.flatMap(r => {
-      const v = r.scores[score];
-      return typeof v === "number" ? [v] : [];
-    });
-    return values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2) : "-";
-  };
-  return [...byKey].map(
-    ([key, trials]) =>
-      `known-hard ${key}: answer_relevance ${meanOf(trials, "answer_relevance")}, source_groundedness ${meanOf(trials, "source_groundedness")} over ${trials.length} trials (reported, not gated on score, since ${trials[0].knownHard!.since})`,
+/** One line per question's checklist result, a total, and the pass rate by question shape. */
+const factsLines = (rows: ChatGateRow[]) => {
+  const questions = factsByQuestion(rows);
+  if (questions.length === 0) return [];
+  const passing = (q: { passes: number; needed: number }) => q.passes >= q.needed;
+  const lines = questions.map(
+    q => `facts ${q.key}: ${q.passes}/${q.answers}${passing(q) ? "" : " FAIL"}`,
   );
+  lines.push(`facts: ${questions.filter(passing).length} of ${questions.length} questions pass`);
+  const shapes = new Map<string, { passing: number; total: number }>();
+  for (const q of questions) {
+    if (!q.shape) continue;
+    const tally = shapes.get(q.shape) ?? { passing: 0, total: 0 };
+    shapes.set(q.shape, { passing: tally.passing + (passing(q) ? 1 : 0), total: tally.total + 1 });
+  }
+  if (shapes.size)
+    lines.push(
+      `by shape: ${[...shapes].map(([shape, t]) => `${shape} ${t.passing}/${t.total}`).join(", ")}`,
+    );
+  return lines;
 };
 
 /** The parts of a Braintrust result row the reporter reads; the SDK types them as a union. */
@@ -77,7 +82,8 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       const metadata = (r.metadata ?? {}) as {
         key?: unknown;
         trial?: unknown;
-        knownHard?: { since: string; reason: string };
+        shape?: unknown;
+        judgeAdvisory?: unknown;
       };
       const output = (r.output ?? {}) as Partial<ChatTurn>;
       const key = String(metadata.key ?? "");
@@ -89,7 +95,8 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         ...(error ? { error } : {}),
         ...(typeof output.totalMs === "number" ? { totalMs: output.totalMs } : {}),
         scores: r.scores ?? {},
-        ...(metadata.knownHard ? { knownHard: metadata.knownHard } : {}),
+        ...(typeof metadata.shape === "string" ? { shape: metadata.shape } : {}),
+        ...(metadata.judgeAdvisory === true ? { judgeAdvisory: true } : {}),
       });
       console.log(
         [
@@ -107,7 +114,10 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
     if (means) console.log(`means: ${means}`);
     const times = answerTimeLine(answerTimesByQuestion(rows));
     if (times) console.log(times);
-    for (const line of knownHardLines(rows)) console.log(line);
+    for (const line of factsLines(rows)) console.log(line);
+    const advisory = [...new Set(rows.filter(r => r.judgeAdvisory).map(r => r.key))];
+    if (advisory.length)
+      console.log(`judge advisory (not in the gated means): ${advisory.join(", ")}`);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkChatGates(rows);
     if (failures.length) {
