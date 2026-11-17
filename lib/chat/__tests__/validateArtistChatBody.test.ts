@@ -215,3 +215,383 @@ it("does not replay a PDF answer whose read ended in an error or lacks a revisio
     expect(JSON.stringify(result)).not.toContain("Revoked fact");
   }
 });
+
+const doc = (n: number, overrides: Record<string, unknown> = {}) => ({
+  n,
+  sourceKind: "vault",
+  sourceId: `44444444-4444-4444-8444-${String(n).padStart(12, "0")}`,
+  revision: `r${n}`,
+  title: `Doc ${n}`,
+  url: n % 2 ? `https://a.example/${n}` : null,
+  ...overrides,
+});
+const search = (documents: unknown[], state = "output-available") => ({
+  type: "tool-searchPassages",
+  toolCallId: "s",
+  state,
+  input: { query: "names" },
+  output: {
+    results: [{ n: 1, locator: "p.1", title: "Doc 1", passage: "unit text" }],
+    weak: false,
+    documents,
+  },
+});
+
+it("keeps the documents an answer's searches numbered, first of each document, without their passages", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("What names?", "1"),
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            search([doc(1), doc(2)]),
+            search([doc(2, { n: 9, revision: "later" }), doc(3, { sourceKind: "social" })]),
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: {
+                n: 1,
+                title: "Doc 1",
+                units: [],
+                truncated: false,
+                missing: [],
+                documents: [doc(1)],
+              },
+            },
+            search([doc(4)], "output-error"),
+            { type: "text", text: "Dutchy [1, p.1][3]." },
+          ],
+        },
+        user("And labels?", "3"),
+      ],
+    }),
+  );
+  expect(result).toEqual({
+    messages: [
+      user("What names?", "1"),
+      {
+        id: "2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Dutchy [1, p.1][3]." }],
+        documents: [doc(1), doc(2), doc(3, { sourceKind: "social" })],
+      },
+      user("And labels?", "3"),
+    ],
+  });
+  expect(JSON.stringify(result)).not.toContain("unit text");
+});
+
+it("accepts searched documents with or without unit counts, and replays them without the counts", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("Every alias?", "1"),
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            search([doc(1, { units: 13, shown: 3 }), doc(2)]),
+            { type: "text", text: "Dutchy [1, p.1]." },
+          ],
+        },
+        user("And labels?", "3"),
+      ],
+    }),
+  );
+  expect(result).toMatchObject({
+    messages: [{ id: "1" }, { id: "2", documents: [doc(1), doc(2)] }, { id: "3" }],
+  });
+  expect(JSON.stringify(result)).not.toMatch(/"units"|"shown"/);
+});
+
+it("accepts a replayed search output with or without expanded", async () => {
+  const withExpanded = search([doc(1)]);
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        user("Every alias?", "1"),
+        {
+          id: "2",
+          role: "assistant",
+          parts: [
+            { ...withExpanded, output: { ...withExpanded.output, expanded: 1 } },
+            search([doc(2)]),
+            { type: "text", text: "Dutchy [1, p.1]." },
+          ],
+        },
+        user("And labels?", "3"),
+      ],
+    }),
+  );
+  expect(result).toMatchObject({
+    messages: [{ id: "1" }, { id: "2", documents: [doc(1), doc(2)] }, { id: "3" }],
+  });
+});
+
+it("keeps documents a readUnits output carries", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: { n: 5, documents: [doc(5)] },
+            },
+            { type: "text", text: "Read [5]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual([
+    doc(5),
+  ]);
+});
+
+it.each([
+  ["49 documents in one list", [Array.from({ length: 49 }, (_, i) => doc(i + 1))]],
+  ["n out of range", [[doc(257)]]],
+  ["n zero", [[doc(0)]]],
+  ["an unknown kind", [[doc(1, { sourceKind: "web" })]]],
+  ["a non-uuid source", [[doc(1, { sourceId: "x" })]]],
+  ["an empty revision", [[doc(1, { revision: "" })]]],
+  ["a long title", [[doc(1, { title: "t".repeat(301) })]]],
+  ["a missing url", [[doc(1, { url: undefined })]]],
+  ["no documents", [undefined]],
+])("does not replay an answer whose searches list %s", async (_name, lists) => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...(lists as unknown[][]).map(list => search(list)),
+            { type: "text", text: "Unverifiable [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(result).not.toBeInstanceOf(NextResponse);
+  expect(JSON.stringify(result)).not.toContain("Unverifiable");
+});
+
+it("keeps 48 documents numbered up to 256 over six searches", async () => {
+  const docs = Array.from({ length: 48 }, (_, i) => doc(i + 209));
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...Array.from({ length: 6 }, (_, i) => search(docs.slice(i * 8, i * 8 + 8))),
+            { type: "text", text: "Many [256]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: { documents?: unknown }[] }).messages[0].documents).toEqual(docs);
+});
+
+it("keeps the text and the first 48 documents of an answer whose searches numbered more", async () => {
+  const docs = Array.from({ length: 50 }, (_, i) => doc(i + 1));
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            ...Array.from({ length: 7 }, (_, i) => search(docs.slice(i * 8, i * 8 + 8))),
+            { type: "text", text: "Many searches [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect((result as { messages: unknown[] }).messages[0]).toEqual({
+    id: "a",
+    role: "assistant",
+    parts: [{ type: "text", text: "Many searches [1]." }],
+    documents: docs.slice(0, 48),
+  });
+});
+
+it("does not replay a read-only answer whose read names no documents", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: {
+                n: 1,
+                title: "Doc 1",
+                units: [{ locator: "p.1", text: "t" }],
+                truncated: false,
+                missing: [],
+              },
+            },
+            { type: "text", text: "Stale read [1]." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(result)).not.toContain("Stale read");
+  // A read that failed numbered nothing and read nothing: the answer stays.
+  const failed = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "a",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-readUnits",
+              state: "output-available",
+              output: { error: "Unknown document number" },
+            },
+            { type: "text", text: "Nothing read." },
+          ],
+        },
+        user("And?"),
+      ],
+    }),
+  );
+  expect(JSON.stringify(failed)).toContain("Nothing read.");
+});
+
+it("keeps a user message's text whatever tool parts it carries, and gives it no documents", async () => {
+  const result = await validateArtistChatBody(
+    post({
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            search(Array.from({ length: 17 }, (_, i) => doc(i + 1))),
+            { type: "text", text: "First question" },
+          ],
+        },
+        { id: "a", role: "assistant", parts: [{ type: "text", text: "Answer." }] },
+        {
+          id: "u2",
+          role: "user",
+          parts: [search([doc(1)]), { type: "text", text: "Second question" }],
+        },
+      ],
+    }),
+  );
+  expect(result).toEqual({
+    messages: [
+      user("First question", "u1"),
+      { id: "a", role: "assistant", parts: [{ type: "text", text: "Answer." }] },
+      user("Second question", "u2"),
+    ],
+  });
+});
+
+it("keeps an answer whose fifth search hit the cap, with the documents of the searches that ran", async () => {
+  const capped = {
+    type: "tool-searchPassages",
+    toolCallId: "s5",
+    state: "output-available",
+    input: { query: "more" },
+    output: { error: "Search limit reached for this answer", results: [], documents: [] },
+  };
+  const bare = { ...capped, output: { error: "Search limit reached for this answer" } };
+  for (const part of [capped, bare]) {
+    const result = await validateArtistChatBody(
+      post({
+        messages: [
+          {
+            id: "a",
+            role: "assistant",
+            parts: [search([doc(1)]), part, { type: "text", text: "Capped [1, p.1]." }],
+          },
+          user("And?"),
+        ],
+      }),
+    );
+    expect((result as { messages: unknown[] }).messages[0]).toEqual({
+      id: "a",
+      role: "assistant",
+      parts: [{ type: "text", text: "Capped [1, p.1]." }],
+      documents: [doc(1)],
+    });
+  }
+});
+
+const answerWith = (parts: unknown[]) =>
+  validateArtistChatBody(
+    post({
+      messages: [user("q1", "1"), { id: "2", role: "assistant", parts }, user("q2", "3")],
+    }),
+  );
+const toolParts = (count: number) => Array.from({ length: count }, () => search([doc(1), doc(2)]));
+
+it("ignores parts the API never reads before the part limit applies", async () => {
+  const sources = Array.from({ length: 100 }, (_, i) => ({
+    type: "source-url",
+    sourceId: String(i),
+    url: `https://a.example/${i}`,
+  }));
+  const reasoning = { type: "reasoning", text: "thinking" };
+  const rest = [{ type: "step-start" }, ...toolParts(3), { type: "text", text: "Dutchy [1]." }];
+  const withSources = await answerWith([...sources, reasoning, ...rest]);
+  const without = await answerWith(rest);
+  expect(withSources).not.toBeInstanceOf(NextResponse);
+  expect(withSources).toEqual(without);
+  expect(JSON.stringify(withSources)).toContain("Dutchy");
+  expect(JSON.stringify(withSources)).toContain('"documents"');
+});
+
+it("still rejects more than 64 readable parts, and more than 512 raw parts", async () => {
+  expect(await answerWith(toolParts(65))).toBeInstanceOf(NextResponse);
+  expect(await answerWith(toolParts(64))).not.toBeInstanceOf(NextResponse);
+  const sources = (count: number) =>
+    Array.from({ length: count }, () => ({ type: "source-url", url: "https://a.example" }));
+  const text = [{ type: "text", text: "x" }];
+  expect(await answerWith([...sources(511), ...text])).not.toBeInstanceOf(NextResponse);
+  expect(await answerWith([...sources(512), ...text])).toBeInstanceOf(NextResponse);
+});
+
+it("accepts a slimmed passage-tool output and gives the same documents as the full one", async () => {
+  const slim = (output: unknown) => ({
+    type: "tool-searchPassages",
+    toolCallId: "s",
+    state: "output-available",
+    output,
+  });
+  const text = { type: "text", text: "Dutchy [1]." };
+  const full = await answerWith([search([doc(1), doc(2)]), text]);
+  const slimmed = await answerWith([slim({ documents: [doc(1), doc(2)] }), text]);
+  expect(slimmed).not.toBeInstanceOf(NextResponse);
+  expect(slimmed).toEqual(full);
+  const refused = await answerWith([
+    slim({ error: "Search limit reached", results: [], documents: [] }),
+    search([doc(1), doc(2)]),
+    text,
+  ]);
+  expect(refused).toEqual(full);
+});

@@ -1,3 +1,4 @@
+import { answerVerdictSchema } from "@/lib/evals/answerVerdictSchema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 const generateObject = vi.fn();
@@ -102,6 +103,8 @@ describe("judgeCitedAnswer model", () => {
     expect(call.model).toBe(MODEL_JUDGE);
     expect(call).not.toHaveProperty("temperature");
     expect(call.instructions).toMatch(/\[page N\]/);
+    expect(call.instructions).toContain("starts with its locator in brackets");
+    expect(call.instructions).toContain("[n, §Early years]");
     expect(JSON.parse(call.prompt).evidence[0].text).toBe("[page 2]\nLabel X");
   });
 
@@ -111,5 +114,37 @@ describe("judgeCitedAnswer model", () => {
     });
     await judgeCitedAnswer({ ...input(), model: "openai/gpt-5.4" });
     expect(generateObject.mock.calls[0][0].model).toBe("openai/gpt-5.4");
+  });
+});
+
+describe("judgeCitedAnswer issues vocabulary", () => {
+  it("passes the closed issue list to the judge and keeps the scoring text", async () => {
+    generateObject.mockResolvedValue({
+      output: {
+        relevance: 1,
+        groundedness: 1,
+        reason: "ok",
+        issues: ["none"],
+        unsupportedCitations: [],
+        missingRequired: 0,
+      },
+    });
+    await judgeCitedAnswer(input());
+    const call = generateObject.mock.calls[0][0];
+    for (const issue of answerVerdictSchema.shape.issues.element.options)
+      expect(call.instructions).toContain(`${issue}:`);
+    expect(call.instructions).toContain(
+      "Check qualifications, contradictions, artist identity and dates.",
+    );
+    expect(
+      answerVerdictSchema.safeParse({
+        relevance: 1,
+        groundedness: 1,
+        reason: "r",
+        issues: ["made_up"],
+        unsupportedCitations: [],
+        missingRequired: 0,
+      }).success,
+    ).toBe(false);
   });
 });

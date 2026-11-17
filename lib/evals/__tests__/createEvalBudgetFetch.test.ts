@@ -28,10 +28,10 @@ describe("createEvalBudgetFetch", () => {
       body: JSON.stringify({ query: "artist" }),
     });
     expect(guard.snapshot().reservedUsd).toBe(0.120224);
-    await expect(createEvalBudgetFetch(send, 9999999).fetch(gateway, request())).rejects.toThrow(
+    await expect(createEvalBudgetFetch(send, 15999999).fetch(gateway, request())).rejects.toThrow(
       "exhausted",
     );
-    for (const invalid of [-1, NaN, 0.1, 10000001])
+    for (const invalid of [-1, NaN, 0.1, 16000001])
       expect(() => createEvalBudgetFetch(send, invalid)).toThrow();
   });
   it("allows the SDK's Anthropic message-start metadata on later tool steps", async () => {
@@ -98,11 +98,11 @@ describe("createEvalBudgetFetch", () => {
     expect(guard.snapshot().paidRequests).toBe(1);
     expect(guard.snapshot().reservedUsd).toBeGreaterThan(0);
   });
-  it("never sends a request whose reservation exceeds ten dollars", async () => {
+  it("never sends a request whose reservation exceeds sixteen dollars", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
     const guard = createEvalBudgetFetch(send);
     for (let i = 0; i < 160; i++) await guard.fetch(gateway, request()).catch(() => {});
-    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(10);
+    expect(guard.snapshot().reservedUsd).toBeLessThanOrEqual(16);
     expect(guard.snapshot().blocked).toBe(true);
     expect(send.mock.calls.length).toBeLessThanOrEqual(150);
   });
@@ -142,6 +142,48 @@ describe("createEvalBudgetFetch", () => {
     expect(hydrogen).toBeLessThan(sonnet);
     await expect(reservedFor("openai/gpt-5.5")).rejects.toThrow("unpriced model");
     await expect(reservedFor("google/gemini-3.1-pro-preview")).rejects.toThrow("unpriced model");
+  });
+  it("prices a gateway embedding request by its input size at the embedding model's rate", async () => {
+    const embeddingUrl = "https://ai-gateway.vercel.sh/v4/ai/embedding-model";
+    const embed = (values: string[], model = "openai/text-embedding-3-small") => ({
+      method: "POST",
+      headers: { "ai-model-id": model },
+      body: JSON.stringify({ values }),
+    });
+    const send = vi.fn().mockResolvedValue(new Response("{}"));
+    const guard = createEvalBudgetFetch(send);
+    const values = ["x".repeat(4000)];
+    await guard.fetch(embeddingUrl, embed(values));
+    const tokens = Math.ceil(JSON.stringify(values).length / 4);
+    expect(guard.snapshot().reservedUsd).toBeCloseTo(Math.ceil(tokens * 0.02) / 1000000, 9);
+    expect(guard.snapshot().paidRequests).toBe(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    await expect(
+      createEvalBudgetFetch(send).fetch(
+        embeddingUrl,
+        embed(["q"], "openai/text-embedding-3-large"),
+      ),
+    ).rejects.toThrow("unpriced model");
+    await expect(
+      createEvalBudgetFetch(send).fetch(embeddingUrl, {
+        ...embed(["q"]),
+        body: JSON.stringify({ input: ["q"] }),
+      }),
+    ).rejects.toThrow("missing values");
+  });
+  it("fails closed on any other gateway model path but leaves other gateway paths as they were", async () => {
+    const send = vi.fn();
+    for (const path of ["image-model", "video-model", "reranking-model"]) {
+      const guard = createEvalBudgetFetch(send);
+      await expect(
+        guard.fetch(`https://ai-gateway.vercel.sh/v4/ai/${path}`, request()),
+      ).rejects.toThrow("unpriced gateway path");
+      expect(guard.snapshot().blocked).toBe(true);
+    }
+    await expect(
+      createEvalBudgetFetch(send).fetch("https://ai-gateway.vercel.sh/v1/credits", request()),
+    ).rejects.toThrow("unapproved network destination");
+    expect(send).not.toHaveBeenCalled();
   });
   it("reserves search credits and passes through Braintrust logging", async () => {
     const send = vi.fn().mockResolvedValue(new Response("ok"));
@@ -236,7 +278,7 @@ describe("createEvalBudgetFetch", () => {
   });
   it("passes through a GET of a public original PDF without reserving spend, even after the run stopped", async () => {
     const send = vi.fn().mockResolvedValue(new Response("%PDF"));
-    const guard = createEvalBudgetFetch(send, 9999999);
+    const guard = createEvalBudgetFetch(send, 15999999);
     const pdf = "https://project.supabase.co/storage/v1/object/public/vault-files/a/timeline.pdf";
     await guard.fetch(pdf, { redirect: "error", cache: "no-store" });
     await expect(guard.fetch(gateway, request())).rejects.toThrow("exhausted");
@@ -247,5 +289,177 @@ describe("createEvalBudgetFetch", () => {
     await expect(
       guard.fetch("https://project.supabase.co/rest/v1/artists", { method: "GET" }),
     ).rejects.toThrow();
+  });
+  describe("says why it stopped", () => {
+    const secretUrl = `${gateway}?secret=1`;
+    const secretInit = { ...request("unlisted/model", "secret text") };
+    const spy = () => vi.spyOn(console, "error").mockImplementation(() => {});
+
+    it("logs one line with the reason and request kind on the first refusal only", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow("unpriced model");
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] blocked: unpriced model (language-model)",
+        );
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow("run already stopped");
+        expect(logged).toHaveBeenCalledTimes(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("carries blockedBy in the snapshot", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        expect(guard.snapshot().blockedBy).toBeUndefined();
+        await expect(guard.fetch("https://api.tavily.com/other", secretInit)).rejects.toThrow();
+        expect(guard.snapshot()).toMatchObject({
+          stopReason: "unapproved network destination",
+          blockedBy: "tavily",
+        });
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it.each([
+      ["https://ai-gateway.vercel.sh/v4/ai/embedding-model", "embedding-model"],
+      ["https://ai-gateway.vercel.sh/v4/ai/image-model", "other-gateway"],
+      ["https://api.tavily.com/search", "tavily"],
+    ])("labels %s as %s", async (url, kind) => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(url, { method: "GET" })).rejects.toThrow();
+        expect(guard.snapshot().blockedBy).toBe(kind);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("never logs a URL query string or body text", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(secretUrl, secretInit)).rejects.toThrow();
+        const line = String(logged.mock.calls[0]?.[0]);
+        expect(line).not.toContain("secret");
+        expect(line).not.toContain("?");
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("refuses an unknown destination without latching, logging once per host", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn().mockResolvedValue(new Response("ok"));
+        const guard = createEvalBudgetFetch(send);
+        const s3 = "https://bucket.s3.us-east-1.amazonaws.com/bundle?secret=1";
+        const put = { method: "PUT", body: new Uint8Array([1, 2]) } as unknown as RequestInit;
+        await expect(guard.fetch(s3, put)).rejects.toThrow("unapproved network destination");
+        await expect(guard.fetch(s3, put)).rejects.toThrow("unapproved network destination");
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] refused: unapproved network destination (host:bucket.s3.us-east-1.amazonaws.com)",
+        );
+        expect(guard.snapshot()).toMatchObject({
+          blocked: false,
+          stopReason: undefined,
+          refusedHosts: ["bucket.s3.us-east-1.amazonaws.com"],
+        });
+        await guard.fetch("https://ai-gateway.vercel.sh/v4/ai/embedding-model", {
+          method: "POST",
+          headers: { "ai-model-id": "openai/text-embedding-3-small" },
+          body: JSON.stringify({ values: ["hello"] }),
+        });
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(guard.snapshot().paidRequests).toBe(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("refuses a non-https request to an unknown host without latching or sending", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn().mockResolvedValue(new Response("ok"));
+        const guard = createEvalBudgetFetch(send);
+        const local = "http://localhost:4318/v1/traces?secret=1";
+        await expect(guard.fetch(local, { method: "POST", body: "{}" })).rejects.toThrow(
+          "unapproved network destination",
+        );
+        await expect(guard.fetch(local, { method: "POST", body: "{}" })).rejects.toThrow(
+          "unapproved network destination",
+        );
+        expect(logged).toHaveBeenCalledTimes(1);
+        expect(logged).toHaveBeenCalledWith(
+          "[eval-budget] refused: unapproved network destination (host:localhost)",
+        );
+        expect(guard.snapshot()).toMatchObject({
+          blocked: false,
+          stopReason: undefined,
+          refusedHosts: ["localhost"],
+        });
+        expect(send).not.toHaveBeenCalled();
+        await guard.fetch("https://ai-gateway.vercel.sh/v4/ai/embedding-model", {
+          method: "POST",
+          headers: { "ai-model-id": "openai/text-embedding-3-small" },
+          body: JSON.stringify({ values: ["hello"] }),
+        });
+        expect(send).toHaveBeenCalledTimes(1);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it("does not send a non-https request to an allowed free host", async () => {
+      const logged = spy();
+      try {
+        const send = vi.fn();
+        const guard = createEvalBudgetFetch(send);
+        await expect(
+          guard.fetch("http://api.braintrust.dev/logs3", { method: "POST", body: "{}" }),
+        ).rejects.toThrow("unapproved network destination");
+        expect(send).not.toHaveBeenCalled();
+        expect(guard.snapshot().blocked).toBe(false);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it.each(["http://ai-gateway.vercel.sh/v4/ai/language-model", "http://api.tavily.com/search"])(
+      "still latches on a non-https request to the paid host %s",
+      async url => {
+        const logged = spy();
+        try {
+          const send = vi.fn();
+          const guard = createEvalBudgetFetch(send);
+          await expect(guard.fetch(url, request())).rejects.toThrow("HTTPS required");
+          expect(guard.snapshot()).toMatchObject({ blocked: true, stopReason: "HTTPS required" });
+          expect(send).not.toHaveBeenCalled();
+        } finally {
+          logged.mockRestore();
+        }
+      },
+    );
+
+    it("still latches on a malformed request to a paid provider", async () => {
+      const logged = spy();
+      try {
+        const guard = createEvalBudgetFetch(vi.fn());
+        await expect(guard.fetch(gateway, { ...request(), body: "{" })).rejects.toThrow(
+          "invalid JSON body",
+        );
+        await expect(guard.fetch(gateway, request())).rejects.toThrow("run already stopped");
+        expect(guard.snapshot().blocked).toBe(true);
+      } finally {
+        logged.mockRestore();
+      }
+    });
   });
 });
