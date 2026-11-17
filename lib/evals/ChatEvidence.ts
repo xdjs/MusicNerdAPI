@@ -3,7 +3,8 @@ export type ChatEvidence = {
   n: number;
   url: string;
   text: string;
-  tool: "readSource" | "webSearch" | "readPdfSource" | "readNamedPdf";
+  tool:
+    "readSource" | "webSearch" | "readPdfSource" | "readNamedPdf" | "searchPassages" | "readUnits";
   toolCallId: string;
   sha256: string;
 };

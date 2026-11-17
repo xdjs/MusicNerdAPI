@@ -78,6 +78,102 @@ describe("chatStreamTurn", () => {
     expect(turn.error).toBeUndefined();
   });
 
+  it("counts the text deltas and times the last one, to show whether text streams", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "tool-input-available", toolCallId: "t", toolName: "searchPassages", input: {} },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "One " },
+        { type: "text-delta", id: "x", delta: "two " },
+        { type: "text-delta", id: "x", delta: "three." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    // Clock reads: start 100, tool 200, deltas 300, 400, 500, end 600.
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.textDeltas).toBe(3);
+    expect(turn.firstTextMs).toBe(200);
+    expect(turn.lastTextMs).toBe(400);
+    expect(turn.totalMs).toBe(500);
+  });
+
+  it("reports no text deltas and no last text time for an answer without text", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([{ type: "tool-input-available", toolCallId: "t", toolName: "x", input: {} }]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
+    expect(turn.textDeltas).toBe(0);
+    expect(turn.lastTextMs).toBeUndefined();
+  });
+
+  it("records a text-free trace of the tool calls in order and counts steps", async () => {
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        { type: "start-step" },
+        {
+          type: "tool-input-available",
+          toolCallId: "a",
+          toolName: "searchPassages",
+          input: { query: "secret query" },
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "a",
+          output: {
+            results: [{ n: 1, locator: "p.1", title: "Secret Title", passage: "Secret passage" }],
+            weak: false,
+            truncated: false,
+            documents: [{ n: 1, shown: 1, units: 5, title: "Secret Title" }],
+          },
+        },
+        { type: "finish-step" },
+        { type: "start-step" },
+        {
+          type: "tool-input-available",
+          toolCallId: "b",
+          toolName: "readUnits",
+          input: { n: 1, locators: ["p.2"] },
+        },
+        {
+          type: "tool-output-available",
+          toolCallId: "b",
+          output: {
+            n: 1,
+            title: "Secret Title",
+            units: [{ locator: "p.2", text: "Secret" }],
+            truncated: false,
+            missing: [],
+          },
+        },
+        { type: "finish-step" },
+        { type: "start-step" },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "Answer [1, p.2]." },
+        { type: "text-end", id: "x" },
+        { type: "finish-step" },
+      ]),
+    );
+
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Q" }, fakeClock());
+
+    expect(turn.steps).toBe(3);
+    expect(turn.trace).toEqual([
+      {
+        name: "searchPassages",
+        atMs: 100,
+        doneMs: 200,
+        summary: "results=1 docs=1 shown/units=1/5 weak=false truncated=false expanded=none",
+      },
+      {
+        name: "readUnits",
+        atMs: 300,
+        doneMs: 400,
+        summary: "n=1 locators=1 units=1 truncated=false missing=0",
+      },
+    ]);
+    expect(JSON.stringify(turn.trace)).not.toMatch(/secret/i);
+  });
+
   it("returns the error response's status and message", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
       NextResponse.json({ status: "error", error: "Artist not found" }, { status: 404 }),
@@ -267,6 +363,58 @@ describe("chatStreamTurn follow-ups", () => {
         },
       },
       { type: "text", text: "Dutchy [1, p.1]." },
+    ]);
+  });
+});
+
+describe("chatStreamTurn passage tools", () => {
+  it("keeps the passage tool parts, with their documents, in the parts for the next turn", async () => {
+    const documents = [
+      {
+        n: 1,
+        sourceKind: "vault",
+        sourceId: "00000000-0000-4000-8000-000000000001",
+        revision: "r1",
+        title: "Doc",
+        url: "https://a.example/d.pdf",
+      },
+    ];
+    const output = {
+      results: [{ n: 1, locator: "p.2", title: "Doc", passage: "Born in 1970." }],
+      weak: false,
+      documents,
+    };
+    postArtistChatHandler.mockResolvedValueOnce(
+      streamOf([
+        {
+          type: "tool-input-available",
+          toolCallId: "s",
+          toolName: "searchPassages",
+          input: { query: "born" },
+        },
+        { type: "tool-output-available", toolCallId: "s", output },
+        { type: "source-url", sourceId: "1", url: "https://cited.example/d.pdf", title: "Doc" },
+        { type: "text-start", id: "x" },
+        { type: "text-delta", id: "x", delta: "1970 [1, p.2]." },
+        { type: "text-end", id: "x" },
+      ]),
+    );
+    const turn = await chatStreamTurn({ artistId: "a1", question: "Born?" }, fakeClock());
+    // The source-url part arrives after the output here; the evidence still takes its url.
+    expect(turn.evidence?.[0]).toMatchObject({ url: "https://cited.example/d.pdf" });
+    expect(turn.evidence?.[0]).toMatchObject({
+      tool: "searchPassages",
+      text: "[p.2]\nBorn in 1970.",
+    });
+    expect(turn.assistantParts).toEqual([
+      {
+        type: "tool-searchPassages",
+        toolCallId: "s",
+        state: "output-available",
+        input: { query: "born" },
+        output,
+      },
+      { type: "text", text: "1970 [1, p.2]." },
     ]);
   });
 });

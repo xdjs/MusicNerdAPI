@@ -4,8 +4,9 @@ import { CHAT_GATES, checkChatGates, type ChatGateRow } from "@/lib/evals/chatGa
 const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): ChatGateRow => ({
   key,
   answerable: true,
+  totalMs: 5000,
   scores: {
-    first_text: 0,
+    first_signal: 1,
     total_time: 1,
     citations: 1,
     evidence_scorable: 1,
@@ -16,8 +17,20 @@ const good = (key: string, overrides: Partial<ChatGateRow["scores"]> = {}): Chat
 });
 
 describe("checkChatGates", () => {
-  it("passes a run that meets every gate, and never gates first text", () => {
-    expect(checkChatGates([good("a"), good("b", { first_text: 0 })])).toEqual([]);
+  it("passes a run that meets every gate", () => {
+    expect(checkChatGates([good("a"), good("b")])).toEqual([]);
+  });
+
+  it("requires the status signal within 5 s on every row that did not error", () => {
+    const failures = checkChatGates([
+      good("a", { first_signal: 0 }),
+      good("t"),
+      good("t", { first_signal: null }),
+      { ...good("e", { first_signal: null }), error: "429 limit" },
+    ]);
+    expect(failures).toContain("a: no status signal within 5 s.");
+    expect(failures).toContain("t trial 2: no status signal within 5 s.");
+    expect(failures.filter(f => f.includes("status signal"))).toHaveLength(2);
   });
 
   it("fails an empty run", () => {
@@ -46,22 +59,20 @@ describe("checkChatGates", () => {
     ]);
   });
 
-  it("applies the per-question floors and the run means over questions", () => {
+  it("applies the run means over questions", () => {
     const failures = checkChatGates([
-      good("a", { answer_relevance: 0.5, source_groundedness: 0.55 }),
-      good("b", { answer_relevance: 1, source_groundedness: 1 }),
+      good("a", { answer_relevance: 0.5, source_groundedness: 0.55, facts: 1 }),
+      good("b", { answer_relevance: 1, source_groundedness: 1, facts: 1 }),
     ]);
     expect(failures).toEqual([
-      `a: answer_relevance 0.5 is below ${CHAT_GATES.questionRelevance}.`,
-      `a: source_groundedness 0.55 is below ${CHAT_GATES.questionGroundedness}.`,
       `Mean answer_relevance 0.75 is below ${CHAT_GATES.meanRelevance}.`,
       `Mean source_groundedness 0.78 is below ${CHAT_GATES.meanGroundedness}.`,
     ]);
   });
 
-  it("averages a question's trials before applying floors and means", () => {
-    // Three trials of one question at 0.5, 0.7 and 0.9 average 0.7: above the floor, and the
-    // question counts once against the other question's 1.0 (mean 0.85).
+  it("averages a question's trials before applying the means and the unchecked floor", () => {
+    // Three trials at 0.5, 0.7 and 0.9 average 0.7: above the 0.6 floor, and the question
+    // counts once against the other question's 1.0 (mean 0.85).
     expect(
       checkChatGates([
         good("t", { answer_relevance: 0.5 }),
@@ -80,7 +91,9 @@ describe("checkChatGates", () => {
         good("u", { answer_relevance: 1 }),
         good("v", { answer_relevance: 1 }),
       ]),
-    ).toEqual([`t: answer_relevance 0.5 is below ${CHAT_GATES.questionRelevance}.`]);
+    ).toEqual([
+      `t: answer_relevance 0.5 is below ${CHAT_GATES.uncheckedRelevance} (no fact checklist).`,
+    ]);
   });
 
   it("labels the failing trial of a repeated question", () => {
@@ -94,5 +107,85 @@ describe("checkChatGates", () => {
     ]);
     expect(failures).toContain("No question received an answer_relevance score.");
     expect(failures).toContain("No question received a source_groundedness score.");
+  });
+
+  describe("fact checklists", () => {
+    const trials = (key: string, facts: (number | null)[]) =>
+      facts.map(f => good(key, { facts: f }));
+
+    it("passes a question with every fact in 4 of 5 answers", () => {
+      expect(checkChatGates(trials("q", [1, 1, 0.5, 1, 1]))).toEqual([]);
+    });
+
+    it("fails 3 of 5 with the exact message", () => {
+      expect(checkChatGates(trials("q", [1, 0, 1, 0.5, 1]))).toEqual([
+        "q: every required fact in 3 of 5 answers; needs 4.",
+      ]);
+    });
+
+    it("needs all 3 of 3 answers, so 2 of 3 fails", () => {
+      expect(checkChatGates(trials("q", [1, 1, 0]))).toEqual([
+        "q: every required fact in 2 of 3 answers; needs 3.",
+      ]);
+    });
+
+    it("does not count an errored row as an answer, but still fails it as an error", () => {
+      const rows = [
+        ...trials("q", [1, 1, 1, 1]),
+        { ...good("q", { facts: null, first_signal: null, total_time: null }), error: "boom" },
+      ];
+      expect(checkChatGates(rows)).toEqual([
+        "q trial 5: ended in an error (boom).",
+        "q trial 5: did not finish within the total time budget.",
+      ]);
+    });
+
+    it("holds a question without facts scores to the 0.6 relevance floor", () => {
+      const others = ["a", "b", "c", "d", "e", "f"].map(k => good(k, { answer_relevance: 1 }));
+      expect(checkChatGates([...others, good("n", { answer_relevance: 0.55 })])).toEqual([
+        "n: answer_relevance 0.55 is below 0.6 (no fact checklist).",
+      ]);
+    });
+
+    it("does not fail a question with facts scores on a low judge score by itself", () => {
+      const failures = checkChatGates([
+        good("a", { facts: 1, answer_relevance: 0.3, source_groundedness: 0.3 }),
+        ...["b", "c", "d", "e", "f", "g", "h", "i", "j"].map(k => good(k, { facts: 1 })),
+      ]);
+      expect(failures).toEqual([]);
+    });
+
+    it("counts a low judge score on a question with facts in the run means", () => {
+      const failures = checkChatGates([
+        good("a", { facts: 1, answer_relevance: 0.3, source_groundedness: 0.3 }),
+        good("b", { facts: 1 }),
+      ]);
+      expect(failures).toEqual([
+        "Mean answer_relevance 0.6 is below 0.8.",
+        "Mean source_groundedness 0.6 is below 0.8.",
+      ]);
+    });
+
+    it("leaves a judge-advisory question out of the run means but still checks its facts", () => {
+      const advisory = {
+        ...good("a", { facts: 1, answer_relevance: 0.3, source_groundedness: 0.3 }),
+        judgeAdvisory: true,
+      };
+      expect(checkChatGates([advisory, good("b", { facts: 1 })])).toEqual([]);
+      expect(
+        checkChatGates([
+          { ...advisory, scores: { ...advisory.scores, facts: 0 } },
+          good("b", { facts: 1 }),
+        ]),
+      ).toEqual(["a: every required fact in 0 of 1 answers; needs 1."]);
+    });
+
+    it("still needs a judged question when every other one is judge-advisory", () => {
+      const advisory = { ...good("a", { facts: 1 }), judgeAdvisory: true };
+      expect(checkChatGates([advisory])).toEqual([
+        "No question received an answer_relevance score.",
+        "No question received a source_groundedness score.",
+      ]);
+    });
   });
 });

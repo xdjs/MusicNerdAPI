@@ -1,19 +1,55 @@
 import { Reporter } from "braintrust";
+import { answerTimesByQuestion } from "@/lib/evals/answerTimesByQuestion";
+import { factsByQuestion } from "@/lib/evals/factsByQuestion";
 import { checkChatGates, type ChatGateRow } from "@/lib/evals/chatGates";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 
 const SCORE_COLUMNS = [
   "first_signal",
-  "first_text",
   "total_time",
   "citations",
   "evidence_scorable",
   "answer_relevance",
   "source_groundedness",
+  "facts",
 ] as const;
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
+/** Mean, median and slowest of per-question answer times; null when there are none. */
+const answerTimeLine = (times: number[]) => {
+  if (times.length === 0) return null;
+  const sorted = [...times].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const mean = sorted.reduce((sum, t) => sum + t, 0) / sorted.length;
+  return `answer time: mean ${seconds(mean)}, median ${seconds(median)}, slowest ${seconds(sorted[sorted.length - 1])}`;
+};
 
 const cell = (value: number | null | undefined) =>
   value === null || value === undefined ? "-" : String(Math.round(value * 100) / 100);
+
+/** One line per question's checklist result, a total, and the pass rate by question shape. */
+const factsLines = (rows: ChatGateRow[]) => {
+  const questions = factsByQuestion(rows);
+  if (questions.length === 0) return [];
+  const passing = (q: { passes: number; needed: number }) => q.passes >= q.needed;
+  const lines = questions.map(
+    q => `facts ${q.key}: ${q.passes}/${q.answers}${passing(q) ? "" : " FAIL"}`,
+  );
+  lines.push(`facts: ${questions.filter(passing).length} of ${questions.length} questions pass`);
+  const shapes = new Map<string, { passing: number; total: number }>();
+  for (const q of questions) {
+    if (!q.shape) continue;
+    const tally = shapes.get(q.shape) ?? { passing: 0, total: 0 };
+    shapes.set(q.shape, { passing: tally.passing + (passing(q) ? 1 : 0), total: tally.total + 1 });
+  }
+  if (shapes.size)
+    lines.push(
+      `by shape: ${[...shapes].map(([shape, t]) => `${shape} ${t.passing}/${t.total}`).join(", ")}`,
+    );
+  return lines;
+};
 
 /** The parts of a Braintrust result row the reporter reads; the SDK types them as a union. */
 type ResultRow = {
@@ -25,8 +61,8 @@ type ResultRow = {
 };
 
 /**
- * The chat suite's reporter: prints every row's scores and timings, the run means and the
- * Braintrust experiment link, then applies `checkChatGates`. Returning false makes
+ * The chat suite's reporter: prints every row's scores and timings, the run means, the answer
+ * time over questions (mean, median, slowest) and the Braintrust experiment link, then applies `checkChatGates`. Returning false makes
  * `braintrust eval` exit non-zero, which is what fails the hosted run.
  */
 export const chatReporter = Reporter<boolean>("chat-gates", {
@@ -43,7 +79,12 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       ].join(" "),
     );
     for (const r of result.results as unknown as ResultRow[]) {
-      const metadata = (r.metadata ?? {}) as { key?: unknown; trial?: unknown };
+      const metadata = (r.metadata ?? {}) as {
+        key?: unknown;
+        trial?: unknown;
+        shape?: unknown;
+        judgeAdvisory?: unknown;
+      };
       const output = (r.output ?? {}) as Partial<ChatTurn>;
       const key = String(metadata.key ?? "");
       const label = metadata.trial === undefined ? key : `${key} #${String(metadata.trial)}`;
@@ -52,7 +93,10 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
         key,
         answerable: Boolean((r.expected as { answerable?: unknown } | undefined)?.answerable),
         ...(error ? { error } : {}),
+        ...(typeof output.totalMs === "number" ? { totalMs: output.totalMs } : {}),
         scores: r.scores ?? {},
+        ...(typeof metadata.shape === "string" ? { shape: metadata.shape } : {}),
+        ...(metadata.judgeAdvisory === true ? { judgeAdvisory: true } : {}),
       });
       console.log(
         [
@@ -68,6 +112,12 @@ export const chatReporter = Reporter<boolean>("chat-gates", {
       .map(s => `${s.name} ${cell(s.score)}`)
       .join(", ");
     if (means) console.log(`means: ${means}`);
+    const times = answerTimeLine(answerTimesByQuestion(rows));
+    if (times) console.log(times);
+    for (const line of factsLines(rows)) console.log(line);
+    const advisory = [...new Set(rows.filter(r => r.judgeAdvisory).map(r => r.key))];
+    if (advisory.length)
+      console.log(`judge advisory (not in the gated means): ${advisory.join(", ")}`);
     if (result.summary.experimentUrl) console.log(`experiment: ${result.summary.experimentUrl}`);
     const failures = checkChatGates(rows);
     if (failures.length) {

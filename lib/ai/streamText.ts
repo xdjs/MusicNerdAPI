@@ -42,6 +42,7 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     instructions,
     prompt,
     temperature,
+    maxOutputTokens,
     thinkingBudget,
     thinkingLevel,
     anthropicEffort,
@@ -58,6 +59,7 @@ export async function streamText(options: StreamTextOptions): Promise<{ text: st
     instructions,
     prompt,
     temperature,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(beforeStep
       ? {
           prepareStep: async () => {

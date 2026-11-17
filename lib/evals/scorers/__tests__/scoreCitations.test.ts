@@ -44,4 +44,19 @@ describe("scoreCitations", () => {
     expect(result.score).toBe(0);
     expect(result.metadata).toEqual({ cited: [], dangling: [] });
   });
+
+  it("counts a locator citation as its first element only", () => {
+    const tour = scoreCitations("Toured [1, §2007-08 tour].", [1]);
+    expect(tour.metadata).toEqual({ cited: [1], dangling: [] });
+    expect(tour.score).toBe(1);
+    const live = scoreCitations("Live [1, §Live, 1999] and [2, p.3].", [1, 2]);
+    expect(live.metadata).toEqual({ cited: [1, 2], dangling: [] });
+  });
+
+  it("reads no year in brackets or prose as a citation", () => {
+    expect(scoreCitations("In 1999 [1999] they toured [1].", [1]).metadata).toEqual({
+      cited: [1],
+      dangling: [],
+    });
+  });
 });

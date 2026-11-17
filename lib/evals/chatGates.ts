@@ -1,22 +1,28 @@
+import { factsByQuestion } from "@/lib/evals/factsByQuestion";
+
 /** One scored chat row as the gates read it: a case, or one trial of a case. */
 export type ChatGateRow = {
   key: string;
   answerable: boolean;
   /** Set when the turn ended in an error instead of an answer. */
   error?: string;
+  /** From the question being sent to the finished answer; absent when the row has no output. */
+  totalMs?: number;
   scores: Record<string, number | null>;
+  /** What the question tests (see `ChatCase.shape`); reported, never gated. */
+  shape?: string;
+  /** True when the judge's scores on this question stay out of the run means (`ChatCase.judgeAdvisory`). */
+  judgeAdvisory?: boolean;
 };
 
-/** The thresholds a chat run must meet (xdjs/MusicNerdWeb#1424, decided 2026-11-12). */
+/** The thresholds a chat run must meet (xdjs/MusicNerdWeb#1424; bar reset 2026-11-15). */
 export const CHAT_GATES = {
   /** Mean answer_relevance over questions. */
   meanRelevance: 0.8,
   /** Mean source_groundedness over questions. */
   meanGroundedness: 0.8,
-  /** No question's answer_relevance below this. */
-  questionRelevance: 0.6,
-  /** No question's source_groundedness below this. */
-  questionGroundedness: 0.6,
+  /** Floor on answer_relevance for a question with no fact checklist. */
+  uncheckedRelevance: 0.6,
 } as const;
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -25,14 +31,20 @@ const mean = (values: number[]) =>
   values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
 
 /**
- * Why a chat run fails, one sentence each; empty when it passes. A question with trials
- * contributes the mean of its trials, so every question weighs the same in the run means.
- * first_text is reported but never gates: the chat reads sources before it writes, so the
- * five-second target waits on a product change (a status line while reading).
+ * Why a chat run fails, one sentence each; empty when it passes. The bar was reset on
+ * 2026-11-15: accuracy is judged by fact checklists, there is no mean answer time gate, and no
+ * question is exempt as known-hard. A question with trials contributes the mean of its trials
+ * to the run means, so every question weighs the same.
  *
- * Gates: no row ends in an error; total_time is 1 on every row; citations and
- * evidence_scorable are 1 on every answerable row; relevance and groundedness means over
- * questions are at least 0.8, and no question falls below 0.6 on either.
+ * Gates: no row ends in an error; first_signal is 1 on every row that did not error;
+ * total_time is 1 on every row; citations and evidence_scorable are 1 on every answerable row;
+ * every required fact is present in at least 4 of every 5 answers to a question (rounded up,
+ * so 3 answers need 3; rows that errored are not answers here but fail as errors); a question
+ * with no facts score on any row (a why-question, one the documents cannot answer) must have a
+ * mean answer_relevance of at least `uncheckedRelevance`; the means over questions of
+ * answer_relevance and source_groundedness are at least 0.8. A low judge score on a question
+ * with a checklist is not a failure by itself, only through those means, and a question marked
+ * `judgeAdvisory` stays out of them (its checklist and every other gate still apply).
  *
  * @param rows - Every scored row of the run.
  * @returns The failures.
@@ -42,12 +54,15 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
   const failures: string[] = [];
   const byKey = new Map<string, ChatGateRow[]>();
   for (const row of rows) byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
+  const checklists = new Map(factsByQuestion(rows).map(q => [q.key, q]));
   const relevanceByQuestion: number[] = [];
   const groundednessByQuestion: number[] = [];
   for (const [key, trials] of byKey) {
     const label = (i: number) => (trials.length > 1 ? `${key} trial ${i + 1}` : key);
     trials.forEach((row, i) => {
       if (row.error) failures.push(`${label(i)}: ended in an error (${row.error}).`);
+      else if (row.scores.first_signal !== 1)
+        failures.push(`${label(i)}: no status signal within 5 s.`);
       if (row.scores.total_time !== 1)
         failures.push(`${label(i)}: did not finish within the total time budget.`);
       if (row.answerable) {
@@ -57,6 +72,11 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
           failures.push(`${label(i)}: the judge could not score the captured evidence.`);
       }
     });
+    const checklist = checklists.get(key);
+    if (checklist && checklist.passes < checklist.needed)
+      failures.push(
+        `${key}: every required fact in ${checklist.passes} of ${checklist.answers} answers; needs ${checklist.needed}.`,
+      );
     const relevance = mean(
       trials.flatMap(r =>
         (r.scores.answer_relevance ?? null) === null ? [] : [r.scores.answer_relevance!],
@@ -67,20 +87,15 @@ export function checkChatGates(rows: ChatGateRow[]): string[] {
         (r.scores.source_groundedness ?? null) === null ? [] : [r.scores.source_groundedness!],
       ),
     );
+    const advisory = trials.some(r => r.judgeAdvisory);
     if (relevance !== null) {
-      relevanceByQuestion.push(relevance);
-      if (relevance < CHAT_GATES.questionRelevance)
+      if (!advisory) relevanceByQuestion.push(relevance);
+      if (!checklist && relevance < CHAT_GATES.uncheckedRelevance)
         failures.push(
-          `${key}: answer_relevance ${round(relevance)} is below ${CHAT_GATES.questionRelevance}.`,
+          `${key}: answer_relevance ${round(relevance)} is below ${CHAT_GATES.uncheckedRelevance} (no fact checklist).`,
         );
     }
-    if (groundedness !== null) {
-      groundednessByQuestion.push(groundedness);
-      if (groundedness < CHAT_GATES.questionGroundedness)
-        failures.push(
-          `${key}: source_groundedness ${round(groundedness)} is below ${CHAT_GATES.questionGroundedness}.`,
-        );
-    }
+    if (groundedness !== null && !advisory) groundednessByQuestion.push(groundedness);
   }
   const meanRelevance = mean(relevanceByQuestion);
   const meanGroundedness = mean(groundednessByQuestion);
