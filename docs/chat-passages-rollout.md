@@ -1,10 +1,10 @@
 # Chat on passages: rollout order and accepted limits (Web #1424), November 16, 2026
 
-Pete read ten side-by-side pairs on 2026-11-16 and approved moving toward production. The evidence is in `docs/chat-eval-pdf-evidence.md` ("Third staging record"). This note is the order of work from here, who has to act at each step, how to check it, and how to go back. Nothing here has been done yet unless it says so.
+Pete read ten side-by-side pairs on 2026-11-16 and approved moving toward production. The evidence is in `docs/chat-eval-pdf-evidence.md` ("Third staging record"). This note is the order of work, who had to act at each step, how to check it, and how to go back. **Every step was done by 2026-11-17; see "What happened" below.**
 
 ## Order
 
-The order matters because API `main` publishes to production on merge, and the indexing job needs the table to exist.
+The order matters because the indexing job needs the table to exist. (This note first said API `main` publishes to production on merge. It does not: see "Production builds are staged" below.)
 
 | Step | What | Who | Check | Going back |
 | --- | --- | --- | --- | --- |
@@ -25,16 +25,26 @@ Things to know before starting:
 - Step 5 spends on production's own AI Gateway access: one embedding per unit and one vision call per scanned page. The design estimated cents for the embeddings of the whole corpus; the vision cost depends on how many pages are scans and has not been measured on production.
 - The index only holds documents that have text. About a third of production's approved documents have none (47 of 134 on 2026-11-15); the new search cannot answer from those any more than the current chat can.
 
+## What happened (2026-11-16 to 2026-11-17)
+
+- **Steps 1 to 4:** all PRs merged on 2026-11-16. Migration 0066 was applied to production through the Supabase CLI and verified: the table, five indexes, row-level security and the app role's policies, `vector` 0.8.0 in `public`, the delete triggers and the `unit_sync` job kind.
+- **Step 6:** staging switched on 2026-11-16.
+- **Step 7:** Pete checked staging in the browser on 2026-11-17. That check led to three Web fixes: real bold text instead of `**` (Web #1689), no `¶`/`§` markers beside citation numbers (Web #1690; PDF page labels stay), and real italics instead of `*` (Web #1692).
+- **Production builds are staged.** Production had been serving the 2026-11-11 build (#113) since then; later `main` builds were built for production but never assigned to the domain. On 2026-11-17 Pete promoted `2ac7e08` (`vercel promote <deployment> --scope musicnerd`). That shipped #99, #117, #120 and this work together. The Web production release followed, carrying Web #1642 (signed-in account from `GET /api/user/me`), which needs #99 live first. Pete checked sign-in, the account menu, his profile and the admin panel. **Any future API change reaches production only when someone promotes its build.**
+- **Step 5:** 344 `unit_sync` jobs, queued in batches of 50 after the promote. 5,539 units for 343 artists, every unit embedded, no failed jobs; about 40 minutes.
+- **Step 8:** `CHAT_RETRIEVAL=units` set for Production on 2026-11-17 and promoted (deployment `api-1g7nz6ak3`). A direct request showed the chat calling `searchPassages`. Two questions read on musicnerd.net were complete and cited. To go back, promote the previous build (`api-rnksbwvf4`) or remove the variable and redeploy.
+- **Step 9:** the branch-scoped Preview variable is gone. Staging keeps `CHAT_RETRIEVAL=units` so it matches production. Removing the legacy path (and making `units` the default) is still to come, after production has run on passages for a release.
+
 ## Limits accepted with the switch
 
-To be confirmed by Pete when he closes #1424. Each is measured in the evidence note.
+Accepted by Pete with the switch, and recorded on #1424. Each is measured in the evidence note.
 
 1. **An unmarked closing conclusion.** About 1 answer in 13 ends on a sentence of the model's own that no document states (3 of 91 answers contradicted a document). The current chat does it less often and misses more facts. The instructions already forbid it; a higher reasoning setting and a check before sending are untested options.
 2. **A one-off item on a long list is sometimes left out.** `dutchyyy-alias-years` named every alias in 5 of 6 answers with the list rule (4 of 6 before); the model was shown the same pages each time. The current chat left the same alias out in one of two answers.
 3. **A true fact is sometimes cited to the wrong document** (5 of 636 claims).
-4. **Documents with no saved text are invisible to the chat.** A separate issue should cover re-reading them and the sites that refuse the fetcher.
+4. **Documents with no saved text are invisible to the chat** (47 of 134 approved documents on production, 2026-11-17). Tracked in Web #1693.
 5. **Celia Cruz has no three-answer result on the new search.** The run was blocked by the Evals key's budget; her earlier single answers were complete.
 6. **The judge's scores on two questions are advisory** (`willie-colon-blades`, `dutchyyy-aliases`), for the reasons recorded on those cases.
-7. **Not checked in a browser on the new search yet:** the answer text arrives in one burst at the end, with the status line covering the wait (step 7).
+7. **The answer text arrives in one burst at the end**, with the status line covering the wait. Checked in the browser on staging and production on 2026-11-17.
 8. **Follow-up conversations** were measured in the eval on the new search but were not part of the side-by-side with the current chat.
 9. **The any-term text query is unmeasured on production-sized data** (step 8's day of logs covers it).
