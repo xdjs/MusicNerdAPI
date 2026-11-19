@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 import { postRevokeClaimHandler } from "@/lib/claims/postRevokeClaimHandler";
+import { RevocationReviewRequiredError } from "@/lib/claims/RevocationReviewRequiredError";
 
 const m = vi.hoisted(() => ({
   auth: vi.fn(),
   get: vi.fn(),
   revoke: vi.fn(),
-  purge: vi.fn(),
   audit: vi.fn(),
   label: vi.fn(),
   discord: vi.fn(),
@@ -14,7 +14,6 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/auth/authenticateAdmin", () => ({ authenticateAdmin: m.auth }));
 vi.mock("@/lib/claims/getClaimById", () => ({ getClaimById: m.get }));
 vi.mock("@/lib/claims/revokeApprovedClaim", () => ({ revokeApprovedClaim: m.revoke }));
-vi.mock("@/lib/claims/purgeClaimStorage", () => ({ purgeClaimStorage: m.purge }));
 vi.mock("@/lib/mcp/logMcpAudit", () => ({ logMcpAudit: m.audit }));
 vi.mock("@/lib/claims/userLabel", () => ({ userLabel: m.label }));
 vi.mock("@/lib/discord/sendDiscordMessage", () => ({ sendDiscordMessage: m.discord }));
@@ -33,18 +32,20 @@ beforeEach(() => {
   m.auth.mockResolvedValue({ userId: "admin" });
   m.get.mockResolvedValue(claim);
   m.revoke.mockResolvedValue(claim);
-  m.purge.mockResolvedValue(undefined);
   m.audit.mockResolvedValue(undefined);
   m.label.mockResolvedValue("admin@example.test");
 });
 
 describe("postRevokeClaimHandler", () => {
-  it("revokes, purges the artist's files, records the audit and tells the team", async () => {
+  it("revokes, records the audit, tells the team and says the files were kept", async () => {
     const res = await postRevokeClaimHandler(req(), ID);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
-    expect(m.revoke).toHaveBeenCalledWith(ID);
-    expect(m.purge).toHaveBeenCalledWith("a1");
+    expect(await res.json()).toEqual({
+      status: "ok",
+      warning:
+        "Claim revoked. Uploaded files were retained; safe storage cleanup requires separate review.",
+    });
+    expect(m.revoke).toHaveBeenCalledWith(ID, "admin");
     expect(m.audit).toHaveBeenCalledWith({
       artistId: "a1",
       field: "claim",
@@ -81,7 +82,20 @@ describe("postRevokeClaimHandler", () => {
     res = await postRevokeClaimHandler(req(), ID);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ status: "error", error: "Claim is no longer approved" });
-    expect(m.purge).not.toHaveBeenCalled();
+    expect(m.discord).not.toHaveBeenCalled();
+  });
+
+  it("is 409 with nothing changed when a source's provenance needs review", async () => {
+    m.revoke.mockRejectedValueOnce(new RevocationReviewRequiredError());
+    const res = await postRevokeClaimHandler(req(), ID);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      status: "error",
+      error:
+        "Revocation needs source-retention review because some Lore provenance is unknown. No changes were made.",
+    });
+    expect(m.audit).not.toHaveBeenCalled();
+    expect(m.discord).not.toHaveBeenCalled();
   });
 
   it("is 400 for a non-UUID id and forwards the admin check", async () => {

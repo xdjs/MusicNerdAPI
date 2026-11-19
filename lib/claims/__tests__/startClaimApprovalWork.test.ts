@@ -53,6 +53,12 @@ describe("startClaimApprovalWork", () => {
     expect(m.search).not.toHaveBeenCalled();
   });
 
+  it("falls back to source research when the discovery check fails", async () => {
+    m.reuse.mockRejectedValueOnce(new Error("db down"));
+    expect(await startClaimApprovalWork(claim, "admin")).toBeUndefined();
+    expect(m.search).toHaveBeenCalledWith("a1", "c1");
+  });
+
   it("starts no build for a page that's already built", async () => {
     m.state.mockResolvedValueOnce({ complete: true });
     expect(await startClaimApprovalWork(claim, "admin")).toBeUndefined();

@@ -23,7 +23,13 @@ export async function startClaimApprovalWork(
   adminUserId: string,
 ): Promise<string | undefined> {
   const ownership = { userId: adminUserId, expectedClaimId: claim.id, trigger: "claim_approval" };
-  let researchReady = await hasReusableDirectoryDiscovery(claim.artistId, claim.id);
+  let researchReady = false;
+  try {
+    researchReady = await hasReusableDirectoryDiscovery(claim.artistId, claim.id);
+  } catch (error) {
+    // A failed reuse check falls back to ordinary source research.
+    console.error("[claims] Discovery handoff check failed:", error);
+  }
   if (!researchReady) {
     try {
       researchReady = await withArtistOperation(claim.artistId, ownership, () =>
