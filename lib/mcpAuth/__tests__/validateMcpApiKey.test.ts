@@ -4,7 +4,11 @@ import { hashApiKey } from "@/lib/mcpAuth/hashApiKey";
 const { findFirst } = vi.hoisted(() => ({ findFirst: vi.fn() }));
 vi.mock("@/lib/db/db", () => ({ db: { query: { mcpApiKeys: { findFirst } } } }));
 vi.mock("@/lib/db/schema", () => ({
-  mcpApiKeys: { keyHash: { name: "key_hash" }, revokedAt: { name: "revoked_at" } },
+  mcpApiKeys: {
+    keyHash: { name: "key_hash" },
+    revokedAt: { name: "revoked_at" },
+    boardMember: { name: "board_member" },
+  },
 }));
 const { validateMcpApiKey } = await import("@/lib/mcpAuth/validateMcpApiKey");
 
@@ -36,6 +40,12 @@ describe("validateMcpApiKey", () => {
     expect(text).not.toContain('"secret"');
     expect(text).toContain("revoked_at");
     expect(text).toContain("is null");
+  });
+
+  it("only accepts admin keys, never a board agent key", async () => {
+    findFirst.mockResolvedValue(undefined);
+    await validateMcpApiKey(req("Bearer board-key"));
+    expect(JSON.stringify(findFirst.mock.calls[0][0].where)).toContain("board_member");
   });
 
   it("is null without a header, with a non-Bearer header, and never touches the database then", async () => {

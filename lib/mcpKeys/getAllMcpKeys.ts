@@ -1,9 +1,10 @@
-import { desc } from "drizzle-orm";
+import { desc, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/db";
 import { mcpApiKeys } from "@/lib/db/schema";
 
 /**
- * Every MCP API key, newest first, revoked ones included. Only the first 8
+ * Every admin MCP API key, newest first, revoked ones included; board agent
+ * keys are listed by their members instead. Only the first 8
  * characters of the hash are exposed, to tell keys apart.
  *
  * @returns The keys as MusicNerdWeb's admin lists them.
@@ -26,6 +27,7 @@ export async function getAllMcpKeys(): Promise<
       revokedAt: mcpApiKeys.revokedAt,
     })
     .from(mcpApiKeys)
+    .where(isNull(mcpApiKeys.boardMember))
     .orderBy(desc(mcpApiKeys.createdAt));
 
   // Only expose first 8 chars of hash for identification

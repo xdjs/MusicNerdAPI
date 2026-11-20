@@ -14,6 +14,9 @@ importers:
       '@privy-io/server-auth':
         specifier: 1.32.5
         version: 1.32.5(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(viem@2.57.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.5))
+      '@vercel/board':
+        specifier: 0.52.0
+        version: 0.52.0
       ai:
         specifier: 7.0.100
         version: 7.0.100(zod@4.6.5)
@@ -1584,6 +1587,28 @@ packages:
     resolution: {integrity: sha512-Vwj9lUIW5Xq3wQ9w6gv3R86g1hMK8f2zNOdGTAgeXUMMXFK78G9ruCjjqutHMNJc0+CH7LYRnHeUB9IT8wFmcw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@vercel/board@0.52.0':
+    resolution: {integrity: sha512-ARsgjNfQaKgAE8Pbwu+aP4IbMpCaiZNcwQYSiBHRDPODpgE+kQQbtjkIWHTjTg7jUrvCi9rPHW8qozhnGzfqfQ==}
+    engines: {node: '>=22.18'}
+    hasBin: true
+    peerDependencies:
+      '@chat-adapter/github': ^4.41.1
+      '@chat-adapter/linear': ^4.41.1
+      '@chat-adapter/slack': ^4.41.1
+      '@vercel/connect': ^2.3.4
+      chat: ^4.41.1
+    peerDependenciesMeta:
+      '@chat-adapter/github':
+        optional: true
+      '@chat-adapter/linear':
+        optional: true
+      '@chat-adapter/slack':
+        optional: true
+      '@vercel/connect':
+        optional: true
+      chat:
+        optional: true
+
   '@vercel/cli-auth@0.0.1':
     resolution: {integrity: sha512-CnqiuMlZ4pjs2LCPYiR6aLKPPd3Xb8SBI1Y7eotXKgpx6qgrGNY+E7EIyUt5ErGHJGIrCZyGG5WEo4bHtVmz2Q==}
 
@@ -1617,6 +1642,10 @@ packages:
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
+    engines: {node: '>= 20'}
+
+  '@vercel/oidc@3.8.10':
+    resolution: {integrity: sha512-sPw1kIfQEA6/2dB+zlAJHnhhNBRJ8t/t4HfFvKO+g0EPBA7NbCKyGovuhgAV6Mnl865ka7HqCEguIy596czdAw==}
     engines: {node: '>= 20'}
 
   '@vercel/oidc@4.0.1':
@@ -5868,6 +5897,12 @@ snapshots:
       '@typescript-eslint/types': 8.70.1
       eslint-visitor-keys: 5.0.1
 
+  '@vercel/board@0.52.0':
+    dependencies:
+      '@vercel/oidc': 3.8.10
+      jose: 6.2.13
+      zod: 4.6.5
+
   '@vercel/cli-auth@0.0.1':
     dependencies:
       async-listen: 3.0.0
@@ -5896,6 +5931,12 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   '@vercel/oidc@3.2.0': {}
+
+  '@vercel/oidc@3.8.10':
+    dependencies:
+      '@vercel/cli-config': 0.3.1
+      '@vercel/cli-exec': 1.0.1
+      jose: 5.10.0
 
   '@vercel/oidc@4.0.1':
     dependencies:

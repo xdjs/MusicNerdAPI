@@ -288,6 +288,8 @@ export const mcpApiKeys = pgTable("mcp_api_keys", {
     .default(sql`now()`)
     .notNull(),
   revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "string" }),
+  // Set for a board agent key: the team member it belongs to. Null for an admin MCP key.
+  boardMember: text("board_member"),
 });
 
 // Append-only audit log — no UPDATE or DELETE policies granted to application role.

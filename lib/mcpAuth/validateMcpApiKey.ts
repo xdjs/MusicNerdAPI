@@ -6,7 +6,8 @@ import { hashApiKey } from "@/lib/mcpAuth/hashApiKey";
 
 /**
  * The MCP API key gate: hashes the `Authorization: Bearer <key>` token and
- * looks the hash up among the keys that haven't been revoked. The SHA-256
+ * looks the hash up among the admin keys that haven't been revoked (a board
+ * agent key only opens the board's MCP server). The SHA-256
  * prehash makes the direct lookup safe: timing only reveals whether a hash
  * exists, nothing about the key.
  *
@@ -18,7 +19,11 @@ export async function validateMcpApiKey(request: Request): Promise<string | null
   if (!token) return null;
   const keyHash = hashApiKey(token);
   const row = await db.query.mcpApiKeys.findFirst({
-    where: and(eq(mcpApiKeys.keyHash, keyHash), isNull(mcpApiKeys.revokedAt)),
+    where: and(
+      eq(mcpApiKeys.keyHash, keyHash),
+      isNull(mcpApiKeys.revokedAt),
+      isNull(mcpApiKeys.boardMember),
+    ),
   });
   return row ? keyHash : null;
 }

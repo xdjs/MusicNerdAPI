@@ -1,13 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getAllMcpKeys } from "@/lib/mcpKeys/getAllMcpKeys";
 
-const mock = vi.hoisted(() => ({ orderBy: vi.fn(), from: vi.fn(), select: vi.fn() }));
+const mock = vi.hoisted(() => ({
+  orderBy: vi.fn(),
+  where: vi.fn(),
+  from: vi.fn(),
+  select: vi.fn(),
+}));
 vi.mock("@/lib/db/db", () => ({ db: { select: mock.select } }));
+vi.mock("@/lib/db/schema", () => ({
+  mcpApiKeys: {
+    id: { name: "id" },
+    keyHash: { name: "key_hash" },
+    label: { name: "label" },
+    createdAt: { name: "created_at" },
+    revokedAt: { name: "revoked_at" },
+    boardMember: { name: "board_member" },
+  },
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
   mock.select.mockReturnValue({ from: mock.from });
-  mock.from.mockReturnValue({ orderBy: mock.orderBy });
+  mock.from.mockReturnValue({ where: mock.where });
+  mock.where.mockReturnValue({ orderBy: mock.orderBy });
 });
 
 describe("getAllMcpKeys", () => {
@@ -49,5 +65,11 @@ describe("getAllMcpKeys", () => {
   it("is empty when there are no keys", async () => {
     mock.orderBy.mockResolvedValueOnce([]);
     expect(await getAllMcpKeys()).toEqual([]);
+  });
+
+  it("lists admin keys only, leaving board agent keys out", async () => {
+    mock.orderBy.mockResolvedValueOnce([]);
+    await getAllMcpKeys();
+    expect(JSON.stringify(mock.where.mock.calls[0][0])).toContain("board_member");
   });
 });
