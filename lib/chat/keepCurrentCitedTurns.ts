@@ -1,8 +1,10 @@
 import type { ChatDocumentRef } from "@/lib/chat/createChatDocuments";
 import { findCitationNumbers } from "@/lib/chat/findCitationNumbers";
-import { type HistoryMessage, keepCurrentPdfTurns } from "@/lib/chat/keepCurrentPdfTurns";
 import type { ArtistChatBody } from "@/lib/chat/validateArtistChatBody";
 import { findCurrentDocuments } from "@/lib/units/findCurrentDocuments";
+
+/** A message as `convertToModelMessages` takes it: the check's bookkeeping removed. */
+export type HistoryMessage = Pick<ArtistChatBody["messages"][number], "id" | "role" | "parts">;
 
 const refKey = (ref: { sourceKind: string; sourceId: string }) =>
   `${ref.sourceKind}:${ref.sourceId}`;
@@ -25,14 +27,13 @@ const revisionKey = (ref: { sourceKind: string; sourceId: string; revision: stri
  *   registers it) and the union is current, since the prompt lets the model re-cite such a number
  *   from memory. It is dropped when it cites a document-form number no kept answer numbered. A plain `[n]` answer (web,
  *   readSource, or a client that sends text only) stays under the running union.
- * - An answer that read a PDF goes through `keepCurrentPdfTurns` first, as before.
  *
  * Every distinct document in the history is looked up in one query (`findCurrentDocuments`), none
  * when there are none.
  *
  * @param messages - The validated body's messages.
  * @param artistId - The artist the conversation is about.
- * @returns The messages to send, without `documents` or `pdfReads`; `prior`, the documents of
+ * @returns The messages to send, without `documents`; `prior`, the documents of
  *   the kept answers by ascending `n`, each document once at its first number (a number already
  *   held by another document is left out, so `createChatDocuments` can always re-register them);
  *   and `highestCitedNumber`, the highest `[n]` any kept answer's text cites (0 for none), above
@@ -57,17 +58,10 @@ export async function keepCurrentCitedTurns(
         sourceId,
         revision,
       });
-  // keepCurrentPdfTurns returns the kept messages rebuilt; their ids are replaced by indexes
-  // here so each maps back to its message (and documents) even when the client repeats ids.
-  const [pdfKept, current] = await Promise.all([
-    keepCurrentPdfTurns(
-      messages.map((message, index) => ({ ...message, id: String(index) })),
-      artistId,
-    ),
-    lookups.size ? findCurrentDocuments(artistId, [...lookups.values()]) : new Set<string>(),
-  ]);
+  const current = lookups.size
+    ? await findCurrentDocuments(artistId, [...lookups.values()])
+    : new Set<string>();
 
-  const pdfKeptIndexes = new Set(pdfKept.map(({ id }) => Number(id)));
   const textOf = (message: ArtistChatBody["messages"][number]) =>
     message.parts.map(part => part.text).join("\n");
   const kept: ArtistChatBody["messages"] = [];
@@ -84,11 +78,10 @@ export async function keepCurrentCitedTurns(
       c => c.locator === null || numberedBefore.has(c.n),
     );
   };
-  for (const [index, message] of messages.entries()) {
+  for (const message of messages) {
     const own = cites(message);
     if (own.some(ref => !current.has(revisionKey(ref)))) unionCurrent = false;
-    const keep = pdfKeptIndexes.has(index) && keepsAnswer(message, own);
-    if (keep) {
+    if (keepsAnswer(message, own)) {
       kept.push(message);
       for (const { n } of own) numberedBefore.add(n);
     }

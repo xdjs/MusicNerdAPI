@@ -15,11 +15,11 @@ vi.mock("node:worker_threads", async original => {
     },
   };
 });
-const { inspectChatPdf } = await import("@/lib/chatPdf/inspectChatPdf");
+const { countPdfPages } = await import("@/lib/units/countPdfPages");
 
 it("terminates a demonstrably running synchronous parser while the request event loop remains live", async () => {
   const cancel = new AbortController();
-  const reading = inspectChatPdf(
+  const reading = countPdfPages(
     new Uint8Array(),
     cancel.signal,
     fileURLToPath(new URL("./fixtures/busyParser.cjs", import.meta.url)),
@@ -40,7 +40,7 @@ it("terminates a demonstrably running synchronous parser while the request event
 }, 10000);
 
 it("contains parser heap exhaustion in the worker", async () => {
-  const reading = inspectChatPdf(
+  const reading = countPdfPages(
     new Uint8Array(),
     AbortSignal.timeout(5000),
     fileURLToPath(new URL("./fixtures/heapParser.cjs", import.meta.url)),
@@ -53,6 +53,6 @@ it("returns actual PDF metadata and disposes the worker", async () => {
   const bytes = readFileSync(
     new URL("../../vaultUpload/__tests__/fixtures/text.pdf", import.meta.url),
   );
-  expect(await inspectChatPdf(bytes, AbortSignal.timeout(3000))).toBe(1);
+  expect(await countPdfPages(bytes, AbortSignal.timeout(3000))).toBe(1);
   expect(workers.at(-1)!.threadId).toBe(-1);
 });

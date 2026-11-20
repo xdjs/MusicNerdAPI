@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mock = vi.hoisted(() => ({ ingest: vi.fn(), queue: vi.fn(), inspect: vi.fn() }));
 vi.mock("@/lib/units/ingestSource", () => ({ ingestSource: mock.ingest }));
 vi.mock("@/lib/units/queueUnitSync", () => ({ queueUnitSync: mock.queue }));
-vi.mock("@/lib/chatPdf/inspectChatPdf", () => ({ inspectChatPdf: mock.inspect }));
+vi.mock("@/lib/units/countPdfPages", () => ({ countPdfPages: mock.inspect }));
 const { ingestUploadInline } = await import("@/lib/units/ingestUploadInline");
 
 const bytes = Buffer.from("bytes");

@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import { Worker } from "node:worker_threads";
 import parserEntry from "pdf-parse/lib/pdf-parse.js";
-import { MAX_CHAT_PDF_BYTES } from "@/lib/chatPdf/types";
+/** The largest PDF whose pages are counted here; a bigger one is left to the queued job. */
+const MAX_PDF_BYTES = 4 * 1024 * 1024;
 
 const code = `
 const { parentPort, workerData } = require('node:worker_threads');
@@ -11,8 +12,8 @@ Promise.resolve().then(() => parse(workerData.bytes, { max: 1, pagerender: async
   .catch(() => parentPort.postMessage({ type: 'failed' }));
 `;
 
-/** Inspect in a terminable isolate; optional parser path is an offline test seam, never request input. */
-export async function inspectChatPdf(
+/** Counts a PDF's pages in a terminable isolate; optional parser path is an offline test seam, never request input. */
+export async function countPdfPages(
   bytes: Uint8Array,
   signal: AbortSignal,
   parserPath = createRequire(`${process.cwd()}/package.json`).resolve("pdf-parse/lib/pdf-parse.js"),
@@ -20,7 +21,7 @@ export async function inspectChatPdf(
   // Keep the existing parser dependency in deployment traces; parsing runs only in the worker.
   if (typeof parserEntry !== "function") throw new Error("PDF parser unavailable");
   signal.throwIfAborted();
-  if (bytes.length > MAX_CHAT_PDF_BYTES) throw new Error("PDF exceeds read limit");
+  if (bytes.length > MAX_PDF_BYTES) throw new Error("PDF exceeds read limit");
   const worker = new Worker(code, {
     eval: true,
     workerData: { bytes: new Uint8Array(bytes), parserPath },

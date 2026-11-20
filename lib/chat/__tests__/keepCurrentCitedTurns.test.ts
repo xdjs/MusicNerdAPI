@@ -4,10 +4,6 @@ const findCurrentDocuments = vi.fn();
 vi.mock("@/lib/units/findCurrentDocuments", () => ({
   findCurrentDocuments: (...a: unknown[]) => findCurrentDocuments(...a),
 }));
-const loadChatPdfs = vi.fn();
-vi.mock("@/lib/chatPdf/loadChatPdfs", () => ({
-  loadChatPdfs: (...a: unknown[]) => loadChatPdfs(...a),
-}));
 const { keepCurrentCitedTurns } = await import("@/lib/chat/keepCurrentCitedTurns");
 
 const uuid = (n: number) => `44444444-4444-4444-8444-${String(n).padStart(12, "0")}`;
@@ -51,7 +47,6 @@ const messages = () => [
 
 beforeEach(() => {
   findCurrentDocuments.mockReset();
-  loadChatPdfs.mockReset();
 });
 
 it("keeps every turn whose documents are current, looks each distinct document up once, and returns prior in n order", async () => {
@@ -72,7 +67,6 @@ it("keeps every turn whose documents are current, looks each distinct document u
     { n: 2, ref: ref(doc(2, "social")) },
     { n: 3, ref: ref(doc(3, "evidence")) },
   ]);
-  expect(loadChatPdfs).not.toHaveBeenCalled();
 });
 
 it("drops the turn whose document moved on and every later answer, keeps the earlier ones, and leaves its documents out of prior", async () => {
@@ -179,34 +173,6 @@ it("maps kept turns back to their own documents when ids repeat", async () => {
   findCurrentDocuments.mockResolvedValue(new Set([key(doc(1))]));
   const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
   expect(kept.map(m => m.parts[0].text)).toEqual(["Here [1].", "q"]);
-  expect(prior).toEqual([{ n: 1, ref: ref(doc(1)) }]);
-});
-
-it("still applies the PDF rule: drops a turn whose PDF changed, whatever its documents", async () => {
-  const pdf = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-  const history = [
-    { id: "1", role: "user" as const, parts: text("q") },
-    {
-      id: "2",
-      role: "assistant" as const,
-      parts: text("PDF [1]."),
-      pdfReads: [{ sourceId: pdf, revision: "a1" }],
-    },
-    { id: "3", role: "user" as const, parts: text("q") },
-    { id: "4", role: "assistant" as const, parts: text("Units [1]."), documents: [doc(1)] },
-    { id: "5", role: "user" as const, parts: text("q") },
-  ];
-  loadChatPdfs.mockResolvedValue([{ id: pdf, revision: "a2" }]);
-  findCurrentDocuments.mockImplementation(
-    async (_a: string, refs: Parameters<typeof key>[0][]) => new Set(refs.map(key)),
-  );
-  const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
-  expect(kept).toEqual([
-    { id: "1", role: "user", parts: text("q") },
-    { id: "3", role: "user", parts: text("q") },
-    { id: "4", role: "assistant", parts: text("Units [1].") },
-    { id: "5", role: "user", parts: text("q") },
-  ]);
   expect(prior).toEqual([{ n: 1, ref: ref(doc(1)) }]);
 });
 
@@ -398,7 +364,6 @@ it("drops a from-memory re-citation when a document of the union is no longer cu
 });
 
 it("drops a from-memory re-citation of a number only a dropped answer carried", async () => {
-  const pdf = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const history = [
     { id: "1", role: "user" as const, parts: text("q1") },
     {
@@ -406,16 +371,13 @@ it("drops a from-memory re-citation of a number only a dropped answer carried", 
       role: "assistant" as const,
       parts: text("Dutchy [1, p.1]."),
       documents: [doc(1)],
-      pdfReads: [{ sourceId: pdf, revision: "a1" }],
     },
     { id: "3", role: "user" as const, parts: text("q2") },
     { id: "4", role: "assistant" as const, parts: text("Again [1, p.2].") },
     { id: "5", role: "user" as const, parts: text("q3") },
   ];
-  loadChatPdfs.mockResolvedValue([{ id: pdf, revision: "a2" }]);
-  findCurrentDocuments.mockImplementation(
-    async (_a: string, refs: Parameters<typeof key>[0][]) => new Set(refs.map(key)),
-  );
+  // The first answer's document was withdrawn, so that answer is dropped.
+  findCurrentDocuments.mockResolvedValue(new Set());
   const { messages: kept, prior } = await keepCurrentCitedTurns(history, "artist");
   expect(kept.map(m => m.id)).toEqual(["1", "3", "5"]);
   expect(prior).toEqual([]);
