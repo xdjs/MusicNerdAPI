@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { MAX_CHAT_PDF_READS } from "@/lib/chatPdf/types";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 const MAX_MESSAGES = 12;
@@ -17,12 +16,7 @@ const MAX_DOCUMENT_N = 256;
 const question = z.string().trim().min(1).max(500);
 
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
-/** A completed PDF read as the client sends it back: enough to ask whether that document is still what it was. */
-const pdfReadPart = z.object({
-  type: z.enum(["tool-readPdfSource", "tool-readNamedPdf"]),
-  state: z.literal("output-available"),
-  output: z.object({ sourceId: z.uuid(), revision: z.string().min(1).max(300) }),
-});
+/** A read by the PDF tools the chat no longer has; an open tab can still send one back. */
 const isPdfRead = (part: { type: string }) =>
   part.type === "tool-readPdfSource" || part.type === "tool-readNamedPdf";
 
@@ -95,15 +89,11 @@ const message = z
       .pipe(z.array(z.looseObject({ type: z.string() })).max(MAX_PARTS)),
   })
   .transform(({ id, role, parts }) => {
-    const reads = parts.filter(isPdfRead).map(part => pdfReadPart.safeParse(part));
-    // An earlier answer that read a PDF is replayed only if every read can be checked
-    // against the document's current publication (keepCurrentPdfTurns); one that cannot be
-    // identified, or claims more reads than the tool allows, is not replayed at all, since
-    // access can have changed since. The cap also bounds the lookups a hostile body can cause.
-    if (reads.length > MAX_CHAT_PDF_READS || reads.some(read => !read.success))
-      return { id, role, parts: [] };
-    // The same for an answer from the document tools (keepCurrentCitedTurns): its documents
-    // must all be identified, or the answer is not replayed; past 48 it keeps the first 48. Only answers cite;
+    // An answer from the removed PDF tools cannot be checked against the documents' current
+    // publication any more, so it is not replayed.
+    if (parts.some(isPdfRead)) return { id, role, parts: [] };
+    // An answer from the document tools (keepCurrentCitedTurns) must have all its documents
+    // identified, or it is not replayed; past 48 it keeps the first 48. Only answers cite;
     // tool parts on a user message are ignored, so they can never empty the question.
     const documents = role === "assistant" ? citedDocuments(parts) : [];
     if (!documents) return { id, role, parts: [] };
@@ -111,12 +101,10 @@ const message = z
       const parsed = textPart.safeParse(part);
       return parsed.success ? [{ type: "text" as const, text: parsed.data.text }] : [];
     });
-    const pdfReads = reads.flatMap(read => (read.success ? [read.data.output] : []));
     return {
       id,
       role,
       parts: text,
-      ...(pdfReads.length ? { pdfReads } : {}),
       ...(documents.length ? { documents } : {}),
     };
   });
@@ -144,9 +132,7 @@ export type ArtistChatBody = z.infer<typeof chatBodySchema>;
 /**
  * Reads a chat body: `{ messages: UIMessage[] }` whose last message is the
  * visitor's question, at most 500 characters. Keeps the last 12
- * messages and only their text parts. An assistant message that read a PDF
- * also carries `pdfReads`, the documents and revisions it depends on, for
- * `keepCurrentPdfTurns` to check before the model sees it; one that searched the
+ * messages and only their text parts. An assistant message that searched the
  * artist's documents carries `documents`, the numbered documents and revisions it may
  * cite (the first 48), for `keepCurrentCitedTurns`.
  *

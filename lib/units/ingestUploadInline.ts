@@ -1,4 +1,4 @@
-import { inspectChatPdf } from "@/lib/chatPdf/inspectChatPdf";
+import { countPdfPages } from "@/lib/units/countPdfPages";
 import { ingestSource } from "@/lib/units/ingestSource";
 import { queueUnitSync } from "@/lib/units/queueUnitSync";
 import { INLINE_INGEST_MAX_PAGES } from "@/lib/units/types";
@@ -10,7 +10,7 @@ async function fitsInline(bytes: Buffer, contentType: string): Promise<boolean> 
   if (isText(contentType)) return true;
   if (contentType !== "application/pdf") return false;
   try {
-    const pages = await inspectChatPdf(bytes, AbortSignal.timeout(5_000));
+    const pages = await countPdfPages(bytes, AbortSignal.timeout(5_000));
     return pages <= INLINE_INGEST_MAX_PAGES;
   } catch {
     // Over the read limit or unreadable here: leave it to the queued job.

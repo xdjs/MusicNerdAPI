@@ -110,7 +110,7 @@ it("does not replay previous named PDF answers as evidence after access can chan
   expect(JSON.stringify(result)).not.toContain("Revoked fact");
 });
 
-it("keeps an earlier PDF answer with the reads it depends on, when every read is identified", async () => {
+it("drops an earlier answer from the removed PDF tools even when every read is identified", async () => {
   const sourceId = "33333333-3333-4333-8333-333333333333";
   const result = await validateArtistChatBody(
     post({
@@ -144,20 +144,11 @@ it("keeps an earlier PDF answer with the reads it depends on, when every read is
     }),
   );
   expect(result).toEqual({
-    messages: [
-      user("What names?", "1"),
-      {
-        id: "pdf",
-        role: "assistant",
-        parts: [{ type: "text", text: "Dutchy and Dutchmassive [1, p.1]." }],
-        pdfReads: [{ sourceId, revision: "r1" }],
-      },
-      user("Which is the producer alias?", "3"),
-    ],
+    messages: [user("What names?", "1"), user("Which is the producer alias?", "3")],
   });
 });
 
-it("does not replay a PDF answer that claims more reads than the tool allows, and bounds parts per message", async () => {
+it("does not replay a PDF answer with several reads, and bounds parts per message", async () => {
   const read = (n: number) => ({
     type: "tool-readPdfSource",
     state: "output-available",

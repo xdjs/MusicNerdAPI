@@ -3,7 +3,6 @@ import { Eval } from "braintrust";
 import { MODEL_CHAT, MODEL_JUDGE } from "@/lib/ai/const";
 import { FIRST_SIGNAL_BUDGET_MS, TOTAL_BUDGET_MS } from "@/lib/evals/chatBudgets";
 import { getChatEffort } from "@/lib/chat/getChatEffort";
-import { getChatRetrievalMode } from "@/lib/chat/getChatRetrievalMode";
 import { CHAT_CASES, type ChatCase } from "@/lib/evals/chatCases";
 import { chatReporter } from "@/lib/evals/chatReporter";
 import { experimentName } from "@/lib/evals/experimentName";
@@ -40,9 +39,8 @@ globalThis.fetch = budget.fetch;
 
 const SHA = process.env.GITHUB_SHA ?? "local";
 
-const RETRIEVAL = getChatRetrievalMode();
-const EFFORT = getChatEffort(RETRIEVAL);
-console.log(`[chat] effort=${EFFORT} retrieval=${RETRIEVAL}`);
+const EFFORT = getChatEffort();
+console.log(`[chat] effort=${EFFORT}`);
 
 /** A row of the suite: a case, or a case's follow-up asked with the first answer in the conversation. */
 type ChatRow = ChatCase & { followUpOf?: string };
@@ -68,7 +66,8 @@ Eval(
       suite: "chat",
       model: MODEL_CHAT,
       sha: SHA,
-      retrieval: RETRIEVAL,
+      // Kept so experiments stay comparable with the runs made while legacy existed.
+      retrieval: "units",
       effort: EFFORT,
       rubric: "cited-evidence-v4",
       judgeModel: MODEL_JUDGE,

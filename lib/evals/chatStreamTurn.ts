@@ -1,6 +1,5 @@
 import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
 import { readChatEvidence } from "@/lib/evals/readChatEvidence";
-import { readPdfChatEvidence } from "@/lib/evals/readPdfChatEvidence";
 import { summarizeToolCall } from "@/lib/evals/summarizeToolCall";
 import type { ChatTurn } from "@/lib/evals/ChatTurn";
 import { postArtistChatHandler } from "@/lib/chat/postArtistChatHandler";
@@ -88,8 +87,6 @@ export async function chatStreamTurn(
   const trace: NonNullable<ChatTurn["trace"]> = [];
   const traced = new Map<string, { entry: (typeof trace)[number]; input: unknown }>();
   let steps = 0;
-  // PDF tool outputs carry only metadata; the original is refetched after timing ends.
-  const pdfReads: { tool: string; toolCallId: string; output: unknown }[] = [];
   // Passage tool outputs are the evidence itself; they are also replayed so a follow-up carries `documents`.
   const passageReads: { tool: string; toolCallId: string; output: unknown }[] = [];
   const reader = parseJsonEventStream({
@@ -124,13 +121,9 @@ export async function chatStreamTurn(
         call.entry.summary = summarizeToolCall(call.entry.name, call.input, chunk.output);
       }
       const tool = toolNames.get(chunk.toolCallId) ?? "";
-      if (tool === "readPdfSource" || tool === "readNamedPdf")
-        pdfReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
-      else {
-        if (tool === "searchPassages" || tool === "readUnits")
-          passageReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
-        else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
-      }
+      if (tool === "searchPassages" || tool === "readUnits")
+        passageReads.push({ tool, toolCallId: chunk.toolCallId, output: chunk.output });
+      else evidence.push(...readChatEvidence(tool, chunk.toolCallId, chunk.output));
     } else if (chunk.type === "text-delta") {
       lastText = clock.now();
       textDeltas += 1;
@@ -148,16 +141,8 @@ export async function chatStreamTurn(
   const sourceUrls = new Map(sources.map(s => [s.n, s.url] as const));
   for (const read of passageReads)
     evidence.push(...readChatEvidence(read.tool, read.toolCallId, read.output, sourceUrls));
-  for (const read of pdfReads) {
-    const n = (read.output as { n?: unknown } | null)?.n;
-    const source = sources.find(s => s.n === n);
-    if (source)
-      evidence.push(
-        ...(await readPdfChatEvidence(read.tool, read.toolCallId, read.output, source.url)),
-      );
-  }
   const assistantParts: unknown[] = [
-    ...[...pdfReads, ...passageReads].map(read => ({
+    ...passageReads.map(read => ({
       type: `tool-${read.tool}`,
       toolCallId: read.toolCallId,
       state: "output-available",
