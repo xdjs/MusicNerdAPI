@@ -23,7 +23,7 @@ export async function getActivityHandler(request: Request) {
           type: e.type,
           artistId: e.artist_id,
           artistName: e.artist_name,
-          platform: e.platform?.replace("mapping:", "") ?? null,
+          platform: e.platform,
           createdAt: e.created_at,
         })),
       },
