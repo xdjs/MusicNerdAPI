@@ -49,7 +49,13 @@ describe("/mcp", () => {
   });
 
   it("POST with an access token lists the tools", async () => {
-    findGrant.mockResolvedValue({ grantId: "g", userId: "u", isAdmin: false, email: null });
+    findGrant.mockResolvedValue({
+      grantId: "g",
+      userId: "u",
+      isAdmin: false,
+      email: null,
+      agent: "Claude",
+    });
     const response = await route.POST(
       post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, "Bearer mn_at_x"),
     );

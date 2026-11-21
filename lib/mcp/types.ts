@@ -76,11 +76,13 @@ export type AuditEntry = {
   apiKeyHash: string;
 };
 
-/** Who an `/mcp` request runs as: the connection's user, their role, and the grant behind the token. */
+/** Who an `/mcp` request runs as: the connection's user, their role, the grant behind the token, and the agent. */
 export type McpContext = {
   userId: string;
   isAdmin: boolean;
   /** The member's name when the user is on the team (`TEAM_ALLOWED_EMAILS`), else null. */
   member: string | null;
   grantId: string;
+  /** The name the client registered with, like "Claude". */
+  agent: string;
 };

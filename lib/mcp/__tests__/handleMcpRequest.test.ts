@@ -3,7 +3,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/db/db", () => ({ db: {} }));
 const { handleMcpRequest } = await import("@/lib/mcp/handleMcpRequest");
 
-const context = { userId: "user-1", isAdmin: false, member: null, grantId: "grant-1" };
+const context = {
+  userId: "user-1",
+  isAdmin: false,
+  member: null,
+  grantId: "grant-1",
+  agent: "Claude",
+};
 const post = (body: unknown, headers: Record<string, string> = {}) =>
   new Request("https://api/mcp", {
     method: "POST",

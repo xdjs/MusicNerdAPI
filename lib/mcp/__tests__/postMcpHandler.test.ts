@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const context = { userId: "user-1", isAdmin: false, member: null, grantId: "grant-1" };
+const context = {
+  userId: "user-1",
+  isAdmin: false,
+  member: null,
+  grantId: "grant-1",
+  agent: "Claude",
+};
 const { authenticate, handle } = vi.hoisted(() => ({
   authenticate: vi.fn(async (_r: Request): Promise<unknown> => null),
   handle: vi.fn(async (_r: Request, _c: unknown) => new Response("ok", { status: 200 })),

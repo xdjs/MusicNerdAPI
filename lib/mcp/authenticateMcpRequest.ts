@@ -7,7 +7,7 @@ import { findTeamMember } from "@/lib/team/findTeamMember";
 
 /**
  * Who is calling `/mcp`: an OAuth access token in `Authorization: Bearer`,
- * resolved to its connection and user, whose connection is marked used. A
+ * resolved to its connection, user and agent, whose connection is marked used. A
  * missing, expired or revoked token gets a 401 whose `WWW-Authenticate`
  * points the client at the resource metadata, where it finds how to sign in.
  *
@@ -42,5 +42,6 @@ export async function authenticateMcpRequest(request: Request): Promise<McpConte
     isAdmin: grant.isAdmin,
     member: grant.email ? findTeamMember(grant.email) : null,
     grantId: grant.grantId,
+    agent: grant.agent,
   };
 }
