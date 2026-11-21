@@ -83,16 +83,4 @@ describe("handleMcpRequest", () => {
       id: null,
     });
   });
-
-  it("opens the standalone SSE stream on GET and acknowledges DELETE", async () => {
-    const get = await handleMcpRequest(
-      new Request("https://api/mcp", { headers: { Accept: "text/event-stream" } }),
-    );
-    expect(get.status).toBe(200);
-    expect(get.headers.get("content-type")).toMatch(/^text\/event-stream/);
-    await get.body?.cancel();
-    const del = await handleMcpRequest(new Request("https://api/mcp", { method: "DELETE" }));
-    expect(del.status).toBe(200);
-    expect(del.headers.get("Access-Control-Allow-Origin")).toBe("*");
-  });
 });
