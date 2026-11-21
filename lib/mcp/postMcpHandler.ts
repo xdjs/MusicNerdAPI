@@ -4,7 +4,7 @@ import { validateMcpApiKey } from "@/lib/mcpAuth/validateMcpApiKey";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 /**
- * Handles POST /api/mcp, the JSON-RPC endpoint. A request with an
+ * Handles POST /mcp, the JSON-RPC endpoint. A request with an
  * `Authorization` header whose key is unknown or revoked is refused with 401
  * before the transport sees it. A request without the header proceeds so the
  * read-only tools stay available; only a valid key opens the request context

@@ -83,8 +83,8 @@ export default [
     },
   },
   {
-    // Public API surface — AGENTS.md mandates JSDoc on all API routes.
-    files: ["app/api/**/*.ts"],
+    // Public API surface — AGENTS.md mandates JSDoc on all API routes, /mcp included.
+    files: ["app/api/**/*.ts", "app/mcp/**/*.ts"],
     rules: jsdocStrictRules,
   },
   {
