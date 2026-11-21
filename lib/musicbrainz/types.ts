@@ -12,3 +12,17 @@ export type MusicBrainzRequestResult =
   | { status: "ok"; data: Record<string, unknown> }
   | { status: "not-found" }
   | { status: "unavailable" };
+
+/** The other platform's id for an artist, and the MusicBrainz entry that links both. */
+export type MusicBrainzCounterpart = { platformId: string; musicbrainzId: string };
+
+/** How a URL reads as a platform's artist page. */
+export type PlatformArtistUrlMatch =
+  { status: "unrelated" } | { status: "invalid" } | { status: "valid"; platformId: string };
+
+/** A MusicBrainz entry's relations that have not ended, or invalid when malformed. */
+export type ActiveRelationsResult =
+  { status: "ok"; relations: Array<Record<string, unknown>> } | { status: "invalid" };
+
+/** The artists a MusicBrainz URL entry belongs to, or invalid when malformed. */
+export type ArtistRelationIdsResult = { status: "ok"; ids: Set<string> } | { status: "invalid" };
