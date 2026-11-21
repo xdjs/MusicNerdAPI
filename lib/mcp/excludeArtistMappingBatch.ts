@@ -6,18 +6,16 @@ import type { ExcludeBatchResult, ExcludeItem } from "@/lib/mcp/types";
  * recorded on its item and never rolls back the others.
  *
  * @param items - The exclusions.
- * @param apiKeyHash - The reporting key's hash.
  * @returns One result per item, in order.
  */
 export async function excludeArtistMappingBatch(
   items: ExcludeItem[],
-  apiKeyHash: string,
 ): Promise<{ results: ExcludeBatchResult[] }> {
   const results: ExcludeBatchResult[] = [];
 
   for (const item of items) {
     try {
-      const result = await excludeArtistMapping({ ...item, apiKeyHash });
+      const result = await excludeArtistMapping(item);
       results.push({ artistId: item.artistId, ...result });
     } catch (err: unknown) {
       results.push({

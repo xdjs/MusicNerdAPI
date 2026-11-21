@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "@/lib/mcp/createMcpServer";
+import type { McpContext } from "@/lib/mcp/types";
 import { withCorsHeaders } from "@/lib/networking/withCorsHeaders";
 
 /**
@@ -9,15 +10,16 @@ import { withCorsHeaders } from "@/lib/networking/withCorsHeaders";
  * an SSE stream for requests.
  *
  * @param req - The incoming request.
+ * @param context - Who the request runs as, which decides the tools.
  * @returns The transport's response, with the CORS headers.
  */
-export async function handleMcpRequest(req: Request): Promise<Response> {
+export async function handleMcpRequest(req: Request, context: McpContext): Promise<Response> {
   console.log(`[MCP] Incoming ${req.method} request`);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
-  const server = createMcpServer();
+  const server = createMcpServer(context);
   await server.connect(transport);
 
   return withCorsHeaders(await transport.handleRequest(req));

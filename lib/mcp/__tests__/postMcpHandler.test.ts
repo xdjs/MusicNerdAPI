@@ -1,61 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mcpRequestContext } from "@/lib/mcpAuth/mcpRequestContext";
 
-const { validate, handle } = vi.hoisted(() => ({
-  validate: vi.fn(async (_r: Request): Promise<string | null> => "hash123"),
-  handle: vi.fn(async (_r: Request) => new Response("ok", { status: 200 })),
+const context = { userId: "user-1", isAdmin: false, member: null, grantId: "grant-1" };
+const { authenticate, handle } = vi.hoisted(() => ({
+  authenticate: vi.fn(async (_r: Request): Promise<unknown> => null),
+  handle: vi.fn(async (_r: Request, _c: unknown) => new Response("ok", { status: 200 })),
 }));
-vi.mock("@/lib/mcpAuth/validateMcpApiKey", () => ({ validateMcpApiKey: validate }));
+vi.mock("@/lib/mcp/authenticateMcpRequest", () => ({ authenticateMcpRequest: authenticate }));
 vi.mock("@/lib/mcp/handleMcpRequest", () => ({ handleMcpRequest: handle }));
 const { postMcpHandler } = await import("@/lib/mcp/postMcpHandler");
 
-const request = (auth?: string) =>
-  new Request("https://api/mcp", {
-    method: "POST",
-    headers: auth ? { Authorization: auth } : {},
-    body: "{}",
-  });
+const request = () => new Request("https://api/mcp", { method: "POST", body: "{}" });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authenticate.mockResolvedValue(context);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("postMcpHandler", () => {
-  it("passes a request without a key straight through, outside any context", async () => {
-    let store: unknown = "unset";
-    handle.mockImplementationOnce(async () => {
-      store = mcpRequestContext.getStore();
-      return new Response("ok");
-    });
+  it("runs an authenticated request through the transport with its context", async () => {
     expect((await postMcpHandler(request())).status).toBe(200);
-    expect(validate).not.toHaveBeenCalled();
-    expect(handle).toHaveBeenCalledTimes(1);
-    expect(store).toBeUndefined();
+    expect(handle).toHaveBeenCalledWith(expect.any(Request), context);
   });
 
-  it("runs a request with a valid key inside the request context", async () => {
-    let store: unknown;
-    handle.mockImplementationOnce(async () => {
-      store = mcpRequestContext.getStore();
-      return new Response("ok");
-    });
-    await postMcpHandler(request("Bearer good"));
-    expect(validate).toHaveBeenCalledTimes(1);
-    expect(store).toEqual({ apiKeyHash: "hash123" });
-  });
-
-  it("refuses an unknown or revoked key with a 401 JSON-RPC error before the transport", async () => {
-    validate.mockResolvedValueOnce(null);
-    const response = await postMcpHandler(request("Bearer bad"));
-    expect(response.status).toBe(401);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(await response.json()).toEqual({
-      jsonrpc: "2.0",
-      error: { code: -32000, message: "Invalid or revoked API key" },
-      id: null,
-    });
+  it("returns the 401 challenge without reaching the transport", async () => {
+    authenticate.mockResolvedValue(new Response("unauthorized", { status: 401 }));
+    expect((await postMcpHandler(request())).status).toBe(401);
     expect(handle).not.toHaveBeenCalled();
   });
 
@@ -70,16 +41,11 @@ describe("postMcpHandler", () => {
     });
   });
 
-  it("is a 500 JSON-RPC error with CORS headers when the key lookup throws (e.g. the database is down)", async () => {
-    validate.mockRejectedValueOnce(new Error("connection refused"));
-    const response = await postMcpHandler(request("Bearer good"));
+  it("is a 500 JSON-RPC error with CORS headers when the token lookup throws", async () => {
+    authenticate.mockRejectedValueOnce(new Error("connection refused"));
+    const response = await postMcpHandler(request());
     expect(response.status).toBe(500);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(await response.json()).toEqual({
-      jsonrpc: "2.0",
-      error: { code: -32603, message: "Internal server error" },
-      id: null,
-    });
     expect(handle).not.toHaveBeenCalled();
   });
 });

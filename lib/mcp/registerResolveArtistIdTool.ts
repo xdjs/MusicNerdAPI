@@ -1,7 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VALID_MAPPING_PLATFORMS } from "@/lib/mcp/const";
-import { logMcpAudit } from "@/lib/mcp/logMcpAudit";
 import { MappingConcurrentWriteError } from "@/lib/mcp/MappingConcurrentWriteError";
 import { MappingConflictError } from "@/lib/mcp/MappingConflictError";
 import { MappingNotFoundError } from "@/lib/mcp/MappingNotFoundError";
@@ -10,8 +9,6 @@ import { resolveArtistMapping } from "@/lib/mcp/resolveArtistMapping";
 import { resolveArtistMappingBatch } from "@/lib/mcp/resolveArtistMappingBatch";
 import { toolError } from "@/lib/mcp/toolError";
 import { toolText } from "@/lib/mcp/toolText";
-import { McpAuthError } from "@/lib/mcpAuth/McpAuthError";
-import { requireMcpAuth } from "@/lib/mcpAuth/requireMcpAuth";
 
 const resolveItemSchema = z.object({
   artistId: z.string().uuid().describe("The UUID of the artist in MusicNerd"),
@@ -35,8 +32,7 @@ const resolveItemSchema = z.object({
 
 /**
  * Registers `resolve_artist_id`: stores one mapping, or a batch of up to 100
- * in `items`, each independent. Needs an MCP API key (checked first); every
- * stored mapping is audited, skipped ones are not.
+ * in `items`, each independent. Registered for admins only.
  *
  * @param server - The server to register on.
  * @returns The registered tool.
@@ -86,8 +82,6 @@ export function registerResolveArtistIdTool(server: McpServer) {
       );
 
       try {
-        const apiKeyHash = requireMcpAuth();
-
         if (items === undefined) {
           if (!artistId || !platform || !platformId || !confidence || !source) {
             return toolError(
@@ -110,54 +104,14 @@ export function registerResolveArtistIdTool(server: McpServer) {
             confidence,
             source,
             reasoning,
-            apiKeyHash,
           });
-
-          if (!result.skipped) {
-            try {
-              await logMcpAudit({
-                artistId,
-                field: `mapping:${platform}`,
-                action: "resolve",
-                oldValue: result.previousMapping?.platformId ?? null,
-                newValue: platformId,
-                apiKeyHash,
-              });
-            } catch (auditError) {
-              console.error("[MCP] Audit log failed (mutation succeeded):", auditError);
-            }
-          }
 
           return toolText({ success: true, ...result });
         }
 
-        const batchResult = await resolveArtistMappingBatch(items, apiKeyHash);
-
-        const auditEntries = batchResult.results
-          .map((r, i) => ({ r, item: items[i] }))
-          .filter(({ r }) => !r.skipped && !r.error)
-          .map(({ r, item }) => ({
-            artistId: item.artistId,
-            field: `mapping:${item.platform}`,
-            action: "resolve" as const,
-            oldValue: r.previousMapping?.platformId ?? null,
-            newValue: item.platformId,
-            apiKeyHash,
-          }));
-
-        if (auditEntries.length > 0) {
-          try {
-            await logMcpAudit(auditEntries);
-          } catch (auditError) {
-            console.error("[MCP] Batch audit log failed (mutations succeeded):", auditError);
-          }
-        }
-
+        const batchResult = await resolveArtistMappingBatch(items);
         return toolText({ success: true, results: batchResult.results });
       } catch (error) {
-        if (error instanceof McpAuthError) {
-          return toolError(error.message, "AUTH_REQUIRED");
-        }
         if (error instanceof MappingNotFoundError) {
           return toolError("Artist not found", "NOT_FOUND");
         }

@@ -1103,6 +1103,74 @@ export const artistBioCorrections = pgTable(
   ],
 );
 
+// OAuth for the Music Nerd MCP (`/api/oauth`, xdjs/MusicNerdWeb#1696), as MusicNerdWeb's
+// migration 0067 creates them. Tokens are stored only as SHA-256 hex.
+// One row per registered client; `id` is the OAuth `client_id`.
+export const oauthClients = pgTable(
+  "oauth_clients",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    name: text().notNull(),
+    redirectUris: text("redirect_uris").array().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  table => [check("oauth_clients_name", sql`char_length(${table.name}) BETWEEN 1 AND 200`)],
+);
+
+// One row per connection (a member approving a client); deleting it revokes every token issued under it.
+export const oauthGrants = pgTable(
+  "oauth_grants",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true, mode: "string" }),
+  },
+  table => [
+    index("oauth_grants_user").using("btree", table.userId, table.createdAt.desc()),
+    index("oauth_grants_client").using("btree", table.clientId),
+  ],
+);
+
+// Authorization codes, access and refresh tokens under a grant. Codes and refresh tokens are single use
+// (`used_at`); refresh tokens have no expiry and last until the grant is deleted.
+export const oauthTokens = pgTable(
+  "oauth_tokens",
+  {
+    hash: text().primaryKey().notNull(),
+    kind: text().notNull(),
+    grantId: uuid("grant_id")
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "string" }),
+    codeChallenge: text("code_challenge"),
+    redirectUri: text("redirect_uri"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  table => [
+    index("oauth_tokens_grant").using("btree", table.grantId),
+    check("oauth_tokens_hash", sql`${table.hash} ~ '^[0-9a-f]{64}$'`),
+    check("oauth_tokens_kind", sql`${table.kind} IN ('code','access','refresh')`),
+    check("oauth_tokens_expiry", sql`(${table.kind} = 'refresh') = (${table.expiresAt} IS NULL)`),
+    check(
+      "oauth_tokens_code",
+      sql`(${table.kind} = 'code') = (${table.codeChallenge} IS NOT NULL AND ${table.redirectUri} IS NOT NULL)`,
+    ),
+  ],
+);
+
 // Relations, only where a migrated route reads with `db.query.<table>` and `with:`:
 // `getApprovedClaimByUserId` (user/has-claim) and `getPendingUGC` (pendingUGCCount).
 export const ugcresearchRelations = relations(ugcresearch, ({ one }) => ({

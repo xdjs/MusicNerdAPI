@@ -1,20 +1,22 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { clearArtistLink } from "@/lib/artistLinks/clearArtistLink";
-import { logMcpAudit } from "@/lib/mcp/logMcpAudit";
+import { db } from "@/lib/db/db";
 import { toolError } from "@/lib/mcp/toolError";
 import { toolText } from "@/lib/mcp/toolText";
-import { McpAuthError } from "@/lib/mcpAuth/McpAuthError";
-import { requireMcpAuth } from "@/lib/mcpAuth/requireMcpAuth";
+import { findApprovedClaim } from "@/lib/ownership/findApprovedClaim";
+import { withArtistOperation } from "@/lib/ownership/withArtistOperation";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
 /**
- * Registers `delete_artist_link`: clears one platform link. Needs an MCP API
- * key (checked first) and records the change in the audit log, best-effort.
+ * Registers `delete_artist_link`: clears one platform link, as the
+ * connection's admin, the way an admin's edit on the site does.
  *
  * @param server - The server to register on.
+ * @param userId - The admin the connection belongs to.
  * @returns The registered tool.
  */
-export function registerDeleteArtistLinkTool(server: McpServer) {
+export function registerDeleteArtistLinkTool(server: McpServer, userId: string) {
   return server.registerTool(
     "delete_artist_link",
     {
@@ -31,29 +33,25 @@ export function registerDeleteArtistLinkTool(server: McpServer) {
       );
 
       try {
-        const apiKeyHash = requireMcpAuth();
         if (siteName.toLowerCase() === "spotify" || siteName.toLowerCase() === "deezer")
           return toolError(
             "Catalog disconnect requires the authenticated profile editor with the displayed account ID. Use POST /api/directEditLink with a Privy bearer token.",
             "OWNER_DISCONNECT_REQUIRED",
           );
 
-        const { oldValue } = await clearArtistLink(artistId, siteName);
+        const expectedClaimId = (await findApprovedClaim(db, artistId))?.id ?? null;
+        const { oldValue } = await withArtistOperation(artistId, { userId, expectedClaimId }, () =>
+          clearArtistLink(artistId, siteName),
+        );
 
         if (oldValue === null) {
           return toolError("Link is not set", "NOT_SET");
         }
 
-        try {
-          await logMcpAudit({ artistId, field: siteName, action: "delete", oldValue, apiKeyHash });
-        } catch (auditError) {
-          console.error("[MCP] Audit log failed (mutation succeeded):", auditError);
-        }
-
         return toolText({ success: true, siteName, oldValue });
       } catch (error) {
-        if (error instanceof McpAuthError) {
-          return toolError(error.message, "AUTH_REQUIRED");
+        if (error instanceof OwnershipChangedError) {
+          return toolError(error.message, "FORBIDDEN");
         }
         if (error instanceof Error && error.message.startsWith("Artist not found")) {
           return toolError("Artist not found", "NOT_FOUND");

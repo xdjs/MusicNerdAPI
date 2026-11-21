@@ -6,18 +6,16 @@ import type { ResolveBatchResult, ResolveItem } from "@/lib/mcp/types";
  * recorded on its item and never rolls back the others.
  *
  * @param items - The mappings.
- * @param apiKeyHash - The reporting key's hash.
  * @returns One result per item, in order.
  */
 export async function resolveArtistMappingBatch(
   items: ResolveItem[],
-  apiKeyHash: string,
 ): Promise<{ results: ResolveBatchResult[] }> {
   const results: ResolveBatchResult[] = [];
 
   for (const item of items) {
     try {
-      const result = await resolveArtistMapping({ ...item, apiKeyHash });
+      const result = await resolveArtistMapping(item);
       results.push({ artistId: item.artistId, ...result });
     } catch (err: unknown) {
       results.push({
