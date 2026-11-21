@@ -10,7 +10,13 @@ const request = (auth?: string) =>
     method: "POST",
     headers: auth ? { Authorization: auth } : {},
   });
-const grant = { grantId: "grant-1", userId: "user-1", isAdmin: true, email: "S@Example.com" };
+const grant = {
+  grantId: "grant-1",
+  userId: "user-1",
+  isAdmin: true,
+  email: "S@Example.com",
+  agent: "Claude",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -19,13 +25,14 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("authenticateMcpRequest", () => {
-  it("resolves a valid access token to the user, role, team member and grant, and marks the grant used", async () => {
+  it("resolves a valid access token to the user, role, team member, grant and agent, and marks the grant used", async () => {
     mock.find.mockResolvedValue(grant);
     expect(await authenticateMcpRequest(request("Bearer mn_at_x"))).toEqual({
       userId: "user-1",
       isAdmin: true,
       member: "sweetman",
       grantId: "grant-1",
+      agent: "Claude",
     });
     expect(mock.find).toHaveBeenCalledWith("mn_at_x");
     expect(mock.touch).toHaveBeenCalledWith("grant-1");

@@ -16,7 +16,7 @@ beforeEach(async () => {
 afterAll(async () => client.close());
 
 describe("findGrantByAccessToken", () => {
-  it("maps a live access token to its grant and user", async () => {
+  it("maps a live access token to its grant, user and agent", async () => {
     const { grantId, userId } = await seedGrant(client, { email: "a@example.com", isAdmin: true });
     const access = await issueOAuthToken(grantId, "access");
     expect(await findGrantByAccessToken(access)).toEqual({
@@ -24,6 +24,7 @@ describe("findGrantByAccessToken", () => {
       userId,
       isAdmin: true,
       email: "a@example.com",
+      agent: "Claude",
     });
   });
 

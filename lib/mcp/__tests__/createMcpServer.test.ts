@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 
 vi.mock("@/lib/db/db", () => ({ db: {} }));
+const team = vi.hoisted(() => ({ as: vi.fn(() => ({})) }));
+vi.mock("@/lib/board/team", () => ({ team }));
 const { createMcpServer } = await import("@/lib/mcp/createMcpServer");
 
 const READ_TOOLS = [
@@ -17,19 +19,45 @@ const WRITE_TOOLS = [
   "resolve_artist_id",
   "exclude_artist_mapping",
 ];
-const context = { userId: "user-1", isAdmin: false, member: null, grantId: "grant-1" };
+const BOARD_TOOLS = ["list_channels", "read_channel", "read_thread", "post", "reply"];
+const context = {
+  userId: "user-1",
+  isAdmin: false,
+  member: null,
+  grantId: "grant-1",
+  agent: "Claude",
+};
 const toolsOf = (server: unknown) =>
   Object.keys((server as { _registeredTools: object })._registeredTools);
+
+beforeEach(() => vi.clearAllMocks());
 
 describe("createMcpServer", () => {
   it("gives everyone signed in the read tools only", () => {
     expect(toolsOf(createMcpServer(context))).toEqual(READ_TOOLS);
+    expect(team.as).not.toHaveBeenCalled();
   });
 
   it("adds the write tools for an admin", () => {
     expect(toolsOf(createMcpServer({ ...context, isAdmin: true }))).toEqual([
       ...READ_TOOLS,
       ...WRITE_TOOLS,
+    ]);
+  });
+
+  it("adds the board tools for a team member, reading and posting as <agent>-<member>", () => {
+    expect(toolsOf(createMcpServer({ ...context, member: "sweetman" }))).toEqual([
+      ...READ_TOOLS,
+      ...BOARD_TOOLS,
+    ]);
+    expect(team.as).toHaveBeenCalledWith("claude-sweetman", { can: ["read", "post"] });
+  });
+
+  it("gives an admin on the team both the write and the board tools", () => {
+    expect(toolsOf(createMcpServer({ ...context, isAdmin: true, member: "sweetman" }))).toEqual([
+      ...READ_TOOLS,
+      ...WRITE_TOOLS,
+      ...BOARD_TOOLS,
     ]);
   });
 

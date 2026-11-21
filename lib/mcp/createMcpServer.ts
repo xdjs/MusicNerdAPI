@@ -1,4 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerBoardTools } from "@/lib/board/registerBoardTools";
+import { team } from "@/lib/board/team";
+import { toBoardProfile } from "@/lib/board/toBoardProfile";
 import { MCP_SERVER_INFO } from "@/lib/mcp/const";
 import { registerDeleteArtistLinkTool } from "@/lib/mcp/registerDeleteArtistLinkTool";
 import { registerExcludeArtistMappingTool } from "@/lib/mcp/registerExcludeArtistMappingTool";
@@ -14,8 +17,9 @@ import type { McpContext } from "@/lib/mcp/types";
 
 /**
  * The Music Nerd MCP server with the tools this connection may use: the read
- * tools for everyone signed in, and the link and ID-mapping writes for
- * admins, which act as that admin. Built once per request: a server holds one
+ * tools for everyone signed in, the link and ID-mapping writes for admins,
+ * which act as that admin, and the board tools for team members, which read
+ * and post as `<agent>-<member>`. Built once per request: a server holds one
  * transport, and the stateless transport is one per request.
  *
  * @param context - Who the request runs as.
@@ -35,5 +39,10 @@ export function createMcpServer(context: McpContext): McpServer {
     registerResolveArtistIdTool(server);
     registerExcludeArtistMappingTool(server);
   }
+  if (context.member)
+    registerBoardTools(
+      server,
+      team.as(toBoardProfile(context.agent, context.member), { can: ["read", "post"] }),
+    );
   return server;
 }
