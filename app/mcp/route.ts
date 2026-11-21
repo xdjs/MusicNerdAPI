@@ -18,7 +18,7 @@ export async function OPTIONS() {
  * POST only: the server keeps no sessions and pushes no messages, so GET and
  * DELETE answer 405.
  *
- * @param req - The request; an MCP API key as `Authorization: Bearer` for the write tools.
+ * @param req - The request; an OAuth access token as `Authorization: Bearer`.
  * @returns The responses as server-sent events, 202 for notifications, or a JSON-RPC error.
  */
 export async function POST(req: Request): Promise<Response> {

@@ -11,26 +11,27 @@ const item = (artistId: string) => ({ artistId, platform: "deezer", reason: "con
 beforeEach(() => vi.clearAllMocks());
 
 describe("excludeArtistMappingBatch", () => {
-  it("excludes each item with the key hash, in order, keeping failures on their item", async () => {
+  it("excludes each item in order, keeping failures on their item", async () => {
     exclude
       .mockResolvedValueOnce({ created: true, updated: false })
       .mockRejectedValueOnce(new Error("Artist not found: a2"))
       .mockResolvedValueOnce({ created: false, updated: true });
-    const { results } = await excludeArtistMappingBatch(
-      [item("a1"), { ...item("a2"), details: "d" }, item("a3")],
-      "hash",
-    );
+    const { results } = await excludeArtistMappingBatch([
+      item("a1"),
+      { ...item("a2"), details: "d" },
+      item("a3"),
+    ]);
     expect(results).toEqual([
       { artistId: "a1", created: true, updated: false },
       { artistId: "a2", created: false, updated: false, error: "Artist not found: a2" },
       { artistId: "a3", created: false, updated: true },
     ]);
-    expect(exclude).toHaveBeenNthCalledWith(2, { ...item("a2"), details: "d", apiKeyHash: "hash" });
+    expect(exclude).toHaveBeenNthCalledWith(2, { ...item("a2"), details: "d" });
   });
 
   it("stringifies a non-Error failure and is empty for no items", async () => {
     exclude.mockRejectedValueOnce("nope");
-    expect((await excludeArtistMappingBatch([item("a1")], "hash")).results[0].error).toBe("nope");
-    expect(await excludeArtistMappingBatch([], "hash")).toEqual({ results: [] });
+    expect((await excludeArtistMappingBatch([item("a1")])).results[0].error).toBe("nope");
+    expect(await excludeArtistMappingBatch([])).toEqual({ results: [] });
   });
 });

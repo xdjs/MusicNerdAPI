@@ -10,28 +10,30 @@ import { registerGetUnmappedArtistsTool } from "@/lib/mcp/registerGetUnmappedArt
 import { registerResolveArtistIdTool } from "@/lib/mcp/registerResolveArtistIdTool";
 import { registerSearchArtistsTool } from "@/lib/mcp/registerSearchArtistsTool";
 import { registerSetArtistLinkTool } from "@/lib/mcp/registerSetArtistLinkTool";
+import type { McpContext } from "@/lib/mcp/types";
 
 /**
- * The Music Nerd MCP server with its ten tools, in the order `tools/list`
- * returns them. Built once per request: a server holds one transport, and the
- * stateless transport is one per request.
+ * The Music Nerd MCP server with the tools this connection may use: the read
+ * tools for everyone signed in, and the link and ID-mapping writes for
+ * admins, which act as that admin. Built once per request: a server holds one
+ * transport, and the stateless transport is one per request.
  *
- * Every mutating tool calls `requireMcpAuth()` before any database work; the
- * read-only tools need no key.
- *
+ * @param context - Who the request runs as.
  * @returns A new server.
  */
-export function createMcpServer(): McpServer {
+export function createMcpServer(context: McpContext): McpServer {
   const server = new McpServer({ ...MCP_SERVER_INFO });
   registerSearchArtistsTool(server);
   registerGetArtistTool(server);
-  registerSetArtistLinkTool(server);
-  registerDeleteArtistLinkTool(server);
   registerGetUnmappedArtistsTool(server);
   registerGetMappingStatsTool(server);
   registerGetArtistMappingsTool(server);
-  registerResolveArtistIdTool(server);
-  registerExcludeArtistMappingTool(server);
   registerGetMappingExclusionsTool(server);
+  if (context.isAdmin) {
+    registerSetArtistLinkTool(server, context.userId);
+    registerDeleteArtistLinkTool(server, context.userId);
+    registerResolveArtistIdTool(server);
+    registerExcludeArtistMappingTool(server);
+  }
   return server;
 }

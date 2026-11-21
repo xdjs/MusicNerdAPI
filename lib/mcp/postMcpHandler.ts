@@ -1,14 +1,11 @@
+import { authenticateMcpRequest } from "@/lib/mcp/authenticateMcpRequest";
 import { handleMcpRequest } from "@/lib/mcp/handleMcpRequest";
-import { mcpRequestContext } from "@/lib/mcpAuth/mcpRequestContext";
-import { validateMcpApiKey } from "@/lib/mcpAuth/validateMcpApiKey";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
 
 /**
- * Handles POST /mcp, the JSON-RPC endpoint. A request with an
- * `Authorization` header whose key is unknown or revoked is refused with 401
- * before the transport sees it. A request without the header proceeds so the
- * read-only tools stay available; only a valid key opens the request context
- * the write tools demand.
+ * Handles POST /mcp, the JSON-RPC endpoint. Every request needs an OAuth
+ * access token; without a valid one the 401 challenge is answered before the
+ * transport sees the request.
  *
  * @param req - The incoming request.
  * @returns The transport's response; 401 or 500 as a JSON-RPC error.
@@ -19,24 +16,9 @@ export async function postMcpHandler(req: Request): Promise<Response> {
 
   try {
     console.log("[MCP] POST request received");
-
-    const authHeader = req.headers.get("authorization");
-    const apiKeyHash = authHeader ? await validateMcpApiKey(req) : null;
-
-    if (authHeader && !apiKeyHash) {
-      return new Response(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          error: { code: -32000, message: "Invalid or revoked API key" },
-          id: null,
-        }),
-        { status: 401, headers },
-      );
-    }
-
-    return apiKeyHash
-      ? await mcpRequestContext.run({ apiKeyHash }, () => handleMcpRequest(req))
-      : await handleMcpRequest(req);
+    const context = await authenticateMcpRequest(req);
+    if (context instanceof Response) return context;
+    return await handleMcpRequest(req, context);
   } catch (error) {
     console.error("[MCP] POST error:", error);
     return new Response(

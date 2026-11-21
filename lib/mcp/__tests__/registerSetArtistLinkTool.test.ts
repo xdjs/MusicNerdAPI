@@ -1,29 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ArtistLinkConflictError } from "@/lib/artistLinks/ArtistLinkConflictError";
 import { callTool, testServer } from "@/lib/mcp/__tests__/toolTestUtils";
-import { McpAuthError } from "@/lib/mcpAuth/McpAuthError";
+import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 
-const { extractArtistId, setArtistLink, logMcpAudit, requireMcpAuth } = vi.hoisted(() => ({
-  extractArtistId: vi.fn(async (_u: string): Promise<any> => null),
-  setArtistLink: vi.fn(async (_a: string, _s: string, _v: string): Promise<any> => ({
-    oldValue: null,
-    artistName: "A",
-  })),
-  logMcpAudit: vi.fn(async (_e: unknown) => {}),
-  requireMcpAuth: vi.fn((): string => "test-hash"),
-}));
+const { extractArtistId, setArtistLink, findApprovedClaim, withArtistOperation } = vi.hoisted(
+  () => ({
+    extractArtistId: vi.fn(async (_u: string): Promise<any> => null),
+    setArtistLink: vi.fn(async (_a: string, _s: string, _v: string): Promise<any> => ({
+      oldValue: null,
+      artistName: "A",
+    })),
+    findApprovedClaim: vi.fn(async (_d: unknown, _a: string): Promise<any> => ({ id: "claim-1" })),
+    withArtistOperation: vi.fn((_a: string, _o: unknown, op: () => unknown) => op()),
+  }),
+);
+vi.mock("@/lib/db/db", () => ({ db: {} }));
 vi.mock("@/lib/artists/extractArtistId", () => ({ extractArtistId }));
 vi.mock("@/lib/artistLinks/setArtistLink", () => ({ setArtistLink }));
-vi.mock("@/lib/mcp/logMcpAudit", () => ({ logMcpAudit }));
-vi.mock("@/lib/mcpAuth/requireMcpAuth", () => ({ requireMcpAuth }));
-const { registerSetArtistLinkTool } = await import("@/lib/mcp/registerSetArtistLinkTool");
+vi.mock("@/lib/ownership/findApprovedClaim", () => ({ findApprovedClaim }));
+vi.mock("@/lib/ownership/withArtistOperation", () => ({ withArtistOperation }));
+const { registerSetArtistLinkTool: register } = await import("@/lib/mcp/registerSetArtistLinkTool");
+const registerSetArtistLinkTool = (server: ReturnType<typeof testServer>) =>
+  register(server, "admin-1");
 
 const artistId = "00000000-0000-0000-0000-000000000001";
 const ig = { siteName: "instagram", id: "testuser", cardPlatformName: "Instagram" };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  requireMcpAuth.mockReturnValue("test-hash");
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -56,39 +60,29 @@ describe("set_artist_link", () => {
     expect(result.isError).toBeUndefined();
   });
 
-  it("writes the audit entry with the exact fields, after the write", async () => {
-    extractArtistId.mockResolvedValue({ ...ig, id: "new-user" });
-    setArtistLink.mockResolvedValue({ oldValue: "old-user", artistName: "A" });
+  it("writes as the connection's admin, under the artist's current claim", async () => {
+    extractArtistId.mockResolvedValue(ig);
     await callTool(registerSetArtistLinkTool(testServer()), {
       artistId,
-      url: "https://instagram.com/new-user",
+      url: "https://instagram.com/testuser",
     });
-    expect(logMcpAudit).toHaveBeenCalledWith({
+    expect(findApprovedClaim).toHaveBeenCalledWith({}, artistId);
+    expect(withArtistOperation).toHaveBeenCalledWith(
       artistId,
-      field: "instagram",
-      action: "set",
-      submittedUrl: "https://instagram.com/new-user",
-      oldValue: "old-user",
-      newValue: "new-user",
-      apiKeyHash: "test-hash",
-    });
-    expect(setArtistLink.mock.invocationCallOrder[0]).toBeLessThan(
-      logMcpAudit.mock.invocationCallOrder[0],
+      { userId: "admin-1", expectedClaimId: "claim-1" },
+      expect.any(Function),
     );
   });
 
-  it("checks auth before extracting or writing, and is AUTH_REQUIRED without it", async () => {
-    requireMcpAuth.mockImplementation(() => {
-      throw new McpAuthError("Authentication required");
-    });
+  it("is FORBIDDEN when the claim or the admin role changed under the write", async () => {
+    extractArtistId.mockResolvedValue(ig);
+    setArtistLink.mockRejectedValue(new OwnershipChangedError());
     const { result, parsed } = await callTool(registerSetArtistLinkTool(testServer()), {
       artistId,
-      url: "https://instagram.com/test",
+      url: "https://instagram.com/testuser",
     });
-    expect(parsed).toEqual({ error: "Authentication required", code: "AUTH_REQUIRED" });
+    expect(parsed.code).toBe("FORBIDDEN");
     expect(result.isError).toBe(true);
-    expect(extractArtistId).not.toHaveBeenCalled();
-    expect(setArtistLink).not.toHaveBeenCalled();
   });
 
   it("is INVALID_URL when no platform reads the URL, or it reads an empty id", async () => {
@@ -114,10 +108,9 @@ describe("set_artist_link", () => {
     });
     expect(parsed).toEqual({ error: "Artist not found", code: "NOT_FOUND" });
     expect(result.isError).toBe(true);
-    expect(logMcpAudit).not.toHaveBeenCalled();
   });
 
-  it("is a terminal CONFLICT with the conflict's message, unaudited", async () => {
+  it("is a terminal CONFLICT with the conflict's message", async () => {
     extractArtistId.mockResolvedValue({
       siteName: "spotify",
       id: "spotify-123",
@@ -135,19 +128,6 @@ describe("set_artist_link", () => {
       code: "CONFLICT",
     });
     expect(result.isError).toBe(true);
-    expect(logMcpAudit).not.toHaveBeenCalled();
-  });
-
-  it("still succeeds when the audit log fails", async () => {
-    extractArtistId.mockResolvedValue(ig);
-    setArtistLink.mockResolvedValue({ oldValue: null, artistName: "A" });
-    logMcpAudit.mockRejectedValue(new Error("DB connection failed"));
-    const { result, parsed } = await callTool(registerSetArtistLinkTool(testServer()), {
-      artistId,
-      url: "https://instagram.com/testuser",
-    });
-    expect(parsed.success).toBe(true);
-    expect(result.isError).toBeUndefined();
   });
 
   it("is INTERNAL_ERROR for any other failure", async () => {

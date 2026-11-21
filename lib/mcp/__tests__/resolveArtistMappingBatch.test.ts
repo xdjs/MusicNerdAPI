@@ -17,7 +17,7 @@ const item = (artistId: string) => ({
 beforeEach(() => vi.clearAllMocks());
 
 describe("resolveArtistMappingBatch", () => {
-  it("resolves each item with the key hash, in order, keeping failures on their item", async () => {
+  it("resolves each item in order, keeping failures on their item", async () => {
     resolve
       .mockResolvedValueOnce({ created: true, updated: false, skipped: false })
       .mockRejectedValueOnce(new Error("Artist not found: a2"))
@@ -27,10 +27,7 @@ describe("resolveArtistMappingBatch", () => {
         skipped: true,
         previousMapping: { platformId: "x", confidence: "manual" },
       });
-    const { results } = await resolveArtistMappingBatch(
-      [item("a1"), item("a2"), item("a3")],
-      "hash",
-    );
+    const { results } = await resolveArtistMappingBatch([item("a1"), item("a2"), item("a3")]);
     expect(results).toEqual([
       { artistId: "a1", created: true, updated: false, skipped: false },
       {
@@ -49,12 +46,12 @@ describe("resolveArtistMappingBatch", () => {
       },
     ]);
     expect(resolve).toHaveBeenCalledTimes(3);
-    expect(resolve).toHaveBeenNthCalledWith(2, { ...item("a2"), apiKeyHash: "hash" });
+    expect(resolve).toHaveBeenNthCalledWith(2, { ...item("a2") });
   });
 
   it("stringifies a non-Error failure and is empty for no items", async () => {
     resolve.mockRejectedValueOnce("nope");
-    expect((await resolveArtistMappingBatch([item("a1")], "hash")).results[0].error).toBe("nope");
-    expect(await resolveArtistMappingBatch([], "hash")).toEqual({ results: [] });
+    expect((await resolveArtistMappingBatch([item("a1")])).results[0].error).toBe("nope");
+    expect(await resolveArtistMappingBatch([])).toEqual({ results: [] });
   });
 });

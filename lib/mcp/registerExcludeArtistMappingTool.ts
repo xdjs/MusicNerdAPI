@@ -3,13 +3,10 @@ import { z } from "zod";
 import { EXCLUSION_REASON_VALUES, VALID_MAPPING_PLATFORMS } from "@/lib/mcp/const";
 import { excludeArtistMapping } from "@/lib/mcp/excludeArtistMapping";
 import { excludeArtistMappingBatch } from "@/lib/mcp/excludeArtistMappingBatch";
-import { logMcpAudit } from "@/lib/mcp/logMcpAudit";
 import { MappingNotFoundError } from "@/lib/mcp/MappingNotFoundError";
 import { MappingValidationError } from "@/lib/mcp/MappingValidationError";
 import { toolError } from "@/lib/mcp/toolError";
 import { toolText } from "@/lib/mcp/toolText";
-import { McpAuthError } from "@/lib/mcpAuth/McpAuthError";
-import { requireMcpAuth } from "@/lib/mcpAuth/requireMcpAuth";
 
 const excludeItemSchema = z.object({
   artistId: z.string().uuid().describe("The UUID of the artist in MusicNerd"),
@@ -27,8 +24,8 @@ const excludeItemSchema = z.object({
 
 /**
  * Registers `exclude_artist_mapping`: marks one artist, or a batch of up to
- * 100 in `items`, as excluded from mapping for a platform. Needs an MCP API
- * key (checked first); every stored exclusion is audited.
+ * 100 in `items`, as excluded from mapping for a platform. Registered for
+ * admins only.
  *
  * @param server - The server to register on.
  * @returns The registered tool.
@@ -72,8 +69,6 @@ export function registerExcludeArtistMappingTool(server: McpServer) {
       );
 
       try {
-        const apiKeyHash = requireMcpAuth();
-
         if (items === undefined) {
           if (!artistId || !platform || !reason) {
             return toolError(
@@ -87,50 +82,14 @@ export function registerExcludeArtistMappingTool(server: McpServer) {
             platform,
             reason,
             details,
-            apiKeyHash,
           });
-
-          try {
-            await logMcpAudit({
-              artistId,
-              field: `mapping:${platform}`,
-              action: "exclude",
-              newValue: details ? `${reason}: ${details}` : reason,
-              apiKeyHash,
-            });
-          } catch (auditError) {
-            console.error("[MCP] Audit log failed (mutation succeeded):", auditError);
-          }
 
           return toolText({ success: true, ...result });
         }
 
-        const batchResult = await excludeArtistMappingBatch(items, apiKeyHash);
-
-        const auditEntries = batchResult.results
-          .map((r, i) => ({ r, item: items[i] }))
-          .filter(({ r }) => !r.error)
-          .map(({ item }) => ({
-            artistId: item.artistId,
-            field: `mapping:${item.platform}`,
-            action: "exclude" as const,
-            newValue: item.details ? `${item.reason}: ${item.details}` : item.reason,
-            apiKeyHash,
-          }));
-
-        if (auditEntries.length > 0) {
-          try {
-            await logMcpAudit(auditEntries);
-          } catch (auditError) {
-            console.error("[MCP] Batch audit log failed (mutations succeeded):", auditError);
-          }
-        }
-
+        const batchResult = await excludeArtistMappingBatch(items);
         return toolText({ success: true, results: batchResult.results });
       } catch (error) {
-        if (error instanceof McpAuthError) {
-          return toolError(error.message, "AUTH_REQUIRED");
-        }
         if (error instanceof MappingNotFoundError) {
           return toolError("Artist not found", "NOT_FOUND");
         }
