@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The six rules the OAuth server's security rests on (xdjs/MusicNerdWeb#1696),
+ * The seven rules the OAuth server's security rests on (xdjs/MusicNerdWeb#1696),
  * run through the real modules against the 0067 tables. Only the database
  * client is swapped for an in-memory Postgres.
  */
@@ -17,6 +17,7 @@ const { issueOAuthToken } = await import("@/lib/oauth/issueOAuthToken");
 const { postTokenHandler } = await import("@/lib/oauth/postTokenHandler");
 const { findGrantByAccessToken } = await import("@/lib/oauth/findGrantByAccessToken");
 const { hashToken } = await import("@/lib/oauth/hashToken");
+const { pruneOAuthTokens } = await import("@/lib/oauth/pruneOAuthTokens");
 
 const origin = "https://api.musicnerd.net";
 const redirect = "http://127.0.0.1:33418/callback";
@@ -163,5 +164,39 @@ describe("OAuth security rules", () => {
       [hashToken(access)],
     );
     expect(await findGrantByAccessToken(access)).toBeUndefined();
+  });
+
+  it("7. pruning keeps replay protection: replaying the last used refresh token still disconnects the agent", async () => {
+    let pair = (await exchange(await newCode())).body;
+    const used: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      used.push(String(pair.refresh_token));
+      pair = (await refresh(String(pair.refresh_token))).body;
+    }
+    // Every used refresh token is now past the retention window, and every access token expired.
+    await client.query(
+      "update oauth_tokens set used_at = used_at - interval '60 days' where used_at is not null",
+    );
+    await client.query(
+      "update oauth_tokens set expires_at = now() - interval '1 second' where kind = 'access'",
+    );
+    // The four access tokens, and every used refresh token but the last.
+    expect(await pruneOAuthTokens()).toBe(6);
+    const kinds = await client.query<{ kind: string; used: boolean }>(
+      "select kind, used_at is not null as used from oauth_tokens order by kind, used",
+    );
+    expect(kinds.rows).toEqual([
+      { kind: "refresh", used: false },
+      { kind: "refresh", used: true },
+    ]);
+
+    expect((await refresh(used[0])).body).toMatchObject({ error: "invalid_grant" });
+    expect((await client.query("select id from oauth_grants")).rows).toHaveLength(1);
+
+    expect((await refresh(used[2])).body).toMatchObject({ error: "invalid_grant" });
+    expect((await client.query("select id from oauth_grants")).rows).toEqual([]);
+    expect((await refresh(String(pair.refresh_token))).body).toMatchObject({
+      error: "invalid_grant",
+    });
   });
 });

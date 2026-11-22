@@ -16,3 +16,10 @@ export const TOKEN_PREFIXES = {
 
 /** Client and grant ids are UUIDs; anything else is unknown without asking the database. */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A used refresh token is deleted once it was used more than this many days
+ * ago and a newer one on its grant has been used too. Until then, replaying it
+ * disconnects the agent; the last one used on a grant is never deleted.
+ */
+export const USED_REFRESH_TOKEN_RETENTION_DAYS = 30;
