@@ -4,6 +4,10 @@ const advance = vi.fn();
 vi.mock("@/lib/research/advanceResearch", () => ({
   advanceResearch: (...a: unknown[]) => advance(...a),
 }));
+const prune = vi.fn();
+vi.mock("@/lib/oauth/pruneOAuthTokens", () => ({
+  pruneOAuthTokens: (...a: unknown[]) => prune(...a),
+}));
 const { getResearchAdvanceHandler } = await import("@/lib/research/getResearchAdvanceHandler");
 
 const get = async (headers: Record<string, string> = {}) =>
@@ -11,6 +15,7 @@ const get = async (headers: Record<string, string> = {}) =>
 
 beforeEach(() => {
   advance.mockReset();
+  prune.mockReset().mockResolvedValue(0);
   vi.stubEnv("CRON_SECRET", "");
 });
 
@@ -45,6 +50,7 @@ describe("getResearchAdvanceHandler", () => {
     expect(denied.status).toBe(401);
     expect(await denied.json()).toEqual({ status: "error", error: "unauthorized", ran: false });
     expect(advance).not.toHaveBeenCalled();
+    expect(prune).not.toHaveBeenCalled();
     expect((await get({ authorization: "Bearer s3cret" })).status).toBe(200);
     expect(advance).toHaveBeenCalled();
   });
@@ -78,5 +84,20 @@ describe("getResearchAdvanceHandler", () => {
     expect(advance.mock.calls[0][0].excludeJobIds).toEqual([]);
     expect(advance.mock.calls[1][0].excludeJobIds).toEqual(["ingest-1"]);
     expect(advance.mock.calls[2][0].excludeJobIds).toEqual(["ingest-1"]);
+  });
+
+  it("prunes OAuth tokens once a tick", async () => {
+    advance.mockResolvedValue({ ran: false });
+    await get();
+    expect(prune).toHaveBeenCalledTimes(1);
+  });
+
+  it("still runs research when pruning fails", async () => {
+    prune.mockRejectedValue(new Error("db down"));
+    advance.mockResolvedValueOnce({ ran: true, jobId: "a", progress: "x" }).mockResolvedValue({
+      ran: false,
+    });
+    const body = await (await get()).json();
+    expect(body).toMatchObject({ status: "ok", ran: true });
   });
 });

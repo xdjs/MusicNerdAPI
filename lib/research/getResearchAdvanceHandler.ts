@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { getCorsHeaders } from "@/lib/networking/getCorsHeaders";
+import { pruneOAuthTokens } from "@/lib/oauth/pruneOAuthTokens";
 import { advanceResearch } from "@/lib/research/advanceResearch";
 import { ADVANCE_MAX_DURATION_S, MIN_SLICE_MS, RESPONSE_RESERVE_MS } from "@/lib/research/const";
 import type { AdvanceResult } from "@/lib/research/types";
 
 /**
- * Handles GET /api/research/advance, the scheduler's entry point. Takes
- * slices until the budget runs out, and stops the moment the queue is empty,
- * so an idle tick costs one database round trip. A job that is waiting on
- * Apify is set aside for the rest of the tick, or the loop would poll the
- * same scrape until the invocation expired.
+ * Handles GET /api/research/advance, the scheduler's entry point. First
+ * prunes spent OAuth tokens, so the API keeps one cron. Then takes slices
+ * until the budget runs out, and stops the moment the queue is empty, so an
+ * idle tick costs two database round trips. A job that is waiting on Apify
+ * is set aside for the rest of the tick, or the loop would poll the same
+ * scrape until the invocation expired.
  *
  * @param request - The request; must carry `Bearer $CRON_SECRET` when one is set.
  * @returns 200 with every slice taken, or 401 without the secret.
@@ -25,6 +27,11 @@ export async function getResearchAdvanceHandler(request: Request): Promise<NextR
       { status: 401, headers },
     );
   }
+
+  await pruneOAuthTokens().then(
+    n => n > 0 && console.debug(`[research/advance] pruned ${n} OAuth token(s)`),
+    e => console.error("[research/advance] OAuth token prune failed:", e),
+  );
 
   const deadline = started + ADVANCE_MAX_DURATION_S * 1000 - RESPONSE_RESERVE_MS;
   const slices: AdvanceResult[] = [];
