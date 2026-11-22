@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 describe("handleMcpRequest", () => {
-  it("answers initialize on an SSE stream with the server info and CORS headers", async () => {
+  it("answers initialize on an SSE stream with the server info, its icon and CORS headers", async () => {
     const response = await handleMcpRequest(
       post({
         jsonrpc: "2.0",
@@ -44,7 +44,9 @@ describe("handleMcpRequest", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toMatch(/^text\/event-stream/);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(await response.text()).toContain('"serverInfo":{"name":"Music Nerd","version":"1.0.0"}');
+    expect(await response.text()).toContain(
+      '"serverInfo":{"name":"Music Nerd","version":"1.0.0","icons":[{"src":"https://api/icon.png","mimeType":"image/png","sizes":["512x512"]}]}',
+    );
   });
 
   it("lists the tools the connection's user may use", async () => {
