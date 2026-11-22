@@ -1,4 +1,4 @@
-/** The MCP server's identity, as `initialize` reports it. */
+/** The MCP server's name and version; `getMcpServerInfo` adds the icon. */
 export const MCP_SERVER_INFO = { name: "Music Nerd", version: "1.0.0" } as const;
 
 /** The platforms a cross-platform ID mapping may target. */

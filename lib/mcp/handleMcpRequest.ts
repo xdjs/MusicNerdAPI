@@ -19,7 +19,7 @@ export async function handleMcpRequest(req: Request, context: McpContext): Promi
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
-  const server = createMcpServer(context);
+  const server = createMcpServer(context, new URL(req.url).origin);
   await server.connect(transport);
 
   return withCorsHeaders(await transport.handleRequest(req));

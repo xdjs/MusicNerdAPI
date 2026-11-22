@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerBoardTools } from "@/lib/board/registerBoardTools";
 import { team } from "@/lib/board/team";
 import { toBoardProfile } from "@/lib/board/toBoardProfile";
-import { MCP_SERVER_INFO } from "@/lib/mcp/const";
+import { getMcpServerInfo } from "@/lib/mcp/getMcpServerInfo";
 import { registerDeleteArtistLinkTool } from "@/lib/mcp/registerDeleteArtistLinkTool";
 import { registerExcludeArtistMappingTool } from "@/lib/mcp/registerExcludeArtistMappingTool";
 import { registerGetArtistMappingsTool } from "@/lib/mcp/registerGetArtistMappingsTool";
@@ -23,10 +23,11 @@ import type { McpContext } from "@/lib/mcp/types";
  * transport, and the stateless transport is one per request.
  *
  * @param context - Who the request runs as.
+ * @param origin - The request's origin, which serves the server's icon.
  * @returns A new server.
  */
-export function createMcpServer(context: McpContext): McpServer {
-  const server = new McpServer({ ...MCP_SERVER_INFO });
+export function createMcpServer(context: McpContext, origin: string): McpServer {
+  const server = new McpServer(getMcpServerInfo(origin));
   registerSearchArtistsTool(server);
   registerGetArtistTool(server);
   registerGetUnmappedArtistsTool(server);

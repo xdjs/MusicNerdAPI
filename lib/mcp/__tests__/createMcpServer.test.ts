@@ -27,6 +27,7 @@ const context = {
   grantId: "grant-1",
   agent: "Claude",
 };
+const ORIGIN = "https://api.musicnerd.net";
 const toolsOf = (server: unknown) =>
   Object.keys((server as { _registeredTools: object })._registeredTools);
 
@@ -34,19 +35,19 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("createMcpServer", () => {
   it("gives everyone signed in the read tools only", () => {
-    expect(toolsOf(createMcpServer(context))).toEqual(READ_TOOLS);
+    expect(toolsOf(createMcpServer(context, ORIGIN))).toEqual(READ_TOOLS);
     expect(team.as).not.toHaveBeenCalled();
   });
 
   it("adds the write tools for an admin", () => {
-    expect(toolsOf(createMcpServer({ ...context, isAdmin: true }))).toEqual([
+    expect(toolsOf(createMcpServer({ ...context, isAdmin: true }, ORIGIN))).toEqual([
       ...READ_TOOLS,
       ...WRITE_TOOLS,
     ]);
   });
 
   it("adds the board tools for a team member, reading and posting as <agent>-<member>", () => {
-    expect(toolsOf(createMcpServer({ ...context, member: "sweetman" }))).toEqual([
+    expect(toolsOf(createMcpServer({ ...context, member: "sweetman" }, ORIGIN))).toEqual([
       ...READ_TOOLS,
       ...BOARD_TOOLS,
     ]);
@@ -54,14 +55,12 @@ describe("createMcpServer", () => {
   });
 
   it("gives an admin on the team both the write and the board tools", () => {
-    expect(toolsOf(createMcpServer({ ...context, isAdmin: true, member: "sweetman" }))).toEqual([
-      ...READ_TOOLS,
-      ...WRITE_TOOLS,
-      ...BOARD_TOOLS,
-    ]);
+    expect(
+      toolsOf(createMcpServer({ ...context, isAdmin: true, member: "sweetman" }, ORIGIN)),
+    ).toEqual([...READ_TOOLS, ...WRITE_TOOLS, ...BOARD_TOOLS]);
   });
 
   it("builds a new server each time, so each request gets its own transport", () => {
-    expect(createMcpServer(context)).not.toBe(createMcpServer(context));
+    expect(createMcpServer(context, ORIGIN)).not.toBe(createMcpServer(context, ORIGIN));
   });
 });
