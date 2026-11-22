@@ -65,17 +65,6 @@ export type ExcludeBatchResult = {
   error?: string;
 };
 
-/** One row for `mcp_audit_log`. */
-export type AuditEntry = {
-  artistId: string;
-  field: string;
-  action: "set" | "delete" | "resolve" | "exclude";
-  submittedUrl?: string;
-  oldValue?: string | null;
-  newValue?: string | null;
-  apiKeyHash: string;
-};
-
 /** Who an `/mcp` request runs as: the connection's user, their role, the grant behind the token, and the agent. */
 export type McpContext = {
   userId: string;

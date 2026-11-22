@@ -6,13 +6,13 @@ vi.mock("@/lib/activityFeed/getRecentActivity", () => ({ getRecentActivity: mock
 beforeEach(() => vi.clearAllMocks());
 
 describe("getActivityHandler", () => {
-  it("returns the events in the feed's field names, with `mapping:` stripped from the platform", async () => {
+  it("returns the events in the feed's field names", async () => {
     mock.recent.mockResolvedValue([
       {
-        type: "agent_mapping",
+        type: "ugc_approved",
         artist_id: "a1",
         artist_name: "Bio Ritmo",
-        platform: "mapping:deezer",
+        platform: "bandcamp",
         created_at: "2026-10-20T10:00:00+00:00",
       },
       {
@@ -33,10 +33,10 @@ describe("getActivityHandler", () => {
       status: "ok",
       events: [
         {
-          type: "agent_mapping",
+          type: "ugc_approved",
           artistId: "a1",
           artistName: "Bio Ritmo",
-          platform: "deezer",
+          platform: "bandcamp",
           createdAt: "2026-10-20T10:00:00+00:00",
         },
         {

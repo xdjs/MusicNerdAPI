@@ -4,7 +4,7 @@ import { rowsOf } from "@/lib/db/rowsOf";
 
 /** One event on the public activity feed, as the database returns it. */
 export type ActivityEvent = {
-  type: "agent_mapping" | "ugc_approved" | "artist_added" | "self_edit_added" | "self_edit_updated";
+  type: "ugc_approved" | "artist_added" | "self_edit_added" | "self_edit_updated";
   artist_id: string;
   artist_name: string | null;
   platform: string | null;
@@ -12,9 +12,9 @@ export type ActivityEvent = {
 };
 
 /**
- * The most recent public events, newest first: agent link mappings (resolved
- * `mapping:*` audit rows), approved submissions (by the moderation date, so
- * unmoderated ones never show), artists' own profile edits and new artists.
+ * The most recent public events, newest first: approved submissions (by the
+ * moderation date, so unmoderated ones never show), artists' own profile
+ * edits and new artists.
  * MusicNerdWeb's `getRecentActivity`, verbatim: one query, `since` optional
  * inside the SQL. Not the `artist_activity_events` ledger `lib/activity` writes.
  *
@@ -25,16 +25,6 @@ export type ActivityEvent = {
 export async function getRecentActivity(since?: string, limit = 15): Promise<ActivityEvent[]> {
   const sinceParam = since ?? null;
   const rows = await db.execute(sql`
-        (SELECT 'agent_mapping' AS type, al.artist_id, a.name AS artist_name,
-                al.field AS platform, al.created_at
-         FROM mcp_audit_log al
-         INNER JOIN artists a ON a.id = al.artist_id
-         WHERE al.action = 'resolve' AND al.field LIKE 'mapping:%'
-           AND (${sinceParam}::timestamptz IS NULL OR al.created_at > ${sinceParam}::timestamptz)
-         ORDER BY al.created_at DESC LIMIT ${limit})
-
-        UNION ALL
-
         (SELECT 'ugc_approved' AS type, u.artist_id, u.name AS artist_name,
                 u.site_name AS platform, u.date_processed AS created_at
          FROM ugcresearch u

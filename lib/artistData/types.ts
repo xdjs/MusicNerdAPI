@@ -14,7 +14,6 @@ export interface ArtistLinkCoverageItem {
   category: TrackedColumnCategory;
   count: number;
   percentage: number;
-  todayCount: number;
 }
 
 export interface CompletenessBucket {

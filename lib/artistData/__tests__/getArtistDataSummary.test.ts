@@ -5,14 +5,12 @@ import { getArtistDataSummary } from "@/lib/artistData/getArtistDataSummary";
 const mock = vi.hoisted(() => ({
   totals: vi.fn(),
   platforms: vi.fn(),
-  today: vi.fn(),
   completeness: vi.fn(),
 }));
 vi.mock("@/lib/artistData/getArtistTotalsAndCoverage", () => ({
   getArtistTotalsAndCoverage: mock.totals,
 }));
 vi.mock("@/lib/artistData/getPlatformIdStats", () => ({ getPlatformIdStats: mock.platforms }));
-vi.mock("@/lib/artistData/getLinkTodayCounts", () => ({ getLinkTodayCounts: mock.today }));
 vi.mock("@/lib/artistData/getCompletenessDistribution", () => ({
   getCompletenessDistribution: mock.completeness,
 }));
@@ -26,7 +24,6 @@ beforeEach(() => {
     enrichment: { hasWikidata: 5, hasSpotifyNoWikidata: 155, noSpotify: 40 },
   });
   mock.platforms.mockResolvedValue(new Map([["deezer", { count: 40, todayCount: 2 }]]));
-  mock.today.mockResolvedValue(new Map([["instagram", 3]]));
   mock.completeness.mockResolvedValue({
     buckets: [{ bucket: "0-1", count: 200, percentage: 100 }],
     medianFields: 1,
@@ -48,14 +45,12 @@ describe("getArtistDataSummary", () => {
       category: "social",
       count: 100,
       percentage: 50,
-      todayCount: 3,
     });
     expect(summary.artistLinkCoverage.find(c => c.column === "bio")).toEqual({
       column: "bio",
       category: "content",
       count: 20,
       percentage: 10,
-      todayCount: 0,
     });
     expect(summary.artistLinkCoverage.find(c => c.column === "patreon")?.count).toBe(0);
     expect(summary.completenessDistribution).toEqual([
