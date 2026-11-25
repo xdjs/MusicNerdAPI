@@ -88,3 +88,20 @@ it("propagates persistence failures rather than reporting success", async () => 
   m.execute.mockReset().mockResolvedValueOnce([{ id }]).mockRejectedValue(new Error("storage"));
   await expect(checkpointSourceExtraction(job, state, result)).rejects.toThrow("storage");
 });
+it("records which reader got the saved text, and no reader when nothing was saved", async () => {
+  await checkpointSourceExtraction(job, state, { ...result, httpStatus: 403, reader: "tavily" });
+  const saved = renderSql(m.execute.mock.calls[3][0]);
+  expect(saved.text).toContain("update artist_research_jobs");
+  expect(saved.params.some(p => typeof p === "string" && p.includes('"reader":"tavily"'))).toBe(
+    true,
+  );
+  m.execute
+    .mockReset()
+    .mockResolvedValueOnce([{ id }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValue([{ id }]);
+  await checkpointSourceExtraction(job, state, { ...result, reader: "tavily" });
+  const skipped = renderSql(m.execute.mock.calls[2][0]);
+  expect(skipped.text).toContain("update artist_research_jobs");
+  expect(skipped.params.some(p => typeof p === "string" && p.includes('"reader"'))).toBe(false);
+});

@@ -5,6 +5,7 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { extractPublicationDate } from "@/lib/sourceExtraction/extractPublicationDate";
 import { extractVaultText } from "@/lib/sourceExtraction/extractVaultText";
+import { isChallengeText } from "@/lib/sourceExtraction/isChallengeText";
 import { isPublicAddress } from "@/lib/sourceExtraction/isPublicAddress";
 import type { FetchedSource } from "@/lib/sourceExtraction/types";
 
@@ -113,14 +114,7 @@ export async function fetchSourceText(input: string, budgetMs: number): Promise<
       }
       const extracted = extractVaultText(html);
       if (!extracted.text) return result("empty");
-      // A challenge page is content from the gate, never artist evidence.
-      if (
-        /just a moment|verify (?:you are human|your browser)|checking your browser|enable javascript and cookies|access denied/i.test(
-          extracted.text.slice(0, 2000),
-        ) &&
-        extracted.text.length < 5000
-      )
-        return result("blocked");
+      if (isChallengeText(extracted.text)) return result("blocked");
       return result("ready", {
         text: extracted.text,
         truncated: extracted.truncated,

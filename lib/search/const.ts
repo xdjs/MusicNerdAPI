@@ -3,6 +3,9 @@ export const WEB_SEARCH_PROVIDER = "tavily";
 
 export const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
+/** Reads one page's text when our own fetcher is refused (#1693). */
+export const TAVILY_EXTRACT_ENDPOINT = "https://api.tavily.com/extract";
+
 /** Per-request timeout, short so a hung provider can't eat a caller's budget. */
 export const REQUEST_TIMEOUT_MS = 6_000;
 

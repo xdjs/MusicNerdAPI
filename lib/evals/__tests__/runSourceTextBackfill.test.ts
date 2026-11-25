@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const { execute, fetchSourceText } = vi.hoisted(() => ({
+const { execute, readSourceText } = vi.hoisted(() => ({
   execute: vi.fn(),
-  fetchSourceText: vi.fn(),
+  readSourceText: vi.fn(),
 }));
 vi.mock("@/lib/db/db", () => ({ db: { execute } }));
-vi.mock("@/lib/sourceExtraction/fetchSourceText", () => ({ fetchSourceText }));
+vi.mock("@/lib/sourceExtraction/readSourceText", () => ({ readSourceText }));
 const { runSourceTextBackfill } = await import("@/lib/evals/runSourceTextBackfill");
 
 const fetched = (status: string, extra: object = {}) => ({
@@ -18,7 +18,7 @@ const fetched = (status: string, extra: object = {}) => ({
 
 beforeEach(() => {
   execute.mockReset();
-  fetchSourceText.mockReset();
+  readSourceText.mockReset();
 });
 
 it("saves the text of readable pages and reports the rest by host and status only", async () => {
@@ -29,7 +29,7 @@ it("saves the text of readable pages and reports the rest by host and status onl
       { id: "c", url: "https://empty.example/x" },
     ])
     .mockResolvedValueOnce([{ id: "a" }]);
-  fetchSourceText
+  readSourceText
     .mockResolvedValueOnce(fetched("ready", { text: "twelve chars" }))
     .mockResolvedValueOnce(fetched("blocked", { httpStatus: 403 }))
     .mockResolvedValueOnce(fetched("empty"));
@@ -38,6 +38,7 @@ it("saves the text of readable pages and reports the rest by host and status onl
     missing: 3,
     saved: 1,
     savedChars: 12,
+    viaTavily: 0,
     outcomes: { ready: 1, blocked: 1, empty: 1 },
     failures: ["blocked.example=blocked:403", "empty.example=empty:200"],
   });
@@ -51,7 +52,7 @@ it("counts a page as skipped when the row changed before the save, and a thrown 
       { id: "b", url: "not a url" },
     ])
     .mockResolvedValueOnce([]);
-  fetchSourceText
+  readSourceText
     .mockResolvedValueOnce(fetched("ready", { text: "text" }))
     .mockRejectedValueOnce(new Error("https://one.example/a?token=secret"));
   const result = await runSourceTextBackfill("artist");
@@ -59,6 +60,7 @@ it("counts a page as skipped when the row changed before the save, and a thrown 
     missing: 2,
     saved: 0,
     savedChars: 0,
+    viaTavily: 0,
     outcomes: { skipped: 1, error: 1 },
     failures: ["one.example=skipped:200", "invalid-url=error"],
   });
@@ -70,8 +72,25 @@ it("does nothing when every approved link already has text", async () => {
     missing: 0,
     saved: 0,
     savedChars: 0,
+    viaTavily: 0,
     outcomes: {},
     failures: [],
   });
-  expect(fetchSourceText).not.toHaveBeenCalled();
+  expect(readSourceText).not.toHaveBeenCalled();
+});
+
+it("counts the texts that came through Tavily", async () => {
+  execute
+    .mockResolvedValueOnce([
+      { id: "a", url: "https://www.discogs.com/artist/1" },
+      { id: "b", url: "https://direct.example/a" },
+    ])
+    .mockResolvedValueOnce([{ id: "a" }])
+    .mockResolvedValueOnce([{ id: "b" }]);
+  readSourceText
+    .mockResolvedValueOnce(
+      fetched("ready", { text: "via tavily", httpStatus: 403, reader: "tavily" }),
+    )
+    .mockResolvedValueOnce(fetched("ready", { text: "direct", reader: "direct" }));
+  expect(await runSourceTextBackfill("artist")).toMatchObject({ saved: 2, viaTavily: 1 });
 });

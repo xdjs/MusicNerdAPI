@@ -14,6 +14,8 @@ const outcome = z.object({
   httpStatus: z.number().int().min(100).max(599).nullable(),
   storedChars: z.number().int().min(0).max(50_000),
   truncated: z.boolean(),
+  /** Which reader got the saved text; absent on outcomes recorded before #1693. */
+  reader: z.enum(["direct", "tavily"]).optional(),
 });
 const source = z.object({ id: z.string().uuid(), url: z.string().max(8192) });
 const explicitState = z.object({
