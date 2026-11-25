@@ -33,7 +33,16 @@ Things to know before starting:
 - **Production builds are staged.** Production had been serving the 2026-11-11 build (#113) since then; later `main` builds were built for production but never assigned to the domain. On 2026-11-17 Pete promoted `2ac7e08` (`vercel promote <deployment> --scope musicnerd`). That shipped #99, #117, #120 and this work together. The Web production release followed, carrying Web #1642 (signed-in account from `GET /api/user/me`), which needs #99 live first. Pete checked sign-in, the account menu, his profile and the admin panel. **Any future API change reaches production only when someone promotes its build.**
 - **Step 5:** 344 `unit_sync` jobs, queued in batches of 50 after the promote. 5,539 units for 343 artists, every unit embedded, no failed jobs; about 40 minutes.
 - **Step 8:** `CHAT_RETRIEVAL=units` set for Production on 2026-11-17 and promoted (deployment `api-1g7nz6ak3`). A direct request showed the chat calling `searchPassages`. Two questions read on musicnerd.net were complete and cited. To go back, promote the previous build (`api-rnksbwvf4`) or remove the variable and redeploy.
-- **Step 9:** the branch-scoped Preview variable is gone. Staging keeps `CHAT_RETRIEVAL=units` so it matches production. Removing the legacy path (and making `units` the default) is still to come, after production has run on passages for a release.
+- **Step 9:** the branch-scoped Preview variable is gone. Staging keeps `CHAT_RETRIEVAL=units` so it matches production. The legacy path was removed on 2026-11-20 (next section).
+
+## Legacy path removed (2026-11-20)
+
+Pete asked for the cleanup on 2026-11-20, three days after the production switch, instead of waiting a further release.
+
+- The chat has one path: `searchPassages`, `readUnits` and `listDocuments`, with `searchSources`/`readSource` for the latest releases and published answers, and `webSearch`. `CHAT_RETRIEVAL` is no longer read; the variable can be removed from Production and staging once this build is live.
+- Removed: the PDF tools (`lib/chatPdf/`), the PDF-turn replay check, the `chat-pdf-text` eval and the `pdf106` benchmarks with their workflow jobs, and the Evals workflow's `retrieval` input. The PDF page counter that uploads use moved to `lib/units/countPdfPages.ts`.
+- An earlier answer from the PDF tools, sent back by a tab opened before the switch, is no longer replayed into the conversation: its reads can no longer be checked against the documents' current publication.
+- To go back to the old chat, promote a production build from before this change (for example `api-1g7nz6ak3`, which still honours `CHAT_RETRIEVAL`).
 
 ## Limits accepted with the switch
 

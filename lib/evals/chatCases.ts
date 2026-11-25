@@ -173,8 +173,7 @@ export const CHAT_CASES: ChatCase[] = [
     note: "An uploaded-file source rather than a web page (reference v2, 2026-11-06 audit).",
     judgeAdvisory:
       "Read on 2026-11-15: answers listing every alias scored 0.45 to 0.62 (the judge ticks the groups, named as groups, as miscategorised); single trials have ranged from 0.45 to 0.82 on identical runs.",
-    // The follow-up only makes sense with the first answer in the conversation: before
-    // keepCurrentPdfTurns, every answer that read a PDF was dropped from history.
+    // The follow-up only makes sense with the first answer in the conversation.
     followUp: {
       question: "Which of those names is the producer alias?",
       facts: ["Dutchy"],

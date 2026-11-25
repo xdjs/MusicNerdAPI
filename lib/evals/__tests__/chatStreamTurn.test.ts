@@ -226,51 +226,6 @@ describe("chatStreamTurn", () => {
   });
 });
 
-describe("chatStreamTurn PDF evidence", () => {
-  it("captures a cited PDF read through the adapter using the streamed source URL, after timing", async () => {
-    const readPdfChatEvidence = vi.fn(async () => [
-      {
-        n: 1,
-        url: "https://a.example/t.pdf",
-        text: "[page 1]\nAliases",
-        tool: "readPdfSource" as const,
-        toolCallId: "p",
-        sha256: "h",
-      },
-    ]);
-    vi.doMock("@/lib/evals/readPdfChatEvidence", () => ({ readPdfChatEvidence }));
-    vi.resetModules();
-    vi.doMock("@/lib/chat/postArtistChatHandler", () => ({
-      postArtistChatHandler: (...a: unknown[]) => postArtistChatHandler(...a),
-    }));
-    const { chatStreamTurn: turnWithPdf } = await import("@/lib/evals/chatStreamTurn");
-    postArtistChatHandler.mockResolvedValueOnce(
-      streamOf([
-        { type: "tool-input-available", toolCallId: "p", toolName: "readPdfSource", input: {} },
-        { type: "source-url", sourceId: "1", url: "https://a.example/t.pdf", title: "t.pdf" },
-        {
-          type: "tool-output-available",
-          toolCallId: "p",
-          output: { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
-        },
-        { type: "text-start", id: "x" },
-        { type: "text-delta", id: "x", delta: "Aliases [1, p.1]." },
-        { type: "text-end", id: "x" },
-      ]),
-    );
-    const turn = await turnWithPdf({ artistId: "a1", question: "Aliases?" }, fakeClock());
-    expect(readPdfChatEvidence).toHaveBeenCalledWith(
-      "readPdfSource",
-      "p",
-      { sourceId: "s", n: 1, title: "t.pdf", pages: 1, sha256: "x".repeat(64) },
-      "https://a.example/t.pdf",
-    );
-    expect(turn.evidence).toEqual([expect.objectContaining({ tool: "readPdfSource", n: 1 })]);
-    expect(turn.sources).toEqual([{ n: 1, title: "t.pdf", url: "https://a.example/t.pdf" }]);
-    vi.doUnmock("@/lib/evals/readPdfChatEvidence");
-  });
-});
-
 describe("chatStreamTurn tool record", () => {
   it("records which tools ran and their inputs, for review", async () => {
     postArtistChatHandler.mockResolvedValueOnce(
@@ -284,7 +239,7 @@ describe("chatStreamTurn tool record", () => {
         {
           type: "tool-input-available",
           toolCallId: "b",
-          toolName: "searchPdfSources",
+          toolName: "listDocuments",
           input: { query: "q" },
         },
         { type: "text-start", id: "x" },
@@ -295,7 +250,7 @@ describe("chatStreamTurn tool record", () => {
     const turn = await chatStreamTurn({ artistId: "a1", question: "Q?" }, fakeClock());
     expect(turn.tools).toMatchObject([
       { name: "searchSources", input: { query: "q" } },
-      { name: "searchPdfSources", input: { query: "q" } },
+      { name: "listDocuments", input: { query: "q" } },
     ]);
   });
 });
@@ -307,8 +262,8 @@ describe("chatStreamTurn follow-ups", () => {
         {
           type: "tool-input-available",
           toolCallId: "r",
-          toolName: "readPdfSource",
-          input: { sourceId: "pdf-1" },
+          toolName: "readUnits",
+          input: { n: 1 },
         },
         {
           type: "source-url",
@@ -319,14 +274,7 @@ describe("chatStreamTurn follow-ups", () => {
         {
           type: "tool-output-available",
           toolCallId: "r",
-          output: {
-            sourceId: "pdf-1",
-            n: 1,
-            title: "timeline.pdf",
-            pages: 2,
-            sha256: "no",
-            revision: "r1",
-          },
+          output: { documents: [], units: [] },
         },
         { type: "text-start", id: "x" },
         { type: "text-delta", id: "x", delta: "Dutchy [1, p.1]." },
@@ -349,18 +297,11 @@ describe("chatStreamTurn follow-ups", () => {
     ]);
     expect(turn.assistantParts).toEqual([
       {
-        type: "tool-readPdfSource",
+        type: "tool-readUnits",
         toolCallId: "r",
         state: "output-available",
-        input: { sourceId: "pdf-1" },
-        output: {
-          sourceId: "pdf-1",
-          n: 1,
-          title: "timeline.pdf",
-          pages: 2,
-          sha256: "no",
-          revision: "r1",
-        },
+        input: { n: 1 },
+        output: { documents: [], units: [] },
       },
       { type: "text", text: "Dutchy [1, p.1]." },
     ]);

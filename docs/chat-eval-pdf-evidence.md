@@ -261,6 +261,7 @@ Means by question are about 0.87 for relevance and 0.86 for groundedness; the `m
 - Answer text reaches the eval in one burst at the end of the answer (15 to 117 text deltas within 13 ms). Where that buffering happens is not known and it has not been checked in a browser; the status line covers the wait.
 - The any-term text query is unmeasured on production-sized data.
 - The default is still `legacy`. Production switches by setting `CHAT_RETRIEVAL=units` after the index exists there; the legacy path is removed in a later change.
+- Update 2026-11-20: production switched on 2026-11-17 and the legacy path, the PDF tools and `CHAT_RETRIEVAL` were removed on 2026-11-20 (`docs/chat-passages-rollout.md`).
 
 ## Third staging record: the accuracy bar (2026-11-15)
 

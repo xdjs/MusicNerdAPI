@@ -11,52 +11,37 @@ on:
         type: choice
         options:
           - chat
-          - chat-pdf-text
-          - pdf106-paired
-          - pdf106-pete-smoke
-          - pdf106-four-paired
           - vision-page
           - retrieval
           - units-backfill
           - source-text-backfill
         default: chat
-      trials:
-        description: "chat-pdf-text only: how many times the acceptance question is asked (1-10)"
-        type: string
-        default: "5"
       case_trials:
         description: "chat only: ask each case (each selected case, with cases) this many times, 1 to 5; empty asks each once"
         type: string
         default: ""
       effort:
-        description: "chat only, passage tools only: model reasoning effort low or medium; empty is low"
+        description: "chat only: model reasoning effort low or medium; empty is low"
         type: string
         default: ""
       label:
         description: "retrieval only: print each hit's source id, page locator, title and public URL (never text) so the cases can be labelled"
         type: boolean
         default: false
-      retrieval:
-        description: "chat only: the chat's retrieval (CHAT_RETRIEVAL): legacy (whole sources and PDF tools) or units (page-level passages)"
-        type: choice
-        options:
-          - legacy
-          - units
-        default: legacy
       cases:
         description: "chat only: comma-separated case keys to run; empty runs all"
         type: string
         default: ""
       units_max_per_document:
-        description: "retrieval/chat units: the most units of one document among the hits (UNITS_MAX_PER_DOCUMENT, 1-8); empty keeps 3"
+        description: "retrieval/chat: the most units of one document among the hits (UNITS_MAX_PER_DOCUMENT, 1-8); empty keeps 3"
         type: string
         default: ""
       units_text_mode:
-        description: "retrieval/chat units: full-text matching (UNITS_TEXT_MODE): and (every word), or (any term) or idf (any term, ranked by rarity); the default is idf"
+        description: "retrieval/chat: full-text matching (UNITS_TEXT_MODE): and (every word), or (any term) or idf (any term, ranked by rarity); the default is idf"
         type: string
         default: ""
       units_candidates:
-        description: "retrieval/chat units: candidates per text and vector list (UNITS_CANDIDATES, 10-60); empty keeps 20"
+        description: "retrieval/chat: candidates per text and vector list (UNITS_CANDIDATES, 10-60); empty keeps 20"
         type: string
         default: ""
 
@@ -68,7 +53,7 @@ concurrency:
 
 jobs:
   eval:
-    if: inputs.suite == 'chat' || inputs.suite == 'chat-pdf-text' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill' || inputs.suite == 'source-text-backfill'
+    if: inputs.suite == 'chat' || inputs.suite == 'vision-page' || inputs.suite == 'retrieval' || inputs.suite == 'units-backfill' || inputs.suite == 'source-text-backfill'
     runs-on: ubuntu-latest
     # A run takes about eight minutes; the suite waits up to an hour when the staging
     # question allowance (30 per rolling hour) is still used by an earlier run.
@@ -87,15 +72,11 @@ jobs:
       # A signed-out question counts against the allowance per IP, read from x-real-ip
       # only on Vercel; the task sends a documentation address (lib/evals/chatStreamTurn.ts).
       VERCEL: "1"
-      # The trial count of chat-pdf-text (evals/chat-pdf-text.eval.ts).
-      CHAT_TRIALS: ${{ inputs.trials }}
       # The chat suite's trials per case (each selected case, with cases), 1 to 5 (lib/evals/selectChatCases.ts); empty asks each once.
       CHAT_CASE_TRIALS: ${{ inputs.case_trials }}
       # The retrieval suite's labelling mode (evals/retrieval.eval.ts).
       RETRIEVAL_LABEL: ${{ inputs.label && '1' || '0' }}
-      # The chat's retrieval for the run (lib/chat/getChatRetrievalMode.ts).
-      CHAT_RETRIEVAL: ${{ inputs.retrieval }}
-      # The chat's reasoning effort in units mode (lib/chat/getChatEffort.ts).
+      # The chat's reasoning effort (lib/chat/getChatEffort.ts).
       CHAT_EFFORT: ${{ inputs.effort }}
 
     steps:
@@ -106,9 +87,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # PDF discovery only matches rows whose URL is on the staging project's public storage
-      # origin, so the chat suite needs SUPABASE_URL; derive it from the database connection
-      # rather than adding a secret (same derivation the PDF suites use).
+      # Stored documents are read from the staging project's public storage origin, so the
+      # suites need SUPABASE_URL; derive it from the database connection rather than adding a secret.
       - name: Bind the staging storage origin for this job only
         shell: bash
         run: |
@@ -136,130 +116,3 @@ jobs:
           # The chat suite's case selection (lib/evals/selectChatCases.ts); empty runs all.
           CHAT_CASES: ${{ inputs.cases }}
         run: pnpm eval "evals/${{ inputs.suite }}.eval.ts" --no-progress-bars --terminate-on-failure
-
-  pdf106-paired:
-    if: inputs.suite == 'pdf106-paired' || inputs.suite == 'pdf106-pete-smoke'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-    env:
-      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-      SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
-      MUSICNERD_RESEARCH_API_KEY: ${{ secrets.MUSICNERD_RESEARCH_API_KEY }}
-      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-      APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
-      VERCEL: "1"
-      PDF106_MODE: ${{ inputs.suite == 'pdf106-pete-smoke' && 'pete-smoke' || 'original' }}
-      PDF106_OUTPUT: ${{ github.workspace }}/pdf106-results
-    steps:
-      - name: Refuse automatic reruns of a spending job
-        run: test "${{ github.run_attempt }}" = "1"
-      - uses: actions/checkout@v4
-        with:
-          path: candidate
-          ref: ${{ inputs.suite == 'pdf106-pete-smoke' && 'f9344be7908051180c3a5050d8118435e20e895e' || github.sha }}
-      - uses: actions/checkout@v4
-        with:
-          path: adapter
-      - uses: actions/checkout@v4
-        with:
-          ref: e4054a4783ab3cf7dfdadf91d7285a54adf3c734
-          path: baseline
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.9.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install locked dependencies and identical observer
-        run: |
-          pnpm --dir baseline install --frozen-lockfile
-          pnpm --dir candidate install --frozen-lockfile
-          cp -R adapter/benchmarks/pdf106/. candidate/benchmarks/pdf106/
-          mkdir -p baseline/benchmarks
-          cp -R candidate/benchmarks/pdf106 baseline/benchmarks/pdf106
-      - name: Baseline bounded selected questions
-        working-directory: baseline
-        env:
-          PDF106_COHORT: baseline
-        run: |
-          node benchmarks/pdf106/build.mjs
-          node .next/pdf106-run.mjs
-      - name: Candidate bounded selected questions
-        working-directory: candidate
-        env:
-          PDF106_COHORT: candidate
-        run: |
-          node benchmarks/pdf106/build.mjs
-          node .next/pdf106-run.mjs
-      - name: Retain sanitized evidence even on partial failure
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pdf106-paired-${{ github.run_id }}
-          path: ${{ github.workspace }}/pdf106-results
-          if-no-files-found: warn
-          retention-days: 7
-
-  pdf106-four-paired:
-    if: inputs.suite == 'pdf106-four-paired'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - name: Refuse spending job reruns
-        run: test "${{ github.run_attempt }}" = "1"
-      - uses: actions/checkout@v4
-        with:
-          path: adapter
-      - uses: actions/checkout@v4
-        with:
-          path: candidate
-          ref: 4fa7c2f02030a17256452fde4508548b2f793e43
-      - uses: actions/checkout@v4
-        with:
-          path: baseline
-          ref: 277e8ebadb9c55c10a11f2d774afafa9a8c276d8
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.9.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install pinned applications and identical adapter
-        run: |
-          pnpm --dir candidate install --frozen-lockfile
-          pnpm --dir baseline install --frozen-lockfile
-          cp -R adapter/benchmarks/pdf106v2/. candidate/benchmarks/pdf106v2/
-          cp -R adapter/benchmarks/pdf106v2/. baseline/benchmarks/pdf106v2/
-          mkdir -p pdf-chat-eval/acceptance-v2 pdf106-four-results
-      - name: Read and verify the two existing original PDFs
-        working-directory: candidate
-        env:
-          SUPABASE_DB_CONNECTION: ${{ secrets.SUPABASE_DB_CONNECTION }}
-        run: node benchmarks/pdf106v2/download-originals.mjs ../evidence
-      - name: Verify offline boundaries and serialization on both pins
-        run: |
-          for checkout in baseline candidate; do
-            (cd "$checkout" && pnpm exec vitest run benchmarks/pdf106v2/__tests__ && node benchmarks/pdf106v2/build.mjs benchmarks/pdf106v2/offline.ts && node .next/pdf106v2-run.mjs && node benchmarks/pdf106v2/build.mjs)
-          done
-      - name: Run exactly four approved answers in fixed interleaved order
-        env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-        run: |
-          (cd baseline && node .next/pdf106v2-run.mjs --approved-four-paired --cohort baseline --case pdf-alias --output ../pdf106-four-results --fixtures ../evidence)
-          (cd candidate && node .next/pdf106v2-run.mjs --approved-four-paired --cohort candidate --case pdf-alias --output ../pdf106-four-results --fixtures ../evidence)
-          (cd candidate && node .next/pdf106v2-run.mjs --approved-four-paired --cohort candidate --case pdf-qualified-preservation --output ../pdf106-four-results --fixtures ../evidence)
-          (cd baseline && node .next/pdf106v2-run.mjs --approved-four-paired --cohort baseline --case pdf-qualified-preservation --output ../pdf106-four-results --fixtures ../evidence)
-      - name: Retain sanitized evidence on success or failure
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pdf106-four-${{ github.run_id }}
-          path: |
-            pdf106-four-results
-            pdf-chat-eval/acceptance-v2/harness-offline.json
-          if-no-files-found: warn
-          retention-days: 7
