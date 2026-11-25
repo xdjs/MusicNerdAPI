@@ -1,7 +1,7 @@
 import { OwnershipChangedError } from "@/lib/research/OwnershipChangedError";
 import type { ResearchJob, SliceOutcome } from "@/lib/research/types";
 import { sourceExtractionSchemas } from "@/lib/sourceExtraction/sourceExtractionSchemas";
-import { fetchSourceText } from "@/lib/sourceExtraction/fetchSourceText";
+import { readSourceText } from "@/lib/sourceExtraction/readSourceText";
 import { checkSourceExtractionSlice } from "@/lib/sourceExtraction/checkSourceExtractionSlice";
 import { checkpointSourceExtraction } from "@/lib/sourceExtraction/checkpointSourceExtraction";
 
@@ -33,7 +33,7 @@ export async function runSourceExtraction(
         httpStatus: null,
         truncated: false,
       });
-    const result = await fetchSourceText(
+    const result = await readSourceText(
       state.sources[job.cursor].url,
       Math.min(15_000, deadline - Date.now()),
     );

@@ -8,9 +8,10 @@ import { runSourceTextBackfill } from "@/lib/evals/runSourceTextBackfill";
  * Fetches and saves the text of approved link documents that have none, for the eval suites'
  * artists (`evalArtists.ts`), on the staging database. A third of production's approved Lore
  * documents have no saved text (measured 2026-11-15) because they were approved before the
- * `source_extract` job existed; this suite measures how many of such pages the job's fetcher can
- * read and fills them on staging. Run `units-backfill` afterwards to index what was saved. No model
- * or paid request is made. Output is counts, hosts and fetch statuses: no titles, paths or text.
+ * `source_extract` job existed; this suite measures how many of such pages the job's reader can
+ * read (our fetcher, then Tavily's extract when a site refuses it) and fills them on staging. Run `units-backfill` afterwards to index what was saved. No model
+ * request is made; Tavily's extract (1 credit per 5 pages) is called only for pages our fetcher
+ * could not read. Output is counts, hosts and fetch statuses: no titles, paths or text.
  *
  *   hosted: the Evals workflow, suite `source-text-backfill`
  */
@@ -18,7 +19,7 @@ import { runSourceTextBackfill } from "@/lib/evals/runSourceTextBackfill";
 const SHA = process.env.GITHUB_SHA ?? "local";
 
 Eval("music-nerd", {
-  experimentName: experimentName("source-text-backfill", "fetchSourceText", SHA),
+  experimentName: experimentName("source-text-backfill", "readSourceText", SHA),
   metadata: { suite: "source-text-backfill", sha: SHA },
   maxConcurrency: 1,
   data: () => EVAL_ARTIST_IDS.map(artistId => ({ input: { artistId }, metadata: { artistId } })),
@@ -26,7 +27,7 @@ Eval("music-nerd", {
     try {
       const result = await runSourceTextBackfill(input.artistId);
       console.log(
-        `[source-text-backfill] ${input.artistId} missing=${result.missing} saved=${result.saved} savedChars=${result.savedChars} outcomes=${JSON.stringify(result.outcomes)} failures=${JSON.stringify(result.failures)}`,
+        `[source-text-backfill] ${input.artistId} missing=${result.missing} saved=${result.saved} savedChars=${result.savedChars} viaTavily=${result.viaTavily} outcomes=${JSON.stringify(result.outcomes)} failures=${JSON.stringify(result.failures)}`,
       );
       return result;
     } catch (error) {

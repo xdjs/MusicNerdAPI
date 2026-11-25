@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ fetch: vi.fn(), checkpoint: vi.fn(), check: vi.fn(
 vi.mock("@/lib/sourceExtraction/checkSourceExtractionSlice", () => ({
   checkSourceExtractionSlice: m.check,
 }));
-vi.mock("@/lib/sourceExtraction/fetchSourceText", () => ({ fetchSourceText: m.fetch }));
+vi.mock("@/lib/sourceExtraction/readSourceText", () => ({ readSourceText: m.fetch }));
 vi.mock("@/lib/sourceExtraction/checkpointSourceExtraction", () => ({
   checkpointSourceExtraction: m.checkpoint,
 }));

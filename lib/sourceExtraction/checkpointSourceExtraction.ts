@@ -36,6 +36,7 @@ export async function checkpointSourceExtraction(
         httpStatus: result.httpStatus,
         storedChars,
         truncated: storedChars > 0 && result.truncated,
+        ...(storedChars > 0 && result.reader ? { reader: result.reader } : {}),
       });
       next = { ...state, outcomes: [...state.outcomes, outcome] };
       cursor++;
